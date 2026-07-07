@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "skills": {
+    "myco": {
+      "source": "/home/luis/GitHub/9aia/myco/skills/myco",
+      "sourceType": "local",
+      "computedHash": "b71943e98b2f2155c2fb3093a107de9b2f4b2c54f39897a62c495229a62039b6"
+    },
+    "skill-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "computedHash": "5ea13a6d9f0d4bb694405d79acd00cadec0d21bb138c4dd10fcf3c500cb835c2"
+    }
+  }
+}

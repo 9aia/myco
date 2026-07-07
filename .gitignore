@@ -1,0 +1,6 @@
+# Ignore local agent installation directories
+.*
+!/.gitignore
+!/.github/
+/agent/
+/data/
