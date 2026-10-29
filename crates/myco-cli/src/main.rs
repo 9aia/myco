@@ -7,9 +7,9 @@
 //! agents the verbs; `myco manifest`/`myco schema` are the
 //! self-describing surface.
 //!
-//! Phase 4 wires the item verbs — `todo`, `backlog`, `issue`,
-//! `proposal`, `plan`, `adr`, `item show|set` — on `myco-store-md`.
-//! `schema`/`status` stay stubs until phase 5.
+//! Phase 5 wires the views — `schema`, `status [--prompt]`,
+//! `board`, `report`, `index`, `org` — plus the `myco-index(-redb)`
+//! derived cache that powers the cross-repo reads.
 
 use std::path::PathBuf;
 
@@ -17,17 +17,24 @@ use clap::{Parser, Subcommand};
 
 mod adr;
 mod backlog;
+mod board;
 mod check;
 mod commit;
+mod digest;
 mod discover;
+mod indexcmd;
 mod init;
 mod issue;
 mod itemcmd;
 mod items;
 mod migrate;
 mod ops;
+mod org;
 mod plan;
 mod proposal;
+mod report;
+mod schema;
+mod status;
 mod templates;
 mod todo;
 
@@ -61,7 +68,7 @@ struct Cli {
 enum Cmd {
     /// Capabilities + protocol version — agent self-discovery.
     Manifest,
-    /// The file/state spec, machine-readable JSON Schema. [phase 5]
+    /// The file/state spec, machine-readable JSON Schema.
     Schema,
     /// Scaffold `project/`: orphan branch + worktree + .gitignore +
     /// seed files. Idempotent — a valid existing worktree gets its
@@ -119,11 +126,29 @@ enum Cmd {
         cmd: itemcmd::Cmd,
     },
     /// Cheap digest of the work ledger. `--prompt` = token-sized.
-    /// [phase 5]
     Status {
         /// Render for an agent prompt (minimal tokens).
         #[arg(long)]
         prompt: bool,
+    },
+    /// Kanban of the ledger — Backlog | Open | Claimed | In
+    /// Progress | Blocked. `--md` emits a markdown table.
+    Board {
+        /// Emit a markdown table (for docs/READMEs).
+        #[arg(long)]
+        md: bool,
+    },
+    /// Aging + velocity + blocked — how the ledger is trending.
+    Report,
+    /// The derived index: register repos, query/rebuild snapshots.
+    Index {
+        #[command(subcommand)]
+        cmd: indexcmd::Cmd,
+    },
+    /// Cross-repo views over the index (auto-rebuilds stale repos).
+    Org {
+        #[command(subcommand)]
+        cmd: org::Cmd,
     },
     /// Print the CLI reference as markdown (docs pipeline).
     #[command(hide = true, name = "gen-cli-docs")]
@@ -134,25 +159,37 @@ fn manifest() -> serde_json::Value {
     serde_json::json!({
         "name": "myco",
         "version": env!("CARGO_PKG_VERSION"),
-        "protocol": 0,
+        "protocol": 1,
         "description": env!("CARGO_PKG_DESCRIPTION"),
         "repository": env!("CARGO_PKG_REPOSITORY"),
-        "capabilities": [
-            "manifest",
-            "schema", "init", "check", "migrate", "commit", "absorb",
-            "index rebuild", "todo", "backlog", "issue", "proposal",
-            "plan", "adr", "item show", "item set", "handoff",
-            "resume", "status",
-            "board", "report", "index add", "org",
+        "capabilities": {
+            "store": "markdown",
+            "index": "redb",
+            "protocol": 1,
+        },
+        "verbs": [
+            "manifest", "schema",
+            "init", "check", "migrate", "commit", "absorb",
+            "todo", "backlog", "issue", "proposal", "plan", "adr",
+            "item show", "item set",
+            "status", "board", "report",
+            "index add", "index remove", "index list", "index rebuild",
+            "org status", "org board",
+            "handoff", "resume", "serve",
         ],
         "implemented": [
-            "manifest", "gen-cli-docs",
+            "manifest", "gen-cli-docs", "schema",
             "init", "check", "migrate", "commit",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
+            "status", "board", "report",
+            "index add", "index remove", "index list", "index rebuild",
+            "org status", "org board",
         ],
         "notes": "markdown in project/ is canonical; every verb is one \
-                  atomic commit on the `project` branch",
+                  atomic commit on the `project` branch; the redb index \
+                  under $MYCO_HOME|~/.local/share/myco is a disposable \
+                  derived cache",
     })
 }
 
@@ -182,15 +219,12 @@ fn main() {
         Cmd::Plan { cmd } => plan::run(cmd, dir, root, json, no_commit),
         Cmd::Adr { cmd } => adr::run(cmd, dir, root, json, no_commit),
         Cmd::Item { cmd } => itemcmd::run(cmd, dir, root, json, no_commit),
-        Cmd::Schema | Cmd::Status { .. } => {
-            let name = match &cli.command {
-                Cmd::Schema => "schema",
-                Cmd::Status { .. } => "status",
-                _ => "verb",
-            };
-            eprintln!("myco {name}: not implemented yet — see project/proposals/v2.md phases");
-            std::process::exit(2);
-        }
+        Cmd::Schema => schema::run(),
+        Cmd::Status { prompt } => status::run(dir, root, prompt, json),
+        Cmd::Board { md } => board::run(dir, root, md, json),
+        Cmd::Report => report::run(dir, root, json),
+        Cmd::Index { cmd } => indexcmd::run(cmd, json),
+        Cmd::Org { cmd } => org::run(cmd, json),
     };
     match result {
         Ok(code) => std::process::exit(code),

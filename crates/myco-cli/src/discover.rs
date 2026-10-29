@@ -29,7 +29,7 @@ pub struct Project {
 
 /// `d` is usable as the project dir — a git worktree checked out
 /// on `project`, or at minimum a dir holding `TODO.md`.
-fn qualifies(d: &Path) -> bool {
+pub fn qualifies(d: &Path) -> bool {
     if !d.is_dir() {
         return false;
     }

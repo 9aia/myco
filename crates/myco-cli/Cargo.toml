@@ -13,16 +13,20 @@ name = "myco"
 path = "src/main.rs"
 
 [dependencies]
-myco-core.workspace = true
+myco-core = { workspace = true, features = ["schema"] }
 myco-config.workspace = true
 myco-config-toml.workspace = true
 myco-git.workspace = true
+myco-index.workspace = true
+myco-index-redb.workspace = true
 myco-shell.workspace = true
 myco-store.workspace = true
 myco-store-md.workspace = true
 clap.workspace = true
 clap-markdown.workspace = true
 serde_json.workspace = true
+schemars.workspace = true
+tabled.workspace = true
 camino.workspace = true
 miette.workspace = true
 time.workspace = true

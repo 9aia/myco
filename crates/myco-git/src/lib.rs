@@ -219,6 +219,51 @@ pub fn push_tag(repo: &Path, tag: &str) -> bool {
     git(repo, &["push", "origin", tag])
 }
 
+/// `git rev-parse --verify HEAD` — the commit a worktree/repo is
+/// on, `None` when the branch is unborn. Index freshness is
+/// `stored head == head_commit(worktree)`.
+pub fn head_commit(dir: &Path) -> Option<String> {
+    git_out(dir, &["rev-parse", "--verify", "HEAD"]).ok()
+}
+
+/// One `git log` line, parsed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogEntry {
+    /// Full commit hash.
+    pub hash: String,
+    /// Author date, `YYYY-MM-DD` (`%as`).
+    pub date: String,
+    /// Subject line.
+    pub subject: String,
+}
+
+/// `git log` newest-first — `%H %as %s` over a NUL separator so
+/// subjects are safe. `limit` caps the walk (`git log -n`). An
+/// unborn branch yields an empty history, not an error.
+pub fn log(dir: &Path, limit: Option<usize>) -> Result<Vec<LogEntry>, Error> {
+    if !has_commit(dir, "HEAD") {
+        return Ok(Vec::new());
+    }
+    let mut args = vec!["log", "--format=%H%x00%as%x00%s"];
+    let n;
+    if let Some(k) = limit {
+        n = format!("-{k}");
+        args.push(&n);
+    }
+    let out = git_out(dir, &args)?;
+    Ok(out
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.split('\0');
+            Some(LogEntry {
+                hash: parts.next()?.to_string(),
+                date: parts.next()?.to_string(),
+                subject: parts.next().unwrap_or_default().to_string(),
+            })
+        })
+        .collect())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -324,6 +369,32 @@ mod tests {
         assert!(has_changes(d.path()));
         assert!(commit_all(d.path(), "add f"));
         assert!(!has_changes(d.path()));
+    }
+
+    #[test]
+    fn head_commit_and_log() {
+        let d = repo();
+        // unborn HEAD → None, empty log
+        assert_eq!(head_commit(d.path()), None);
+        assert!(log(d.path(), None).unwrap().is_empty());
+        std::fs::write(d.path().join("a.txt"), "1").unwrap();
+        assert!(commit_all(d.path(), "chore: first"));
+        std::fs::write(d.path().join("b.txt"), "2").unwrap();
+        assert!(commit_all(d.path(), "chore: second"));
+        let head = head_commit(d.path()).unwrap();
+        assert_eq!(head.len(), 40);
+        let entries = log(d.path(), None).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].hash, head);
+        assert_eq!(entries[0].subject, "chore: second");
+        assert_eq!(entries[1].subject, "chore: first");
+        assert_eq!(entries[0].date.len(), 10);
+        // limit caps the walk
+        assert_eq!(log(d.path(), Some(1)).unwrap().len(), 1);
+        // not a repo / no HEAD → empty history, not an error
+        let plain = tmpdir("log-norepo");
+        assert!(log(&plain, None).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&plain);
     }
 
     #[test]

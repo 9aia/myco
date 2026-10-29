@@ -413,11 +413,14 @@ fn manifest_lists_implemented_verbs() {
 }
 
 #[test]
-fn stubs_still_exit_2() {
-    for verb in ["schema", "status"] {
-        let out = run(std::path::Path::new("/"), &[verb]);
-        assert_eq!(code(&out), 2, "{verb}");
-    }
+fn schema_needs_no_project() {
+    // schema is repo-free discovery; status needs a ledger
+    let out = run(std::path::Path::new("/"), &["schema"]);
+    assert_eq!(code(&out), 0);
+    assert_eq!(json(&out)["version"], 1);
+    let d = tempfile::tempdir().unwrap();
+    let out = run(d.path(), &["status"]);
+    assert_eq!(code(&out), 2);
 }
 
 #[test]

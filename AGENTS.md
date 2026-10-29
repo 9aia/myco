@@ -17,13 +17,17 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/myco-core` | Item models, ID registry, state machine, deps — pure, no I/O |
 | `crates/myco-config` | Config port — where `myco.toml`-shaped config comes from |
 | `crates/myco-config-toml` | Config impl — explicit path → `$MYCO_CONFIG` → `./myco.toml` → `~/.config/myco/` |
-| `crates/myco-git` | Git plumbing via the `git` CLI — `project` orphan branch, worktree, auto-commit |
+| `crates/myco-git` | Git plumbing via the `git` CLI — `project` orphan branch, worktree, auto-commit, log |
 | `crates/myco-shell` | `bash -c <cmd>` in a workdir — generic shell-out |
+| `crates/myco-store` | Store port — the `project/` persistence trait |
+| `crates/myco-store-md` | Markdown impl — strict parse/emit; owns the file spec |
+| `crates/myco-index` | Index port — the derived, disposable cache (registry + snapshots) |
+| `crates/myco-index-redb` | Index impl — redb snapshots + `repos.toml` under `~/.local/share/myco` |
+| `crates/myco-testkit` | Golden fixtures + conformance for the file spec |
 | `crates/myco-cli` | The `myco` binary — clap, `--json` everywhere, `manifest`/`gen-cli-docs` |
 | `xtask` | check / test / coverage / install / site |
 
-Planned (per `project/proposals/v2.md`): `myco-store(-md)`,
-`myco-index(-redb)`, `myco-template`, `myco-testkit`.
+Planned (per `project/proposals/proposal-0001-*.md`): `myco-template`.
 
 ## Boundary
 
