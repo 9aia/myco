@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_ACTOR","DEFAULT_LAST"],"fn":["handoff","open_checklist","read_note","resume"]};

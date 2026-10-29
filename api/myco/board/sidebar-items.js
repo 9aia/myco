@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COLUMNS"],"fn":["card","cards_by_column","columns","columns_json","render","render_cards","run"],"struct":["Row"]};

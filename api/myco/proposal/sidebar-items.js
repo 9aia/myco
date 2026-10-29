@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Cmd"],"fn":["proposal_status","run"]};

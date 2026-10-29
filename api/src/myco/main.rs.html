@@ -1,0 +1,324 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/myco-cli/src/main.rs`."><title>main.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="myco" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.0 (88d9e12ae 2026-08-18)" data-channel="1.98.0" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">myco/</div>main.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! myco — project management, grown not built. A mycorrhizal
+<a href=#2 id=2 data-nosnippet>2</a>//! network for your agents: tasks, signals, handoffs.
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//! Agent-first PM: markdown in `project/` is canonical and
+<a href=#5 id=5 data-nosnippet>5</a>//! human-editable; every deterministic write goes through this CLI
+<a href=#6 id=6 data-nosnippet>6</a>//! (auto-commit per verb, `--json` everywhere). The skill teaches
+<a href=#7 id=7 data-nosnippet>7</a>//! agents the verbs; `myco manifest`/`myco schema` are the
+<a href=#8 id=8 data-nosnippet>8</a>//! self-describing surface.
+<a href=#9 id=9 data-nosnippet>9</a>//!
+<a href=#10 id=10 data-nosnippet>10</a>//! Phase 6 wires continuity — `handoff`/`resume` over append-only
+<a href=#11 id=11 data-nosnippet>11</a>//! `handoffs/&lt;ID&gt;.md` files (one per item, any kind); sepia hooks
+<a href=#12 id=12 data-nosnippet>12</a>//! call them at session boundaries. Phase 7 lands the Jira-parity
+<a href=#13 id=13 data-nosnippet>13</a>//! slice — `epic:`/`ms:` item metadata + grouping views,
+<a href=#14 id=14 data-nosnippet>14</a>//! `absorb` importers (comment sweep, Jira CSV, GitHub dumps).
+<a href=#15 id=15 data-nosnippet>15</a>
+<a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">use </span>std::path::PathBuf;
+<a href=#17 id=17 data-nosnippet>17</a>
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>clap::{Parser, Subcommand};
+<a href=#19 id=19 data-nosnippet>19</a>
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">mod </span>absorb;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">mod </span>adr;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">mod </span>backlog;
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">mod </span>board;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">mod </span>check;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">mod </span>commit;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">mod </span>continuity;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">mod </span>digest;
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">mod </span>discover;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">mod </span>group;
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">mod </span>indexcmd;
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">mod </span>init;
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">mod </span>issue;
+<a href=#33 id=33 data-nosnippet>33</a><span class="kw">mod </span>itemcmd;
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">mod </span>items;
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">mod </span>migrate;
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">mod </span>ops;
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">mod </span>org;
+<a href=#38 id=38 data-nosnippet>38</a><span class="kw">mod </span>plan;
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">mod </span>proposal;
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">mod </span>report;
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">mod </span>schema;
+<a href=#42 id=42 data-nosnippet>42</a><span class="kw">mod </span>status;
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">mod </span>templates;
+<a href=#44 id=44 data-nosnippet>44</a><span class="kw">mod </span>todo;
+<a href=#45 id=45 data-nosnippet>45</a>
+<a href=#46 id=46 data-nosnippet>46</a><span class="doccomment">/// myco — agent-first project management for a repo's `project/`
+<a href=#47 id=47 data-nosnippet>47</a>/// worktree.
+<a href=#48 id=48 data-nosnippet>48</a></span><span class="attr">#[derive(Parser)]
+<a href=#49 id=49 data-nosnippet>49</a>#[command(name = <span class="string">"myco"</span>, version, about, long_about = <span class="prelude-val">None</span>)]
+<a href=#50 id=50 data-nosnippet>50</a></span><span class="kw">struct </span>Cli {
+<a href=#51 id=51 data-nosnippet>51</a>    <span class="doccomment">/// Emit JSON (accepted everywhere; default output for machines).
+<a href=#52 id=52 data-nosnippet>52</a>    </span><span class="attr">#[arg(long, global = <span class="bool-val">true</span>)]
+<a href=#53 id=53 data-nosnippet>53</a>    </span>json: bool,
+<a href=#54 id=54 data-nosnippet>54</a>
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="doccomment">/// Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+<a href=#56 id=56 data-nosnippet>56</a>    </span><span class="attr">#[arg(long, global = <span class="bool-val">true</span>)]
+<a href=#57 id=57 data-nosnippet>57</a>    </span>no_commit: bool,
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="doccomment">/// Project worktree to act on, overriding discovery.
+<a href=#60 id=60 data-nosnippet>60</a>    </span><span class="attr">#[arg(long, global = <span class="bool-val">true</span>, value_name = <span class="string">"PATH"</span>)]
+<a href=#61 id=61 data-nosnippet>61</a>    </span>dir: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#62 id=62 data-nosnippet>62</a>
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="doccomment">/// Repo root to act on, overriding discovery (the worktree is
+<a href=#64 id=64 data-nosnippet>64</a>    /// `&lt;root&gt;/project`).
+<a href=#65 id=65 data-nosnippet>65</a>    </span><span class="attr">#[arg(long, global = <span class="bool-val">true</span>, value_name = <span class="string">"PATH"</span>)]
+<a href=#66 id=66 data-nosnippet>66</a>    </span>root: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="attr">#[command(subcommand)]
+<a href=#69 id=69 data-nosnippet>69</a>    </span>command: Cmd,
+<a href=#70 id=70 data-nosnippet>70</a>}
+<a href=#71 id=71 data-nosnippet>71</a>
+<a href=#72 id=72 data-nosnippet>72</a><span class="attr">#[derive(Subcommand)]
+<a href=#73 id=73 data-nosnippet>73</a></span><span class="kw">enum </span>Cmd {
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="doccomment">/// Capabilities + protocol version — agent self-discovery.
+<a href=#75 id=75 data-nosnippet>75</a>    </span>Manifest,
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="doccomment">/// The file/state spec, machine-readable JSON Schema.
+<a href=#77 id=77 data-nosnippet>77</a>    </span>Schema,
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="doccomment">/// Scaffold `project/`: orphan branch + worktree + .gitignore +
+<a href=#79 id=79 data-nosnippet>79</a>    /// seed files. Idempotent — a valid existing worktree gets its
+<a href=#80 id=80 data-nosnippet>80</a>    /// scaffold verified/repaired.
+<a href=#81 id=81 data-nosnippet>81</a>    </span>Init,
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="doccomment">/// Validate schemas + state machine, repair file/index drift.
+<a href=#83 id=83 data-nosnippet>83</a>    /// Exit 1 with findings; `--fix` applies safe repairs + commits.
+<a href=#84 id=84 data-nosnippet>84</a>    </span>Check {
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="doccomment">/// Repair drift in place instead of only reporting.
+<a href=#86 id=86 data-nosnippet>86</a>        </span><span class="attr">#[arg(long)]
+<a href=#87 id=87 data-nosnippet>87</a>        </span>fix: bool,
+<a href=#88 id=88 data-nosnippet>88</a>    },
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// Convert legacy ledgers to v2: `pm/` → `project/`, or
+<a href=#90 id=90 data-nosnippet>90</a>    /// normalize files already on the `project` branch.
+<a href=#91 id=91 data-nosnippet>91</a>    </span>Migrate,
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="doccomment">/// Stage + commit worktree changes (conventional message).
+<a href=#93 id=93 data-nosnippet>93</a>    </span>Commit {
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="doccomment">/// Commit message (default: `chore: update project ledger`).
+<a href=#95 id=95 data-nosnippet>95</a>        </span><span class="attr">#[arg(short, long)]
+<a href=#96 id=96 data-nosnippet>96</a>        </span>message: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#97 id=97 data-nosnippet>97</a>    },
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="doccomment">/// TODO.md tasks — add / done / defer / list.
+<a href=#99 id=99 data-nosnippet>99</a>    </span>Todo {
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="attr">#[command(subcommand)]
+<a href=#101 id=101 data-nosnippet>101</a>        </span>cmd: todo::Cmd,
+<a href=#102 id=102 data-nosnippet>102</a>    },
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="doccomment">/// BACKLOG.md parked items — add / promote / list.
+<a href=#104 id=104 data-nosnippet>104</a>    </span>Backlog {
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="attr">#[command(subcommand)]
+<a href=#106 id=106 data-nosnippet>106</a>        </span>cmd: backlog::Cmd,
+<a href=#107 id=107 data-nosnippet>107</a>    },
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// Tracked issues, one file each under `issues/`.
+<a href=#109 id=109 data-nosnippet>109</a>    </span>Issue {
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="attr">#[command(subcommand)]
+<a href=#111 id=111 data-nosnippet>111</a>        </span>cmd: issue::Cmd,
+<a href=#112 id=112 data-nosnippet>112</a>    },
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="doccomment">/// Design proposals under `proposals/` (`P-NNN`).
+<a href=#114 id=114 data-nosnippet>114</a>    </span>Proposal {
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="attr">#[command(subcommand)]
+<a href=#116 id=116 data-nosnippet>116</a>        </span>cmd: proposal::Cmd,
+<a href=#117 id=117 data-nosnippet>117</a>    },
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="doccomment">/// Execution plans under `plans/` (`PL-NNN`).
+<a href=#119 id=119 data-nosnippet>119</a>    </span>Plan {
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="attr">#[command(subcommand)]
+<a href=#121 id=121 data-nosnippet>121</a>        </span>cmd: plan::Cmd,
+<a href=#122 id=122 data-nosnippet>122</a>    },
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// Architecture decision records under `adrs/` (`ADR-NNNN`).
+<a href=#124 id=124 data-nosnippet>124</a>    </span>Adr {
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="attr">#[command(subcommand)]
+<a href=#126 id=126 data-nosnippet>126</a>        </span>cmd: adr::Cmd,
+<a href=#127 id=127 data-nosnippet>127</a>    },
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// Kind-agnostic item verbs — show / set.
+<a href=#129 id=129 data-nosnippet>129</a>    </span>Item {
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="attr">#[command(subcommand)]
+<a href=#131 id=131 data-nosnippet>131</a>        </span>cmd: itemcmd::Cmd,
+<a href=#132 id=132 data-nosnippet>132</a>    },
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="doccomment">/// Attach resumable state at session end — appends a dated
+<a href=#134 id=134 data-nosnippet>134</a>    /// entry to `handoffs/&lt;ID&gt;.md` (any item kind, live or
+<a href=#135 id=135 data-nosnippet>135</a>    /// archived; append-only).
+<a href=#136 id=136 data-nosnippet>136</a>    </span>Handoff {
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="doccomment">/// Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`,
+<a href=#138 id=138 data-nosnippet>138</a>        /// `PL-NNN`).
+<a href=#139 id=139 data-nosnippet>139</a>        </span>id: myco_core::ItemId,
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="doccomment">/// Handoff note — done/next/open. `-` reads stdin.
+<a href=#141 id=141 data-nosnippet>141</a>        </span><span class="attr">#[arg(long, value_name = <span class="string">"TEXT|-"</span>)]
+<a href=#142 id=142 data-nosnippet>142</a>        </span>note: String,
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="doccomment">/// Who wrote it (`devin`, `human:luis`, …; default `cli`).
+<a href=#144 id=144 data-nosnippet>144</a>        </span><span class="attr">#[arg(long)]
+<a href=#145 id=145 data-nosnippet>145</a>        </span>actor: <span class="prelude-ty">Option</span>&lt;myco_core::Actor&gt;,
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="doccomment">/// Session provenance — a sepia session id, `cli:&lt;pid&gt;`,
+<a href=#147 id=147 data-nosnippet>147</a>        /// any id string.
+<a href=#148 id=148 data-nosnippet>148</a>        </span><span class="attr">#[arg(long)]
+<a href=#149 id=149 data-nosnippet>149</a>        </span>session: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#150 id=150 data-nosnippet>150</a>    },
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="doccomment">/// Minimal context block to restart work on an item — the
+<a href=#152 id=152 data-nosnippet>152</a>    /// item, `blocks:` dep titles, latest handoffs, open
+<a href=#153 id=153 data-nosnippet>153</a>    /// checklist. The single-item `status --prompt`.
+<a href=#154 id=154 data-nosnippet>154</a>    </span>Resume {
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="doccomment">/// Any item id.
+<a href=#156 id=156 data-nosnippet>156</a>        </span>id: myco_core::ItemId,
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="doccomment">/// Only the latest N handoff entries (default 10).
+<a href=#158 id=158 data-nosnippet>158</a>        </span><span class="attr">#[arg(long)]
+<a href=#159 id=159 data-nosnippet>159</a>        </span>last: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#160 id=160 data-nosnippet>160</a>    },
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Cheap digest of the work ledger. `--prompt` = token-sized.
+<a href=#162 id=162 data-nosnippet>162</a>    </span>Status {
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="doccomment">/// Render for an agent prompt (minimal tokens).
+<a href=#164 id=164 data-nosnippet>164</a>        </span><span class="attr">#[arg(long)]
+<a href=#165 id=165 data-nosnippet>165</a>        </span>prompt: bool,
+<a href=#166 id=166 data-nosnippet>166</a>    },
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="doccomment">/// Kanban of the ledger — Backlog | Open | Claimed | In
+<a href=#168 id=168 data-nosnippet>168</a>    /// Progress | Blocked. `--md` emits a markdown table.
+<a href=#169 id=169 data-nosnippet>169</a>    </span>Board {
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="doccomment">/// Emit a markdown table (for docs/READMEs).
+<a href=#171 id=171 data-nosnippet>171</a>        </span><span class="attr">#[arg(long)]
+<a href=#172 id=172 data-nosnippet>172</a>        </span>md: bool,
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="doccomment">/// Only items in this epic.
+<a href=#174 id=174 data-nosnippet>174</a>        </span><span class="attr">#[arg(long)]
+<a href=#175 id=175 data-nosnippet>175</a>        </span>epic: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#176 id=176 data-nosnippet>176</a>        <span class="doccomment">/// Only items in this milestone.
+<a href=#177 id=177 data-nosnippet>177</a>        </span><span class="attr">#[arg(long)]
+<a href=#178 id=178 data-nosnippet>178</a>        </span>milestone: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#179 id=179 data-nosnippet>179</a>    },
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="doccomment">/// Items grouped by epic — bare lists epics with counts, a
+<a href=#181 id=181 data-nosnippet>181</a>    /// name renders that epic's board (`epic v2` ≡ `board
+<a href=#182 id=182 data-nosnippet>182</a>    /// --epic v2`).
+<a href=#183 id=183 data-nosnippet>183</a>    </span>Epic {
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="doccomment">/// Epic name — omit for the all-epics summary.
+<a href=#185 id=185 data-nosnippet>185</a>        </span>name: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="doccomment">/// Emit a markdown table (with a name).
+<a href=#187 id=187 data-nosnippet>187</a>        </span><span class="attr">#[arg(long)]
+<a href=#188 id=188 data-nosnippet>188</a>        </span>md: bool,
+<a href=#189 id=189 data-nosnippet>189</a>    },
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="doccomment">/// Items grouped by milestone — bare lists milestones with
+<a href=#191 id=191 data-nosnippet>191</a>    /// counts, a name renders that milestone's board.
+<a href=#192 id=192 data-nosnippet>192</a>    </span>Milestone {
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="doccomment">/// Milestone name — omit for the all-milestones summary.
+<a href=#194 id=194 data-nosnippet>194</a>        </span>name: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="doccomment">/// Emit a markdown table (with a name).
+<a href=#196 id=196 data-nosnippet>196</a>        </span><span class="attr">#[arg(long)]
+<a href=#197 id=197 data-nosnippet>197</a>        </span>md: bool,
+<a href=#198 id=198 data-nosnippet>198</a>    },
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="doccomment">/// Import work into the ledger — TODO/FIXME comments, Jira
+<a href=#200 id=200 data-nosnippet>200</a>    /// CSV exports, GitHub issue dumps.
+<a href=#201 id=201 data-nosnippet>201</a>    </span>Absorb {
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="attr">#[command(subcommand)]
+<a href=#203 id=203 data-nosnippet>203</a>        </span>cmd: absorb::Cmd,
+<a href=#204 id=204 data-nosnippet>204</a>    },
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="doccomment">/// Aging + velocity + blocked — how the ledger is trending.
+<a href=#206 id=206 data-nosnippet>206</a>    </span>Report,
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="doccomment">/// The derived index: register repos, query/rebuild snapshots.
+<a href=#208 id=208 data-nosnippet>208</a>    </span>Index {
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="attr">#[command(subcommand)]
+<a href=#210 id=210 data-nosnippet>210</a>        </span>cmd: indexcmd::Cmd,
+<a href=#211 id=211 data-nosnippet>211</a>    },
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="doccomment">/// Cross-repo views over the index (auto-rebuilds stale repos).
+<a href=#213 id=213 data-nosnippet>213</a>    </span>Org {
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="attr">#[command(subcommand)]
+<a href=#215 id=215 data-nosnippet>215</a>        </span>cmd: org::Cmd,
+<a href=#216 id=216 data-nosnippet>216</a>    },
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="doccomment">/// Print the CLI reference as markdown (docs pipeline).
+<a href=#218 id=218 data-nosnippet>218</a>    </span><span class="attr">#[command(hide = <span class="bool-val">true</span>, name = <span class="string">"gen-cli-docs"</span>)]
+<a href=#219 id=219 data-nosnippet>219</a>    </span>GenCliDocs,
+<a href=#220 id=220 data-nosnippet>220</a>}
+<a href=#221 id=221 data-nosnippet>221</a>
+<a href=#222 id=222 data-nosnippet>222</a><span class="kw">fn </span>manifest() -&gt; serde_json::Value {
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="macro">serde_json::json!</span>({
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="string">"name"</span>: <span class="string">"myco"</span>,
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="string">"version"</span>: <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>),
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="string">"protocol"</span>: <span class="number">1</span>,
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="string">"description"</span>: <span class="macro">env!</span>(<span class="string">"CARGO_PKG_DESCRIPTION"</span>),
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="string">"repository"</span>: <span class="macro">env!</span>(<span class="string">"CARGO_PKG_REPOSITORY"</span>),
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="string">"capabilities"</span>: {
+<a href=#230 id=230 data-nosnippet>230</a>            <span class="string">"store"</span>: <span class="string">"markdown"</span>,
+<a href=#231 id=231 data-nosnippet>231</a>            <span class="string">"index"</span>: <span class="string">"redb"</span>,
+<a href=#232 id=232 data-nosnippet>232</a>            <span class="string">"protocol"</span>: <span class="number">1</span>,
+<a href=#233 id=233 data-nosnippet>233</a>        },
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="string">"verbs"</span>: [
+<a href=#235 id=235 data-nosnippet>235</a>            <span class="string">"manifest"</span>, <span class="string">"schema"</span>,
+<a href=#236 id=236 data-nosnippet>236</a>            <span class="string">"init"</span>, <span class="string">"check"</span>, <span class="string">"migrate"</span>, <span class="string">"commit"</span>, <span class="string">"absorb"</span>,
+<a href=#237 id=237 data-nosnippet>237</a>            <span class="string">"todo"</span>, <span class="string">"backlog"</span>, <span class="string">"issue"</span>, <span class="string">"proposal"</span>, <span class="string">"plan"</span>, <span class="string">"adr"</span>,
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="string">"item show"</span>, <span class="string">"item set"</span>,
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="string">"epic"</span>, <span class="string">"milestone"</span>,
+<a href=#240 id=240 data-nosnippet>240</a>            <span class="string">"status"</span>, <span class="string">"board"</span>, <span class="string">"report"</span>,
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="string">"index add"</span>, <span class="string">"index remove"</span>, <span class="string">"index list"</span>, <span class="string">"index rebuild"</span>,
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="string">"org status"</span>, <span class="string">"org board"</span>,
+<a href=#243 id=243 data-nosnippet>243</a>            <span class="string">"handoff"</span>, <span class="string">"resume"</span>, <span class="string">"serve"</span>,
+<a href=#244 id=244 data-nosnippet>244</a>        ],
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="string">"implemented"</span>: [
+<a href=#246 id=246 data-nosnippet>246</a>            <span class="string">"manifest"</span>, <span class="string">"gen-cli-docs"</span>, <span class="string">"schema"</span>,
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="string">"init"</span>, <span class="string">"check"</span>, <span class="string">"migrate"</span>, <span class="string">"commit"</span>, <span class="string">"absorb"</span>,
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="string">"todo"</span>, <span class="string">"backlog"</span>, <span class="string">"issue"</span>, <span class="string">"proposal"</span>, <span class="string">"plan"</span>, <span class="string">"adr"</span>,
+<a href=#249 id=249 data-nosnippet>249</a>            <span class="string">"item show"</span>, <span class="string">"item set"</span>,
+<a href=#250 id=250 data-nosnippet>250</a>            <span class="string">"epic"</span>, <span class="string">"milestone"</span>,
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="string">"status"</span>, <span class="string">"board"</span>, <span class="string">"report"</span>,
+<a href=#252 id=252 data-nosnippet>252</a>            <span class="string">"index add"</span>, <span class="string">"index remove"</span>, <span class="string">"index list"</span>, <span class="string">"index rebuild"</span>,
+<a href=#253 id=253 data-nosnippet>253</a>            <span class="string">"org status"</span>, <span class="string">"org board"</span>,
+<a href=#254 id=254 data-nosnippet>254</a>            <span class="string">"handoff"</span>, <span class="string">"resume"</span>,
+<a href=#255 id=255 data-nosnippet>255</a>        ],
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="string">"notes"</span>: <span class="string">"markdown in project/ is canonical; every verb is one \
+<a href=#257 id=257 data-nosnippet>257</a>                  atomic commit on the `project` branch; the redb index \
+<a href=#258 id=258 data-nosnippet>258</a>                  under $MYCO_HOME|~/.local/share/myco is a disposable \
+<a href=#259 id=259 data-nosnippet>259</a>                  derived cache"</span>,
+<a href=#260 id=260 data-nosnippet>260</a>    })
+<a href=#261 id=261 data-nosnippet>261</a>}
+<a href=#262 id=262 data-nosnippet>262</a>
+<a href=#263 id=263 data-nosnippet>263</a><span class="kw">fn </span>main() {
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let </span>cli = Cli::parse();
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span>json = cli.json;
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">let </span>no_commit = cli.no_commit;
+<a href=#267 id=267 data-nosnippet>267</a>    <span class="kw">let </span>dir = cli.dir.clone();
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">let </span>root = cli.root.clone();
+<a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">let </span>result: <span class="prelude-ty">Result</span>&lt;i32, String&gt; = <span class="kw">match </span>cli.command {
+<a href=#270 id=270 data-nosnippet>270</a>        Cmd::Manifest =&gt; {
+<a href=#271 id=271 data-nosnippet>271</a>            ops::print_json(<span class="kw-2">&amp;</span>manifest());
+<a href=#272 id=272 data-nosnippet>272</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
+<a href=#273 id=273 data-nosnippet>273</a>        }
+<a href=#274 id=274 data-nosnippet>274</a>        Cmd::GenCliDocs =&gt; {
+<a href=#275 id=275 data-nosnippet>275</a>            <span class="macro">println!</span>(<span class="string">"{}"</span>, clap_markdown::help_markdown::&lt;Cli&gt;());
+<a href=#276 id=276 data-nosnippet>276</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
+<a href=#277 id=277 data-nosnippet>277</a>        }
+<a href=#278 id=278 data-nosnippet>278</a>        Cmd::Init =&gt; init::run(dir, root, json, no_commit),
+<a href=#279 id=279 data-nosnippet>279</a>        Cmd::Check { fix } =&gt; check::run(dir, root, fix, json, no_commit),
+<a href=#280 id=280 data-nosnippet>280</a>        Cmd::Migrate =&gt; migrate::run(dir, root, json, no_commit),
+<a href=#281 id=281 data-nosnippet>281</a>        Cmd::Commit { message } =&gt; commit::run(dir, root, message, json, no_commit),
+<a href=#282 id=282 data-nosnippet>282</a>        Cmd::Todo { cmd } =&gt; todo::run(cmd, dir, root, json, no_commit),
+<a href=#283 id=283 data-nosnippet>283</a>        Cmd::Backlog { cmd } =&gt; backlog::run(cmd, dir, root, json, no_commit),
+<a href=#284 id=284 data-nosnippet>284</a>        Cmd::Issue { cmd } =&gt; issue::run(cmd, dir, root, json, no_commit),
+<a href=#285 id=285 data-nosnippet>285</a>        Cmd::Proposal { cmd } =&gt; proposal::run(cmd, dir, root, json, no_commit),
+<a href=#286 id=286 data-nosnippet>286</a>        Cmd::Plan { cmd } =&gt; plan::run(cmd, dir, root, json, no_commit),
+<a href=#287 id=287 data-nosnippet>287</a>        Cmd::Adr { cmd } =&gt; adr::run(cmd, dir, root, json, no_commit),
+<a href=#288 id=288 data-nosnippet>288</a>        Cmd::Item { cmd } =&gt; itemcmd::run(cmd, dir, root, json, no_commit),
+<a href=#289 id=289 data-nosnippet>289</a>        Cmd::Handoff {
+<a href=#290 id=290 data-nosnippet>290</a>            id,
+<a href=#291 id=291 data-nosnippet>291</a>            note,
+<a href=#292 id=292 data-nosnippet>292</a>            actor,
+<a href=#293 id=293 data-nosnippet>293</a>            session,
+<a href=#294 id=294 data-nosnippet>294</a>        } =&gt; continuity::handoff(id, <span class="kw-2">&amp;</span>note, actor, session, dir, root, json, no_commit),
+<a href=#295 id=295 data-nosnippet>295</a>        Cmd::Resume { id, last } =&gt; continuity::resume(id, last, dir, root, json),
+<a href=#296 id=296 data-nosnippet>296</a>        Cmd::Schema =&gt; schema::run(),
+<a href=#297 id=297 data-nosnippet>297</a>        Cmd::Status { prompt } =&gt; status::run(dir, root, prompt, json),
+<a href=#298 id=298 data-nosnippet>298</a>        Cmd::Board {
+<a href=#299 id=299 data-nosnippet>299</a>            md,
+<a href=#300 id=300 data-nosnippet>300</a>            epic,
+<a href=#301 id=301 data-nosnippet>301</a>            milestone,
+<a href=#302 id=302 data-nosnippet>302</a>        } =&gt; board::run(dir, root, md, epic, milestone, json),
+<a href=#303 id=303 data-nosnippet>303</a>        Cmd::Epic { name, md } =&gt; group::run(group::Group::Epic, name, md, dir, root, json),
+<a href=#304 id=304 data-nosnippet>304</a>        Cmd::Milestone { name, md } =&gt; {
+<a href=#305 id=305 data-nosnippet>305</a>            group::run(group::Group::Milestone, name, md, dir, root, json)
+<a href=#306 id=306 data-nosnippet>306</a>        }
+<a href=#307 id=307 data-nosnippet>307</a>        Cmd::Absorb { cmd } =&gt; absorb::run(cmd, dir, root, json, no_commit),
+<a href=#308 id=308 data-nosnippet>308</a>        Cmd::Report =&gt; report::run(dir, root, json),
+<a href=#309 id=309 data-nosnippet>309</a>        Cmd::Index { cmd } =&gt; indexcmd::run(cmd, json),
+<a href=#310 id=310 data-nosnippet>310</a>        Cmd::Org { cmd } =&gt; org::run(cmd, json),
+<a href=#311 id=311 data-nosnippet>311</a>    };
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">match </span>result {
+<a href=#313 id=313 data-nosnippet>313</a>        <span class="prelude-val">Ok</span>(code) =&gt; std::process::exit(code),
+<a href=#314 id=314 data-nosnippet>314</a>        <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#315 id=315 data-nosnippet>315</a>            <span class="kw">if </span>json {
+<a href=#316 id=316 data-nosnippet>316</a>                ops::print_json(<span class="kw-2">&amp;</span><span class="macro">serde_json::json!</span>({<span class="string">"error"</span>: e}));
+<a href=#317 id=317 data-nosnippet>317</a>            } <span class="kw">else </span>{
+<a href=#318 id=318 data-nosnippet>318</a>                <span class="macro">eprintln!</span>(<span class="string">"myco: error: {e}"</span>);
+<a href=#319 id=319 data-nosnippet>319</a>            }
+<a href=#320 id=320 data-nosnippet>320</a>            std::process::exit(<span class="number">2</span>);
+<a href=#321 id=321 data-nosnippet>321</a>        }
+<a href=#322 id=322 data-nosnippet>322</a>    }
+<a href=#323 id=323 data-nosnippet>323</a>}
+</code></pre></div></section></main></body></html>

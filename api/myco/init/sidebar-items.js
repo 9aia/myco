@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IGNORE_COMMENT","IGNORE_ENTRY"],"fn":["ensure","ensure_gitignore","repo_name","run"],"struct":["InitOutcome"]};

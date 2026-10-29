@@ -1,0 +1,4 @@
+name: myco-config
+path: crates/myco-config/Cargo.toml
+purpose: Config port: where myco.toml-shaped config comes from
+api: []

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FILE_KINDS"],"enum":["Claim","Fix"],"fn":["analyze","apply_fixes","body_heading","is_done_line","leading_id","normalize","read","repoint_blocks_tokens","repoint_frontmatter","repoint_handoff","run","run_on","strip_done","title_claim","transform_file"],"struct":["Analysis","Finding","Located","Renum"]};

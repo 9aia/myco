@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Error"],"fn":["branch","branch_exists","commit_all","create_orphan_branch","git","git_out","has_changes","has_commit","head_commit","is_git_repo","log","main_worktree","push_tag","repo_root","sync","tag","tag_exists","worktree_add_branch","worktree_add_detached","worktree_branch","worktree_prune","worktree_remove"],"struct":["LogEntry"]};

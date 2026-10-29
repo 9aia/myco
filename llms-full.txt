@@ -1,0 +1,1894 @@
+---
+url: /myco/tutorials/first-item.md
+---
+# Your first item
+
+A guided walk through one task's lifecycle: scaffold a ledger,
+create a task, move it through the state machine, and close it —
+seeing the markdown change under you each step.
+
+You'll need `myco` installed (see
+[getting started](../getting-started.md)) and a git repo to play
+in:
+
+```sh
+mkdir ledger-demo && cd ledger-demo
+git init && git commit --allow-empty -m init
+```
+
+## 1. Scaffold the ledger
+
+```sh
+myco init
+```
+
+This creates a `project/` directory — actually a git worktree of
+the new orphan `project` branch — seeded with `TODO.md`,
+`BACKLOG.md`, `index.md`, `meta.toml`, and empty item dirs.
+`git worktree list` shows it; `.gitignore` hides it from your
+code branch.
+
+## 2. Add a task
+
+```sh
+myco todo add "write the tutorial" --pri high --label docs
+```
+
+```text
+added T-001 open pri:high #docs write the tutorial
+```
+
+myco allocated `T-001` (the `t` counter in `meta.toml`) and
+appended one line to `project/TODO.md`:
+
+```markdown
+- [ ] T-001 write the tutorial · pri:high · created:2026-10-29 · #docs
+```
+
+Everything after the title is `·`-separated tokens —
+`pri:`, `owner:`, `#label`, `blocks:`, `epic:`, `ms:`.
+
+Nest a sub-task under it:
+
+```sh
+myco todo add "review it" --parent T-001
+```
+
+Children are `- [ ]` lines indented two spaces under the parent.
+They are full items — same metadata, same state machine — and
+`done`/`defer` on a parent act on the whole subtree.
+
+## 3. Move it through the state machine
+
+```sh
+myco item set T-001 --status in-progress --owner devin
+myco board
+```
+
+```text
++---------+-----------------+---------+--------------------------+---------+
+| Backlog | Open            | Claimed | In Progress              | Blocked |
++---------+-----------------+---------+--------------------------+---------+
+|         | T-002 review it |         | T-001 write the tutorial |         |
++---------+-----------------+---------+--------------------------+---------+
+```
+
+Statuses are `open → claimed → in-progress → done`, with
+`blocked` and `deferred` off the main path — see
+[the file spec](../explanation/file-spec.md#state-machine) for
+the legal transitions. `item set` walks the machine one step at a
+time; an illegal jump errors and tells you the valid targets.
+
+Park something instead of finishing it:
+
+```sh
+myco todo defer T-002   # → deferred; the line moves to BACKLOG.md
+myco backlog promote T-002   # → open; back to TODO.md
+```
+
+## 4. Leave a handoff
+
+```sh
+myco handoff T-001 --note "Done: draft. Next: screenshots." --actor devin
+myco resume T-001
+```
+
+`handoff` appends a dated entry to `handoffs/T-001.md`;
+`resume` prints the minimal restart context — the item, its
+`blocks:` deps, latest handoffs, open checklist.
+
+## 5. Finish and check
+
+```sh
+myco todo done T-001
+myco check
+```
+
+```text
+check: clean
+```
+
+Done tasks are *removed* from `TODO.md` — the `project` branch
+history is the record. Every verb you ran was one atomic commit
+on that branch (`git -C project log --oneline` shows them all).
+
+## Recap
+
+| you ran | myco did |
+|---|---|
+| `todo add` | alloc id, append line to `TODO.md` |
+| `item set --status` | one legal state-machine step |
+| `todo defer` / `backlog promote` | move the line TODO ↔ BACKLOG |
+| `handoff` / `resume` | append-only session notes / restart context |
+| `todo done` | `done`, then delete the line |
+| `check` | validate files, state machine, index drift |
+
+Every write went through a verb — hand-editing works too (the
+markdown is canonical), but `myco check` is the referee either
+way.
+
+Next: [the daily agent loop](../how-to/agent-loop.md) for how an
+agent drives these verbs, or the
+[CLI reference](../reference/cli.md) for the full surface.
+
+---
+
+---
+url: /myco/how-to/init-repo.md
+---
+# Set up myco on a repository
+
+`myco init` turns any git repo into a myco project: an orphan
+`project` branch checked out as a `project/` worktree.
+
+```sh
+cd your-repo
+myco init
+```
+
+## What it creates
+
+| path | what |
+|---|---|
+| `project/` | git worktree on the orphan `project` branch |
+| `project/meta.toml` | repo name + per-kind id counters (`[next]`) |
+| `project/TODO.md` | active tasks |
+| `project/BACKLOG.md` | deferred items |
+| `project/index.md` | human-readable ledger index |
+| `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs |
+| `.gitignore` += `project/` | keeps the worktree out of code commits |
+
+`init` commits the scaffold on the `project` branch — your code
+branch only gains the `.gitignore` line.
+
+## Re-running init
+
+`init` is idempotent: a valid existing worktree gets its scaffold
+verified/repaired instead of re-created. It is the safe "is this
+repo set up?" probe.
+
+## Overrides and discovery
+
+`--root` picks the repo, `--dir` picks a non-default worktree
+path (init uses it instead of `<root>/project`):
+
+```sh
+myco init --root ~/GitHub/9aia/sepia
+myco init --dir ~/work/ledger          # worktree somewhere else
+```
+
+Every other verb discovers the project the same way, in order:
+
+1. `--dir` — explicit worktree path
+2. `--root` — repo root (worktree is `<root>/project`)
+3. `project_dir` in `myco.toml` (see [config](../reference/config.md))
+4. walk up from cwd for a `project/` worktree on branch `project`
+5. cwd inside the worktree itself
+
+A non-standard worktree location stays discoverable if you set
+`project_dir` (relative to the repo root) in a `myco.toml` —
+the search order is `$MYCO_CONFIG` → `./myco.toml` (where you
+run `myco`) → `~/.config/myco/myco.toml`.
+
+## If the repo has a `pm/` dir
+
+Don't `init` — run [`myco migrate`](migrate.md) instead. It
+converts the legacy `pm/` layout into a fresh `project/` worktree
+in one pass.
+
+---
+
+---
+url: /myco/how-to/agent-loop.md
+---
+# Run the daily agent loop
+
+The core loop for an agent (or a human driving like one):
+orient → claim → work → hand off → resume. Every step is a verb;
+`--json` on all of them.
+
+## Orient
+
+```sh
+myco status --prompt    # token-sized digest, sized for a context window
+```
+
+`status --prompt` is the session opener: counts by kind, what's
+in progress, what's open — enough to pick work without reading
+the files. `myco status` (no flag) is the human-readable version;
+`myco board` and `myco report` give the kanban and the trend.
+
+## Claim
+
+```sh
+myco item set T-012 --status claimed --owner devin
+myco item set T-012 --status in-progress
+```
+
+`claimed` says "an actor owns this" before work starts;
+`in-progress` says "being worked now". Both are single legal
+steps from `open`. Owner ids are namespaced actor strings —
+`devin`, `human:luis`, … — so multiple agents can share a ledger.
+
+Hit a wall mid-task: `myco item set T-012 --status blocked`.
+Need the details: `myco item show T-012` (add `--json` for the
+full item + location + body).
+
+## Hand off
+
+Before the session ends, leave resumable state on the item:
+
+```sh
+myco handoff T-012 --actor devin --session cli:$$ \
+  --note "Done: parser landed. Next: emitter. Open: archive semantics."
+```
+
+`--note -` reads stdin — pipe a generated summary. See
+[handoffs](handoff.md) for the full verb behavior.
+
+## Resume
+
+Next session — human or agent — pulls the restart context:
+
+```sh
+myco resume T-012          # compact prompt-ready block
+myco resume T-012 --json   # {item, location, blocks_titles, handoffs, open_checklist}
+```
+
+Then `myco status --prompt` for the ledger-wide picture and the
+loop restarts.
+
+## Hygiene
+
+```sh
+myco check          # exits 1 with findings
+myco check --fix    # safe repairs + one commit
+```
+
+Run `check` when files were hand-edited or the index may have
+drifted — it validates the [file spec](../explanation/file-spec.md),
+state machine, and index snapshots.
+
+## No-commit mode
+
+Batch or scripted flows can skip the per-verb commit with
+`--no-commit` or `MYCO_NO_COMMIT=1`, then commit once:
+
+```sh
+myco commit -m "chore: end-of-day ledger tidy"
+```
+
+`myco commit` stages all worktree changes and commits with a
+conventional message (default `chore: update project ledger`).
+
+---
+
+---
+url: /myco/how-to/handoff.md
+---
+# Hand off work between sessions
+
+Attach resumable state to any item at the end of a working
+session, then pull the minimal context to restart it later.
+
+```sh
+myco handoff T-012 --note "parser done, emitter next" --actor devin --session cli:abc123
+myco resume T-012   # minimal context block to restart work
+```
+
+## `myco handoff <id>`
+
+Appends a dated entry to `handoffs/<ID>.md` — works on every item
+kind (`T-`, `I-`, `P-`, `ADR-`, `PL-`), live or archived. The item
+must exist; the note is required.
+
+* `--note "…"` — the handoff text (done/next/open). `-` reads stdin.
+* `--actor <id>` — who wrote it (`devin`, `human:luis`; default `cli`).
+* `--session <id>` — provenance, any id string (a sepia session id,
+  `cli:<pid>`, …). Recorded verbatim, never interpreted.
+
+Each call is one appended `##` entry and one commit
+(`chore: handoff <id>`). Files are append-only — history inside a
+file is never rewritten.
+
+## `myco resume <id> [--last N]`
+
+Emits the restart context as a compact prompt block:
+
+```text
+I-003 in-progress pri:high owner:devin #index memory leak
+in: issues/issue-0003-memory-leak.md
+blocks:
+  T-010 store layer
+handoffs:
+2026-10-29 · devin · session:cli:abc123
+  Done: repro. Next: fix.
+open checklist:
+  - [ ] add regression test
+```
+
+`--json` gives `{item, location, blocks_titles, handoffs[],
+open_checklist}` — the same data for machines. `--last N` shows
+only the latest N handoff entries (default 10).
+
+`myco item show <id>` surfaces a `handoffs: N` count; `myco check`
+keeps `handoffs/` honest — files for removed items are archived to
+`handoffs/archive/` by `--fix`, and malformed entries are parse
+findings.
+
+For the sepia-side wiring (session hooks calling these verbs), see
+[session continuity with sepia](session-continuity.md).
+
+---
+
+---
+url: /myco/how-to/session-continuity.md
+---
+# Session continuity with sepia
+
+sepia owns session lifecycle; myco owns work memory. The boundary
+is two verbs — no sepia code lives in this repo, and no myco code
+in sepia. Each side just calls the other's CLI.
+
+## The pattern
+
+Session end (sepia hook) — leave a resumable note on the item you
+were working, tagged with the sepia session id:
+
+```sh
+myco handoff T-012 \
+  --actor devin \
+  --session <sepia-session-id> \
+  --note "Done: store layer landed. Next: wire verbs. Open: archive semantics for ADRs."
+```
+
+`--note -` reads stdin, so a hook can pipe a generated summary.
+`--session` accepts any id string — a sepia session id, a
+`cli:<pid>:<ts>` fallback, whatever wrote the entry. It's
+provenance only; myco records it and never interprets it.
+
+Session start — pull the minimal restart context into the prompt:
+
+```sh
+myco resume T-012 --json
+```
+
+`resume` returns the item (status, priority, owner, labels), the
+titles of its `blocks:` dependencies, the latest handoff entries,
+and the unchecked `- [ ]` checklist items for file-backed items —
+the single-item counterpart of `myco status --prompt`. Human
+output is a compact prompt-ready block; `--last N` caps the
+entries shown (default 10).
+
+## Where handoffs live
+
+`handoffs/<ID>.md` — one append-only file per item, uniform across
+every kind:
+
+```markdown
++++
+item = "T-012"
++++
+
+# Handoffs — T-012
+
+## 2026-10-29 · devin · session:cli:abc123
+Done: store layer landed. Next: wire verbs. Open: archive semantics for ADRs.
+```
+
+Entries are never rewritten — each `myco handoff` is one appended
+`## <date> · <actor> · session:<id>` heading and one atomic commit
+(`chore: handoff T-012`) on the `project` branch, so the branch
+history is the audit trail.
+
+When an item is removed — done tasks leave `TODO.md` — its
+handoff file becomes orphaned. `myco check` reports it and
+`myco check --fix` moves it to `handoffs/archive/`: the live dir
+stays clean, the knowledge survives, and `myco resume` on an
+archived item still finds it.
+
+---
+
+---
+url: /myco/how-to/migrate.md
+---
+# Migrate a legacy ledger
+
+`myco migrate` brings pre-v2 ledgers up to the current spec.
+Two modes, auto-detected by what's on disk.
+
+## `pm/` → `project/`
+
+A `pm/` directory at the repo root is the pre-worktree layout.
+One command converts and removes it:
+
+```sh
+cd your-repo
+myco migrate
+```
+
+* `pm/TODO.md` / `pm/BACKLOG.md` bullets become `T-` items in the
+  new `TODO.md` / `BACKLOG.md` — done items are dropped
+* `pm/ROADMAP.md` becomes a `plans/` file
+* any other `pm/*.md` becomes an `issues/` file
+* a fresh `project/` worktree is scaffolded (the `init` path)
+* `pm/` is removed and its deletion committed on the code branch
+
+## Legacy `project/` → v2
+
+Files already on a `project` branch are normalized in place:
+
+* id-less items get ids
+* `[x]`/done items drop (history keeps them)
+* heading-like lines become `##` sections
+* frontmatter-less files in item dirs are *adopted* — the
+  filename's number is honored when free (`0001-foo.md` →
+  `ADR-0001`); collisions take the next unclaimed number with a
+  warning. Adopted files get synthesized frontmatter and the
+  canonical name
+* everything is re-emitted canonically
+
+## After migrating
+
+```sh
+myco check        # should report clean
+myco status       # the ledger, v2-shaped
+```
+
+`--json` on `migrate` returns the run's counters — items
+converted, ids allocated, files moved, warnings. If the run left
+unparsed lines, they're listed there; fix by hand and `check`
+again.
+
+---
+
+---
+url: /myco/how-to/import-work.md
+---
+# Import external work
+
+`myco absorb` pulls work that lives elsewhere into the ledger —
+code comments, Jira exports, GitHub issue dumps.
+
+## Sweep code comments
+
+```sh
+myco absorb comments                  # the repo root
+myco absorb comments --path src/ --kinds TODO,FIXME,HACK
+myco absorb comments --to issues      # file issues instead of backlog items
+myco absorb comments --dry            # report without creating
+```
+
+Uses ripgrep (`rg` must be installed), respects `.gitignore`, and
+skips `project/`, `docs/`, `target/`. Findings land as `T-` items
+— `BACKLOG.md` by default, `issues/` files with `--to issues`.
+
+## Jira CSV
+
+```sh
+myco absorb jira export.csv
+myco absorb jira export.csv --include-done
+```
+
+`Done`/`Resolved` rows are skipped unless `--include-done` — then
+they're created `done` and archived.
+
+## GitHub issue dump
+
+```sh
+myco absorb github dump.json          # or dump.csv
+myco absorb github dump.json --include-done
+```
+
+JSON input is an array of issue objects — a
+`gh issue list --json number,title,state,labels,assignees,body`
+dump works as-is (`labels` entries can be `"name"` strings or
+`{name:…}` objects, `assignee`/`assignees` strings or
+`{login:…}` objects; extra fields are ignored). CSV is the
+equivalent columns. `closed` issues are skipped unless
+`--include-done` (created `done` + archived).
+
+## After importing
+
+```sh
+myco status         # the ledger, now bigger
+myco board          # or the kanban view
+myco check          # sanity
+```
+
+Each absorb run is one commit — `--no-commit` batches several
+imports into one `myco commit`.
+
+---
+
+---
+url: /myco/how-to/org-views.md
+---
+# See work across repos
+
+`myco index` registers repos into a machine-wide cache;
+`myco org` renders cross-repo views over it.
+
+## The index
+
+The index lives under `$MYCO_HOME`, else `$XDG_DATA_HOME/myco`,
+else `~/.local/share/myco`:
+
+* `repos.toml` — the registry (`[[repo]] path name`), a plain
+  file you can inspect
+* `index.redb` — one `snapshots` table: repo path → JSON snapshot
+
+It is a **derived, disposable cache** — markdown in each repo's
+`project/` stays canonical. `rm -rf` the index dir and
+`myco index rebuild` derives it back.
+
+## Register repos
+
+```sh
+myco index add ~/GitHub/9aia/sepia    # repo root or its project/ worktree
+myco index add .                      # register the repo you're in
+myco index list                       # repos + snapshot freshness
+```
+
+`add` takes an initial snapshot. Snapshots go stale as ledgers
+change — `list` marks them `stale`; `org` verbs auto-rebuild
+stale entries, or rebuild explicitly:
+
+```sh
+myco index rebuild                    # all registered repos
+myco index rebuild ~/GitHub/9aia/sepia
+myco index remove ~/GitHub/9aia/sepia # unregister + drop snapshot
+```
+
+## Org views
+
+```sh
+myco org status
+```
+
+```text
+org status — 21 repo(s)
+bupha            tasks 7o/0c/0ip/0b backlog 15 issues 0o p 0o pl 0o adr 2o  @ad8b625
+sepia            tasks 2o/0c/0ip/0b backlog 4 issues 0o p 0o pl 1o adr 0o  @8cbc633
+...
+totals: tasks 167o/0c/1ip/0b backlog 326 issues 1o p 5o pl 7o/1r adr 59o
+```
+
+Per-repo counts (`o`pen / `c`laimed / `i`n-`p`rogress /
+`b`locked), the snapshot commit, org totals, then items grouped
+by owner. A rebuilt repo is marked `(rebuilt)`.
+
+```sh
+myco org board          # org kanban — repo-prefixed cards over every live item
+myco org board --md     # markdown table for docs/READMEs
+```
+
+Cards are prefixed with the repo name (`thal:T-118 …`) so one
+board spans the whole org.
+
+---
+
+---
+url: /myco/reference/cli.md
+---
+# Command-Line Help for `myco`
+
+This document contains the help content for the `myco` command-line program.
+
+**Command Overview:**
+
+* [`myco`↴](#myco)
+* [`myco manifest`↴](#myco-manifest)
+* [`myco schema`↴](#myco-schema)
+* [`myco init`↴](#myco-init)
+* [`myco check`↴](#myco-check)
+* [`myco migrate`↴](#myco-migrate)
+* [`myco commit`↴](#myco-commit)
+* [`myco todo`↴](#myco-todo)
+* [`myco todo add`↴](#myco-todo-add)
+* [`myco todo done`↴](#myco-todo-done)
+* [`myco todo defer`↴](#myco-todo-defer)
+* [`myco todo list`↴](#myco-todo-list)
+* [`myco backlog`↴](#myco-backlog)
+* [`myco backlog add`↴](#myco-backlog-add)
+* [`myco backlog promote`↴](#myco-backlog-promote)
+* [`myco backlog list`↴](#myco-backlog-list)
+* [`myco issue`↴](#myco-issue)
+* [`myco issue new`↴](#myco-issue-new)
+* [`myco issue list`↴](#myco-issue-list)
+* [`myco issue resolve`↴](#myco-issue-resolve)
+* [`myco issue archive`↴](#myco-issue-archive)
+* [`myco issue comment`↴](#myco-issue-comment)
+* [`myco proposal`↴](#myco-proposal)
+* [`myco proposal new`↴](#myco-proposal-new)
+* [`myco proposal list`↴](#myco-proposal-list)
+* [`myco proposal status`↴](#myco-proposal-status)
+* [`myco plan`↴](#myco-plan)
+* [`myco plan new`↴](#myco-plan-new)
+* [`myco plan list`↴](#myco-plan-list)
+* [`myco adr`↴](#myco-adr)
+* [`myco adr new`↴](#myco-adr-new)
+* [`myco adr list`↴](#myco-adr-list)
+* [`myco adr supersede`↴](#myco-adr-supersede)
+* [`myco item`↴](#myco-item)
+* [`myco item show`↴](#myco-item-show)
+* [`myco item set`↴](#myco-item-set)
+* [`myco handoff`↴](#myco-handoff)
+* [`myco resume`↴](#myco-resume)
+* [`myco status`↴](#myco-status)
+* [`myco board`↴](#myco-board)
+* [`myco epic`↴](#myco-epic)
+* [`myco milestone`↴](#myco-milestone)
+* [`myco absorb`↴](#myco-absorb)
+* [`myco absorb comments`↴](#myco-absorb-comments)
+* [`myco absorb jira`↴](#myco-absorb-jira)
+* [`myco absorb github`↴](#myco-absorb-github)
+* [`myco report`↴](#myco-report)
+* [`myco index`↴](#myco-index)
+* [`myco index add`↴](#myco-index-add)
+* [`myco index remove`↴](#myco-index-remove)
+* [`myco index list`↴](#myco-index-list)
+* [`myco index rebuild`↴](#myco-index-rebuild)
+* [`myco org`↴](#myco-org)
+* [`myco org status`↴](#myco-org-status)
+* [`myco org board`↴](#myco-org-board)
+
+## `myco`
+
+myco — project management, grown not built: agent-first PM CLI
+
+**Usage:** `myco [OPTIONS] <COMMAND>`
+
+###### **Subcommands:**
+
+* `manifest` — Capabilities + protocol version — agent self-discovery
+* `schema` — The file/state spec, machine-readable JSON Schema
+* `init` — Scaffold `project/`: orphan branch + worktree + .gitignore + seed files. Idempotent — a valid existing worktree gets its scaffold verified/repaired
+* `check` — Validate schemas + state machine, repair file/index drift. Exit 1 with findings; `--fix` applies safe repairs + commits
+* `migrate` — Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch
+* `commit` — Stage + commit worktree changes (conventional message)
+* `todo` — TODO.md tasks — add / done / defer / list
+* `backlog` — BACKLOG.md parked items — add / promote / list
+* `issue` — Tracked issues, one file each under `issues/`
+* `proposal` — Design proposals under `proposals/` (`P-NNN`)
+* `plan` — Execution plans under `plans/` (`PL-NNN`)
+* `adr` — Architecture decision records under `adrs/` (`ADR-NNNN`)
+* `item` — Kind-agnostic item verbs — show / set
+* `handoff` — Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only)
+* `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`
+* `status` — Cheap digest of the work ledger. `--prompt` = token-sized
+* `board` — Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
+* `epic` — Items grouped by epic — bare lists epics with counts, a name renders that epic's board (`epic v2` ≡ `board --epic v2`)
+* `milestone` — Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
+* `absorb` — Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps
+* `report` — Aging + velocity + blocked — how the ledger is trending
+* `index` — The derived index: register repos, query/rebuild snapshots
+* `org` — Cross-repo views over the index (auto-rebuilds stale repos)
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines)
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT)
+* `--dir <PATH>` — Project worktree to act on, overriding discovery
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`)
+
+## `myco manifest`
+
+Capabilities + protocol version — agent self-discovery
+
+**Usage:** `myco manifest`
+
+## `myco schema`
+
+The file/state spec, machine-readable JSON Schema
+
+**Usage:** `myco schema`
+
+## `myco init`
+
+Scaffold `project/`: orphan branch + worktree + .gitignore + seed files. Idempotent — a valid existing worktree gets its scaffold verified/repaired
+
+**Usage:** `myco init`
+
+## `myco check`
+
+Validate schemas + state machine, repair file/index drift. Exit 1 with findings; `--fix` applies safe repairs + commits
+
+**Usage:** `myco check [OPTIONS]`
+
+###### **Options:**
+
+* `--fix` — Repair drift in place instead of only reporting
+
+## `myco migrate`
+
+Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch
+
+**Usage:** `myco migrate`
+
+## `myco commit`
+
+Stage + commit worktree changes (conventional message)
+
+**Usage:** `myco commit [OPTIONS]`
+
+###### **Options:**
+
+* `-m`, `--message <MESSAGE>` — Commit message (default: `chore: update project ledger`)
+
+## `myco todo`
+
+TODO.md tasks — add / done / defer / list
+
+**Usage:** `myco todo <COMMAND>`
+
+###### **Subcommands:**
+
+* `add` — Add a task — allocs a T-id, appends to a section of TODO.md
+* `done` — Mark done — walks the state machine to `done`, then removes the line (git history keeps the record). Done on a parent removes the whole subtree — children die with it
+* `defer` — Park a task — transition to `deferred`, move the line to BACKLOG.md. Defer on a parent moves the whole subtree (children park with it); on a child it detaches alone
+* `list` — List tasks
+
+## `myco todo add`
+
+Add a task — allocs a T-id, appends to a section of TODO.md
+
+**Usage:** `myco todo add [OPTIONS] <TITLE>`
+
+###### **Arguments:**
+
+* `<TITLE>` — One-line title
+
+###### **Options:**
+
+* `--section <SECTION>` — Section to add under (created when absent; default: the first section, or an unsectioned run)
+* `--parent <PARENT>` — Nest under this task instead of a section — the new item becomes a child (`  - [ ]` under the parent)
+* `--pri <PRI>` \[alias: `priority`] — Priority: low|med|high|crit
+* `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …)
+* `--label <LABEL>` — `#label` — repeatable
+* `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable
+* `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`)
+* `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`)
+
+## `myco todo done`
+
+Mark done — walks the state machine to `done`, then removes the line (git history keeps the record). Done on a parent removes the whole subtree — children die with it
+
+**Usage:** `myco todo done <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Task id (`T-NNN`)
+
+## `myco todo defer`
+
+Park a task — transition to `deferred`, move the line to BACKLOG.md. Defer on a parent moves the whole subtree (children park with it); on a child it detaches alone
+
+**Usage:** `myco todo defer <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Task id (`T-NNN`)
+
+## `myco todo list`
+
+List tasks
+
+**Usage:** `myco todo list [OPTIONS]`
+
+###### **Options:**
+
+* `--status <STATUS>` — Keep only items with this status
+* `--owner <OWNER>` — Keep only items owned by this actor
+* `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+
+## `myco backlog`
+
+BACKLOG.md parked items — add / promote / list
+
+**Usage:** `myco backlog <COMMAND>`
+
+###### **Subcommands:**
+
+* `add` — Add a deferred item — allocs a T-id straight into BACKLOG.md
+* `promote` — Re-activate a parked item — `deferred → open`, move the line to TODO.md
+* `list` — List backlog items
+
+## `myco backlog add`
+
+Add a deferred item — allocs a T-id straight into BACKLOG.md
+
+**Usage:** `myco backlog add [OPTIONS] <TITLE>`
+
+###### **Arguments:**
+
+* `<TITLE>` — One-line title
+
+###### **Options:**
+
+* `--section <SECTION>` — Section to add under (created when absent; default: the first section, or an unsectioned run)
+* `--pri <PRI>` \[alias: `priority`] — Priority: low|med|high|crit
+* `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …)
+* `--label <LABEL>` — `#label` — repeatable
+* `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable
+* `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`)
+* `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`)
+
+## `myco backlog promote`
+
+Re-activate a parked item — `deferred → open`, move the line to TODO.md
+
+**Usage:** `myco backlog promote <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Task id (`T-NNN`)
+
+## `myco backlog list`
+
+List backlog items
+
+**Usage:** `myco backlog list [OPTIONS]`
+
+###### **Options:**
+
+* `--status <STATUS>` — Keep only items with this status
+* `--owner <OWNER>` — Keep only items owned by this actor
+* `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+
+## `myco issue`
+
+Tracked issues, one file each under `issues/`
+
+**Usage:** `myco issue <COMMAND>`
+
+###### **Subcommands:**
+
+* `new` — File an issue — allocs an I-id, writes `issues/issue-NNNN-<slug>.md` with frontmatter + template
+* `list` — List issues (live files; `--archived` includes `issues/archive/`)
+* `resolve` — Close an issue — walks the state machine to `done`; `--resolution` appends text under `## Resolution`
+* `archive` — Shelve a done issue — moves the file to `issues/archive/`
+* `comment` — Append a dated note under `## Comments` (created when missing)
+
+## `myco issue new`
+
+File an issue — allocs an I-id, writes `issues/issue-NNNN-<slug>.md` with frontmatter + template
+
+**Usage:** `myco issue new [OPTIONS] <TITLE>`
+
+###### **Arguments:**
+
+* `<TITLE>` — One-line title (drives the filename slug)
+
+###### **Options:**
+
+* `--body <FILE|->` — Body markdown from a file, or `-` for stdin
+* `--text <TEXT>` — Body markdown inline
+* `--pri <PRI>` \[alias: `priority`] — Priority: low|med|high|crit
+* `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …)
+* `--label <LABEL>` — `#label` — repeatable
+* `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable
+* `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`)
+* `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`)
+
+## `myco issue list`
+
+List issues (live files; `--archived` includes `issues/archive/`)
+
+**Usage:** `myco issue list [OPTIONS]`
+
+###### **Options:**
+
+* `--archived` — Include archived issues
+* `--status <STATUS>` — Keep only items with this status
+* `--owner <OWNER>` — Keep only items owned by this actor
+* `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+
+## `myco issue resolve`
+
+Close an issue — walks the state machine to `done`; `--resolution` appends text under `## Resolution`
+
+**Usage:** `myco issue resolve [OPTIONS] <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Issue id (`I-NNN`)
+
+###### **Options:**
+
+* `--resolution <RESOLUTION>` — Resolution text appended to the body
+
+## `myco issue archive`
+
+Shelve a done issue — moves the file to `issues/archive/`
+
+**Usage:** `myco issue archive <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Issue id (`I-NNN`)
+
+## `myco issue comment`
+
+Append a dated note under `## Comments` (created when missing)
+
+**Usage:** `myco issue comment <ID> <TEXT>`
+
+###### **Arguments:**
+
+* `<ID>` — Issue id (`I-NNN`)
+* `<TEXT>` — Comment text
+
+## `myco proposal`
+
+Design proposals under `proposals/` (`P-NNN`)
+
+**Usage:** `myco proposal <COMMAND>`
+
+###### **Subcommands:**
+
+* `new` — File a proposal — allocs a P-id, writes the proposal file with frontmatter + template
+* `list` — List proposals
+* `status` — Set a proposal's status. Proposal words alias the state machine: `draft` = open, `accepted` = done, `rejected` = deferred — the transition is walked through the machine, so `accepted` passes `open → in-progress → done`
+
+## `myco proposal new`
+
+File a proposal — allocs a P-id, writes the proposal file with frontmatter + template
+
+**Usage:** `myco proposal new [OPTIONS] <TITLE>`
+
+###### **Arguments:**
+
+* `<TITLE>` — One-line title (drives the filename slug)
+
+###### **Options:**
+
+* `--body <FILE|->` — Body markdown from a file, or `-` for stdin
+* `--text <TEXT>` — Body markdown inline
+* `--pri <PRI>` \[alias: `priority`] — Priority: low|med|high|crit
+* `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …)
+* `--label <LABEL>` — `#label` — repeatable
+* `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable
+* `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`)
+* `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`)
+
+## `myco proposal list`
+
+List proposals
+
+**Usage:** `myco proposal list [OPTIONS]`
+
+###### **Options:**
+
+* `--status <STATUS>` — Keep only items with this status
+* `--owner <OWNER>` — Keep only items owned by this actor
+* `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+
+## `myco proposal status`
+
+Set a proposal's status. Proposal words alias the state machine: `draft` = open, `accepted` = done, `rejected` = deferred — the transition is walked through the machine, so `accepted` passes `open → in-progress → done`
+
+**Usage:** `myco proposal status <ID> <STATUS>`
+
+###### **Arguments:**
+
+* `<ID>` — Proposal id (`P-NNN`)
+* `<STATUS>` — `draft` | `accepted` | `rejected` (raw machine statuses like `in-progress` also accepted)
+
+## `myco plan`
+
+Execution plans under `plans/` (`PL-NNN`)
+
+**Usage:** `myco plan <COMMAND>`
+
+###### **Subcommands:**
+
+* `new` — File a plan — allocs a PL-id, writes the plan file with frontmatter + a phase-checklist template
+* `list` — List plans
+
+## `myco plan new`
+
+File a plan — allocs a PL-id, writes the plan file with frontmatter + a phase-checklist template
+
+**Usage:** `myco plan new [OPTIONS] <TITLE>`
+
+###### **Arguments:**
+
+* `<TITLE>` — One-line title (drives the filename slug)
+
+###### **Options:**
+
+* `--body <FILE|->` — Body markdown from a file, or `-` for stdin
+* `--text <TEXT>` — Body markdown inline
+* `--pri <PRI>` \[alias: `priority`] — Priority: low|med|high|crit
+* `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …)
+* `--label <LABEL>` — `#label` — repeatable
+* `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable
+* `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`)
+* `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`)
+
+## `myco plan list`
+
+List plans
+
+**Usage:** `myco plan list [OPTIONS]`
+
+###### **Options:**
+
+* `--status <STATUS>` — Keep only items with this status
+* `--owner <OWNER>` — Keep only items owned by this actor
+* `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+
+## `myco adr`
+
+Architecture decision records under `adrs/` (`ADR-NNNN`)
+
+**Usage:** `myco adr <COMMAND>`
+
+###### **Subcommands:**
+
+* `new` — File an ADR — allocs an ADR-id, writes the file with frontmatter (status `open` = "proposed") + template
+* `list` — List ADRs
+* `supersede` — Mark an ADR superseded by another — the old file gets `superseded_by:` + status `done`, the replacement gets a reciprocal `supersedes:` key. Both must already exist
+
+## `myco adr new`
+
+File an ADR — allocs an ADR-id, writes the file with frontmatter (status `open` = "proposed") + template
+
+**Usage:** `myco adr new [OPTIONS] <TITLE>`
+
+###### **Arguments:**
+
+* `<TITLE>` — One-line title (drives the filename slug)
+
+###### **Options:**
+
+* `--body <FILE|->` — Body markdown from a file, or `-` for stdin
+* `--text <TEXT>` — Body markdown inline
+* `--pri <PRI>` \[alias: `priority`] — Priority: low|med|high|crit
+* `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …)
+* `--label <LABEL>` — `#label` — repeatable
+* `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable
+* `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`)
+* `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`)
+
+## `myco adr list`
+
+List ADRs
+
+**Usage:** `myco adr list [OPTIONS]`
+
+###### **Options:**
+
+* `--status <STATUS>` — Keep only items with this status
+* `--owner <OWNER>` — Keep only items owned by this actor
+* `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+
+## `myco adr supersede`
+
+Mark an ADR superseded by another — the old file gets `superseded_by:` + status `done`, the replacement gets a reciprocal `supersedes:` key. Both must already exist
+
+**Usage:** `myco adr supersede --by <BY> <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — The ADR being replaced (`ADR-NNNN`)
+
+###### **Options:**
+
+* `--by <BY>` — The ADR replacing it (`ADR-NNNN`)
+
+## `myco item`
+
+Kind-agnostic item verbs — show / set
+
+**Usage:** `myco item <COMMAND>`
+
+###### **Subcommands:**
+
+* `show` — Dump one item — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body)
+* `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it)
+
+## `myco item show`
+
+Dump one item — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body)
+
+**Usage:** `myco item show <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`, `PL-NNN`) — live or archived
+
+## `myco item set`
+
+Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it)
+
+**Usage:** `myco item set [OPTIONS] <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Any item id
+
+###### **Options:**
+
+* `--status <STATUS>` — New status — one legal step from the current one
+* `--pri <PRI>` \[alias: `priority`] — Priority: low|med|high|crit
+* `--owner <OWNER>` — Owner actor id
+* `--label <LABEL>` — Add (`+x` or `x`) or remove (`-x`) a label — repeatable
+* `--unlabel <UNLABEL>` — Remove a label — repeatable
+* `--blocks <BLOCKS>` — Add (`+T-1` or `T-1`) or remove (`-T-1`) a blocks dep — repeatable
+* `--unblock <UNBLOCK>` — Remove a blocks dep — repeatable
+* `--epic <EPIC>` — Epic name — `""` clears the epic
+* `--milestone <MILESTONE>` — Milestone name — `""` clears the milestone
+
+## `myco handoff`
+
+Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only)
+
+**Usage:** `myco handoff [OPTIONS] --note <TEXT|-> <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`, `PL-NNN`)
+
+###### **Options:**
+
+* `--note <TEXT|->` — Handoff note — done/next/open. `-` reads stdin
+* `--actor <ACTOR>` — Who wrote it (`devin`, `human:luis`, …; default `cli`)
+* `--session <SESSION>` — Session provenance — a sepia session id, `cli:<pid>`, any id string
+
+## `myco resume`
+
+Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`
+
+**Usage:** `myco resume [OPTIONS] <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Any item id
+
+###### **Options:**
+
+* `--last <LAST>` — Only the latest N handoff entries (default 10)
+
+## `myco status`
+
+Cheap digest of the work ledger. `--prompt` = token-sized
+
+**Usage:** `myco status [OPTIONS]`
+
+###### **Options:**
+
+* `--prompt` — Render for an agent prompt (minimal tokens)
+
+## `myco board`
+
+Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
+
+**Usage:** `myco board [OPTIONS]`
+
+###### **Options:**
+
+* `--md` — Emit a markdown table (for docs/READMEs)
+* `--epic <EPIC>` — Only items in this epic
+* `--milestone <MILESTONE>` — Only items in this milestone
+
+## `myco epic`
+
+Items grouped by epic — bare lists epics with counts, a name renders that epic's board (`epic v2` ≡ `board --epic v2`)
+
+**Usage:** `myco epic [OPTIONS] [NAME]`
+
+###### **Arguments:**
+
+* `<NAME>` — Epic name — omit for the all-epics summary
+
+###### **Options:**
+
+* `--md` — Emit a markdown table (with a name)
+
+## `myco milestone`
+
+Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
+
+**Usage:** `myco milestone [OPTIONS] [NAME]`
+
+###### **Arguments:**
+
+* `<NAME>` — Milestone name — omit for the all-milestones summary
+
+###### **Options:**
+
+* `--md` — Emit a markdown table (with a name)
+
+## `myco absorb`
+
+Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps
+
+**Usage:** `myco absorb <COMMAND>`
+
+###### **Subcommands:**
+
+* `comments` — Sweep code comments into the ledger via ripgrep (`rg` must be installed — respects `.gitignore`; `project/`, `docs/`, `target/` are excluded)
+* `jira` — Import a Jira CSV export. `Done`/`Resolved` rows are skipped unless `--include-done` (created done + archived)
+* `github` — Import a GitHub issues dump — a JSON array (`number`, `title`, `state`, `labels`, `assignee`, `body`) or the CSV equivalent. `closed` rows are skipped unless `--include-done` (created done + archived)
+
+## `myco absorb comments`
+
+Sweep code comments into the ledger via ripgrep (`rg` must be installed — respects `.gitignore`; `project/`, `docs/`, `target/` are excluded)
+
+**Usage:** `myco absorb comments [OPTIONS]`
+
+###### **Options:**
+
+* `--path <PATH>` — Directory to scan (default: the repo root)
+* `--kinds <KINDS>` — Comment kinds to match — comma-separated or repeatable (default TODO,FIXME,HACK)
+* `--to <TO>` — Where findings land: `backlog` items or `issues` files (default `backlog`)
+
+  Default value: `backlog`
+* `--dry` — Report findings without creating items or committing
+
+## `myco absorb jira`
+
+Import a Jira CSV export. `Done`/`Resolved` rows are skipped unless `--include-done` (created done + archived)
+
+**Usage:** `myco absorb jira [OPTIONS] <FILE>`
+
+###### **Arguments:**
+
+* `<FILE>` — The export file (`.csv`)
+
+###### **Options:**
+
+* `--include-done` — Import done/resolved issues too
+
+## `myco absorb github`
+
+Import a GitHub issues dump — a JSON array (`number`, `title`, `state`, `labels`, `assignee`, `body`) or the CSV equivalent. `closed` rows are skipped unless `--include-done` (created done + archived)
+
+**Usage:** `myco absorb github [OPTIONS] <FILE>`
+
+###### **Arguments:**
+
+* `<FILE>` — The export file (`.json` or `.csv`)
+
+###### **Options:**
+
+* `--include-done` — Import closed issues too
+
+## `myco report`
+
+Aging + velocity + blocked — how the ledger is trending
+
+**Usage:** `myco report`
+
+## `myco index`
+
+The derived index: register repos, query/rebuild snapshots
+
+**Usage:** `myco index <COMMAND>`
+
+###### **Subcommands:**
+
+* `add` — Register a repo — `<path>` is a repo root (or its `project/` worktree). Takes an initial snapshot
+* `remove` — Unregister a repo and drop its snapshot
+* `list` — List registered repos with snapshot freshness
+* `rebuild` — Re-scan a registered repo (all of them without `<path>`)
+
+## `myco index add`
+
+Register a repo — `<path>` is a repo root (or its `project/` worktree). Takes an initial snapshot
+
+**Usage:** `myco index add <PATH>`
+
+###### **Arguments:**
+
+* `<PATH>` — Repo root (or project worktree) to register
+
+## `myco index remove`
+
+Unregister a repo and drop its snapshot
+
+**Usage:** `myco index remove <PATH>`
+
+###### **Arguments:**
+
+* `<PATH>` — Registered repo root (or project worktree)
+
+## `myco index list`
+
+List registered repos with snapshot freshness
+
+**Usage:** `myco index list`
+
+## `myco index rebuild`
+
+Re-scan a registered repo (all of them without `<path>`)
+
+**Usage:** `myco index rebuild [PATH]`
+
+###### **Arguments:**
+
+* `<PATH>` — Registered repo root (or project worktree)
+
+## `myco org`
+
+Cross-repo views over the index (auto-rebuilds stale repos)
+
+**Usage:** `myco org <COMMAND>`
+
+###### **Subcommands:**
+
+* `status` — Per-repo counts + org totals + items grouped by owner
+* `board` — Org kanban — repo-prefixed cards over every live item
+
+## `myco org status`
+
+Per-repo counts + org totals + items grouped by owner
+
+**Usage:** `myco org status`
+
+## `myco org board`
+
+Org kanban — repo-prefixed cards over every live item
+
+**Usage:** `myco org board [OPTIONS]`
+
+###### **Options:**
+
+* `--md` — Emit a markdown table (for docs/READMEs)
+
+&#xA;This document was generated automatically by
+clap-markdown.&#xA;
+
+---
+
+---
+url: /myco/reference/config.md
+---
+# Config — `myco.toml`
+
+## Top level
+
+| field | type | required | notes |
+|---|---|---|---|
+| `project_dir` | `string` | optional | Path to the project worktree, relative to the repo root. |
+
+## Constraints
+
+* `deny_unknown_fields`: typos in field names fail the load.
+* Search order: `$MYCO_CONFIG` → `./myco.toml` →
+  `~/.config/myco/myco.toml`. The file is optional — no
+  `myco.toml` anywhere just means defaults.
+
+---
+
+---
+url: /myco/reference/crate-api.md
+---
+# Crate API
+
+Rustdoc for every workspace crate — public APIs are
+documented at source (doc comments).
+
+* [myco-core](/myco/api/myco_core/index.html) — domain
+* [myco-config](/myco/api/myco_config/index.html) — port
+* [myco-index](/myco/api/myco_index/index.html) — port
+* [myco-store](/myco/api/myco_store/index.html) — port
+* [myco-config-toml](/myco/api/myco_config_toml/index.html) — adapter
+* [myco-git](/myco/api/myco_git/index.html) — adapter
+* [myco-index-redb](/myco/api/myco_index_redb/index.html) — adapter
+* [myco-shell](/myco/api/myco_shell/index.html) — adapter
+* [myco-store-md](/myco/api/myco_store_md/index.html) — adapter
+* [myco-testkit](/myco/api/myco_testkit/index.html) — adapter
+* [myco](/myco/api/myco/index.html) — binary
+
+---
+
+---
+url: /myco/explanation/worktree-model.md
+---
+# The worktree model
+
+Why `project/` is a git worktree of an orphan branch — and what
+that buys you.
+
+## The shape
+
+```text
+your-repo/
+├── src/ …            ← code branch (main)
+├── project/          ← worktree of the orphan `project` branch
+│   ├── TODO.md
+│   ├── BACKLOG.md
+│   ├── issues/  proposals/  plans/  adrs/  handoffs/
+│   ├── index.md
+│   └── meta.toml
+└── .gitignore        ← gains `project/`
+```
+
+The `project` branch shares the repo's `.git` object store but
+has disjoint history — an orphan root, no code ancestors. The
+worktree mounts it as a plain directory, so tools see ordinary
+files while `git worktree list` shows the truth.
+
+## Why an orphan branch
+
+PM state moves at its own cadence. On an orphan branch, ledger
+commits never touch the code history: no `chore: defer T-009`
+noise in `main`'s log, no PM diffs in PRs, no branch protection
+friction. `project/` is gitignored on every code branch — the
+worktree physically can't leak into a code commit.
+
+## Why a worktree (not just a branch)
+
+The ledger has to be *visible* — agents edit files, humans read
+`TODO.md` — without `git checkout` swapping the code tree. A
+worktree keeps both checked out at once.
+
+## Commits are the audit trail
+
+Every mutating verb is one atomic, conventional commit on
+`project` (`chore: add T-012`, `chore: handoff T-012`,
+`chore: resolve I-003`, …). So
+`git -C project log` *is* the history of intent — who moved what
+when, replayable and greppable, with no separate audit store.
+`--no-commit` / `$MYCO_NO_COMMIT` opts out per run; `myco commit`
+squashes a batch into one.
+
+## Canonical markdown, disposable index
+
+The markdown in `project/` is canonical — human-editable,
+diffable, frozen by golden fixtures. The redb index
+(`index.redb` + `repos.toml` under `$MYCO_HOME` →
+`$XDG_DATA_HOME/myco` → `~/.local/share/myco`) is a *derived
+cache* that powers `status`, `board`, `report`, and `org` without
+re-parsing files. Delete it and `myco index rebuild` derives it
+back; `myco check` finds and repairs drift between the two.
+
+See [the file spec](file-spec.md) for what the files contain and
+[architecture](architecture.md) for the crates that implement it.
+
+---
+
+---
+url: /myco/explanation/file-spec.md
+---
+# The ledger file spec
+
+What `project/` contains, how items are written, and the state
+machine they live under. `myco schema` emits all of this as
+machine-readable JSON Schema; `myco check` enforces it.
+
+## Layout
+
+| path | holds |
+|---|---|
+| `meta.toml` | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
+| `TODO.md` | open-line tasks (`T-`), `##` sections, nested children |
+| `BACKLOG.md` | deferred items — same grammar, no checkbox |
+| `index.md` | free-form human index — verbatim, never rewritten |
+| `issues/` | `issue-NNNN-<slug>.md` + `issues/archive/` |
+| `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/` |
+| `plans/` | `pl-NNNN-<slug>.md` + `plans/archive/` |
+| `adrs/` | `NNNN-<slug>.md` + `adrs/archive/` |
+| `handoffs/` | `<ID>.md` append-only + `handoffs/archive/` |
+
+## Item ids
+
+`<prefix>-<number>`, zero-padded per kind: `T-001` tasks,
+`I-001` issues, `P-001` proposals, `PL-001` plans, `ADR-0001`
+ADRs. One registry, per-kind counters in `meta.toml`'s `[next]`
+table — ids are never reused. Tasks live as lines; the four
+file-backed kinds (`I`, `P`, `PL`, `ADR`) get a markdown file
+each, filenames padded to four digits.
+
+## Line items — TODO.md / BACKLOG.md
+
+```markdown
+# TODO — <repo>
+
+## <section>
+
+- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · epic:v2 · ms:1.0 · note:<text>
+  - [ ] T-013 a sub-task — children are the same grammar, indented 2 spaces/level
+```
+
+* `BACKLOG.md` lines are the same shape minus `[ ]`, default
+  status `deferred`; `TODO.md` defaults to `open`.
+* `done` removes the line (history keeps it); `defer` moves it to
+  `BACKLOG.md`; `promote` moves it back.
+* `done`/`defer` on a parent act on the whole subtree; on a
+  child, just that node.
+* Token order is canonical (`status`, `pri`, `owner`, `created`,
+  `#label`, `blocks`, `epic`, `ms`, `note`) so emit produces
+  minimal diffs. `ms` is the milestone token — kept short.
+* Patterns: actors `[A-Za-z0-9._:-]+`, labels `[A-Za-z0-9_-]+`,
+  epic/ms names `[A-Za-z0-9_.-]+`, priority `low|med|high|crit`.
+
+## File items — issues/ proposals/ plans/ adrs/
+
+`+++` TOML frontmatter + free-form markdown body:
+
+```markdown
++++
+id = "P-001"
+title = "myco v2 — agent-first project management, in Rust"
+status = "open"
+created = "2026-10-29"
+priority = "medium"
+labels = ["design"]
+blocks = ["T-008"]
+epic = "v2"
+milestone = "1.0"
++++
+
+# Title
+
+Body — templates seed Context/Decision/Consequences-shaped
+sections per kind.
+```
+
+Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
+`priority`, `labels`, `blocks`, `note`, `superseded_by`,
+`supersedes`, `epic`, `milestone`. Archiving moves the file to
+`<dir>/archive/` — `myco item show` still finds archived items.
+
+## State machine
+
+Six statuses; `item set --status` and kind verbs walk it one
+legal step at a time:
+
+| from | can go to |
+|---|---|
+| `open` | `claimed`, `in-progress`, `deferred` |
+| `claimed` | `in-progress`, `open`, `deferred` |
+| `in-progress` | `blocked`, `done`, `deferred` |
+| `blocked` | `in-progress`, `open`, `deferred` |
+| `deferred` | `open` |
+| `done` | — (terminal) |
+
+Proposal words alias the machine: `draft` = `open`, `accepted` =
+`done`, `rejected` = `deferred` — the transition still walks the
+graph (`accepted` passes `open → in-progress → done`). ADR status
+`open` reads as "proposed"; `adr supersede` closes the old file
+with `superseded_by:` and stamps the replacement `supersedes:`.
+
+## Handoffs
+
+`handoffs/<ID>.md` — one file per item, uniform across kinds:
+
+```markdown
++++
+item = "T-012"
++++
+
+# Handoffs — T-012
+
+## 2026-10-29 · devin · session:cli:abc123
+Done: parser. Next: emitter. Open: archive semantics.
+```
+
+Append-only: every `myco handoff` is one `##` entry + one commit;
+entries are never rewritten. When an item's file goes away, its
+handoff file is orphaned — `myco check` reports it and
+`check --fix` moves it to `handoffs/archive/`, where `resume`
+still finds it.
+
+---
+
+---
+url: /myco/explanation/architecture.md
+---
+# Architecture
+
+Ports-and-adapters over a flat `crates/` workspace:
+`myco-core` is pure domain — item models, the id registry, the
+state machine — with no I/O. Ports are traits (`myco-store`,
+`myco-config`, `myco-index`); impls live in separate crates;
+`crates/myco-cli` (package `myco`) is the composition root that
+wires impls to verbs.
+
+Design rules:
+
+* **No `unsafe`, no async** — the binary stays dependency-light
+  and synchronous; no runtime to embed.
+* **Git via the `git` CLI** — `myco-git` shells out for the
+  orphan branch, worktree, and per-verb commits; no
+  libgit2/gix binding.
+* **Markdown is the file spec** — `myco-store-md` owns strict
+  parse/emit: deterministic output, stable ordering, minimal
+  diffs. `myco-testkit` freezes emit with golden fixtures and
+  proptest round-trips, so the format can't drift silently.
+* **The index is derived, never canonical** — `myco-index-redb`
+  snapshots ledgers into redb for `status`/`board`/`org`; it can
+  be deleted and rebuilt at any time.
+
+| crate | layer | purpose |
+|---|---|---|
+| `myco-core` | domain | myco domain core: item models, ID registry, state machine — pure, no I/O |
+| `myco-config` | port | Config port: where myco.toml-shaped config comes from |
+| `myco-index` | port | Index port: the derived, disposable cache powering status/board/report/org views |
+| `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
+| `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
+| `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
+| `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
+| `myco-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
+| `myco-store-md` | adapter | Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec |
+| `myco-testkit` | adapter | Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec |
+| `myco` | binary | myco — project management, grown not built: agent-first PM CLI |
+|---|---|---|
+| `myco-core` | domain | myco domain core: item models, ID registry, state machine — pure, no I/O |
+| `myco-config` | port | Config port: where myco.toml-shaped config comes from |
+| `myco-index` | port | Index port: the derived, disposable cache powering status/board/report/org views |
+| `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
+| `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
+| `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
+| `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
+| `myco-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
+| `myco-store-md` | adapter | Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec |
+| `myco-testkit` | adapter | Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec |
+| `myco` | binary | myco — project management, grown not built: agent-first PM CLI |
+|---|---|---|
+| `myco-core` | domain | myco domain core: item models, ID registry, state machine — pure, no I/O |
+| `myco-config` | port | Config port: where myco.toml-shaped config comes from |
+| `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
+| `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
+| `myco-index` | adapter | Index port: the derived, disposable cache powering status/board/report/org views |
+| `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
+| `myco-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
+| `myco-store` | adapter | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
+| `myco-store-md` | adapter | Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec |
+| `myco-testkit` | adapter | Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec |
+| `myco` | binary | myco — project management, grown not built: agent-first PM CLI |
+
+## Boundary — work memory only
+
+myco owns the ledger of intent (tasks, issues, proposals, plans,
+ADRs, handoffs). Neighbors own their own memory:
+
+* **sturn** — ephemeral coordination (live claims/ops/topics)
+* **kuda** — code memory; myco indexes work items, not code
+* **peregrin** — orchestration; an optional `myco serve` ndjson
+  wire is deferred per `adrs/0001`
+* **bupha** — CI gate; `myco check` in pipelines, `Item:` trailers
+* **mycena** — surfaces TODO/FIXME in code → `myco absorb`
+* **sepia** — session lifecycle → `myco handoff` / `myco resume`
+
+Anything needing a daemon, a multi-machine view, or arbitration
+between actors belongs to peregrin, not here.
+
+---
+
+---
+url: /myco/explanation/release-model.md
+---
+# Release model
+
+Releases are repo automation, not manual steps:
+`scripts/release.sh` is triggered by bupha watch on each `main`
+push — a debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
+means only the last push in a quiet window actually releases. The
+script runs inside a detached worktree and pushes commits and
+tags from there, never from the main checkout.
+
+## What a release run does
+
+1. **Diff since the last tag** — crates under `crates/` that
+   changed since `git describe --tags` are the release set; the
+   `myco` binary re-publishes whenever any crate changed. No
+   crate changes, no release.
+2. **Per-crate patch bump + publish** —
+   `cargo set-version -p <crate> --bump patch`, then
+   `cargo publish` with retries.
+   Each crate gets its own tag `<crate>-v<ver>` — versions
+   diverge independently in the monorepo.
+3. **Commit + push** — one `release: bump crate versions` commit,
+   pushed to `main` with the tags.
+4. **Binary dist** — when `dist` and `gh` are available, a local
+   `dist build` produces the shell installer
+   (`dist-workspace.toml`, host arch `x86_64-unknown-linux-gnu`
+   only — other targets are a TODO for remote workers), uploaded
+   to a GitHub Release `myco-v<ver>` with generated notes.
+
+With no tags at all the script exits early — the flow is seeded
+by tagging once.
+
+## Constraints
+
+* The crates.io name `myco` is currently held by an unrelated
+  project, so `cargo publish` of the CLI package depends on
+  resolving that; installs should use
+  `cargo install --git https://github.com/9aia/myco` regardless.
+* Library crates publish normally under their `myco-*` names.
+
+---
+
+---
+url: /myco/getting-started.md
+---
+# Getting started
+
+Install the `myco` CLI, then turn a repo's `project/` directory
+into a work ledger — tasks, issues, proposals, plans, ADRs,
+handoffs — that lives on its own orphan branch.
+
+## Install
+
+The crates.io name `myco` belongs to an unrelated project —
+install from the repo:
+
+```sh
+cargo install --git https://github.com/9aia/myco
+```
+
+From a checkout of this repo: `cargo xtask install` builds and
+installs the release binary to `~/.cargo/bin/myco`.
+
+## Set up a repo
+
+```sh
+cd your-repo
+myco init
+```
+
+`init` creates the orphan `project` branch, mounts it as a
+`project/` worktree, seeds `meta.toml`, `TODO.md`, `BACKLOG.md`,
+`index.md` and the item dirs (`issues/`, `proposals/`, `plans/`,
+`adrs/`, `handoffs/`), and adds `project/` to `.gitignore` on your
+code branch. It is idempotent — run it again and a healthy
+worktree is verified, a damaged one repaired.
+
+## First items
+
+```sh
+myco todo add "ship the thing" --pri high --label release
+myco item set T-001 --status in-progress
+myco status            # ledger digest
+myco todo done T-001   # the line leaves TODO.md — git history keeps it
+```
+
+Every mutating verb is one atomic commit on the `project` branch —
+the branch history is the audit trail. `--no-commit` (or the
+`MYCO_NO_COMMIT` env var) opts out.
+
+## Agent self-discovery
+
+```sh
+myco manifest          # capabilities + protocol version (JSON)
+myco schema            # the file/state spec as JSON Schema
+myco status --prompt   # token-sized digest for a context window
+```
+
+Every verb accepts `--json`. `myco check` validates the ledger —
+file schemas, state machine, index drift — and `myco check --fix`
+repairs what it safely can.
+
+## Where next
+
+* [Your first item](tutorials/first-item.md) — a guided walk
+  through a full task lifecycle.
+* [Set up myco on a repository](how-to/init-repo.md) — discovery,
+  overrides, non-standard layouts.
+* [The worktree model](explanation/worktree-model.md) — what is
+  actually on disk and why.
+* [CLI reference](reference/cli.md) — the full verb surface.
+
+---
+
+---
+url: /myco/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md
+---
+Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+Copyright 2014 - 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is copied below, and is also available with a FAQ at: http://scripts.sil.org/OFL
+
+***
+
+## SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1. Neither the Font Software nor any of its individual components,
+   in Original or Modified Versions, may be sold by itself.
+
+2. Original or Modified Versions of the Font Software may be bundled,
+   redistributed and/or sold with any software, provided that each copy
+   contains the above copyright notice and this license. These can be
+   included either as stand-alone text files, human-readable headers or
+   in the appropriate machine-readable metadata fields within text or
+   binary files as long as those fields can be easily viewed by the user.
+
+3. No Modified Version of the Font Software may use the Reserved Font
+   Name(s) unless explicit written permission is granted by the corresponding
+   Copyright Holder. This restriction only applies to the primary font name as
+   presented to the users.
+
+4. The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+   Software shall not be used to promote, endorse or advertise any
+   Modified Version, except to acknowledge the contribution(s) of the
+   Copyright Holder(s) and the Author(s) or with their explicit written
+   permission.
+
+5. The Font Software, modified or unmodified, in part or in whole,
+   must be distributed entirely under this license, and must not be
+   distributed under any other license. The requirement for fonts to
+   remain under this license does not apply to any document created
+   using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.

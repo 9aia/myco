@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BRANCH","DIR"],"fn":["canonicalize","discover","enclosing_project_worktree","qualifies","repo_root_for","worktree_path"],"struct":["Project"]};

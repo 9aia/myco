@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SCAFFOLD_DIRS"],"fn":["autocommit","commit_paths","commits_enabled","index_template","print_json","scaffold","store_at"]};

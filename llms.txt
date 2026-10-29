@@ -1,0 +1,39 @@
+# myco
+
+> project management, grown not built
+
+a mycorrhizal network for your agents — tasks, signals, handoffs
+
+## Table of Contents
+
+### Tutorials
+
+- [Your first item](/myco/tutorials/first-item.md)
+
+### How-to
+
+- [Set up myco on a repository](/myco/how-to/init-repo.md)
+- [Run the daily agent loop](/myco/how-to/agent-loop.md)
+- [Hand off work between sessions](/myco/how-to/handoff.md)
+- [Session continuity with sepia](/myco/how-to/session-continuity.md)
+- [Migrate a legacy ledger](/myco/how-to/migrate.md)
+- [Import external work](/myco/how-to/import-work.md)
+- [See work across repos](/myco/how-to/org-views.md)
+
+### Reference
+
+- [Command-Line Help for `myco`](/myco/reference/cli.md)
+- [Config — `myco.toml`](/myco/reference/config.md)
+- [Crate API](/myco/reference/crate-api.md)
+
+### Explanation
+
+- [The worktree model](/myco/explanation/worktree-model.md)
+- [The ledger file spec](/myco/explanation/file-spec.md)
+- [Architecture](/myco/explanation/architecture.md)
+- [Release model](/myco/explanation/release-model.md)
+
+### Other
+
+- [Getting started](/myco/getting-started.md)
+- [Untitled](/myco/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md)

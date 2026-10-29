@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FILE_KINDS"],"enum":["PmDest"],"fn":["adopt_or_normalize","commit_pm_removal","convert_sections","first_heading","materialize","migrate_pm","migrate_project","pm_dest","read_str","run","seed_counters"],"struct":["AdoptClaims","Stats"]};
