@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Generate docs/reference/config.md from config-struct doc comments
 — the structs across core + impl crates are the source of truth."""
-import pathlib, re, sys
+import os, pathlib, re, sys
 
-ROOT = pathlib.Path(__file__).parent / ".."
+# Sources live in the main checkout — normally docs/ is a worktree of it
+# (so `..` works); under bupha the docs sha runs detached, so MYCO_ROOT
+# points at the real repo.
+ROOT = pathlib.Path(
+    os.environ.get("MYCO_ROOT") or pathlib.Path(__file__).parent / "..")
 OUT  = pathlib.Path(__file__).parent / "reference" / "config.md"
 
 # file → {struct: section title}; order preserved

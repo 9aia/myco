@@ -2,9 +2,11 @@
 """Generate the crate-map table (into architecture.md) and
 reference/crate-api.md from workspace Cargo.tomls — never hand-edit
 either."""
-import pathlib, re
+import os, pathlib, re
 
-ROOT = pathlib.Path(__file__).parent / ".."
+# See gen-config-docs.py — MYCO_ROOT overrides the `..` worktree layout.
+ROOT = pathlib.Path(
+    os.environ.get("MYCO_ROOT") or pathlib.Path(__file__).parent / "..")
 WST = (ROOT / "Cargo.toml").read_text()
 
 LAYER = {

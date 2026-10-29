@@ -2,10 +2,13 @@
 """cargo doc → docs/public/api + styled index. Resolves the real
 target dir via `cargo metadata` (respects a configured
 `target-dir`); wraps gen-api-index.py for the index page."""
-import json, pathlib, shutil, subprocess
+import json, os, pathlib, shutil, subprocess
 
 DOCS = pathlib.Path(__file__).resolve().parent
-ROOT = DOCS.parent  # the main checkout — docs/ mirrors its worktree
+# The main checkout — docs/ normally mirrors it as a worktree (so
+# DOCS.parent works); under bupha the docs sha runs detached and
+# MYCO_ROOT points at the real repo.
+ROOT = pathlib.Path(os.environ.get("MYCO_ROOT") or DOCS.parent)
 
 
 def run(*args, capture=False):
