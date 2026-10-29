@@ -1703,12 +1703,14 @@ by tagging once.
 The same bupha watch owns the rest of what used to be GitHub
 Actions — there are no workflows in the repo:
 
-* **Push to `main`** runs `scripts/ci.sh` (`cargo xtask check &&
-  cargo xtask test`) in a detached worktree and posts the
-  `ci/bupha` commit status.
 * **Push to `docs`** runs `scripts/deploy-docs.sh`, which
   rebuilds the site and pushes `gh-pages` — Pages is a legacy
   branch deploy, so that push is the whole release of the site.
+* **Push to `main`** is gated locally by the `pre-push` hook
+  (`cargo xtask check`). `scripts/ci.sh` (`check && test`) is
+  ready for bupha, but the watcher routes one `branch` per repo
+  name today — a second `9aia/myco` entry needs bupha's
+  `[[repo.jobs]]` work (its T-004).
 
 ---
 
