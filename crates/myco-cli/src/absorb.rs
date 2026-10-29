@@ -6,18 +6,24 @@
 //!   `docs/`, `target/` excluded). Each hit becomes a backlog item
 //!   or an issue, `note` = `file:line`.
 //! - `jira` — a Jira CSV export (`Issue key`, `Summary`, `Status`,
-//!   `Priority`, `Assignee`, `Labels`; header-name tolerant) →
-//!   `I-NNN` issues, the Jira key preserved in `note`
-//!   (`jira:PROJ-123`).
-//! - `github` — a GitHub issues dump (JSON array or CSV) → `I-NNN`
+//!   `Priority`, `Assignee`, `Labels`; header-name/case tolerant,
+//!   BOM and quoted multi-line cells fine, optional columns may be
+//!   absent, `Epic Link`/`Epic Name`/`Parent key` and
+//!   `Fix Version/s` variants understood) → `I-NNN` issues, the
+//!   Jira key preserved in `note` (`jira:PROJ-123`).
+//! - `github` — a GitHub issues dump (JSON array, an API
+//!   `{"issues": […]}`/`{"items": […]}` wrapper, or CSV) → `I-NNN`
 //!   issues, `note` = `github:<number>`.
 //!
 //! Dedup is uniform: a row is skipped when its `note` marker
 //! (`file:line`, `jira:KEY`, `github:N`) already appears in any
 //! ledger item's note — re-running an import is a no-op. Done-ish
 //! rows are skipped unless `--include-done`, which creates them
-//! `done` and files them straight into `archive/`. Every source
-//! ends in one `chore: absorb <source> (N items)` commit.
+//! `done` and files them straight into `archive/`. Row-level
+//! failures (unreadable records, rows without a title/key,
+//! non-object issues) collect into the report's `warnings` — one
+//! bad row never aborts the file. Every source ends in one
+//! `chore: absorb <source> (N items)` commit.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -553,15 +559,26 @@ fn comments(
 
 // ---------- csv rows ----------
 
+/// The row shape both import formats reduce to: lowercased header
+/// name → every non-empty cell under it.
+type Rows = Vec<BTreeMap<String, Vec<String>>>;
+
 /// Header-name-tolerant CSV: rows are `lowercased header → values`
 /// (repeated headers like Jira's `Labels` merge). First row is
-/// always a header.
-fn read_csv(path: &Path) -> Result<Vec<BTreeMap<String, Vec<String>>>, String> {
+/// always a header. A UTF-8 BOM is stripped (Jira exports carry
+/// one; it would land inside the first header's name) and headers
+/// are case/whitespace-folded, so `Issue KEY`, ` issue key ` and
+/// `Issue Key` all address the same column. A structurally
+/// malformed file errors naming the file (and line when csv
+/// reports one); a *row* that can't map (no key/title) is the
+/// caller's skipped-warning, not a parse failure.
+fn read_csv(path: &Path) -> Result<Rows, String> {
+    let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let src = src.trim_start_matches('\u{feff}');
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .trim(csv::Trim::All)
-        .from_path(path)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+        .from_reader(src.as_bytes());
     let headers: Vec<String> = rdr
         .headers()
         .map_err(|e| format!("{} headers: {e}", path.display()))?
@@ -570,6 +587,9 @@ fn read_csv(path: &Path) -> Result<Vec<BTreeMap<String, Vec<String>>>, String> {
         .collect();
     let mut rows = Vec::new();
     for rec in rdr.records() {
+        // a record-level failure is file-malformation — error out
+        // naming the file (csv's message carries line/record when
+        // it tracked a position)
         let rec = rec.map_err(|e| format!("{}: {e}", path.display()))?;
         let mut row: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (i, cell) in rec.iter().enumerate() {
@@ -610,13 +630,25 @@ fn col_all(row: &BTreeMap<String, Vec<String>>, aliases: &[&str]) -> Vec<String>
 }
 
 /// Jira-ish status words → the machine (`done-ish` marked for the
-/// skip/archive rule). Unknown → `Open`.
+/// skip/archive rule). Unknown → `Open`. Real exports seen in the
+/// wild and how they map: "Selected for Development" is the
+/// standard pre-sprint state → open; "In Review"/"Review" is
+/// active work → in-progress; "Cancelled"/"Declined"/"Won't Fix"/
+/// "Not Planned" are terminal-but-not-shipped → done-ish (skipped
+/// unless `--include-done`, then archived).
 fn import_status(raw: &str) -> ImportStatus {
     match raw.trim().to_lowercase().as_str() {
-        "to do" | "open" | "new" | "backlog" | "todo" | "reopened" => ImportStatus::Open,
-        "in progress" | "in-progress" | "doing" | "started" => ImportStatus::InProgress,
+        "to do" | "open" | "new" | "backlog" | "todo" | "reopened" | "selected for development" => {
+            ImportStatus::Open
+        }
+        "in progress" | "in-progress" | "doing" | "started" | "in review" | "review" => {
+            ImportStatus::InProgress
+        }
         "blocked" | "on hold" | "waiting" => ImportStatus::Blocked,
-        "done" | "resolved" | "closed" | "complete" | "completed" | "fixed" => ImportStatus::Done,
+        "done" | "resolved" | "closed" | "complete" | "completed" | "fixed" | "cancelled"
+        | "canceled" | "declined" | "won't fix" | "wontfix" | "not planned" | "not_planned" => {
+            ImportStatus::Done
+        }
         _ => ImportStatus::Open,
     }
 }
@@ -633,6 +665,46 @@ fn import_priority(raw: &str) -> Priority {
 
 // ---------- jira ----------
 
+/// A Jira CSV row → [`ImportRow`]. `None` when the row carries no
+/// title and no key — the caller reports it as skipped. Optional
+/// columns (`Priority`, `Assignee`, `Labels`, epic, milestone)
+/// simply degrade to defaults when the export lacks them.
+fn jira_row(row: &BTreeMap<String, Vec<String>>) -> Option<ImportRow> {
+    let key = col(row, &["issue key", "key", "issue id", "issuekey", "issue"]);
+    let title = col(row, &["summary", "title"]);
+    let title = clean_title(title.or(key).unwrap_or_default());
+    if title.is_empty() {
+        return None;
+    }
+    let marker = key.unwrap_or(&title).to_string();
+    Some(ImportRow {
+        title,
+        status: col(row, &["status"]).map_or(ImportStatus::Open, import_status),
+        priority: col(row, &["priority", "pri"]).map_or(Priority::Medium, import_priority),
+        owner: col(row, &["assignee", "owner", "reporter"]).and_then(sanitize_actor),
+        labels: labels_from(&col_all(row, &["labels", "label"])),
+        note: format!("jira:{marker}"),
+        // Jira's epic column has shipped under many names
+        epic: col(
+            row,
+            &["epic link", "epic name", "epic", "parent key", "parent"],
+        )
+        .and_then(sanitize_group),
+        milestone: col(
+            row,
+            &[
+                "fix version/s",
+                "fix versions",
+                "fix version",
+                "milestone",
+                "sprint",
+            ],
+        )
+        .and_then(sanitize_group),
+        body: col(row, &["description", "body"]).map(str::to_string),
+    })
+}
+
 fn jira(
     proj: &Project,
     store: &myco_store_md::MdStore,
@@ -645,35 +717,20 @@ fn jira(
     let scan = digest::scan(store)?;
     let notes = existing_notes(&scan);
     let mut imports = Vec::new();
-    for row in &rows {
-        let key = col(row, &["issue key", "key", "issue id", "issuekey"]);
-        let title = col(row, &["summary", "title"]);
-        let title = clean_title(title.or(key).unwrap_or_default());
-        if title.is_empty() {
-            continue;
+    let mut warnings = Vec::new();
+    for (i, row) in rows.iter().enumerate() {
+        match jira_row(row) {
+            Some(r) => imports.push(r),
+            // data rows are 1-based for humans
+            None => warnings.push(format!(
+                "{}: row {}: no summary or key — skipped",
+                file.display(),
+                i + 1
+            )),
         }
-        let marker = key.unwrap_or(&title).to_string();
-        imports.push(ImportRow {
-            title,
-            status: col(row, &["status"]).map_or(ImportStatus::Open, import_status),
-            priority: col(row, &["priority", "pri"]).map_or(Priority::Medium, import_priority),
-            owner: col(row, &["assignee", "owner", "reporter"]).and_then(sanitize_actor),
-            labels: labels_from(&col_all(row, &["labels", "label"])),
-            note: format!("jira:{marker}"),
-            epic: col(row, &["epic link", "epic name", "epic"]).and_then(sanitize_group),
-            milestone: col(
-                row,
-                &[
-                    "fix version/s",
-                    "fix versions",
-                    "fix version",
-                    "milestone",
-                    "sprint",
-                ],
-            )
-            .and_then(sanitize_group),
-            body: col(row, &["description", "body"]).map(str::to_string),
-        });
+    }
+    for w in &warnings {
+        eprintln!("absorb jira: {w}");
     }
     let (created, dup, skipped_done, archived, ids) =
         import_issues(store, &notes, &imports, include_done)?;
@@ -689,6 +746,7 @@ fn jira(
             "skipped_done": skipped_done,
             "archived": archived,
             "items": ids,
+            "warnings": warnings,
         }),
         created,
         json_out,
@@ -730,15 +788,35 @@ fn gh_number(v: Option<&serde_json::Value>) -> Option<String> {
 }
 
 /// JSON rows → `BTreeMap` rows in the csv shape, so both formats
-/// share the import path.
-fn read_github_json(path: &Path) -> Result<Vec<BTreeMap<String, Vec<String>>>, String> {
+/// share the import path. Accepts a bare array or the GitHub API
+/// list-issues wrapper (`{"issues": [...]}`, or `{"items": [...]}`
+/// for search-result exports). A non-object element degrades to a
+/// `warnings` entry — one bad issue shouldn't sink the file.
+fn read_github_json(path: &Path) -> Result<(Rows, Vec<String>), String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let v: serde_json::Value =
-        serde_json::from_str(&src).map_err(|e| format!("{}: {e}", path.display()))?;
-    let arr = v
-        .as_array()
-        .ok_or_else(|| format!("{}: expected a JSON array of issues", path.display()))?;
+    let v: serde_json::Value = serde_json::from_str(src.trim_start_matches('\u{feff}'))
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let arr = match &v {
+        serde_json::Value::Array(a) => a,
+        serde_json::Value::Object(o) => o
+            .get("issues")
+            .or_else(|| o.get("items"))
+            .and_then(|x| x.as_array())
+            .ok_or_else(|| {
+                format!(
+                    "{}: expected an `issues`/`items` array in the JSON object",
+                    path.display()
+                )
+            })?,
+        _ => {
+            return Err(format!(
+                "{}: expected a JSON array of issues",
+                path.display()
+            ))
+        }
+    };
     let mut rows = Vec::new();
+    let mut warnings = Vec::new();
     for (i, issue) in arr.iter().enumerate() {
         let mut row: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut put = |k: &str, v: Option<String>| {
@@ -746,9 +824,13 @@ fn read_github_json(path: &Path) -> Result<Vec<BTreeMap<String, Vec<String>>>, S
                 row.entry(k.to_string()).or_default().push(v);
             }
         };
-        let obj = issue
-            .as_object()
-            .ok_or_else(|| format!("{}: issue #{i} isn't a JSON object", path.display()))?;
+        let Some(obj) = issue.as_object() else {
+            warnings.push(format!(
+                "{}: issue #{i} isn't a JSON object — skipped",
+                path.display()
+            ));
+            continue;
+        };
         put(
             "key",
             gh_number(obj.get("number").or_else(|| obj.get("id"))),
@@ -759,10 +841,14 @@ fn read_github_json(path: &Path) -> Result<Vec<BTreeMap<String, Vec<String>>>, S
                 .and_then(|t| t.as_str())
                 .map(str::to_string),
         );
+        // `state` is canonical; the API also reports `state_reason`
+        // (`completed`/`not_planned`) and `gh issue list --json`
+        // camelCases it — any of them can be the only signal
         put(
             "state",
-            obj.get("state")
-                .and_then(|t| t.as_str())
+            ["state", "state_reason", "stateReason"]
+                .iter()
+                .find_map(|k| obj.get(*k).and_then(|t| t.as_str()))
                 .map(str::to_string),
         );
         for alias in ["labels", "assignee", "assignees", "epic", "milestone"] {
@@ -814,7 +900,38 @@ fn read_github_json(path: &Path) -> Result<Vec<BTreeMap<String, Vec<String>>>, S
         );
         rows.push(row);
     }
-    Ok(rows)
+    Ok((rows, warnings))
+}
+
+/// A GitHub row (JSON-reduced or CSV) → [`ImportRow`]. `None` when
+/// it carries no title and no number — reported as skipped.
+fn github_row(row: &BTreeMap<String, Vec<String>>) -> Option<ImportRow> {
+    let key = col(row, &["key", "number", "id", "issue", "issue number"]);
+    let title = col(row, &["title", "summary"]);
+    let title = clean_title(title.or(key).unwrap_or_default());
+    if title.is_empty() {
+        return None;
+    }
+    let marker = key.unwrap_or(&title).to_string();
+    let state = col(row, &["state", "status", "state_reason", "statereason"]).map_or(
+        ImportStatus::Open,
+        |s| match s.trim().to_lowercase().as_str() {
+            "open" => ImportStatus::Open,
+            "closed" | "done" | "completed" => ImportStatus::Done,
+            other => import_status(other),
+        },
+    );
+    Some(ImportRow {
+        title,
+        status: state,
+        priority: col(row, &["priority", "pri"]).map_or(Priority::Medium, import_priority),
+        owner: col(row, &["assignee", "assignees", "owner"]).and_then(sanitize_actor),
+        labels: labels_from(&col_all(row, &["labels", "label"])),
+        note: format!("github:{marker}"),
+        epic: col(row, &["epic"]).and_then(sanitize_group),
+        milestone: col(row, &["milestone"]).and_then(sanitize_group),
+        body: col(row, &["body", "description"]).map(str::to_string),
+    })
 }
 
 fn github(
@@ -826,48 +943,34 @@ fn github(
     no_commit: bool,
 ) -> Result<i32, String> {
     let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let rows = if ext == "json" {
+    let (rows, mut warnings) = if ext == "json" {
         read_github_json(file)?
     } else if ext == "csv" {
-        read_csv(file)?
+        (read_csv(file)?, Vec::new())
     } else {
-        // sniff: a JSON array starts with `[`
+        // sniff: JSON starts with `[` (bare array) or `{` (wrapper)
         let src = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
-        if src.trim_start().starts_with('[') {
+        if src.trim_start().starts_with(['[', '{']) {
             read_github_json(file)?
         } else {
-            read_csv(file)?
+            (read_csv(file)?, Vec::new())
         }
     };
     let scan = digest::scan(store)?;
     let notes = existing_notes(&scan);
     let mut imports = Vec::new();
-    for row in &rows {
-        let key = col(row, &["key", "number", "id", "issue"]);
-        let title = col(row, &["title", "summary"]);
-        let title = clean_title(title.or(key).unwrap_or_default());
-        if title.is_empty() {
-            continue;
+    for (i, row) in rows.iter().enumerate() {
+        match github_row(row) {
+            Some(r) => imports.push(r),
+            None => warnings.push(format!(
+                "{}: row {}: no title or number — skipped",
+                file.display(),
+                i + 1
+            )),
         }
-        let marker = key.unwrap_or(&title).to_string();
-        let state = col(row, &["state", "status"]).map_or(ImportStatus::Open, |s| {
-            match s.trim().to_lowercase().as_str() {
-                "open" => ImportStatus::Open,
-                "closed" | "done" | "completed" => ImportStatus::Done,
-                other => import_status(other),
-            }
-        });
-        imports.push(ImportRow {
-            title,
-            status: state,
-            priority: col(row, &["priority", "pri"]).map_or(Priority::Medium, import_priority),
-            owner: col(row, &["assignee", "assignees", "owner"]).and_then(sanitize_actor),
-            labels: labels_from(&col_all(row, &["labels", "label"])),
-            note: format!("github:{marker}"),
-            epic: col(row, &["epic"]).and_then(sanitize_group),
-            milestone: col(row, &["milestone"]).and_then(sanitize_group),
-            body: col(row, &["body", "description"]).map(str::to_string),
-        });
+    }
+    for w in &warnings {
+        eprintln!("absorb github: {w}");
     }
     let (created, dup, skipped_done, archived, ids) =
         import_issues(store, &notes, &imports, include_done)?;
@@ -883,6 +986,7 @@ fn github(
             "skipped_done": skipped_done,
             "archived": archived,
             "items": ids,
+            "warnings": warnings,
         }),
         created,
         json_out,
@@ -1077,7 +1181,8 @@ mod tests {
             ]"#,
         )
         .unwrap();
-        let rows = read_github_json(&f).unwrap();
+        let (rows, warnings) = read_github_json(&f).unwrap();
+        assert!(warnings.is_empty());
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0]["key"], vec!["7".to_string()]);
         assert_eq!(rows[0]["labels"], vec!["bug".to_string(), "ui".to_string()]);
@@ -1096,7 +1201,107 @@ mod tests {
         assert!(read_github_json(&f).is_err());
         std::fs::write(&f, "{\"a\":1}").unwrap();
         assert!(read_github_json(&f).is_err());
-        std::fs::write(&f, "[5]").unwrap();
+        std::fs::write(&f, "5").unwrap();
         assert!(read_github_json(&f).is_err());
+    }
+
+    #[test]
+    fn csv_bom_multiline_and_header_tolerance() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("j.csv");
+        // BOM + uppercase + padded headers; a quoted multi-line
+        // summary and a second, ragged row
+        std::fs::write(
+            &f,
+            "\u{feff}  Issue KEY , SUMMARY ,Status\nPROJ-1,\"line one\nline two\",Done\nPROJ-2,plain\n",
+        )
+        .unwrap();
+        let rows = read_csv(&f).unwrap();
+        assert_eq!(rows.len(), 2);
+        // the BOM didn't corrupt the first header
+        assert_eq!(rows[0]["issue key"], vec!["PROJ-1".to_string()]);
+        assert_eq!(rows[0]["summary"], vec!["line one\nline two".to_string()]);
+        assert_eq!(rows[1]["issue key"], vec!["PROJ-2".to_string()]);
+        // clean_title folds the newline for the ledger title
+        let r = jira_row(&rows[0]).unwrap();
+        assert_eq!(r.title, "line one line two");
+        // optional columns absent → defaults, no error
+        assert_eq!(r.priority, Priority::Medium);
+        assert!(r.owner.is_none() && r.labels.is_empty());
+        assert!(r.epic.is_none() && r.milestone.is_none());
+    }
+
+    #[test]
+    fn csv_malformed_file_errors_cleanly() {
+        let d = tempfile::tempdir().unwrap();
+        // invalid UTF-8 → a clean error naming the file
+        let f = d.path().join("bad.csv");
+        std::fs::write(&f, b"Issue key,Summary\nPROJ-1,\xff\xfe\n").unwrap();
+        let e = read_csv(&f).unwrap_err();
+        assert!(e.contains("bad.csv"), "{e}");
+        // a missing file is still a hard error naming the file
+        let e = read_csv(&d.path().join("nope.csv")).unwrap_err();
+        assert!(e.contains("nope.csv"), "{e}");
+    }
+
+    #[test]
+    fn jira_row_aliases_and_status_synonyms() {
+        let mut row = BTreeMap::new();
+        let put = |r: &mut BTreeMap<String, Vec<String>>, k: &str, v: &str| {
+            r.insert(k.to_string(), vec![v.to_string()]);
+        };
+        put(&mut row, "parent key", "EPIC-9");
+        put(&mut row, "fix version/s", "2.4");
+        put(&mut row, "issue", "PROJ-7");
+        put(&mut row, "status", "Selected for Development");
+        let r = jira_row(&row).unwrap();
+        assert_eq!(r.note, "jira:PROJ-7");
+        assert_eq!(r.epic.as_deref(), Some("EPIC-9"));
+        assert_eq!(r.milestone.as_deref(), Some("2.4"));
+        assert_eq!(r.status, ImportStatus::Open);
+        // "Epic Name" variant + done-ish synonyms
+        let mut row = BTreeMap::new();
+        put(&mut row, "epic name", "launch");
+        put(&mut row, "key", "P-2");
+        put(&mut row, "status", "Won't Fix");
+        let r = jira_row(&row).unwrap();
+        assert_eq!(r.epic.as_deref(), Some("launch"));
+        assert_eq!(r.status, ImportStatus::Done);
+        // no summary and no key → skipped
+        let row = BTreeMap::new();
+        assert!(jira_row(&row).is_none());
+    }
+
+    #[test]
+    fn github_json_wrapper_shapes_and_state_reason() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("issues.json");
+        // API list wrapper + non-object element (warning, not error)
+        // + state_reason-only + body absent
+        std::fs::write(
+            &f,
+            r#"{"issues": [
+                {"number": 1, "title": "one", "state_reason": "not_planned"},
+                "oops",
+                {"number": 2, "title": "two", "stateReason": "completed"},
+                {"number": 3, "title": "three"}
+            ]}"#,
+        )
+        .unwrap();
+        let (rows, warnings) = read_github_json(&f).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("issue #1"), "{warnings:?}");
+        assert_eq!(github_row(&rows[0]).unwrap().status, ImportStatus::Done);
+        assert_eq!(github_row(&rows[1]).unwrap().status, ImportStatus::Done);
+        assert_eq!(github_row(&rows[2]).unwrap().status, ImportStatus::Open);
+        // {"items": [...]} search-result wrapper
+        std::fs::write(&f, r#"{"items": [{"number": 4, "title": "four"}]}"#).unwrap();
+        let (rows, _) = read_github_json(&f).unwrap();
+        assert_eq!(rows.len(), 1);
+        // an object without a recognizable array → clean error
+        std::fs::write(&f, r#"{"data": []}"#).unwrap();
+        let e = read_github_json(&f).unwrap_err();
+        assert!(e.contains("issues"), "{e}");
     }
 }

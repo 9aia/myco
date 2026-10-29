@@ -102,6 +102,32 @@ pub(crate) fn normalize(src: &str) -> String {
     }
 }
 
+/// Byte ranges in `src` covered by code — fenced/indented blocks
+/// and `inline` spans — so prose scans (`myco check`'s
+/// `dangling-ref`) can whitelist them. Sorted, non-overlapping.
+/// Empty when `src` doesn't parse (callers scan unwhitelisted —
+/// a stale ref inside a broken fence is still worth flagging).
+pub fn code_spans(src: &str) -> Vec<(usize, usize)> {
+    fn walk(node: &Node, out: &mut Vec<(usize, usize)>) {
+        if matches!(node, Node::Code(_) | Node::InlineCode(_)) {
+            if let Some(p) = node.position() {
+                out.push((p.start.offset, p.end.offset));
+            }
+            return; // code nodes can't nest scannable prose
+        }
+        if let Some(children) = node.children() {
+            for c in children {
+                walk(c, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if let Ok(ast) = parse(src) {
+        walk(&ast, &mut out);
+    }
+    out
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -205,5 +231,20 @@ mod tests {
         let ast = parse("- [ ] x\n").unwrap();
         // compact Debug inlines `checked: Some(false)` on ListItem
         assert!(format!("{ast:?}").contains("checked: Some(false)"));
+    }
+
+    #[test]
+    fn code_spans_cover_fences_and_inline() {
+        let src = "see `T-001` here\n\n```\nT-002 in a fence\n```\n\nplain T-003\n";
+        let spans = code_spans(src);
+        // inline code + the fenced block, nothing else
+        assert_eq!(spans.len(), 2, "{spans:?}");
+        let inline = &src[spans[0].0..spans[0].1];
+        assert_eq!(inline, "`T-001`", "{inline}");
+        let fence = &src[spans[1].0..spans[1].1];
+        assert!(fence.contains("T-002 in a fence"), "{fence}");
+        // a hand-built node without position is skipped silently —
+        // and unparseable input yields no spans rather than an error
+        assert!(code_spans("plain text only\n").is_empty());
     }
 }

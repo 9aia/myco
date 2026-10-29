@@ -5,7 +5,10 @@
 //! dangling `blocks:` refs, kind/dir filename mismatches, `[x]`/
 //! `status:done` items (the rule: done items are deleted — git
 //! keeps history), title/frontmatter id mismatches (a file whose
-//! title or H1 still carries its old `ADR-0008:` number), and
+//! title or H1 still carries its old `ADR-0008:` number), stale
+//! `PREFIX-NNNN` prose references (a mention in a body, title,
+//! index or handoff that no live or archived id resolves — code
+//! spans/fences and self-references are whitelisted), and
 //! non-canonical emit drift.
 //!
 //! `--fix` applies the safe repairs — strip done items, rename
@@ -35,9 +38,9 @@ pub struct Finding {
     /// 1-based column (0 when not column-specific).
     pub col: usize,
     /// Stable machine code — `parse`, `done-item`, `counter-behind`,
-    /// `duplicate-id`, `dangling-blocks`, `filename`, `missing-file`,
-    /// `unexpected-file`, `emit-drift`, `orphan-handoff`,
-    /// `id-title-mismatch`.
+    /// `duplicate-id`, `dangling-blocks`, `dangling-ref`, `filename`,
+    /// `missing-file`, `unexpected-file`, `emit-drift`,
+    /// `orphan-handoff`, `id-title-mismatch`.
     pub code: &'static str,
     /// Human/agent-readable message.
     pub msg: String,
@@ -299,6 +302,162 @@ const FILE_KINDS: [ItemKind; 4] = [
     ItemKind::Plan,
 ];
 
+// ---------- dangling-ref: prose `PREFIX-NNNN` mentions ----------
+
+/// `<KIND>-<digits>` tokens in prose — a hand-rolled scanner (one
+/// pass per file, cheaper than a `regex` dep for five prefixes).
+/// Returns `(byte offset, id)` pairs; `FOO-123`, `XT-001` and
+/// `T-001abc` don't tokenize — the prefix needs a word boundary
+/// and the digits a trailing one.
+fn id_ref_tokens(src: &str) -> Vec<(usize, ItemId)> {
+    fn word(b: u8) -> bool {
+        b.is_ascii_alphanumeric() || b == b'_'
+    }
+    let b = src.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        // longest-prefix first: PL/ADR before P
+        let plen = if b[i..].starts_with(b"ADR") {
+            3
+        } else if b[i..].starts_with(b"PL") {
+            2
+        } else if matches!(b[i], b'T' | b'I' | b'P') {
+            1
+        } else {
+            0
+        };
+        if plen == 0
+            || (i > 0 && word(b[i - 1]))
+            || b.get(i + plen) != Some(&b'-')
+            || !b.get(i + plen + 1).is_some_and(u8::is_ascii_digit)
+        {
+            i += 1;
+            continue;
+        }
+        let mut k = i + plen + 1;
+        while k < b.len() && b[k].is_ascii_digit() {
+            k += 1;
+        }
+        if k < b.len() && word(b[k]) {
+            i = k; // digits run into a word char — not a token
+            continue;
+        }
+        // parse normalizes width — `T-3` and `T-003` are the same id
+        if let Ok(id) = src[i..k].parse::<ItemId>() {
+            out.push((i, id));
+        }
+        i = k;
+    }
+    out
+}
+
+/// Byte offset just past the closing `+++` fence line — the start
+/// of an item/handoff file's body. 0 when there's no frontmatter
+/// (or it's unclosed — the parse finding covers that case).
+fn frontmatter_end(src: &str) -> usize {
+    let mut lines = src.split_inclusive('\n');
+    let Some(first) = lines.next() else {
+        return 0;
+    };
+    if first.trim_end() != "+++" {
+        return 0;
+    }
+    let mut off = first.len();
+    for line in lines {
+        off += line.len();
+        if line.trim_end() == "+++" {
+            return off;
+        }
+    }
+    0
+}
+
+/// Per-line "title zones" for TODO.md/BACKLOG.md — the text before
+/// the first `·` on each line (metadata tokens like `blocks:` and
+/// `note:` live after it and have their own checks), minus the
+/// list marker and the item's own leading id (`- [ ] T-001 …` —
+/// T-001 is the line's identity, not a reference; a done `[x]`
+/// line's id doesn't resolve but is no more a stale ref than the
+/// live kind).
+fn title_zones(src: &str) -> Vec<(usize, usize)> {
+    let mut zones = Vec::new();
+    let mut off = 0;
+    for line in src.split_inclusive('\n') {
+        let head_len = line.find('·').unwrap_or(line.len());
+        let head = &line[..head_len];
+        let mut t = head.trim_start();
+        if let Some(r) = t.strip_prefix(['-', '*', '+']) {
+            t = r.trim_start();
+        }
+        for cb in ["[ ]", "[x]", "[X]"] {
+            if let Some(r) = t.strip_prefix(cb) {
+                t = r.trim_start();
+                break;
+            }
+        }
+        // an item line's first token is its own id — exclude it
+        // (t is always a suffix of head, so len-diff is its start)
+        let start = match t.split_whitespace().next() {
+            Some(tok) if tok.parse::<ItemId>().is_ok() => head_len - t.len() + tok.len(),
+            _ => 0,
+        };
+        let end = head_len.min(start + head[start..].trim_end().len());
+        zones.push((off + start, off + end));
+        off += line.len();
+    }
+    zones
+}
+
+/// Is `off` inside any `(start, end)` byte range?
+fn in_zones(off: usize, zones: &[(usize, usize)]) -> bool {
+    zones.iter().any(|(s, e)| off >= *s && off < *e)
+}
+
+/// 1-based `(line, col)` for a byte offset — cols count chars.
+fn line_col(src: &str, off: usize) -> (usize, usize) {
+    let (mut line, mut col) = (1, 1);
+    for (i, c) in src.char_indices() {
+        if i >= off {
+            break;
+        }
+        if c == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
+
+/// A file queued for the dangling-ref scan — `zones` are the byte
+/// ranges worth scanning (a post-frontmatter body, or the title
+/// heads of TODO/BACKLOG lines); `self_ids` are the file's own
+/// claims (frontmatter id + title/H1 claims) that never flag.
+struct ProseRef {
+    rel: String,
+    src: String,
+    zones: Vec<(usize, usize)>,
+    self_ids: Vec<ItemId>,
+}
+
+/// The ids a file claims for itself — frontmatter id plus any
+/// title/H1 claim (a renumber candidate's `ADR-0001:` heading is a
+/// claim, not a stale reference).
+fn self_ids(file: &myco_core::ItemFile) -> Vec<ItemId> {
+    let mut v = vec![file.meta.id];
+    match title_claim(file) {
+        Claim::One(w) if w != file.meta.id => v.push(w),
+        Claim::Conflict(x, y) => {
+            v.push(x);
+            v.push(y);
+        }
+        _ => {}
+    }
+    v
+}
+
 /// Is `line` a done item? `[x]`/`[X]` checkbox, or a `· status:done`
 /// metadata token.
 fn is_done_line(line: &str) -> bool {
@@ -350,6 +509,9 @@ fn analyze(wt: &Path) -> Analysis {
     let mut items: Vec<Located> = Vec::new();
     let mut ids: BTreeMap<ItemId, Vec<String>> = BTreeMap::new();
     let mut candidates: Vec<Renum> = Vec::new();
+    // files queued for the dangling-ref prose scan — resolved once
+    // every live + archived id is known
+    let mut prose: Vec<ProseRef> = Vec::new();
 
     let mut meta = ProjectMeta::new(
         wt.file_name()
@@ -464,6 +626,13 @@ fn analyze(wt: &Path) -> Analysis {
                 }
                 Err(e) => a.findings.push(Finding::parse(&e, false)),
             }
+            // item titles reference other ids in prose ("see ADR-0008")
+            prose.push(ProseRef {
+                rel: "TODO.md".into(),
+                zones: title_zones(&src),
+                src,
+                self_ids: Vec::new(),
+            });
         }
     }
 
@@ -524,21 +693,36 @@ fn analyze(wt: &Path) -> Analysis {
                 }
                 Err(e) => a.findings.push(Finding::parse(&e, false)),
             }
+            prose.push(ProseRef {
+                rel: "BACKLOG.md".into(),
+                zones: title_zones(&src),
+                src,
+                self_ids: Vec::new(),
+            });
         }
     }
 
     // --- index.md ---------------------------------------------------
-    if read(wt, "index.md").is_none() {
-        a.findings.push(Finding::at(
-            "index.md",
-            "missing-file",
-            "index.md missing — `myco init` creates it",
-            true,
-        ));
-        a.fixes.push(Fix::Write {
+    match read(wt, "index.md") {
+        None => {
+            a.findings.push(Finding::at(
+                "index.md",
+                "missing-file",
+                "index.md missing — `myco init` creates it",
+                true,
+            ));
+            a.fixes.push(Fix::Write {
+                rel: "index.md".into(),
+                contents: ops::index_template(&meta.name),
+            });
+        }
+        // verbatim freeform — the whole file is scannable prose
+        Some(src) => prose.push(ProseRef {
             rel: "index.md".into(),
-            contents: ops::index_template(&meta.name),
-        });
+            zones: vec![(0, src.len())],
+            src,
+            self_ids: Vec::new(),
+        }),
     }
 
     // --- item dirs --------------------------------------------------
@@ -647,8 +831,16 @@ fn analyze(wt: &Path) -> Analysis {
                     }
                     ids.entry(id).or_default().push(rel.clone());
                     items.push(Located {
-                        item: file.meta,
-                        loc: rel,
+                        item: file.meta.clone(),
+                        loc: rel.clone(),
+                    });
+                    // the body (post-frontmatter) is freeform prose
+                    let start = frontmatter_end(&src);
+                    prose.push(ProseRef {
+                        rel,
+                        zones: vec![(start, src.len())],
+                        self_ids: self_ids(&file),
+                        src,
                     });
                 }
                 Err(e) => {
@@ -680,8 +872,15 @@ fn analyze(wt: &Path) -> Analysis {
                             });
                             ids.entry(id).or_default().push(rel.clone());
                             items.push(Located {
-                                item: file.meta,
-                                loc: rel,
+                                item: file.meta.clone(),
+                                loc: rel.clone(),
+                            });
+                            let start = frontmatter_end(&src);
+                            prose.push(ProseRef {
+                                rel,
+                                zones: vec![(start, src.len())],
+                                self_ids: self_ids(&file),
+                                src,
                             });
                         }
                         None => a.findings.push(Finding::parse(&e, false)),
@@ -802,6 +1001,15 @@ fn analyze(wt: &Path) -> Analysis {
                         to,
                     });
                 }
+                // archived handoffs are scanned too — a cold file
+                // may still reference live ids
+                let start = frontmatter_end(&src);
+                prose.push(ProseRef {
+                    rel,
+                    zones: vec![(start, src.len())],
+                    self_ids: vec![fid],
+                    src,
+                });
             }
         }
     }
@@ -827,6 +1035,32 @@ fn analyze(wt: &Path) -> Analysis {
                     false,
                 ));
             }
+        }
+    }
+
+    // bare `PREFIX-NNNN` mentions in prose — a stale ref is
+    // informational only (unfixable: `--fix` can't know whether
+    // the ref meant a renumbered item, another repo, or history)
+    for p in &prose {
+        let code = myco_store_md::code_spans(&p.src);
+        for (off, id) in id_ref_tokens(&p.src) {
+            if p.self_ids.contains(&id)
+                || !in_zones(off, &p.zones)
+                || in_zones(off, &code)
+                || ids.contains_key(&id)
+            {
+                continue;
+            }
+            let (line, col) = line_col(&p.src, off);
+            a.findings.push(Finding {
+                file: p.rel.clone(),
+                line,
+                col,
+                code: "dangling-ref",
+                msg: format!("{id} doesn't exist — stale prose reference"),
+                fixable: false,
+                rendered: None,
+            });
         }
     }
 
@@ -1627,5 +1861,248 @@ mod tests {
             to: "blocker/b.md".into(),
         }];
         assert!(apply_fixes(wt, &fixes).is_err());
+    }
+
+    // ---- dangling-ref ----
+
+    #[test]
+    fn id_ref_tokens_scan() {
+        let t = |n| ItemId::new(ItemKind::Task, n);
+        let adr = |n| ItemId::new(ItemKind::Adr, n);
+        let got: Vec<ItemId> = id_ref_tokens("see T-003 and ADR-0008, (P-2) [PL-001] I-4 x")
+            .into_iter()
+            .map(|(_, id)| id)
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                t(3),
+                adr(8),
+                ItemId::new(ItemKind::Proposal, 2),
+                ItemId::new(ItemKind::Plan, 1),
+                ItemId::new(ItemKind::Issue, 4),
+            ]
+        );
+        // non-tokenizing shapes — unknown prefixes, glued words,
+        // digits fused into identifiers, missing digits, zero ids
+        for no in [
+            "FOO-123",
+            "XT-001",   // word char before the prefix
+            "T-001abc", // digits fused into a word
+            "x_T-001",  // `_` is a word char too
+            "ADR-",
+            "T-000",    // parses to no valid id
+            "adr-0001", // lowercase — not an id
+            "prefixes T--1",
+        ] {
+            assert!(id_ref_tokens(no).is_empty(), "{no}");
+        }
+        // byte offsets land where the token starts
+        let v = id_ref_tokens("ab T-042");
+        assert_eq!(v, vec![(3, t(42))]);
+    }
+
+    #[test]
+    fn frontmatter_end_offsets() {
+        let src = "+++\nid = \"T-001\"\n+++\n\nbody\n";
+        assert_eq!(&src[frontmatter_end(src)..], "\nbody\n");
+        assert_eq!(frontmatter_end("no fm\n"), 0);
+        assert_eq!(frontmatter_end(""), 0);
+        // unclosed fence → 0 (parse finding covers it)
+        assert_eq!(frontmatter_end("+++\nid = \"T-001\"\n"), 0);
+    }
+
+    #[test]
+    fn title_zones_stop_at_dots() {
+        let src = "# TODO — x\n\n- [ ] T-001 title · pri:high · note:T-002\n- [x] T-002 done\n- T-003 bare backlog\nnot-an-item ADR-0001 here\n";
+        let zones = title_zones(src);
+        let texts: Vec<&str> = zones.iter().map(|(s, e)| &src[*s..*e]).collect();
+        // markers + the item's own leading id drop out of the zone;
+        // `note:`/`pri:` tokens are beyond the `·` cut; non-item
+        // lines scan whole
+        assert_eq!(
+            texts,
+            vec![
+                "# TODO — x",
+                "",
+                " title",
+                " done",
+                " bare backlog",
+                "not-an-item ADR-0001 here"
+            ],
+            "{texts:?}"
+        );
+        assert!(in_zones(0, &zones) && !in_zones(src.len() - 1, &zones));
+    }
+
+    #[test]
+    fn line_col_counts() {
+        let src = "one\ntwo\nT-003 x\n";
+        let off = src.find("T-003").unwrap();
+        assert_eq!(line_col(src, off), (3, 1));
+        assert_eq!(line_col(src, off + 2), (3, 3));
+    }
+
+    /// Minimal scaffold for analyze-level dangling-ref tests.
+    fn scaffold(wt: &Path) {
+        let meta = ProjectMeta::new("x");
+        write(wt, "meta.toml", &myco_store_md::emit_meta(&meta).unwrap());
+        write(
+            wt,
+            "TODO.md",
+            &myco_store_md::emit_todo(&myco_core::TodoDoc::new("x")).unwrap(),
+        );
+        write(
+            wt,
+            "BACKLOG.md",
+            &myco_store_md::emit_backlog(&myco_core::BacklogDoc::default()).unwrap(),
+        );
+        write(wt, "index.md", "# x\n");
+        write(wt, "handoffs/.gitkeep", "");
+    }
+
+    fn dangling_refs(a: &Analysis) -> Vec<&Finding> {
+        a.findings
+            .iter()
+            .filter(|f| f.code == "dangling-ref")
+            .collect()
+    }
+
+    #[test]
+    fn dangling_ref_flags_body_mentions() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        scaffold(wt);
+        // a live ADR body mentioning a missing id — flagged with a
+        // span; a mention of ADR-0001 itself resolves; `T-0009` in a
+        // code fence and `FOO-123` never flag
+        write(
+            wt,
+            "adrs/0001-one.md",
+            "+++\nid = \"ADR-0001\"\ntitle = \"ADR-0001: one\"\nstatus = \"open\"\n+++\n\n# ADR-0001: one\n\nsee ADR-0099 and ADR-0001.\n```\nT-0009 fenced\n```\n`I-077 inline`\nFOO-123\n",
+        );
+        let a = analyze(wt);
+        let refs = dangling_refs(&a);
+        assert_eq!(refs.len(), 1, "{:?}", codes(&a));
+        let f = refs[0];
+        assert_eq!(f.file, "adrs/0001-one.md");
+        assert!(f.line > 0 && f.col > 0);
+        assert!(!f.fixable);
+        assert!(f.msg.contains("ADR-0099"), "{}", f.msg);
+    }
+
+    #[test]
+    fn dangling_ref_self_and_claimed_ids_skip() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        scaffold(wt);
+        // title claims ADR-0005 (missing) — a renumber candidate,
+        // not a dangling prose ref
+        write(
+            wt,
+            "adrs/0002-two.md",
+            "+++\nid = \"ADR-0002\"\ntitle = \"ADR-0005: five\"\nstatus = \"open\"\n+++\n\n# ADR-0005: five\n\nbody\n",
+        );
+        let a = analyze(wt);
+        assert!(dangling_refs(&a).is_empty(), "{:?}", codes(&a));
+        // but it IS an id-title-mismatch candidate
+        assert!(codes(&a).contains(&"id-title-mismatch"));
+    }
+
+    #[test]
+    fn dangling_ref_todo_backlog_titles_and_index() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        let meta = ProjectMeta::new("x");
+        write(wt, "meta.toml", &myco_store_md::emit_meta(&meta).unwrap());
+        // a title mentioning T-999 (missing) flags; `note:see T-888`
+        // is a metadata token, not a title — unflagged; T-001's own
+        // leading id resolves
+        write(
+            wt,
+            "TODO.md",
+            "# TODO — x\n\n- [ ] T-001 follow up on T-999 · note:see T-888\n",
+        );
+        write(wt, "BACKLOG.md", "# Backlog\n\n- T-002 revisit P-007\n");
+        write(
+            wt,
+            "index.md",
+            "# x\n\nLinks: [gone](issues/issue-0042-x.md) and I-042.\n",
+        );
+        write(wt, "handoffs/.gitkeep", "");
+        let a = analyze(wt);
+        let refs = dangling_refs(&a);
+        let at: Vec<(&str, &str)> = refs
+            .iter()
+            .map(|f| (f.file.as_str(), f.msg.as_str()))
+            .collect();
+        assert_eq!(refs.len(), 3, "{at:?}");
+        assert!(at
+            .iter()
+            .any(|(f, m)| *f == "TODO.md" && m.contains("T-999")));
+        assert!(at
+            .iter()
+            .any(|(f, m)| *f == "BACKLOG.md" && m.contains("P-007")));
+        assert!(at
+            .iter()
+            .any(|(f, m)| *f == "index.md" && m.contains("I-042")));
+    }
+
+    #[test]
+    fn dangling_ref_handoffs_live_and_archived() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        scaffold(wt);
+        // T-001 exists; its handoff mentions missing T-009 → flags
+        let item = Item::new(ItemId::new(ItemKind::Task, 1), "t1");
+        let mut doc = myco_core::TodoDoc::new("x");
+        doc.sections.push(myco_core::Section {
+            name: None,
+            items: vec![item],
+        });
+        let todo = myco_store_md::emit_todo(&doc).unwrap();
+        std::fs::write(wt.join("TODO.md"), &todo).unwrap();
+        write(
+            wt,
+            "handoffs/T-001.md",
+            "+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## 2026-01-01 · devin\ncontinues T-009\n",
+        );
+        // an archived handoff for the gone T-002 mentioning I-003
+        write(
+            wt,
+            "handoffs/archive/T-002.md",
+            "+++\nitem = \"T-002\"\n+++\n\n# Handoffs — T-002\n\n## 2026-01-01 · devin\nsee I-003\n",
+        );
+        let a = analyze(wt);
+        let refs = dangling_refs(&a);
+        let files: Vec<&str> = refs.iter().map(|f| f.file.as_str()).collect();
+        assert!(files.contains(&"handoffs/T-001.md"), "{files:?}");
+        assert!(files.contains(&"handoffs/archive/T-002.md"), "{files:?}");
+        // self-refs (the `# Handoffs — <id>` title) never flag
+        assert!(refs
+            .iter()
+            .all(|f| !f.msg.contains("T-001 doesn't exist")
+                && !f.msg.contains("T-002 doesn't exist")));
+    }
+
+    #[test]
+    fn dangling_ref_archived_item_ids_resolve() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        scaffold(wt);
+        // ADR-0007 lives in cold storage — a live ADR referencing it
+        // is NOT stale
+        write(
+            wt,
+            "adrs/archive/0007-old.md",
+            "+++\nid = \"ADR-0007\"\ntitle = \"old\"\nstatus = \"done\"\n+++\n",
+        );
+        write(
+            wt,
+            "adrs/0001-one.md",
+            "+++\nid = \"ADR-0001\"\ntitle = \"one\"\nstatus = \"open\"\n+++\n\nsupersedes ADR-0007.\n",
+        );
+        let a = analyze(wt);
+        assert!(dangling_refs(&a).is_empty(), "{:?}", codes(&a));
     }
 }

@@ -582,6 +582,164 @@ fn absorb_github_sniffing_and_states() {
     assert_eq!(json(&out)["created"], 1);
 }
 
+#[test]
+fn absorb_jira_tolerant_csv() {
+    let (d, wt) = project();
+    let csv = d.path().join("j.csv");
+    // a real-world export: UTF-8 BOM, shouting/padded headers, a
+    // quoted multi-line Summary, optional columns present for one
+    // row and absent values elsewhere, one dead row mid-file
+    std::fs::write(
+        &csv,
+        "\u{feff} Issue KEY , SUMMARY , Epic Name , Fix Version/s , Status , Assignee\n\
+         PROJ-1,\"multi\nline summary\",launch,2.0,Selected for Development,\n\
+         PROJ-2,second,,,Done,Luis Figueiredo\n\
+         ,,,,,\n\
+         PROJ-3,third,,,In Review,\n",
+    )
+    .unwrap();
+    let out = run(
+        d.path(),
+        &[
+            "absorb",
+            "jira",
+            csv.to_str().unwrap(),
+            "--include-done",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{out:?}");
+    let v = json(&out);
+    assert_eq!(v["created"], 3, "{v}");
+    assert_eq!(v["archived"], 1, "{v}"); // the Done row files cold
+                                         // the empty row is a warning, not an abort
+    let w = v["warnings"].as_array().unwrap();
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert!(w[0].as_str().unwrap().contains("row 3"), "{w:?}");
+    assert!(stderr(&out).contains("absorb jira"), "{}", stderr(&out));
+    // epic/milestone/status/assignee survived the trip
+    let i1 = std::fs::read_to_string(wt.join("issues/issue-0001-multi-line-summary.md")).unwrap();
+    assert!(i1.contains("epic = \"launch\""), "{i1}");
+    assert!(i1.contains("milestone = \"2.0\""), "{i1}");
+    let i3 = std::fs::read_to_string(wt.join("issues/issue-0003-third.md")).unwrap();
+    assert!(i3.contains("status = \"in-progress\""), "{i3}");
+    let i2 = std::fs::read_to_string(wt.join("issues/archive/issue-0002-second.md")).unwrap();
+    assert!(i2.contains("owner = \"luis-figueiredo\""), "{i2}");
+}
+
+#[test]
+fn absorb_github_wrapped_and_row_warnings() {
+    let (d, _wt) = project();
+    let f = d.path().join("issues.json");
+    // the API list-issues wrapper, a non-object element (skipped,
+    // not fatal), a state_reason-only row, a body-less row
+    std::fs::write(
+        &f,
+        r#"{"issues": [
+            {"number": 10, "title": "wrapped one", "state_reason": "not_planned"},
+            42,
+            {"number": 11, "title": "open two", "labels": [{"name": "bug"}]}
+        ]}"#,
+    )
+    .unwrap();
+    let out = run(
+        d.path(),
+        &[
+            "absorb",
+            "github",
+            f.to_str().unwrap(),
+            "--include-done",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{out:?}");
+    let v = json(&out);
+    assert_eq!(v["created"], 2, "{v}");
+    assert_eq!(v["archived"], 1, "{v}"); // not_planned → done-ish
+    let w = v["warnings"].as_array().unwrap();
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert!(w[0].as_str().unwrap().contains("issue #1"), "{w:?}");
+    // human mode re-run: rows dedupe, the warning still prints
+    let out = run(d.path(), &["absorb", "github", f.to_str().unwrap()]);
+    assert_eq!(code(&out), 0, "{out:?}");
+    assert!(
+        stderr(&out).contains("isn't a JSON object"),
+        "{}",
+        stderr(&out)
+    );
+    // a malformed file errors cleanly naming it
+    std::fs::write(&f, "{not json").unwrap();
+    let out = run(d.path(), &["absorb", "github", f.to_str().unwrap()]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("issues.json"), "{}", stderr(&out));
+}
+
+// ---------- check: dangling-ref ----------
+
+#[test]
+fn check_flags_dangling_prose_refs() {
+    let (d, wt) = project();
+    assert_eq!(code(&run(d.path(), &["adr", "new", "first"])), 0);
+    assert_eq!(code(&run(d.path(), &["todo", "add", "a task"])), 0);
+    // a prose mention of a missing id in the ADR body — mentions of
+    // live ids, self and code-fenced refs stay clean
+    let dir = wt.join("adrs");
+    let name = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .find(|e| e.file_name().to_str().unwrap_or("").ends_with(".md"))
+        .unwrap()
+        .file_name()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let p = dir.join(&name);
+    let mut src = std::fs::read_to_string(&p).unwrap();
+    src.push_str("\nSee ADR-0099 and T-001 here.\n\n```\nI-999 inside a fence\n```\n");
+    std::fs::write(&p, src).unwrap();
+    // index.md is verbatim prose — a stale ref flags there too
+    write(&wt, "index.md", "# x\n\nmentions PL-042 here\n");
+    let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 1, "{out:?}");
+    let v = json(&out);
+    let refs: Vec<&Value> = v["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["code"] == "dangling-ref")
+        .collect();
+    assert_eq!(refs.len(), 2, "{refs:?}");
+    let adr_ref = refs
+        .iter()
+        .find(|e| e["file"] == format!("adrs/{name}"))
+        .expect("adr finding");
+    assert!(adr_ref["line"].as_u64().unwrap() > 0, "{refs:?}");
+    assert!(adr_ref["col"].as_u64().unwrap() > 0, "{refs:?}");
+    assert_eq!(adr_ref["fixable"], false);
+    assert!(
+        adr_ref["msg"].as_str().unwrap().contains("ADR-0099"),
+        "{refs:?}"
+    );
+    let idx_ref = refs
+        .iter()
+        .find(|e| e["file"] == "index.md")
+        .expect("index finding");
+    assert!(
+        idx_ref["msg"].as_str().unwrap().contains("PL-042"),
+        "{refs:?}"
+    );
+    // --fix repairs everything it can but the stale refs remain —
+    // informational, intent unknown
+    let out = run(d.path(), &["check", "--fix", "--json"]);
+    assert_eq!(code(&out), 1, "{out:?}");
+    let v = json(&out);
+    assert!(v["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|e| e["code"] == "dangling-ref"));
+}
+
 // ---------- migrate ----------
 
 #[test]

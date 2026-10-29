@@ -58,6 +58,7 @@ pub use itemfile::{
     emit_item_file, frontmatter_id, item_dir, item_filename, parse_item_file, parse_item_filename,
 };
 pub use legacy::{parse_legacy_backlog, parse_legacy_todo, LegacyDoc, LegacyItem, LegacySection};
+pub use mdx::code_spans;
 pub use meta::{emit_meta, parse_meta};
 pub use store::{write_atomic, MdStore};
 pub use todo::{emit_todo, parse_todo};
