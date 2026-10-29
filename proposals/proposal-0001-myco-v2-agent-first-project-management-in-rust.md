@@ -1,3 +1,10 @@
++++
+id = "P-001"
+title = "myco v2 — agent-first project management, in Rust"
+status = "open"
+priority = "medium"
++++
+
 # myco v2 — agent-first project management, in Rust
 
 Status: **proposal v2** (amendments folded). Replaces skill-only myco

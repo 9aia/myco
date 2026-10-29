@@ -11,4 +11,4 @@ Markdown here is canonical; `myco` verbs are the write path.
 
 ## Proposals
 
-- [v2 — agent-first project management, in Rust](proposals/v2.md)
+- [v2 — agent-first project management, in Rust](proposals/proposal-0001-myco-v2-agent-first-project-management-in-rust.md)
