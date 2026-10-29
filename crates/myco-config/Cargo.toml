@@ -1,0 +1,15 @@
+[package]
+name = "myco-config"
+description = "Config port: where myco.toml-shaped config comes from"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["pm", "myco"]
+categories = ["development-tools"]
+
+[dependencies]
+myco-core.workspace = true
+
+[lints]
+workspace = true

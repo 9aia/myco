@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/myco-cli",
+    "crates/myco-config",
+    "crates/myco-config-toml",
+    "crates/myco-core",
+    "crates/myco-git",
+    "crates/myco-shell",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/9aia/myco"
+description = "Project management, grown not built — a mycorrhizal network for your agents: tasks, signals, handoffs"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[workspace.dependencies]
+myco = { path = "crates/myco-cli", version = "0.1.0" }
+myco-config = { path = "crates/myco-config", version = "0.1.0" }
+myco-config-toml = { path = "crates/myco-config-toml", version = "0.1.0" }
+myco-core = { path = "crates/myco-core", version = "0.1.0" }
+myco-git = { path = "crates/myco-git", version = "0.1.0" }
+myco-shell = { path = "crates/myco-shell", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+clap-markdown = "0.1.5"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"

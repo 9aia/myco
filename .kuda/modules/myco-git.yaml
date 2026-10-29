@@ -1,0 +1,4 @@
+name: myco-git
+path: crates/myco-git/Cargo.toml
+purpose: Git plumbing — shells out to the git CLI
+api: []

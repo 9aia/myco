@@ -1,0 +1,4 @@
+name: myco-config-toml
+path: crates/myco-config-toml/Cargo.toml
+purpose: Config impl: myco.toml file
+api: []

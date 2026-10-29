@@ -1,0 +1,27 @@
+name: myco
+root: /home/luis/GitHub/9aia/myco
+purpose: '*Project management, grown not built.*'
+modules:
+- _root
+- myco
+- myco-cli
+- myco-config
+- myco-config-toml
+- myco-core
+- myco-git
+- myco-shell
+- xtask
+commands:
+- cargo check
+- cargo test --workspace
+- cargo xtask check
+provenance:
+  files:
+  - Cargo.toml
+  - crates/myco-cli/Cargo.toml
+  - crates/myco-config/Cargo.toml
+  - crates/myco-config-toml/Cargo.toml
+  - crates/myco-core/Cargo.toml
+  - crates/myco-git/Cargo.toml
+  - crates/myco-shell/Cargo.toml
+  - xtask/Cargo.toml

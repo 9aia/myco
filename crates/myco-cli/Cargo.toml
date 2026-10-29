@@ -1,0 +1,26 @@
+[package]
+name = "myco"
+description = "myco — project management, grown not built: agent-first PM CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["pm", "myco"]
+categories = ["development-tools"]
+
+[[bin]]
+name = "myco"
+path = "src/main.rs"
+
+[dependencies]
+myco-core.workspace = true
+myco-config.workspace = true
+myco-config-toml.workspace = true
+myco-git.workspace = true
+myco-shell.workspace = true
+clap.workspace = true
+clap-markdown.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

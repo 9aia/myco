@@ -1,0 +1,4 @@
+name: myco-shell
+path: crates/myco-shell/Cargo.toml
+purpose: bash -c shell-out helper
+api: []

@@ -1,0 +1,4 @@
+name: myco-core
+path: crates/myco-core/Cargo.toml
+purpose: myco domain core — pure, no I/O
+api: []

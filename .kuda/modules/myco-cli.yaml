@@ -1,0 +1,4 @@
+name: myco-cli
+path: crates/myco-cli/Cargo.toml
+purpose: myco — agent-first PM CLI
+api: []

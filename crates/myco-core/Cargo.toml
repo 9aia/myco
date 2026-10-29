@@ -1,0 +1,15 @@
+[package]
+name = "myco-core"
+description = "myco domain core: item models, ID registry, state machine — pure, no I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords = ["pm", "myco"]
+categories = ["development-tools"]
+
+[dependencies]
+serde.workspace = true
+
+[lints]
+workspace = true
