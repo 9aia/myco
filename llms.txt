@@ -2,7 +2,7 @@
 
 > project management, grown not built
 
-a mycorrhizal network for your agents — tasks, signals, handoffs
+a mycorrhizal network for your agents — tasks, signals, handoffs, grown not built
 
 ## Table of Contents
 
