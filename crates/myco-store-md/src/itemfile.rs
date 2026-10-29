@@ -103,6 +103,8 @@ struct FrontmatterIn {
     #[serde(default)]
     blocks: Vec<String>,
     note: Option<String>,
+    superseded_by: Option<String>,
+    supersedes: Option<String>,
 }
 
 /// Emit shape — field order IS the frontmatter key order.
@@ -122,6 +124,10 @@ struct FrontmatterOut<'a> {
     blocks: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     note: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    superseded_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    supersedes: Option<String>,
 }
 
 /// Parse an item file's source. `expected_kind` comes from the
@@ -203,6 +209,20 @@ pub fn parse_item_file(
     item.blocks = blocks;
     item.created = created;
     item.note = fm.note;
+    item.superseded_by = fm
+        .superseded_by
+        .map(|s| {
+            s.parse::<ItemId>()
+                .map_err(|e: myco_core::ParseItemIdError| fm_err(e.to_string()))
+        })
+        .transpose()?;
+    item.supersedes = fm
+        .supersedes
+        .map(|s| {
+            s.parse::<ItemId>()
+                .map_err(|e: myco_core::ParseItemIdError| fm_err(e.to_string()))
+        })
+        .transpose()?;
     // body: everything after the closing fence + one blank line
     let mut body = &src[fence_end..];
     body = body.strip_prefix('\n').unwrap_or(body);
@@ -229,6 +249,8 @@ pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
         labels: file.meta.labels.iter().map(String::as_str).collect(),
         blocks: file.meta.blocks.iter().map(ItemId::to_string).collect(),
         note: file.meta.note.as_deref(),
+        superseded_by: file.meta.superseded_by.map(|i| i.to_string()),
+        supersedes: file.meta.supersedes.map(|i| i.to_string()),
     };
     let toml = toml::to_string(&fm).map_err(|e| EmitError::new("item file", e.to_string()))?;
     let mut out = String::from("+++\n");
@@ -313,6 +335,18 @@ mod tests {
         assert!(file.meta.blocks.contains(&ItemId::new(ItemKind::Task, 10)));
         assert_eq!(file.body, "## Description\n\nBody text.");
         assert_eq!(emit_item_file(&file).unwrap(), ISSUE);
+    }
+
+    #[test]
+    fn supersede_keys_roundtrip() {
+        let src = "+++\nid = \"ADR-0002\"\ntitle = \"old\"\nstatus = \"done\"\npriority = \"medium\"\nsuperseded_by = \"ADR-0003\"\nsupersedes = \"ADR-0001\"\n+++\n";
+        let file = parse_item_file(src, ItemKind::Adr, "adrs/0002-old.md").unwrap();
+        assert_eq!(file.meta.superseded_by, Some(ItemId::new(ItemKind::Adr, 3)));
+        assert_eq!(file.meta.supersedes, Some(ItemId::new(ItemKind::Adr, 1)));
+        assert_eq!(emit_item_file(&file).unwrap(), src);
+        // bad id values are frontmatter errors
+        let bad = "+++\nid = \"ADR-0001\"\ntitle = \"x\"\nstatus = \"open\"\nsuperseded_by = \"nope\"\n+++\n";
+        assert!(parse_item_file(bad, ItemKind::Adr, "x.md").is_err());
     }
 
     #[test]

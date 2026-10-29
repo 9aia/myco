@@ -9,6 +9,10 @@ use myco_store::{Error, Store};
 
 use crate::{backlog, itemfile, meta, todo};
 
+/// The subdir of each item dir holding archived (done, shelved)
+/// item files — `issues/archive/issue-NNNN-*.md`.
+const ARCHIVE_DIR: &str = "archive";
+
 /// A `project/` worktree on disk.
 pub struct MdStore {
     root: Utf8PathBuf,
@@ -47,12 +51,21 @@ impl MdStore {
     }
 
     /// Item files of a kind → `(id, path)` pairs, sorted by id.
-    /// Non-matching names are skipped (`myco check` reports them).
-    fn item_paths(&self, kind: ItemKind) -> Result<Vec<(ItemId, Utf8PathBuf)>, Error> {
+    /// `archived` scopes the scan to `<dir>/archive/` — cold
+    /// storage for done items. Non-matching names are skipped
+    /// (`myco check` reports them).
+    fn item_paths(
+        &self,
+        kind: ItemKind,
+        archived: bool,
+    ) -> Result<Vec<(ItemId, Utf8PathBuf)>, Error> {
         let Some(dir) = itemfile::item_dir(kind) else {
             return Ok(Vec::new());
         };
-        let dir = self.path(dir);
+        let mut dir = self.path(dir);
+        if archived {
+            dir = dir.join(ARCHIVE_DIR);
+        }
         let read = match std::fs::read_dir(&dir) {
             Ok(r) => r,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -71,6 +84,20 @@ impl MdStore {
             }
         }
         out.sort_by_key(|(id, _)| *id);
+        Ok(out)
+    }
+
+    /// Parse every item file of a kind in one scope (live or
+    /// `archive/`) — shared by `list_items`/`list_archived`.
+    fn list_scoped(&self, kind: ItemKind, archived: bool) -> Result<Vec<ItemFile>, Error> {
+        let mut out = Vec::new();
+        for (_, path) in self.item_paths(kind, archived)? {
+            let rel = path
+                .strip_prefix(&self.root)
+                .map_or_else(|_| path.as_str(), |r| r.as_str());
+            let src = self.read(rel)?;
+            out.push(itemfile::parse_item_file(&src, kind, rel)?);
+        }
         Ok(out)
     }
 }
@@ -112,8 +139,11 @@ impl Store for MdStore {
             ItemKind::Adr,
             ItemKind::Plan,
         ] {
-            for (id, _) in self.item_paths(kind)? {
-                ids.insert(id);
+            // archived ids stay reserved — ids are never reused
+            for archived in [false, true] {
+                for (id, _) in self.item_paths(kind, archived)? {
+                    ids.insert(id);
+                }
             }
         }
         Ok(ids)
@@ -144,9 +174,12 @@ impl Store for MdStore {
     }
 
     fn item(&self, id: ItemId) -> Result<ItemFile, Error> {
+        // live first, then archive — a same-id file in both scopes
+        // surfaces as a duplicate rather than shadowing silently
         let mut hits = self
-            .item_paths(id.kind())?
+            .item_paths(id.kind(), false)?
             .into_iter()
+            .chain(self.item_paths(id.kind(), true)?)
             .filter(|(i, _)| *i == id);
         let Some((_, path)) = hits.next() else {
             return Err(Error::NotFound {
@@ -175,7 +208,7 @@ impl Store for MdStore {
         // rename: an existing file for the same id under a different
         // slug gets removed after the new one lands
         let old = self
-            .item_paths(file.meta.id.kind())?
+            .item_paths(file.meta.id.kind(), false)?
             .into_iter()
             .filter(|(i, p)| *i == file.meta.id && *p != target)
             .map(|(_, p)| p)
@@ -189,7 +222,7 @@ impl Store for MdStore {
 
     fn remove_item(&self, id: ItemId) -> Result<(), Error> {
         let Some((_, path)) = self
-            .item_paths(id.kind())?
+            .item_paths(id.kind(), false)?
             .into_iter()
             .find(|(i, _)| *i == id)
         else {
@@ -201,15 +234,42 @@ impl Store for MdStore {
     }
 
     fn list_items(&self, kind: ItemKind) -> Result<Vec<ItemFile>, Error> {
-        let mut out = Vec::new();
-        for (_, path) in self.item_paths(kind)? {
-            let rel = path
-                .strip_prefix(&self.root)
-                .map_or_else(|_| path.as_str(), |r| r.as_str());
-            let src = self.read(rel)?;
-            out.push(itemfile::parse_item_file(&src, kind, rel)?);
+        self.list_scoped(kind, false)
+    }
+
+    fn list_archived(&self, kind: ItemKind) -> Result<Vec<ItemFile>, Error> {
+        self.list_scoped(kind, true)
+    }
+
+    fn archive_item(&self, id: ItemId) -> Result<(), Error> {
+        let Some((_, path)) = self
+            .item_paths(id.kind(), false)?
+            .into_iter()
+            .find(|(i, _)| *i == id)
+        else {
+            if self.is_archived(id)? {
+                return Err(Error::Invalid(format!("{id} is already archived")));
+            }
+            return Err(Error::NotFound {
+                path: format!("{}/{id}", itemfile::item_dir(id.kind()).unwrap_or("<none>")),
+            });
+        };
+        let name = path.file_name().unwrap_or_default();
+        let target = path
+            .parent()
+            .map(|p| p.join(ARCHIVE_DIR).join(name))
+            .ok_or_else(|| Error::Invalid(format!("no parent dir for {path}")))?;
+        if let Some(p) = target.parent() {
+            std::fs::create_dir_all(p).map_err(Error::Io)?;
         }
-        Ok(out)
+        std::fs::rename(&path, &target).map_err(Error::Io)
+    }
+
+    fn is_archived(&self, id: ItemId) -> Result<bool, Error> {
+        Ok(self
+            .item_paths(id.kind(), true)?
+            .into_iter()
+            .any(|(i, _)| i == id))
     }
 
     fn index_md(&self) -> Result<String, Error> {
@@ -323,6 +383,54 @@ mod tests {
         assert!(matches!(
             s.remove_item(ItemId::new(ItemKind::Issue, 3)),
             Err(Error::NotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn archive_lifecycle() {
+        let (_d, s) = store();
+        let file =
+            ItemFile::new(Item::new(ItemId::new(ItemKind::Issue, 3), "Leak").status(Status::Done));
+        s.save_item(&file).unwrap();
+        let live = s.root().join("issues/issue-0003-leak.md");
+        assert!(live.exists());
+
+        s.archive_item(ItemId::new(ItemKind::Issue, 3)).unwrap();
+        assert!(!live.exists());
+        let archived = s.root().join("issues/archive/issue-0003-leak.md");
+        assert!(archived.exists());
+
+        // excluded from live lists, present in archived + item lookup
+        assert!(s.list_items(ItemKind::Issue).unwrap().is_empty());
+        assert_eq!(s.list_archived(ItemKind::Issue).unwrap().len(), 1);
+        assert_eq!(s.item(ItemId::new(ItemKind::Issue, 3)).unwrap(), file);
+        assert!(s.is_archived(ItemId::new(ItemKind::Issue, 3)).unwrap());
+        assert!(!s.is_archived(ItemId::new(ItemKind::Issue, 9)).unwrap());
+        // the archived id still feeds the registry — never reused
+        assert!(s
+            .all_ids()
+            .unwrap()
+            .contains(&ItemId::new(ItemKind::Issue, 3)));
+
+        // already-archived and missing both error
+        assert!(matches!(
+            s.archive_item(ItemId::new(ItemKind::Issue, 3)),
+            Err(Error::Invalid(_))
+        ));
+        assert!(matches!(
+            s.archive_item(ItemId::new(ItemKind::Issue, 9)),
+            Err(Error::NotFound { .. })
+        ));
+        assert!(matches!(
+            s.archive_item(ItemId::new(ItemKind::Task, 1)),
+            Err(Error::NotFound { .. })
+        ));
+
+        // live + archive same-id → duplicate error, not a silent shadow
+        s.save_item(&file).unwrap();
+        assert!(matches!(
+            s.item(ItemId::new(ItemKind::Issue, 3)),
+            Err(Error::Invalid(_))
         ));
     }
 

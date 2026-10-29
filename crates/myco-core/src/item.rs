@@ -47,6 +47,12 @@ pub struct Item {
     /// Free-form note — handoff/resume payload (phase 6).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// `superseded_by:` — the item that replaced this one (ADRs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_by: Option<ItemId>,
+    /// `supersedes:` — the item this one replaces (ADRs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supersedes: Option<ItemId>,
 }
 
 /// The metadata half of an [`crate::ItemFile`] — identical shape to
@@ -67,6 +73,8 @@ impl Item {
             blocks: BTreeSet::new(),
             created: None,
             note: None,
+            superseded_by: None,
+            supersedes: None,
         }
     }
 
@@ -110,6 +118,18 @@ impl Item {
     /// Add a `blocks:` dep.
     pub fn blocks(mut self, id: ItemId) -> Self {
         self.blocks.insert(id);
+        self
+    }
+
+    /// Builder-style `superseded_by` setter (ADRs).
+    pub fn superseded_by(mut self, id: ItemId) -> Self {
+        self.superseded_by = Some(id);
+        self
+    }
+
+    /// Builder-style `supersedes` setter (ADRs).
+    pub fn supersedes(mut self, id: ItemId) -> Self {
+        self.supersedes = Some(id);
         self
     }
 }
@@ -192,7 +212,9 @@ mod tests {
             .created(crate::date::parse("2026-01-01").unwrap())
             .note("n")
             .label("l")
-            .blocks(ItemId::new(ItemKind::Task, 1));
+            .blocks(ItemId::new(ItemKind::Task, 1))
+            .superseded_by(ItemId::new(ItemKind::Adr, 2))
+            .supersedes(ItemId::new(ItemKind::Adr, 1));
         let back: Item = serde_json::from_str(&serde_json::to_string(&full).unwrap()).unwrap();
         assert_eq!(back, full);
     }

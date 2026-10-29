@@ -1,0 +1,236 @@
+//! `myco item show|set` — the kind-agnostic item verbs: locate an
+//! item anywhere in the ledger; mutate metadata, with `--status`
+//! going through the transition machine only.
+
+use std::path::PathBuf;
+
+use clap::Subcommand;
+use myco_core::{is_valid_label, Actor, Item, ItemId, Priority, Status};
+use myco_store::Store;
+use serde_json::json;
+
+use crate::items;
+
+#[derive(Subcommand)]
+pub enum Cmd {
+    /// Dump one item — frontmatter fields plus the body for
+    /// file-backed kinds (`--json` = the full Item + location +
+    /// body).
+    Show {
+        /// Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`,
+        /// `PL-NNN`) — live or archived.
+        id: ItemId,
+    },
+    /// Mutate an item in place. `--status` is the only field routed
+    /// through the state machine — single steps only, invalid ones
+    /// error with the valid targets. Status changes on tasks move
+    /// the line between TODO.md and BACKLOG.md (`done` deletes it).
+    Set {
+        /// Any item id.
+        id: ItemId,
+        /// New status — one legal step from the current one.
+        #[arg(long)]
+        status: Option<Status>,
+        /// Priority: low|med|high|crit.
+        #[arg(long, visible_alias = "priority")]
+        pri: Option<Priority>,
+        /// Owner actor id.
+        #[arg(long)]
+        owner: Option<Actor>,
+        /// Add (`+x` or `x`) or remove (`-x`) a label — repeatable.
+        #[arg(long, allow_hyphen_values = true)]
+        label: Vec<String>,
+        /// Remove a label — repeatable.
+        #[arg(long)]
+        unlabel: Vec<String>,
+        /// Add (`+T-1` or `T-1`) or remove (`-T-1`) a blocks dep —
+        /// repeatable.
+        #[arg(long, allow_hyphen_values = true)]
+        blocks: Vec<String>,
+        /// Remove a blocks dep — repeatable.
+        #[arg(long)]
+        unblock: Vec<ItemId>,
+    },
+}
+
+/// The set-verb flag bundle — applied to an `Item` after the
+/// status transition check.
+struct SetFlags {
+    status: Option<Status>,
+    pri: Option<Priority>,
+    owner: Option<Actor>,
+    label: Vec<String>,
+    unlabel: Vec<String>,
+    blocks: Vec<String>,
+    unblock: Vec<ItemId>,
+}
+
+impl SetFlags {
+    fn is_noop(&self) -> bool {
+        self.status.is_none()
+            && self.pri.is_none()
+            && self.owner.is_none()
+            && self.label.is_empty()
+            && self.unlabel.is_empty()
+            && self.blocks.is_empty()
+            && self.unblock.is_empty()
+    }
+}
+
+/// `+x` → add `x`, `-x` → remove `x`, `x` → add — the `item set`
+/// add/remove convention.
+fn signed(s: &str) -> (bool, &str) {
+    match s.strip_prefix('-') {
+        Some(rest) => (false, rest),
+        None => (true, s.strip_prefix('+').unwrap_or(s)),
+    }
+}
+
+/// Apply every set flag to `item` — status first (machine-checked),
+/// then the plain metadata.
+fn apply_set(item: &mut Item, flags: &SetFlags) -> Result<(), String> {
+    if let Some(to) = flags.status {
+        let from = item.status;
+        item.status = from.transition_to(to).map_err(|_| {
+            format!(
+                "{id}: invalid status transition {from} → {to} (valid from {from}: {t})",
+                id = item.id,
+                t = items::targets(from)
+            )
+        })?;
+    }
+    if let Some(p) = flags.pri {
+        item.priority = p;
+    }
+    if let Some(o) = &flags.owner {
+        item.owner = Some(o.clone());
+    }
+    for raw in &flags.label {
+        let (add, name) = signed(raw);
+        if !is_valid_label(name) {
+            return Err(format!("invalid label {name:?}"));
+        }
+        if add {
+            item.labels.insert(name.to_string());
+        } else {
+            item.labels.remove(name);
+        }
+    }
+    for name in &flags.unlabel {
+        item.labels.remove(name.as_str());
+    }
+    for raw in &flags.blocks {
+        let (add, s) = signed(raw);
+        let id: ItemId = s
+            .parse()
+            .map_err(|e: myco_core::ParseItemIdError| e.to_string())?;
+        if add {
+            item.blocks.insert(id);
+        } else {
+            item.blocks.remove(&id);
+        }
+    }
+    for id in &flags.unblock {
+        item.blocks.remove(id);
+    }
+    Ok(())
+}
+
+/// The `item` verb group.
+pub fn run(
+    cmd: Cmd,
+    dir: Option<PathBuf>,
+    root: Option<PathBuf>,
+    json_out: bool,
+    no_commit: bool,
+) -> Result<i32, String> {
+    let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
+    match cmd {
+        Cmd::Show { id } => match items::find_item(&store, id)? {
+            Some((item, location, body)) => {
+                if json_out {
+                    crate::ops::print_json(
+                        &json!({"item": item, "location": location, "body": body}),
+                    );
+                } else {
+                    println!("{}", items::compact(&item));
+                    println!("  {location}");
+                    if let Some(body) = &body {
+                        if !body.is_empty() {
+                            println!();
+                            println!("{body}");
+                        }
+                    }
+                }
+                Ok(0)
+            }
+            None => Err(format!("{id}: no such item")),
+        },
+        Cmd::Set {
+            id,
+            status,
+            pri,
+            owner,
+            label,
+            unlabel,
+            blocks,
+            unblock,
+        } => {
+            let flags = SetFlags {
+                status,
+                pri,
+                owner,
+                label,
+                unlabel,
+                blocks,
+                unblock,
+            };
+            if flags.is_noop() {
+                return Err("item set: nothing to change — pass at least one flag".into());
+            }
+            let mut ledger = items::Ledger::load(&store)?;
+            if let Some(loc) = ledger.locate(id) {
+                // task item: mutate in place; a status change
+                // relocates the line (deferred → BACKLOG.md,
+                // done → removed, else → TODO.md)
+                let status_change = flags.status.is_some();
+                apply_set(ledger.item_mut(loc), &flags)?;
+                if status_change {
+                    let item = ledger.take(loc);
+                    match item.status {
+                        Status::Done => {}
+                        Status::Deferred => ledger.put_backlog(item, None),
+                        _ => ledger.put_todo(item, None),
+                    }
+                }
+                let item = ledger.locate(id).map(|l| ledger.item(l).clone());
+                ledger.save(&store)?;
+                let committed =
+                    items::commit(&proj.worktree, &format!("chore: set {id}"), no_commit)?;
+                let human = item
+                    .as_ref()
+                    .map(|i| format!("set {}", items::compact(i)))
+                    .unwrap_or_else(|| format!("set {id} done — line removed"));
+                items::report(
+                    json!({"item": item, "location": "tasks"}),
+                    committed,
+                    json_out,
+                    &human,
+                )
+            } else {
+                let mut file = items::item_for_edit(&store, id)?;
+                apply_set(&mut file.meta, &flags)?;
+                let item = file.meta.clone();
+                store.save_item(&file).map_err(|e| e.to_string())?;
+                let committed =
+                    items::commit(&proj.worktree, &format!("chore: set {id}"), no_commit)?;
+                items::report(
+                    json!({"item": item, "location": items::item_rel_path(&item)}),
+                    committed,
+                    json_out,
+                    &format!("set {}", items::compact(&item)),
+                )
+            }
+        }
+    }
+}

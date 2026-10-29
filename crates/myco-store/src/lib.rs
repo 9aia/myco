@@ -40,7 +40,8 @@ pub trait Store {
     fn save_backlog(&self, doc: &BacklogDoc) -> Result<(), Error>;
 
     /// Load one item file by id (`I-003` → `issues/issue-0003-*.md`).
-    /// [`Error::NotFound`] when absent.
+    /// Live files win over `archive/` copies; a same-id file in both
+    /// is a duplicate-id error. [`Error::NotFound`] when absent.
     fn item(&self, id: ItemId) -> Result<ItemFile, Error>;
 
     /// Write an item file atomically. Filename derives from the
@@ -54,7 +55,22 @@ pub trait Store {
 
     /// All item files of a kind, sorted by id. Task items aren't
     /// file-backed — [`ItemKind::Task`] yields an empty vec.
+    /// Archived files (`<dir>/archive/`) are NOT included.
     fn list_items(&self, kind: ItemKind) -> Result<Vec<ItemFile>, Error>;
+
+    /// Item files of a kind under `<dir>/archive/`, sorted by id —
+    /// cold storage for done items (`myco issue archive`).
+    fn list_archived(&self, kind: ItemKind) -> Result<Vec<ItemFile>, Error>;
+
+    /// Move an item file into its kind's `archive/` subdir.
+    /// [`Error::NotFound`] when there's no live file;
+    /// [`Error::Invalid`] when it's already archived.
+    fn archive_item(&self, id: ItemId) -> Result<(), Error>;
+
+    /// Is `id`'s file under `<dir>/archive/`? Archived items stay
+    /// addressable by [`Store::item`] but mutating verbs refuse
+    /// them (they'd silently un-archive otherwise).
+    fn is_archived(&self, id: ItemId) -> Result<bool, Error>;
 
     /// `index.md` verbatim — generated views land later; today it's
     /// a raw passthrough ([`Error::NotFound`] when absent).

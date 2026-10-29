@@ -7,20 +7,29 @@
 //! agents the verbs; `myco manifest`/`myco schema` are the
 //! self-describing surface.
 //!
-//! Phase 3 wires the lifecycle verbs — `init`, `check`, `migrate`,
-//! `commit` — on `myco-git` + `myco-store-md`. `schema`/`status`
-//! stay stubs until phase 5.
+//! Phase 4 wires the item verbs — `todo`, `backlog`, `issue`,
+//! `proposal`, `plan`, `adr`, `item show|set` — on `myco-store-md`.
+//! `schema`/`status` stay stubs until phase 5.
 
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+mod adr;
+mod backlog;
 mod check;
 mod commit;
 mod discover;
 mod init;
+mod issue;
+mod itemcmd;
+mod items;
 mod migrate;
 mod ops;
+mod plan;
+mod proposal;
+mod templates;
+mod todo;
 
 /// myco — agent-first project management for a repo's `project/`
 /// worktree.
@@ -74,6 +83,41 @@ enum Cmd {
         #[arg(short, long)]
         message: Option<String>,
     },
+    /// TODO.md tasks — add / done / defer / list.
+    Todo {
+        #[command(subcommand)]
+        cmd: todo::Cmd,
+    },
+    /// BACKLOG.md parked items — add / promote / list.
+    Backlog {
+        #[command(subcommand)]
+        cmd: backlog::Cmd,
+    },
+    /// Tracked issues, one file each under `issues/`.
+    Issue {
+        #[command(subcommand)]
+        cmd: issue::Cmd,
+    },
+    /// Design proposals under `proposals/` (`P-NNN`).
+    Proposal {
+        #[command(subcommand)]
+        cmd: proposal::Cmd,
+    },
+    /// Execution plans under `plans/` (`PL-NNN`).
+    Plan {
+        #[command(subcommand)]
+        cmd: plan::Cmd,
+    },
+    /// Architecture decision records under `adrs/` (`ADR-NNNN`).
+    Adr {
+        #[command(subcommand)]
+        cmd: adr::Cmd,
+    },
+    /// Kind-agnostic item verbs — show / set.
+    Item {
+        #[command(subcommand)]
+        cmd: itemcmd::Cmd,
+    },
     /// Cheap digest of the work ledger. `--prompt` = token-sized.
     /// [phase 5]
     Status {
@@ -97,12 +141,15 @@ fn manifest() -> serde_json::Value {
             "manifest",
             "schema", "init", "check", "migrate", "commit", "absorb",
             "index rebuild", "todo", "backlog", "issue", "proposal",
-            "plan", "adr", "item set", "handoff", "resume", "status",
+            "plan", "adr", "item show", "item set", "handoff",
+            "resume", "status",
             "board", "report", "index add", "org",
         ],
         "implemented": [
             "manifest", "gen-cli-docs",
             "init", "check", "migrate", "commit",
+            "todo", "backlog", "issue", "proposal", "plan", "adr",
+            "item show", "item set",
         ],
         "notes": "markdown in project/ is canonical; every verb is one \
                   atomic commit on the `project` branch",
@@ -128,6 +175,13 @@ fn main() {
         Cmd::Check { fix } => check::run(dir, root, fix, json, no_commit),
         Cmd::Migrate => migrate::run(dir, root, json, no_commit),
         Cmd::Commit { message } => commit::run(dir, root, message, json, no_commit),
+        Cmd::Todo { cmd } => todo::run(cmd, dir, root, json, no_commit),
+        Cmd::Backlog { cmd } => backlog::run(cmd, dir, root, json, no_commit),
+        Cmd::Issue { cmd } => issue::run(cmd, dir, root, json, no_commit),
+        Cmd::Proposal { cmd } => proposal::run(cmd, dir, root, json, no_commit),
+        Cmd::Plan { cmd } => plan::run(cmd, dir, root, json, no_commit),
+        Cmd::Adr { cmd } => adr::run(cmd, dir, root, json, no_commit),
+        Cmd::Item { cmd } => itemcmd::run(cmd, dir, root, json, no_commit),
         Cmd::Schema | Cmd::Status { .. } => {
             let name = match &cli.command {
                 Cmd::Schema => "schema",
