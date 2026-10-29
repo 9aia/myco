@@ -4,7 +4,7 @@
     "myco": {
       "source": "/home/luis/GitHub/9aia/myco/.agents/skills/myco",
       "sourceType": "local",
-      "computedHash": "b71943e98b2f2155c2fb3093a107de9b2f4b2c54f39897a62c495229a62039b6"
+      "computedHash": "1bf3b14f1961053d170092458bab1e961f08fdad7b557bce399b4cc3f9b7c398"
     },
     "skill-creator": {
       "source": "anthropics/skills",

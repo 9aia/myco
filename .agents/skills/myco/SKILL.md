@@ -1,19 +1,73 @@
 ---
 name: myco
-description: Guidelines for managing projects using file-based, git-based project management. Trigger whenever modifying or reading files in `project/` (e.g. proposals, issues, TODO.md, BACKLOG.md) or when managing task states.
+description: Manage project state via the myco CLI — tasks, backlog, issues, proposals, plans, ADRs, handoffs in `project/` worktree files. Trigger when working with `project/` files, planning, tracking tasks, or starting/resuming work.
 metadata:
-  version: "1.0.0"
+  version: "2.0.0"
 ---
 
-# Myco Project Management Router
+# myco — agent-first project management
 
-Instructions for managing project files under the `project/` directory (mounted via Git worktree). 
+`myco` owns every deterministic write to a repo's `project/` worktree
+(orphan `project` branch, gitignored on main). Markdown is canonical;
+the CLI is the write path; git history is the audit trail.
 
-To keep context overhead minimal, detailed guidelines are split into reference files. **Read only the specific reference file needed for your current task.**
+## The one rule
 
-## Task Routing
-- If setting up or initializing `myco` on a repository for the first time: Read [setup.md](file://./references/setup.md)
-- If writing or refining feature **proposals**: Read [proposals.md](file://./references/proposals.md)
-- If tracking or updating **issues**: Read [issues.md](file://./references/issues.md)
-- If managing the active **TODO list** (`project/TODO.md`): Read [todos.md](file://./references/todos.md)
-- If managing **backlog** items (`project/BACKLOG.md`): Read [backlog.md](file://./references/backlog.md)
+**Never hand-edit `project/` files when a `myco` verb exists.** If a
+change genuinely has no verb, edit — then run `myco check` to
+re-validate and `myco check --fix` to repair drift.
+
+## Bootstrap
+
+```bash
+command -v myco   # missing? install from the repo:
+cargo xtask install        # in 9aia/myco — installs to ~/.cargo/bin
+```
+
+## Discovery — prefer asking the CLI over reading docs
+
+```bash
+myco manifest          # capabilities + full verb list (JSON)
+myco schema            # the file/state spec, machine-readable
+myco <verb> --help     # every verb, self-documenting
+```
+
+`--json` is accepted on every verb — use it for machine consumption.
+`--dir`/`--root` override worktree discovery when cwd isn't the repo.
+
+## Verb cheat sheet — by intent
+
+| Intent | Command |
+| --- | --- |
+| Session start / where things stand | `myco status --prompt` |
+| Add a task | `myco todo add "title" [--pri high] [--owner devin]` |
+| Park / re-activate a task | `myco todo defer T-NNN` / `myco backlog promote T-NNN` |
+| Claim / start / block / finish | `myco item set T-NNN --status claimed|in-progress|blocked|done` |
+| Done a task | `myco todo done T-NNN` |
+| File / close an issue | `myco issue new "title"` / `myco issue resolve I-NNN` |
+| Design / plan / decision docs | `myco proposal new` · `myco plan new` · `myco adr new` |
+| Inspect / mutate any item | `myco item show T-NNN` · `myco item set T-NNN …` |
+| Session end (resumable state) | `myco handoff T-NNN --note "done/next/open"` |
+| Restart work on an item | `myco resume T-NNN` |
+| Views | `myco board` · `report` · `epic` · `milestone` |
+| Cross-repo | `myco index add <repo>` · `myco org status` |
+| Housekeeping | `myco init` · `check` · `migrate` · `commit` |
+
+## The daily loop
+
+1. `myco status --prompt` — token-sized digest of the ledger.
+2. Work. Track state as you go: `--status claimed` on pickup,
+   `in-progress` when started, `blocked` when stuck.
+3. Exit: `myco item set <ID> --status done` for finished work,
+   `myco handoff <ID> --note …` for anything resumable.
+
+## References — read only what the task needs
+
+- [lifecycle.md](file://./references/lifecycle.md) — init / check /
+  migrate / commit, the worktree model, auto-commit semantics
+- [items.md](file://./references/items.md) — all item verbs, id
+  scheme, state machine, metadata tokens
+- [continuity.md](file://./references/continuity.md) — handoff /
+  resume / status --prompt — the core agent workflow
+- [views.md](file://./references/views.md) — board / report / epic /
+  milestone / index / org
