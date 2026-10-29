@@ -5,3 +5,4 @@
 - T-010 absorb import formats — Jira / GH Projects scope per source
 - T-011 myco commit identity — repo config vs actor-tagged trailers
 - T-012 Signals semantics — item annotations vs defer to sturn entirely
+- T-013 migrate project-mode should accept freeform '- ' bullets (pm-style lists) — currently errors; needed for pm→project flows that can't use pm-mode's main-branch commit · created:2026-10-29
