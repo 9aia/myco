@@ -2,7 +2,6 @@
 
 ## v2 rewrite (phases — see proposals/proposal-0001)
 
-- [ ] T-001 myco-git — init / check / migrate / auto-commit
 - [ ] T-002 Item verbs — todo/backlog/issue/proposal/plan/adr + item set
 - [ ] T-003 manifest / schema / status --prompt + myco-index-redb + board/report/org views
 - [ ] T-004 Continuity — handoff / resume + sepia session hook
