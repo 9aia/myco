@@ -36,3 +36,15 @@ by tagging once.
   resolving that; installs should use
   `cargo install --git https://github.com/9aia/myco` regardless.
 - Library crates publish normally under their `myco-*` names.
+
+## CI and docs deploys
+
+The same bupha watch owns the rest of what used to be GitHub
+Actions — there are no workflows in the repo:
+
+- **Push to `main`** runs `scripts/ci.sh` (`cargo xtask check &&
+  cargo xtask test`) in a detached worktree and posts the
+  `ci/bupha` commit status.
+- **Push to `docs`** runs `scripts/deploy-docs.sh`, which
+  rebuilds the site and pushes `gh-pages` — Pages is a legacy
+  branch deploy, so that push is the whole release of the site.
