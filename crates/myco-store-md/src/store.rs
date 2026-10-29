@@ -206,13 +206,24 @@ impl Store for MdStore {
         std::fs::create_dir_all(&dir_path).map_err(Error::Io)?;
         let target = dir_path.join(&filename);
         // rename: an existing file for the same id under a different
-        // slug gets removed after the new one lands
+        // slug gets removed after the new one lands. The filename
+        // match alone isn't enough — frontmatter-less adoptees can
+        // borrow the number, so the old file must actually claim
+        // this id to count as the same item's previous name.
         let old = self
             .item_paths(file.meta.id.kind(), false)?
             .into_iter()
             .filter(|(i, p)| *i == file.meta.id && *p != target)
             .map(|(_, p)| p)
-            .next();
+            .find(|p| {
+                let rel = p
+                    .strip_prefix(&self.root)
+                    .map_or_else(|_| p.as_str(), |r| r.as_str());
+                self.read(rel)
+                    .ok()
+                    .and_then(|src| itemfile::frontmatter_id(&src))
+                    == Some(file.meta.id)
+            });
         write_atomic(&target, &itemfile::emit_item_file(file)?)?;
         if let Some(old) = old {
             std::fs::remove_file(&old).map_err(Error::Io)?;

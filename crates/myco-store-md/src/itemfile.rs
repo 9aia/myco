@@ -88,6 +88,32 @@ pub fn parse_item_filename(kind: ItemKind, filename: &str) -> Option<ItemId> {
     Some(ItemId::new(kind, number))
 }
 
+/// `id = "…"` pulled out of a `+++` frontmatter block — the cheap
+/// probe for when the strict parse isn't needed (or already
+/// failed). `None` for files with no `+++` fence or no parseable
+/// `id` line — including frontmatter-less files that merely
+/// *borrow* an id number via their filename.
+pub fn frontmatter_id(src: &str) -> Option<ItemId> {
+    let mut lines = src.lines();
+    if lines.next()?.trim() != "+++" {
+        return None;
+    }
+    for l in lines {
+        let t = l.trim();
+        if t == "+++" {
+            break;
+        }
+        if let Some(rest) = t.strip_prefix("id") {
+            if let Some(v) = rest.trim_start().strip_prefix('=') {
+                if let Ok(id) = v.trim().trim_matches('"').parse::<ItemId>() {
+                    return Some(id);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Frontmatter DTO — stringly-typed so bad values point at the
 /// frontmatter block, not toml's internals.
 #[derive(Debug, Deserialize)]

@@ -4,18 +4,22 @@
 //! counters ≥ max id per kind, duplicate ids across the ledger,
 //! dangling `blocks:` refs, kind/dir filename mismatches, `[x]`/
 //! `status:done` items (the rule: done items are deleted — git
-//! keeps history), and non-canonical emit drift.
+//! keeps history), title/frontmatter id mismatches (a file whose
+//! title or H1 still carries its old `ADR-0008:` number), and
+//! non-canonical emit drift.
 //!
 //! `--fix` applies the safe repairs — strip done items, rename
-//! misplaced files, reconcile counters, re-emit canonical — then
-//! re-analyzes; without it every finding is just reported.
+//! misplaced files, renumber title-mismatched items (repointing
+//! index links, `blocks:`/`supersedes` refs and handoffs),
+//! reconcile counters, re-emit canonical — then re-analyzes;
+//! without it every finding is just reported.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use camino::Utf8PathBuf;
 use myco_core::{Item, ItemId, ItemKind, ProjectMeta};
-use myco_store_md::{self, ParseError};
+use myco_store_md::{self, frontmatter_id, ParseError};
 use serde_json::json;
 
 use crate::discover::Project;
@@ -32,7 +36,8 @@ pub struct Finding {
     pub col: usize,
     /// Stable machine code — `parse`, `done-item`, `counter-behind`,
     /// `duplicate-id`, `dangling-blocks`, `filename`, `missing-file`,
-    /// `unexpected-file`, `emit-drift`, `orphan-handoff`.
+    /// `unexpected-file`, `emit-drift`, `orphan-handoff`,
+    /// `id-title-mismatch`.
     pub code: &'static str,
     /// Human/agent-readable message.
     pub msg: String,
@@ -96,27 +101,196 @@ fn read(wt: &Path, rel: &str) -> Option<String> {
     std::fs::read_to_string(wt.join(rel)).ok()
 }
 
-/// `id = "…"` pulled out of a `+++` frontmatter block — the cheap
-/// kind-mismatch probe when the strict parse already failed.
-fn frontmatter_id(src: &str) -> Option<ItemId> {
-    let mut lines = src.lines();
-    if lines.next()?.trim() != "+++" {
-        return None;
-    }
-    for l in lines {
-        let t = l.trim();
-        if t == "+++" {
-            break;
-        }
-        if let Some(rest) = t.strip_prefix("id") {
-            if let Some(v) = rest.trim_start().strip_prefix('=') {
-                if let Ok(id) = v.trim().trim_matches('"').parse::<ItemId>() {
-                    return Some(id);
-                }
+/// `<KIND>-<digits>` at the start of a title — `ADR-0008: x`,
+/// `T-003 y`, `PL-001 — z`. The id token must end at a boundary
+/// (`:`, whitespace, a dash) or the string.
+fn leading_id(text: &str) -> Option<ItemId> {
+    let end = text
+        .find(|c: char| c.is_whitespace() || matches!(c, ':' | '—' | '–'))
+        .unwrap_or(text.len());
+    text[..end].parse::<ItemId>().ok()
+}
+
+/// First heading's text in a markdown body — any depth, the H1
+/// convention (`# ADR-0008: …`) or a `##` that opens the file.
+fn body_heading(body: &str) -> Option<String> {
+    for line in body.lines() {
+        let t = line.trim_start();
+        if t.starts_with('#') {
+            let text = t.trim_start_matches('#').trim();
+            if !text.is_empty() {
+                return Some(text.to_string());
             }
         }
     }
     None
+}
+
+/// The id a file claims for itself in prose — frontmatter `title`
+/// and body first-heading both count (`ADR-0008: …`). `One` when
+/// they agree (or only one speaks), `Conflict` when they name two
+/// different ids of the same kind, `None` when neither does.
+enum Claim {
+    None,
+    One(ItemId),
+    Conflict(ItemId, ItemId),
+}
+
+fn title_claim(file: &myco_core::ItemFile) -> Claim {
+    let kind = file.meta.id.kind();
+    let same_kind = |i: &ItemId| i.kind() == kind;
+    let title_id = leading_id(&file.meta.title).filter(same_kind);
+    let head_id = body_heading(&file.body)
+        .and_then(|h| leading_id(&h))
+        .filter(same_kind);
+    match (title_id, head_id) {
+        (Some(a), Some(b)) if a != b => Claim::Conflict(a, b),
+        (Some(a), _) => Claim::One(a),
+        (None, h) => h.map_or(Claim::None, Claim::One),
+    }
+}
+
+/// A file wanting renumbering — its title claims a number its
+/// frontmatter id doesn't have. Collected during the file walk,
+/// resolved once the whole `ids` map exists.
+struct Renum {
+    /// Current rel path.
+    rel: String,
+    /// The parsed item file (id still `current`).
+    file: myco_core::ItemFile,
+    /// Frontmatter id today.
+    current: ItemId,
+    /// The id the title claims.
+    wanted: ItemId,
+    /// Canonical path for `current` — where filename/emit-drift
+    /// fixes aimed; dropped when the renumber wins.
+    old_target: String,
+}
+
+/// Rewrite id references inside a `+++` frontmatter block —
+/// `blocks = […]` arrays and `superseded_by`/`supersedes` scalars,
+/// quoted ids only. `None` when nothing changed.
+fn repoint_frontmatter(src: &str, map: &BTreeMap<ItemId, ItemId>) -> Option<String> {
+    let mut out = String::with_capacity(src.len());
+    let mut in_fm = false;
+    let mut changed = false;
+    for (i, line) in src.split_inclusive('\n').enumerate() {
+        let t = line.trim_end();
+        if t == "+++" {
+            if i == 0 {
+                in_fm = true;
+            } else if in_fm {
+                in_fm = false;
+            }
+        }
+        if in_fm && t != "+++" {
+            let key = t.split('=').next().map(str::trim).unwrap_or("");
+            if matches!(key, "blocks" | "superseded_by" | "supersedes") {
+                let mut l = line.to_string();
+                for (old, new) in map {
+                    let (o, n) = (format!("\"{old}\""), format!("\"{new}\""));
+                    if l.contains(&o) {
+                        l = l.replace(&o, &n);
+                        changed = true;
+                    }
+                }
+                out.push_str(&l);
+                continue;
+            }
+        }
+        out.push_str(line);
+    }
+    changed.then_some(out)
+}
+
+/// Rewrite `· blocks:<csv>` tokens in TODO/BACKLOG item lines.
+/// `None` when nothing changed.
+fn repoint_blocks_tokens(src: &str, map: &BTreeMap<ItemId, ItemId>) -> Option<String> {
+    let mut out = String::with_capacity(src.len());
+    let mut changed = false;
+    for line in src.split_inclusive('\n') {
+        let (body, nl) = line.strip_suffix('\n').map_or((line, ""), |b| (b, "\n"));
+        let mut parts = body.split('·');
+        let mut rebuilt = parts.next().unwrap_or("").to_string();
+        for tok in parts {
+            rebuilt.push('·');
+            let t = tok.trim_start();
+            if let Some(rest) = t.strip_prefix("blocks:") {
+                rebuilt.push_str(&tok[..tok.len() - t.len()]);
+                rebuilt.push_str("blocks:");
+                for (j, idtok) in rest.split(',').enumerate() {
+                    if j > 0 {
+                        rebuilt.push(',');
+                    }
+                    match idtok
+                        .trim()
+                        .parse::<ItemId>()
+                        .ok()
+                        .and_then(|id| map.get(&id))
+                    {
+                        Some(new) => {
+                            rebuilt.push_str(&new.to_string());
+                            changed = true;
+                        }
+                        None => rebuilt.push_str(idtok),
+                    }
+                }
+            } else {
+                rebuilt.push_str(tok);
+            }
+        }
+        out.push_str(&rebuilt);
+        out.push_str(nl);
+    }
+    changed.then_some(out)
+}
+
+/// Rewrite a handoff file to a new item id — `item = "<OLD>"` plus
+/// the `# Handoffs — <OLD>` title (both must agree per the spec).
+fn repoint_handoff(src: &str, old: &ItemId, new: &ItemId) -> Option<String> {
+    let from_item = format!("item = \"{old}\"");
+    let to_item = format!("item = \"{new}\"");
+    let from_title = format!("# Handoffs — {old}");
+    let to_title = format!("# Handoffs — {new}");
+    if !src.contains(&from_item) {
+        return None;
+    }
+    Some(
+        src.replace(&from_item, &to_item)
+            .replace(&from_title, &to_title),
+    )
+}
+
+/// Apply `f` to a file's pending Write fix at `write_rel` when one
+/// exists, otherwise transform the on-disk contents at `read_rel`
+/// into a new Write fix at `write_rel`. (The two differ when the
+/// file is itself being renamed.) `f` returns `None` when the
+/// contents don't change.
+fn transform_file(
+    wt: &Path,
+    fixes: &mut Vec<Fix>,
+    read_rel: &str,
+    write_rel: &str,
+    f: &dyn Fn(&str) -> Option<String>,
+) {
+    for fix in fixes.iter_mut() {
+        if let Fix::Write { rel: r, contents } = fix {
+            if r == write_rel {
+                if let Some(new) = f(contents) {
+                    *contents = new;
+                }
+                return;
+            }
+        }
+    }
+    if let Some(src) = read(wt, read_rel) {
+        if let Some(new) = f(&src) {
+            fixes.push(Fix::Write {
+                rel: write_rel.to_string(),
+                contents: new,
+            });
+        }
+    }
 }
 
 /// `file/kind` pairs — which file-backed kinds live in which dirs.
@@ -177,6 +351,7 @@ fn analyze(wt: &Path) -> Analysis {
     let mut a = Analysis::default();
     let mut items: Vec<Located> = Vec::new();
     let mut ids: BTreeMap<ItemId, Vec<String>> = BTreeMap::new();
+    let mut candidates: Vec<Renum> = Vec::new();
 
     let mut meta = ProjectMeta::new(
         wt.file_name()
@@ -443,10 +618,33 @@ fn analyze(wt: &Path) -> Analysis {
                         ));
                         if let Ok(text) = myco_store_md::emit_item_file(&file) {
                             a.fixes.push(Fix::Write {
-                                rel: target,
+                                rel: target.clone(),
                                 contents: text,
                             });
                         }
+                    }
+                    // title/H1 carrying a different number than the
+                    // frontmatter id — a renumber candidate resolved
+                    // once every id is known
+                    match title_claim(&file) {
+                        Claim::One(w) if w != id => candidates.push(Renum {
+                            rel: rel.clone(),
+                            file: file.clone(),
+                            current: id,
+                            wanted: w,
+                            old_target: target,
+                        }),
+                        Claim::Conflict(x, y) => {
+                            a.findings.push(Finding::at(
+                                &rel,
+                                "id-title-mismatch",
+                                format!(
+                                    "title says {x} but heading says {y} (id is {id}) — renumber manually"
+                                ),
+                                false,
+                            ));
+                        }
+                        _ => {}
                     }
                     ids.entry(id).or_default().push(rel.clone());
                     items.push(Located {
@@ -630,6 +828,153 @@ fn analyze(wt: &Path) -> Analysis {
                     format!("{} blocks {b} which doesn't exist", l.item.id),
                     false,
                 ));
+            }
+        }
+    }
+
+    // --- id-title-mismatch: renumber, repoint refs -------------------
+    // A title's claimed number wins the id when free — the repair
+    // for ids that outran the numbers their titles still carry.
+    // Collisions (two titles want one number, or an item holds it)
+    // are reported and skipped for manual resolution.
+    {
+        let mut granted: BTreeSet<ItemId> = BTreeSet::new();
+        let mut winners: BTreeSet<String> = BTreeSet::new();
+        let mut renames: BTreeMap<String, String> = BTreeMap::new();
+        let mut id_map: BTreeMap<ItemId, ItemId> = BTreeMap::new();
+        for cand in &candidates {
+            let w = cand.wanted;
+            let blocked: Vec<&String> = ids
+                .get(&w)
+                .map(|locs| locs.iter().filter(|l| !winners.contains(*l)).collect())
+                .unwrap_or_default();
+            if granted.contains(&w) || !blocked.is_empty() {
+                let why = if granted.contains(&w) {
+                    format!("another file takes {w} first")
+                } else {
+                    format!(
+                        "{w} is held by {}",
+                        blocked
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+                a.findings.push(Finding::at(
+                    &cand.rel,
+                    "id-title-mismatch",
+                    format!(
+                        "title says {w} but id is {} — {why}; renumber manually",
+                        cand.current
+                    ),
+                    false,
+                ));
+                continue;
+            }
+            let mut nf = cand.file.clone();
+            nf.meta.id = w;
+            let new_rel = myco_store_md::item_dir(w.kind()).and_then(|d| {
+                myco_store_md::item_filename(&w, &nf.meta.title).map(|f| format!("{d}/{f}"))
+            });
+            match (new_rel, myco_store_md::emit_item_file(&nf)) {
+                (Some(to), Ok(text)) => {
+                    a.findings.push(Finding::at(
+                        &cand.rel,
+                        "id-title-mismatch",
+                        format!(
+                            "title says {w} but id is {} — renumber to {w}",
+                            cand.current
+                        ),
+                        true,
+                    ));
+                    // filename/emit-drift fixes against the old id
+                    // are superseded by the renumber
+                    a.fixes.retain(|f| {
+                        !matches!(f, Fix::Rename { from, .. } if *from == cand.rel)
+                            && !matches!(f, Fix::Write { rel: r, .. } if *r == cand.rel || *r == cand.old_target)
+                    });
+                    a.fixes.push(Fix::Rename {
+                        from: cand.rel.clone(),
+                        to: to.clone(),
+                    });
+                    a.fixes.push(Fix::Write {
+                        rel: to.clone(),
+                        contents: text,
+                    });
+                    granted.insert(w);
+                    winners.insert(cand.rel.clone());
+                    renames.insert(cand.rel.clone(), to);
+                    id_map.insert(cand.current, w);
+                }
+                _ => a.findings.push(Finding::at(
+                    &cand.rel,
+                    "id-title-mismatch",
+                    format!(
+                        "title says {w} but id is {} — renumber manually",
+                        cand.current
+                    ),
+                    false,
+                )),
+            }
+        }
+        // Repoint what referenced the renumbered ids — structured
+        // refs only: index paths, `blocks:`/`supersedes` frontmatter
+        // and todo tokens, handoff files. Prose `ADR-NNNN` mentions
+        // stay (ambiguous — they may mean another repo's item).
+        if !id_map.is_empty() {
+            transform_file(wt, &mut a.fixes, "index.md", "index.md", &|src: &str| {
+                let mut s = src.to_string();
+                let mut ch = false;
+                for (from, to) in &renames {
+                    if s.contains(from.as_str()) {
+                        s = s.replace(from.as_str(), to.as_str());
+                        ch = true;
+                    }
+                }
+                ch.then_some(s)
+            });
+            for l in &items {
+                let touches = l.item.blocks.iter().any(|b| id_map.contains_key(b))
+                    || l.item
+                        .superseded_by
+                        .is_some_and(|i| id_map.contains_key(&i))
+                    || l.item.supersedes.is_some_and(|i| id_map.contains_key(&i));
+                if !touches {
+                    continue;
+                }
+                if l.loc == "TODO.md" || l.loc == "BACKLOG.md" {
+                    transform_file(wt, &mut a.fixes, &l.loc, &l.loc, &|src: &str| {
+                        repoint_blocks_tokens(src, &id_map)
+                    });
+                } else {
+                    // write at the canonical target (it may be a
+                    // renumber winner or a filename-fix mover)
+                    let to = renames.get(&l.loc).cloned().unwrap_or_else(|| {
+                        myco_store_md::item_dir(l.item.id.kind())
+                            .and_then(|d| {
+                                myco_store_md::item_filename(&l.item.id, &l.item.title)
+                                    .map(|f| format!("{d}/{f}"))
+                            })
+                            .unwrap_or_else(|| l.loc.clone())
+                    });
+                    transform_file(wt, &mut a.fixes, &l.loc, &to, &|src: &str| {
+                        repoint_frontmatter(src, &id_map)
+                    });
+                }
+            }
+            for (old, new) in &id_map {
+                let hrel = format!("handoffs/{old}.md");
+                if let Some(src) = read(wt, &hrel) {
+                    let hto = format!("handoffs/{new}.md");
+                    a.fixes.push(Fix::Rename {
+                        from: hrel,
+                        to: hto.clone(),
+                    });
+                    if let Some(contents) = repoint_handoff(&src, old, new) {
+                        a.fixes.push(Fix::Write { rel: hto, contents });
+                    }
+                }
             }
         }
     }
@@ -833,6 +1178,134 @@ mod tests {
             std::fs::read_to_string(&p).unwrap(),
             "- [ ] parent\n  - [ ] kept sibling\n- [ ] last\n"
         );
+    }
+
+    #[test]
+    fn leading_id_parsing() {
+        let adr = |n| Some(ItemId::new(ItemKind::Adr, n));
+        assert_eq!(leading_id("ADR-0008: web first"), adr(8));
+        assert_eq!(leading_id("ADR-0001"), adr(1));
+        assert_eq!(
+            leading_id("T-012 do a thing"),
+            Some(ItemId::new(ItemKind::Task, 12))
+        );
+        assert_eq!(
+            leading_id("PL-001 — phases"),
+            Some(ItemId::new(ItemKind::Plan, 1))
+        );
+        // not a leading id
+        for no in [
+            "Plain title",
+            "0036 — Modular VM", // bare number, no prefix
+            "x ADR-0001: mention",
+            "ADR-0001x: glued",
+            "adr-0001 lowercase",
+            "ADR-0000: zero",
+        ] {
+            assert_eq!(leading_id(no), None, "{no}");
+        }
+    }
+
+    #[test]
+    fn body_heading_finds_first() {
+        assert_eq!(
+            body_heading("# ADR-0001: t\n\nbody\n").as_deref(),
+            Some("ADR-0001: t")
+        );
+        assert_eq!(body_heading("## ADR-0008\n").as_deref(), Some("ADR-0008"));
+        assert_eq!(
+            body_heading("prose\n\n## later\n").as_deref(),
+            Some("later")
+        );
+        assert_eq!(body_heading("no headings\n"), None);
+    }
+
+    #[test]
+    fn title_claim_sources() {
+        let mk = |id: u32, title: &str, body: &str| myco_core::ItemFile {
+            meta: {
+                let mut i = Item::new(ItemId::new(ItemKind::Adr, id), title);
+                i.status = myco_core::Status::Open;
+                i
+            },
+            body: body.to_string(),
+        };
+        // both agree → claim
+        assert!(matches!(
+            title_claim(&mk(3, "ADR-0001: x", "# ADR-0001: x\n")),
+            Claim::One(w) if w == ItemId::new(ItemKind::Adr, 1)
+        ));
+        // title only (body has no heading / no id)
+        assert!(matches!(
+            title_claim(&mk(3, "ADR-0001: x", "no heading\n")),
+            Claim::One(w) if w.number() == 1
+        ));
+        // heading only
+        assert!(matches!(
+            title_claim(&mk(3, "x", "# ADR-0002: y\n")),
+            Claim::One(w) if w.number() == 2
+        ));
+        // disagreement → conflict
+        assert!(matches!(
+            title_claim(&mk(3, "ADR-0001: x", "# ADR-0002: y\n")),
+            Claim::Conflict(a, b) if a.number() == 1 && b.number() == 2
+        ));
+        // other-kind prefixes don't claim an ADR file
+        assert!(matches!(title_claim(&mk(3, "T-001: x", "")), Claim::None));
+        // no claim at all
+        assert!(matches!(
+            title_claim(&mk(3, "plain", "# plain\n")),
+            Claim::None
+        ));
+    }
+
+    #[test]
+    fn repoint_frontmatter_refs() {
+        let mut map = BTreeMap::new();
+        map.insert(ItemId::new(ItemKind::Adr, 3), ItemId::new(ItemKind::Adr, 1));
+        let src = "+++\nid = \"ADR-0005\"\ntitle = \"x\"\nstatus = \"open\"\nblocks = [\"ADR-0003\", \"T-001\"]\nsuperseded_by = \"ADR-0003\"\n+++\n\nbody mentions ADR-0003 — untouched\n";
+        let out = repoint_frontmatter(src, &map).unwrap();
+        assert!(out.contains("blocks = [\"ADR-0001\", \"T-001\"]"), "{out}");
+        assert!(out.contains("superseded_by = \"ADR-0001\""), "{out}");
+        // body mentions and non-ref lines stay
+        assert!(out.contains("body mentions ADR-0003 — untouched"), "{out}");
+        assert!(out.contains("id = \"ADR-0005\""), "{out}");
+        // no match → None
+        assert!(repoint_frontmatter("+++\nid = \"I-001\"\n+++\n", &map).is_none());
+    }
+
+    #[test]
+    fn repoint_blocks_token_lines() {
+        let mut map = BTreeMap::new();
+        map.insert(
+            ItemId::new(ItemKind::Adr, 16),
+            ItemId::new(ItemKind::Adr, 7),
+        );
+        let src = "# TODO — x\n\n- [ ] T-001 do it · pri:high · blocks:ADR-0016,T-002\n- [ ] T-002 other · blocks:T-001\n";
+        let out = repoint_blocks_tokens(src, &map).unwrap();
+        assert!(out.contains("blocks:ADR-0007,T-002"), "{out}");
+        assert!(out.contains("blocks:T-001"), "{out}");
+        assert!(repoint_blocks_tokens("- [ ] T-001 x\n", &map).is_none());
+    }
+
+    #[test]
+    fn repoint_handoff_file() {
+        let src = "+++\nitem = \"ADR-0003\"\n+++\n\n# Handoffs — ADR-0003\n\n## 2026-01-01 · devin\nnote\n";
+        let out = repoint_handoff(
+            src,
+            &ItemId::new(ItemKind::Adr, 3),
+            &ItemId::new(ItemKind::Adr, 1),
+        )
+        .unwrap();
+        assert!(out.contains("item = \"ADR-0001\""), "{out}");
+        assert!(out.contains("# Handoffs — ADR-0001"), "{out}");
+        // unrelated file → None
+        assert!(repoint_handoff(
+            "+++\nitem = \"T-001\"\n+++\n",
+            &ItemId::new(ItemKind::Adr, 3),
+            &ItemId::new(ItemKind::Adr, 1),
+        )
+        .is_none());
     }
 
     #[test]
