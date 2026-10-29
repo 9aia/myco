@@ -1,14 +1,15 @@
 //! `TODO.md` — `# TODO — <repo>` then `## <section>` headings with
 //! `- [ ] T-NNN …` task items. Checkbox is always `[ ]` (open-ish
 //! statuses); `done` items don't belong — they're removed by
-//! `myco todo done`.
+//! `myco todo done`. Items nest: a `- [ ]` list indented under an
+//! item is its `children` (2 spaces per level, canonical).
 //!
 //! Emit is hand-written (canonical lines) because
 //! `mdast_util_to_markdown` 0.0.2 can't emit GFM `[ ]` checkboxes —
 //! inline text still goes through it for escaping.
 
 use markdown::mdast::Node;
-use myco_core::{ItemKind, Section, Status, TodoDoc};
+use myco_core::{Item, ItemKind, Section, Status, TodoDoc};
 
 use crate::error::{EmitError, ParseError};
 use crate::line::{self, LineSpec};
@@ -92,36 +93,47 @@ fn parse_list(
     for item in &list.children {
         // list children are ListItem by construction; skip anything else
         if let Node::ListItem(li) = item {
-            match li.checked {
-                Some(true) => {
-                    return Err(err(
-                        src,
-                        item,
-                        "checked item — done tasks are removed from TODO.md",
-                    ));
-                }
-                None => {
-                    return Err(err(src, item, "TODO items must be `- [ ]` task items"));
-                }
-                Some(false) => {}
-            }
-            if li.children.len() != 1 || !matches!(li.children[0], Node::Paragraph(_)) {
-                return Err(err(src, item, "item must be a single line"));
-            }
-            let text = mdx::single_text(&li.children[0])
-                .ok_or_else(|| err(src, item, "item line must be plain text"))?;
-            let parsed = line::parse_text(text, &SPEC).map_err(|m| err(src, item, m))?;
-            if parsed.status == Status::Done {
-                return Err(err(
-                    src,
-                    item,
-                    "status:done — done tasks are removed from TODO.md",
-                ));
-            }
-            section.items.push(parsed);
+            section.items.push(parse_li(src, item, li)?);
         }
     }
     Ok(())
+}
+
+/// One `- [ ] T-NNN …` list item → an [`Item`]; a nested `-` list
+/// under it parses recursively into `children`.
+fn parse_li(src: &str, node: &Node, li: &markdown::mdast::ListItem) -> Result<Item, ParseError> {
+    match li.checked {
+        Some(true) => {
+            return Err(err(
+                src,
+                node,
+                "checked item — done tasks are removed from TODO.md",
+            ));
+        }
+        None => {
+            return Err(err(src, node, "TODO items must be `- [ ]` task items"));
+        }
+        Some(false) => {}
+    }
+    let (head, nested) = line::item_parts(li).map_err(|m| err(src, node, m))?;
+    let text =
+        mdx::single_text(head).ok_or_else(|| err(src, node, "item line must be plain text"))?;
+    let mut parsed = line::parse_text(text, &SPEC).map_err(|m| err(src, node, m))?;
+    if parsed.status == Status::Done {
+        return Err(err(
+            src,
+            node,
+            "status:done — done tasks are removed from TODO.md",
+        ));
+    }
+    if let Some(list) = nested {
+        for child in &list.children {
+            if let Node::ListItem(cli) = child {
+                parsed.children.push(parse_li(src, child, cli)?);
+            }
+        }
+    }
+    Ok(parsed)
 }
 
 /// Canonical `TODO.md` — deterministic output. Fails on models the
@@ -137,13 +149,7 @@ pub fn emit_todo(doc: &TodoDoc) -> Result<String, EmitError> {
     out.push('\n');
     for (i, section) in doc.sections.iter().enumerate() {
         for item in &section.items {
-            line::check_item(item, FILE)?;
-            if item.status == Status::Done {
-                return Err(EmitError::new(
-                    FILE,
-                    format!("done item {} — remove it from TODO.md", item.id),
-                ));
-            }
+            check_subtree(item)?;
         }
         out.push('\n');
         match &section.name {
@@ -168,12 +174,41 @@ pub fn emit_todo(doc: &TodoDoc) -> Result<String, EmitError> {
             }
         }
         for item in &section.items {
-            out.push_str("- [ ] ");
-            out.push_str(&mdx::inline(&line::text(item, &SPEC)?));
-            out.push('\n');
+            emit_item(&mut out, item, 0)?;
         }
     }
     Ok(out)
+}
+
+/// [`line::check_item`] + the no-done rule, applied to a whole
+/// subtree — children follow the same grammar as their parents.
+fn check_subtree(item: &Item) -> Result<(), EmitError> {
+    line::check_item(item, FILE)?;
+    if item.status == Status::Done {
+        return Err(EmitError::new(
+            FILE,
+            format!("done item {} — remove it from TODO.md", item.id),
+        ));
+    }
+    for c in &item.children {
+        check_subtree(c)?;
+    }
+    Ok(())
+}
+
+/// One item line plus its nested children — 2-space indent per
+/// level under the parent's bullet.
+fn emit_item(out: &mut String, item: &Item, depth: usize) -> Result<(), EmitError> {
+    for _ in 0..depth {
+        out.push_str("  ");
+    }
+    out.push_str("- [ ] ");
+    out.push_str(&mdx::inline(&line::text(item, &SPEC)?));
+    out.push('\n');
+    for c in &item.children {
+        emit_item(out, c, depth + 1)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -303,10 +338,68 @@ mod tests {
     }
 
     #[test]
-    fn nested_list_is_single_line_error() {
-        let src = "# TODO — x\n\n- [ ] T-001 a\n  - nested\n";
-        let e = parse_todo(src).unwrap_err();
-        assert!(e.message().contains("single line"));
+    fn nested_items_parse_into_children() {
+        let src = "# TODO — x\n\n- [ ] T-001 a\n  - [ ] T-002 sub one · pri:low\n  - [ ] T-003 sub two\n    - [ ] T-004 deep\n- [ ] T-005 sib\n";
+        let doc = parse_todo(src).unwrap();
+        assert_eq!(doc.sections[0].items.len(), 2);
+        let parent = &doc.sections[0].items[0];
+        assert_eq!(parent.children.len(), 2);
+        assert_eq!(parent.children[0].id.number(), 2);
+        assert_eq!(parent.children[0].priority, myco_core::Priority::Low);
+        assert_eq!(parent.children[1].children[0].id.number(), 4);
+        // canonical emit is 2 spaces per level and round-trips
+        assert_eq!(emit_todo(&doc).unwrap(), src);
+        // flattened view sees the whole subtree
+        let ids: Vec<u32> = parent.subtree().map(|i| i.id.number()).collect();
+        assert_eq!(ids, [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn nested_parse_errors() {
+        for (src, why) in [
+            // a done child is still done — removed, not parked
+            (
+                "# TODO — x\n\n- [ ] T-001 a\n  - [x] T-002 done\n",
+                "checked",
+            ),
+            (
+                "# TODO — x\n\n- [ ] T-001 a\n  - [ ] T-002 x · status:done\n",
+                "status:done",
+            ),
+            (
+                "# TODO — x\n\n- [ ] T-001 a\n  - bare bullet\n",
+                "no checkbox",
+            ),
+            (
+                "# TODO — x\n\n- [ ] T-001 a\n  1. [ ] T-002 ordered\n",
+                "ordered nested",
+            ),
+            (
+                "# TODO — x\n\n- [ ] T-001 a\n  - [ ] T-002\n    second para\n",
+                "paragraph under item",
+            ),
+        ] {
+            assert!(parse_todo(src).is_err(), "{why}: {src:?}");
+        }
+    }
+
+    #[test]
+    fn nested_item_must_have_paragraph_head() {
+        // a nested list with no text line at all — nothing to parse
+        let src = "# TODO — x\n\n- [ ] T-001 a\n  -\n";
+        assert!(parse_todo(src).is_err());
+    }
+
+    #[test]
+    fn emit_rejects_done_children() {
+        let mut doc = TodoDoc::new("x");
+        let child = Item::new(ItemId::new(ItemKind::Task, 2), "sub").status(Status::Done);
+        doc.sections.push(Section {
+            name: None,
+            items: vec![Item::new(ItemId::new(ItemKind::Task, 1), "parent").child(child)],
+        });
+        let e = emit_todo(&doc).unwrap_err();
+        assert!(e.to_string().contains("T-002"), "{e}");
     }
 
     #[test]

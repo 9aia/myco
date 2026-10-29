@@ -241,6 +241,148 @@ fn todo_list_human_snapshot() {
     insta::assert_snapshot!(stdout(&out));
 }
 
+#[test]
+fn nested_tasks_lifecycle() {
+    let (d, wt) = project();
+    // --parent nests the new item under an existing task
+    run(d.path(), &["todo", "add", "parent task"]);
+    let out = run(
+        d.path(),
+        &["todo", "add", "sub one", "--parent", "T-001", "--json"],
+    );
+    assert_eq!(code(&out), 0);
+    assert_eq!(json(&out)["parent"], "T-001");
+    let out = run(d.path(), &["todo", "add", "sub two", "--parent", "T-001"]);
+    assert_eq!(code(&out), 0);
+    let todo = read(&wt, "TODO.md");
+    for frag in [
+        "- [ ] T-001 parent task",
+        "  - [ ] T-002 sub one",
+        "  - [ ] T-003 sub two",
+    ] {
+        assert!(todo.contains(frag), "{frag} in {todo}");
+    }
+    // --section and --parent conflict
+    let out = run(
+        d.path(),
+        &["todo", "add", "x", "--parent", "T-001", "--section", "s"],
+    );
+    assert_eq!(code(&out), 2);
+    // a missing or non-task parent is a clean error
+    let out = run(d.path(), &["todo", "add", "x", "--parent", "T-099"]);
+    assert_eq!(code(&out), 2);
+    run(d.path(), &["issue", "new", "an issue"]);
+    let out = run(d.path(), &["todo", "add", "x", "--parent", "I-001"]);
+    assert_eq!(code(&out), 2);
+
+    // list indents children under their parent; --json nests them
+    let out = run(d.path(), &["todo", "list"]);
+    let text = stdout(&out);
+    let lines: Vec<&str> = text.lines().collect();
+    assert!(
+        lines.iter().any(|l| l.starts_with("  T-002")),
+        "{}",
+        lines.join("\n")
+    );
+    let out = run(d.path(), &["todo", "list", "--json"]);
+    let v = json(&out);
+    assert!(
+        v.as_array().unwrap().iter().any(|i| i["id"] == "T-002"),
+        "{v}"
+    );
+
+    // item set reaches children
+    let out = run(
+        d.path(),
+        &["item", "set", "T-002", "--status", "in-progress", "--json"],
+    );
+    assert_eq!(code(&out), 0);
+    let todo = read(&wt, "TODO.md");
+    assert!(
+        todo.contains("  - [ ] T-002 sub one · status:in-progress"),
+        "{todo}"
+    );
+    // item show finds a child id
+    let out = run(d.path(), &["item", "show", "T-003", "--json"]);
+    assert_eq!(json(&out)["location"], "TODO.md");
+
+    // done on a child removes just the child — parent + sibling stay
+    let out = run(d.path(), &["todo", "done", "T-002", "--json"]);
+    assert_eq!(code(&out), 0);
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("T-001"), "{todo}");
+    assert!(todo.contains("T-003"), "{todo}");
+    assert!(!todo.contains("T-002"), "{todo}");
+
+    // defer on a parent moves the whole subtree to BACKLOG.md
+    let out = run(d.path(), &["todo", "defer", "T-001", "--json"]);
+    assert_eq!(code(&out), 0);
+    let todo = read(&wt, "TODO.md");
+    assert!(!todo.contains("T-00"), "{todo}");
+    let backlog = read(&wt, "BACKLOG.md");
+    for frag in ["- T-001 parent task", "  - T-003 sub two"] {
+        assert!(backlog.contains(frag), "{frag} in {backlog}");
+    }
+    let out2 = run(d.path(), &["backlog", "list"]);
+    assert!(
+        stdout(&out2).contains("  T-003"),
+        "child indented in backlog list"
+    );
+    // children park with the parent — no status token needed
+    assert!(!backlog.contains("status:"), "{backlog}");
+
+    // a child added under a backlog parent is born deferred
+    let out = run(d.path(), &["todo", "add", "late sub", "--parent", "T-001"]);
+    assert_eq!(code(&out), 0);
+    let backlog = read(&wt, "BACKLOG.md");
+    assert!(backlog.contains("  - T-004 late sub"), "{backlog}");
+
+    // promote restores the subtree — children unpark to open
+    let out = run(d.path(), &["backlog", "promote", "T-001", "--json"]);
+    assert_eq!(code(&out), 0);
+    let todo = read(&wt, "TODO.md");
+    for frag in [
+        "- [ ] T-001 parent task",
+        "  - [ ] T-003 sub two",
+        "  - [ ] T-004 late sub",
+    ] {
+        assert!(todo.contains(frag), "{frag} in {todo}");
+    }
+    assert!(!todo.contains("status:"), "{todo}");
+
+    // done on a parent removes the whole subtree
+    let out = run(d.path(), &["todo", "done", "T-001", "--json"]);
+    assert_eq!(code(&out), 0);
+    let todo = read(&wt, "TODO.md");
+    assert!(!todo.contains("T-00"), "{todo}");
+    // and the ledger is clean afterwards
+    let out = run(d.path(), &["check"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+}
+
+#[test]
+fn check_flags_nested_duplicate_and_dangling() {
+    let (d, wt) = project();
+    let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 0);
+    std::fs::write(
+        wt.join("TODO.md"),
+        "# TODO — x\n\n- [ ] T-001 a\n  - [ ] T-002 sub · blocks:T-099\n- [ ] T-002 dup\n",
+    )
+    .unwrap();
+    let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 1);
+    let v = json(&out);
+    let codes: Vec<&str> = v["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["code"].as_str().unwrap())
+        .collect();
+    assert!(codes.contains(&"duplicate-id"), "{codes:?}");
+    assert!(codes.contains(&"dangling-blocks"), "{codes:?}");
+}
+
 // ---------- issue ----------
 
 #[test]

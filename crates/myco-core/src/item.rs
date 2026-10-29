@@ -62,12 +62,38 @@ pub struct Item {
     /// `ms:<name>` (kept short — lines stay readable).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub milestone: Option<String>,
+    /// Nested sub-items — the `  - [ ]` lines indented under this
+    /// one in TODO.md/BACKLOG.md. Children are full items: same
+    /// metadata, same state machine. Depth is arbitrary (one
+    /// level is the recommended shape); `done`/`defer` act on the
+    /// whole subtree. Empty for file-backed kinds — children only
+    /// exist in the line grammar.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<Item>,
 }
 
 /// The metadata half of an [`crate::ItemFile`] — identical shape to
 /// [`Item`]; the alias exists so signatures read as "frontmatter,
 /// not body".
 pub type ItemMeta = Item;
+
+/// Pre-order DFS over an item subtree — a stack of pending nodes,
+/// children pushed reversed so they pop in file order.
+struct Subtree<'a> {
+    stack: Vec<&'a Item>,
+}
+
+impl<'a> Iterator for Subtree<'a> {
+    type Item = &'a Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.stack.pop()?;
+        for c in item.children.iter().rev() {
+            self.stack.push(c);
+        }
+        Some(item)
+    }
+}
 
 impl Item {
     /// Minimal item: id + title, open, medium, nothing else.
@@ -86,7 +112,21 @@ impl Item {
             supersedes: None,
             epic: None,
             milestone: None,
+            children: Vec::new(),
         }
+    }
+
+    /// `self` plus every descendant, pre-order — the subtree
+    /// flattened (each parent immediately before its children).
+    /// Id lookups, dup checks, counts, and index scans all see
+    /// nested items through this.
+    pub fn subtree(&self) -> impl Iterator<Item = &Item> {
+        Subtree { stack: vec![self] }
+    }
+
+    /// Every descendant (children, grandchildren, …), pre-order.
+    pub fn descendants(&self) -> impl Iterator<Item = &Item> {
+        self.subtree().skip(1)
     }
 
     /// Builder-style `status` setter (no transition validation —
@@ -153,6 +193,13 @@ impl Item {
     /// Builder-style `milestone` setter.
     pub fn milestone(mut self, name: impl Into<String>) -> Self {
         self.milestone = Some(name.into());
+        self
+    }
+
+    /// Append a nested child (subtask) — line-grammar items only;
+    /// file-backed kinds never carry children.
+    pub fn child(mut self, child: Item) -> Self {
+        self.children.push(child);
         self
     }
 }
@@ -250,7 +297,8 @@ mod tests {
         assert!(!obj.contains_key("note"));
         assert!(!obj.contains_key("epic"));
         assert!(!obj.contains_key("milestone"));
-        // full item round-trips
+        assert!(!obj.contains_key("children"));
+        // full item round-trips — children included
         let full = Item::new(ItemId::new(ItemKind::Issue, 2), "t")
             .owner("devin".parse().unwrap())
             .created(crate::date::parse("2026-01-01").unwrap())
@@ -260,9 +308,26 @@ mod tests {
             .superseded_by(ItemId::new(ItemKind::Adr, 2))
             .supersedes(ItemId::new(ItemKind::Adr, 1))
             .epic("v2")
-            .milestone("1.0");
+            .milestone("1.0")
+            .child(
+                Item::new(ItemId::new(ItemKind::Task, 7), "sub")
+                    .child(Item::new(ItemId::new(ItemKind::Task, 8), "deep")),
+            );
         let back: Item = serde_json::from_str(&serde_json::to_string(&full).unwrap()).unwrap();
         assert_eq!(back, full);
+    }
+
+    #[test]
+    fn subtree_walks_preorder() {
+        let t = |n: u32| Item::new(ItemId::new(ItemKind::Task, n), format!("t{n}"));
+        let root = t(1).child(t(2).child(t(4))).child(t(3));
+        let ids: Vec<u32> = root.subtree().map(|i| i.id.number()).collect();
+        assert_eq!(ids, [1, 2, 4, 3]);
+        let deep: Vec<u32> = root.descendants().map(|i| i.id.number()).collect();
+        assert_eq!(deep, [2, 4, 3]);
+        // a leaf subtree is just itself
+        assert_eq!(t(9).subtree().count(), 1);
+        assert_eq!(t(9).descendants().count(), 0);
     }
 
     #[cfg(feature = "schema")]

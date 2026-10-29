@@ -1,9 +1,11 @@
 //! `BACKLOG.md` — `# Backlog` plus optional `##` sections of
 //! `- T-NNN …` items. No checkboxes: backlog items are `Deferred`
-//! (a `status:` token must say `deferred` if present).
+//! (a `status:` token must say `deferred` if present). Items nest
+//! like TODO.md — a `-` list indented under an item is its
+//! `children` (2 spaces per level, canonical).
 
 use markdown::mdast::Node;
-use myco_core::{BacklogDoc, ItemKind, Section, Status};
+use myco_core::{BacklogDoc, Item, ItemKind, Section, Status};
 
 use crate::error::{EmitError, ParseError};
 use crate::line::{self, LineSpec};
@@ -74,30 +76,41 @@ fn parse_list(
     for item in &list.children {
         // list children are ListItem by construction; skip anything else
         if let Node::ListItem(li) = item {
-            if li.checked.is_some() {
-                return Err(err(
-                    src,
-                    item,
-                    "backlog items have no checkbox — they're deferred",
-                ));
-            }
-            if li.children.len() != 1 || !matches!(li.children[0], Node::Paragraph(_)) {
-                return Err(err(src, item, "item must be a single line"));
-            }
-            let text = mdx::single_text(&li.children[0])
-                .ok_or_else(|| err(src, item, "item line must be plain text"))?;
-            let parsed = line::parse_text(text, &SPEC).map_err(|m| err(src, item, m))?;
-            if parsed.status != Status::Deferred {
-                return Err(err(
-                    src,
-                    item,
-                    "backlog items are deferred — no other status is allowed",
-                ));
-            }
-            section.items.push(parsed);
+            section.items.push(parse_li(src, item, li)?);
         }
     }
     Ok(())
+}
+
+/// One `- T-NNN …` list item → an [`Item`]; a nested `-` list
+/// under it parses recursively into `children`.
+fn parse_li(src: &str, node: &Node, li: &markdown::mdast::ListItem) -> Result<Item, ParseError> {
+    if li.checked.is_some() {
+        return Err(err(
+            src,
+            node,
+            "backlog items have no checkbox — they're deferred",
+        ));
+    }
+    let (head, nested) = line::item_parts(li).map_err(|m| err(src, node, m))?;
+    let text =
+        mdx::single_text(head).ok_or_else(|| err(src, node, "item line must be plain text"))?;
+    let mut parsed = line::parse_text(text, &SPEC).map_err(|m| err(src, node, m))?;
+    if parsed.status != Status::Deferred {
+        return Err(err(
+            src,
+            node,
+            "backlog items are deferred — no other status is allowed",
+        ));
+    }
+    if let Some(list) = nested {
+        for child in &list.children {
+            if let Node::ListItem(cli) = child {
+                parsed.children.push(parse_li(src, child, cli)?);
+            }
+        }
+    }
+    Ok(parsed)
 }
 
 /// Canonical `BACKLOG.md` — same layout as [`crate::emit_todo`]
@@ -108,13 +121,7 @@ pub fn emit_backlog(doc: &BacklogDoc) -> Result<String, EmitError> {
     let mut out = String::from("# Backlog\n");
     for (i, section) in doc.sections.iter().enumerate() {
         for item in &section.items {
-            line::check_item(item, FILE)?;
-            if item.status != Status::Deferred {
-                return Err(EmitError::new(
-                    FILE,
-                    format!("non-deferred item {} in BACKLOG.md", item.id),
-                ));
-            }
+            check_subtree(item)?;
         }
         out.push('\n');
         match &section.name {
@@ -139,12 +146,41 @@ pub fn emit_backlog(doc: &BacklogDoc) -> Result<String, EmitError> {
             }
         }
         for item in &section.items {
-            out.push_str("- ");
-            out.push_str(&mdx::inline(&line::text(item, &SPEC)?));
-            out.push('\n');
+            emit_item(&mut out, item, 0)?;
         }
     }
     Ok(out)
+}
+
+/// [`line::check_item`] + the deferred-only rule, applied to a
+/// whole subtree.
+fn check_subtree(item: &Item) -> Result<(), EmitError> {
+    line::check_item(item, FILE)?;
+    if item.status != Status::Deferred {
+        return Err(EmitError::new(
+            FILE,
+            format!("non-deferred item {} in BACKLOG.md", item.id),
+        ));
+    }
+    for c in &item.children {
+        check_subtree(c)?;
+    }
+    Ok(())
+}
+
+/// One item line plus its nested children — 2-space indent per
+/// level under the parent's bullet.
+fn emit_item(out: &mut String, item: &Item, depth: usize) -> Result<(), EmitError> {
+    for _ in 0..depth {
+        out.push_str("  ");
+    }
+    out.push_str("- ");
+    out.push_str(&mdx::inline(&line::text(item, &SPEC)?));
+    out.push('\n');
+    for c in &item.children {
+        emit_item(out, c, depth + 1)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -220,10 +256,40 @@ mod tests {
     }
 
     #[test]
-    fn nested_list_is_single_line_error() {
-        let src = "# Backlog\n\n- T-001 a\n  - nested\n";
-        let e = parse_backlog(src).unwrap_err();
-        assert!(e.message().contains("single line"));
+    fn nested_items_parse_into_children() {
+        let src = "# Backlog\n\n- T-001 a\n  - T-002 sub\n  - T-003 sub two · status:deferred\n- T-004 sib\n";
+        let doc = parse_backlog(src).unwrap();
+        assert_eq!(doc.sections[0].items.len(), 2);
+        let parent = &doc.sections[0].items[0];
+        assert_eq!(parent.children.len(), 2);
+        // the redundant token is dropped on canonical emit
+        assert_eq!(
+            emit_backlog(&doc).unwrap(),
+            "# Backlog\n\n- T-001 a\n  - T-002 sub\n  - T-003 sub two\n- T-004 sib\n"
+        );
+    }
+
+    #[test]
+    fn nested_parse_errors() {
+        for (src, why) in [
+            ("# Backlog\n\n- T-001 a\n  - [ ] T-002 x\n", "checkbox"),
+            (
+                "# Backlog\n\n- T-001 a\n  - T-002 x · status:open\n",
+                "open child",
+            ),
+        ] {
+            assert!(parse_backlog(src).is_err(), "{why}: {src:?}");
+        }
+        // emit rejects a non-deferred child too
+        let mut doc = BacklogDoc::default();
+        let child = Item::new(ItemId::new(ItemKind::Task, 2), "sub").status(Status::Open);
+        doc.sections.push(Section {
+            name: None,
+            items: vec![Item::new(ItemId::new(ItemKind::Task, 1), "p")
+                .status(Status::Deferred)
+                .child(child)],
+        });
+        assert!(emit_backlog(&doc).is_err());
     }
 
     #[test]

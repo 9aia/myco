@@ -12,7 +12,13 @@
 //! `status` = the doc's default (`open` for TODO, `deferred` for
 //! BACKLOG), `pri` = `med`. Unknown/malformed tokens are errors —
 //! `myco check` should catch typos, not swallow them.
+//!
+//! Items nest: a `-`/`[ ]` list indented under an item is its
+//! `children` (canonical emit = 2 spaces per level; arbitrary
+//! depth, one level recommended). Child lines carry the same
+//! grammar — full items, not prose.
 
+use markdown::mdast::Node;
 use myco_core::{
     date, is_valid_group_name, is_valid_label, Actor, Item, ItemId, ItemKind, Priority, Status,
 };
@@ -31,6 +37,31 @@ pub(crate) struct LineSpec {
 
 fn bad(msg: impl Into<String>) -> String {
     msg.into()
+}
+
+/// A list item's shape: its `Paragraph` head line plus at most one
+/// nested unordered `List` (the item's children). Anything else —
+/// a second paragraph, an ordered list, a second nested list —
+/// breaks the grammar.
+pub(crate) fn item_parts(
+    li: &markdown::mdast::ListItem,
+) -> Result<(&Node, Option<&markdown::mdast::List>), String> {
+    let mut children = li.children.iter();
+    let Some(head @ Node::Paragraph(_)) = children.next() else {
+        return Err(bad("item must be a single line"));
+    };
+    let mut nested = None;
+    for c in children {
+        match c {
+            Node::List(l) if !l.ordered && nested.is_none() => nested = Some(l),
+            _ => {
+                return Err(bad(
+                    "unexpected block under item — only a nested `-` list is allowed",
+                ))
+            }
+        }
+    }
+    Ok((head, nested))
 }
 
 /// Parse the text inside a list item (after `- [ ] ` / `- `).

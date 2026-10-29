@@ -17,19 +17,25 @@ pub enum Cmd {
         title: String,
         /// Section to add under (created when absent; default: the
         /// first section, or an unsectioned run).
-        #[arg(long)]
+        #[arg(long, conflicts_with = "parent")]
         section: Option<String>,
+        /// Nest under this task instead of a section — the new
+        /// item becomes a child (`  - [ ]` under the parent).
+        #[arg(long)]
+        parent: Option<ItemId>,
         #[command(flatten)]
         meta: items::MetaFlags,
     },
     /// Mark done — walks the state machine to `done`, then removes
-    /// the line (git history keeps the record).
+    /// the line (git history keeps the record). Done on a parent
+    /// removes the whole subtree — children die with it.
     Done {
         /// Task id (`T-NNN`).
         id: ItemId,
     },
     /// Park a task — transition to `deferred`, move the line to
-    /// BACKLOG.md.
+    /// BACKLOG.md. Defer on a parent moves the whole subtree
+    /// (children park with it); on a child it detaches alone.
     Defer {
         /// Task id (`T-NNN`).
         id: ItemId,
@@ -54,17 +60,48 @@ pub fn run(
         Cmd::Add {
             title,
             section,
+            parent,
             meta,
         } => {
+            let mut ledger = items::Ledger::load(&store)?;
+            // validate the parent before allocating — failed adds
+            // must not burn ids
+            let ploc = match parent {
+                Some(pid) => {
+                    items::require_kind(pid, ItemKind::Task, "todo add --parent")?;
+                    Some(
+                        ledger
+                            .locate(pid)
+                            .ok_or_else(|| format!("{pid}: no such task — can't nest under it"))?,
+                    )
+                }
+                None => None,
+            };
             let id = store.alloc_id(ItemKind::Task).map_err(|e| e.to_string())?;
             let mut item = Item::new(id, title).created(items::today());
             meta.apply(&mut item)?;
-            let mut ledger = items::Ledger::load(&store)?;
-            ledger.put_todo(item.clone(), section.as_deref());
+            let file = match ploc {
+                Some(loc) => {
+                    if loc.backlog {
+                        // a backlog parent's children park with it
+                        item.status = Status::Deferred;
+                    }
+                    ledger.item_mut(&loc).children.push(item.clone());
+                    if loc.backlog {
+                        "BACKLOG.md"
+                    } else {
+                        "TODO.md"
+                    }
+                }
+                None => {
+                    ledger.put_todo(item.clone(), section.as_deref());
+                    "TODO.md"
+                }
+            };
             ledger.save(&store)?;
             let committed = items::commit(&proj.worktree, &format!("chore: add {id}"), no_commit)?;
             items::report(
-                json!({"item": item, "file": "TODO.md"}),
+                json!({"item": item, "file": file, "parent": parent.map(|p| p.to_string())}),
                 committed,
                 json_out,
                 &format!("added {}", items::compact(&item)),
@@ -81,7 +118,9 @@ pub fn run(
                     "{id} is deferred (BACKLOG.md) — `myco backlog promote` it first"
                 ));
             }
-            let mut item = ledger.take(loc);
+            // take removes the whole subtree — children die with
+            // their parent; done on a child removes just the child
+            let mut item = ledger.take(&loc);
             items::walk_to(&mut item, Status::Done)?;
             ledger.save(&store)?;
             let committed = items::commit(&proj.worktree, &format!("chore: done {id}"), no_commit)?;
@@ -101,8 +140,11 @@ pub fn run(
             if loc.backlog {
                 return Err(format!("{id} is already deferred (BACKLOG.md)"));
             }
-            let mut item = ledger.take(loc);
+            let mut item = ledger.take(&loc);
             items::walk_to(&mut item, Status::Deferred)?;
+            // the whole subtree parks too — BACKLOG.md is
+            // deferred-only
+            items::walk_descendants_to(&mut item, Status::Deferred)?;
             ledger.put_backlog(item.clone(), None);
             ledger.save(&store)?;
             let committed =
@@ -115,11 +157,12 @@ pub fn run(
             )
         }
         Cmd::List { list } => {
-            let found: Vec<Item> = doc_items(&store, false)?
+            let all = doc_items(&store, false)?;
+            let found: Vec<(usize, &Item)> = items::tree_view(&all)
                 .into_iter()
-                .filter(|i| list.matches(i))
+                .filter(|(_, i)| list.matches(i))
                 .collect();
-            items::print_list(&found, json_out)
+            items::print_tree(&found, json_out)
         }
     }
 }

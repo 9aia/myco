@@ -31,9 +31,13 @@ pub struct Scan {
 }
 
 impl Scan {
-    /// Non-archived items (any status).
+    /// Non-archived items (any status) — nested children count as
+    /// items everywhere, so the whole tree flattens into views.
     pub fn live(&self) -> impl Iterator<Item = &Item> {
-        self.items.iter().filter(|i| !self.archived.contains(&i.id))
+        self.items
+            .iter()
+            .flat_map(Item::subtree)
+            .filter(|i| !self.archived.contains(&i.id))
     }
 
     /// Live items with an active status — not done, not deferred.
@@ -174,7 +178,7 @@ impl Counts {
 /// this also counts org snapshots.
 pub fn counts(scan: &Scan) -> Counts {
     let mut c = Counts::default();
-    for i in &scan.items {
+    for i in scan.items.iter().flat_map(Item::subtree) {
         let archived = scan.archived.contains(&i.id);
         match i.id.kind() {
             ItemKind::Task => match i.status {

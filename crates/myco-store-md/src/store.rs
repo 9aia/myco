@@ -128,10 +128,10 @@ impl Store for MdStore {
     fn all_ids(&self) -> Result<BTreeSet<ItemId>, Error> {
         let mut ids = BTreeSet::new();
         if let Ok(doc) = self.todo() {
-            ids.extend(doc.items().map(|i| i.id));
+            ids.extend(doc.items().flat_map(|i| i.subtree()).map(|i| i.id));
         }
         if let Ok(doc) = self.backlog() {
-            ids.extend(doc.items().map(|i| i.id));
+            ids.extend(doc.items().flat_map(|i| i.subtree()).map(|i| i.id));
         }
         for kind in [
             ItemKind::Issue,

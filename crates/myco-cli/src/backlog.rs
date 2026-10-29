@@ -76,8 +76,12 @@ pub fn run(
             if !loc.backlog {
                 return Err(format!("{id} isn't in BACKLOG.md — nothing to promote"));
             }
-            let mut item = ledger.take(loc);
+            let mut item = ledger.take(&loc);
             items::walk_to(&mut item, Status::Open)?;
+            // the subtree unparks with its parent — deferred
+            // children come back to open (TODO.md holds no
+            // deferred items)
+            items::walk_descendants_to(&mut item, Status::Open)?;
             ledger.put_todo(item.clone(), None);
             ledger.save(&store)?;
             let committed =
@@ -90,11 +94,12 @@ pub fn run(
             )
         }
         Cmd::List { list } => {
-            let found: Vec<Item> = crate::todo::doc_items(&store, true)?
+            let all = crate::todo::doc_items(&store, true)?;
+            let found: Vec<(usize, &Item)> = items::tree_view(&all)
                 .into_iter()
-                .filter(|i| list.matches(i))
+                .filter(|(_, i)| list.matches(i))
                 .collect();
-            items::print_list(&found, json_out)
+            items::print_tree(&found, json_out)
         }
     }
 }

@@ -139,9 +139,8 @@ pub mod strat {
         "[a-z0-9 .:/_-]{1,40}".prop_map(|s| s.trim().to_string())
     }
 
-    /// A task item valid for a line grammar — notes are the
-    /// trimmed `note:` token kind only, and status avoids `forbid`.
-    pub fn line_item(forbid: &'static [Status]) -> impl Strategy<Value = Item> {
+    /// A leaf line item — full metadata, no children.
+    fn leaf_item(forbid: &'static [Status]) -> impl Strategy<Value = Item> {
         (
             item_id(ItemKind::Task),
             title(),
@@ -173,6 +172,31 @@ pub mod strat {
                     item
                 },
             )
+    }
+
+    /// A task item valid for a line grammar — notes are the
+    /// trimmed `note:` token kind only, and status avoids `forbid`
+    /// at every level. Children are full items too; generated
+    /// depth is ≤ 2 (one nesting level — the recommended shape,
+    /// deeper nesting is legal but rare).
+    pub fn line_item(forbid: &'static [Status]) -> impl Strategy<Value = Item> {
+        (
+            leaf_item(forbid),
+            prop::collection::vec(leaf_item(forbid), 0..3),
+        )
+            .prop_map(|(mut item, children)| {
+                item.children = children;
+                item
+            })
+    }
+
+    /// Set `status` on a whole subtree (deferred propagates to
+    /// children — BACKLOG.md is deferred-only).
+    fn status_tree(item: &mut Item, status: Status) {
+        item.status = status;
+        for c in &mut item.children {
+            status_tree(c, status);
+        }
     }
 
     fn sections(items: impl Strategy<Value = Item>) -> impl Strategy<Value = Vec<Section>> {
@@ -212,10 +236,10 @@ pub mod strat {
             .prop_map(|(repo, sections)| TodoDoc { repo, sections })
     }
 
-    /// A `BacklogDoc` — all items `Deferred`.
+    /// A `BacklogDoc` — every item (children included) `Deferred`.
     pub fn backlog_doc() -> impl Strategy<Value = BacklogDoc> {
         sections(line_item(&[]).prop_map(|mut i| {
-            i.status = Status::Deferred;
+            status_tree(&mut i, Status::Deferred);
             i
         }))
         .prop_map(|sections| BacklogDoc { sections })

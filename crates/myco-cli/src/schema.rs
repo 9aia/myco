@@ -88,12 +88,14 @@ pub fn document() -> serde_json::Value {
                 "section": "## <name>",
                 "line": "- [ ] T-NNN <title>[ · <token>]…",
                 "checkbox": "[ ] open — done items are removed, git history keeps them",
+                "children": "a `- [ ]` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
                 "default_status": "open",
             },
             "BACKLOG.md": {
                 "format": "markdown",
                 "schema": "BacklogDoc",
                 "line": "- T-NNN <title>[ · <token>]…",
+                "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
                 "default_status": "deferred",
             },
             "index.md": {"format": "markdown", "verbatim": true},
@@ -132,6 +134,10 @@ pub fn document() -> serde_json::Value {
             "label_pattern": "[A-Za-z0-9_-]+",
             "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms names — `ms` is the milestone token)",
             "actor_pattern": "[A-Za-z0-9._:-]+ (no leading/trailing ':', no '::')",
+            "nesting": "an item's children are a `-`/`[ ]` list indented under it \
+                       (canonical 2 spaces per level; one level recommended). Children \
+                       carry the same token grammar — `done`/`defer` on a parent act \
+                       on the whole subtree, on a child just that node",
         },
     })
 }

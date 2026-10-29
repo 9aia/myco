@@ -220,20 +220,39 @@ pub fn run(
             }
             let mut ledger = items::Ledger::load(&store)?;
             if let Some(loc) = ledger.locate(id) {
-                // task item: mutate in place; a status change
-                // relocates the line (deferred → BACKLOG.md,
-                // done → removed, else → TODO.md)
+                // task item: mutate in place; a status change may
+                // relocate the line — done deletes the subtree,
+                // deferred detaches the node into BACKLOG.md
+                // (children park with it), an active status moves
+                // backlog nodes into TODO.md (children unpark).
+                // Nested children that keep their doc stay nested.
                 let status_change = flags.status.is_some();
-                apply_set(ledger.item_mut(loc), &flags)?;
+                apply_set(ledger.item_mut(&loc), &flags)?;
                 if status_change {
-                    let item = ledger.take(loc);
-                    match item.status {
-                        Status::Done => {}
-                        Status::Deferred => ledger.put_backlog(item, None),
-                        _ => ledger.put_todo(item, None),
+                    match ledger.item(&loc).status {
+                        Status::Done => {
+                            ledger.take(&loc);
+                        }
+                        Status::Deferred => {
+                            let mut item = ledger.take(&loc);
+                            items::walk_descendants_to(&mut item, Status::Deferred)?;
+                            ledger.put_backlog(item, None);
+                        }
+                        _ if loc.backlog => {
+                            let mut item = ledger.take(&loc);
+                            items::walk_descendants_to(&mut item, Status::Open)?;
+                            ledger.put_todo(item, None);
+                        }
+                        _ if !loc.is_child() => {
+                            // top-level items re-land at the
+                            // section tail — same as before
+                            let item = ledger.take(&loc);
+                            ledger.put_todo(item, None);
+                        }
+                        _ => {} // a TODO child stays nested
                     }
                 }
-                let item = ledger.locate(id).map(|l| ledger.item(l).clone());
+                let item = ledger.locate(id).map(|l| ledger.item(&l).clone());
                 ledger.save(&store)?;
                 let committed =
                     items::commit(&proj.worktree, &format!("chore: set {id}"), no_commit)?;

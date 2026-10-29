@@ -140,20 +140,25 @@ fn is_done_line(line: &str) -> bool {
     t.split('·').skip(1).any(|p| p.trim() == "status:done")
 }
 
-/// Delete done-item lines and their indented continuations.
+/// Delete done-item lines and their deeper-indented continuations
+/// — a done item's nested children die with it, but a done child
+/// leaves its parent's other children alone.
 fn strip_done(path: &Path) -> Result<(), String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let mut out = String::with_capacity(src.len());
-    let mut skipping = false;
+    // indent width of the done line currently being skipped under
+    let mut skipping_at: Option<usize> = None;
     for line in src.split_inclusive('\n') {
-        if skipping {
-            if line.starts_with(' ') || line.starts_with('\t') {
+        let indented = line.starts_with(' ') || line.starts_with('\t');
+        let indent = line.len() - line.trim_start().len();
+        if let Some(at) = skipping_at {
+            if indented && indent > at {
                 continue; // continuation/nested line of the done item
             }
-            skipping = false;
+            skipping_at = None;
         }
         if is_done_line(line) {
-            skipping = true;
+            skipping_at = Some(indent);
             continue;
         }
         out.push_str(line);
@@ -257,7 +262,9 @@ fn analyze(wt: &Path) -> Analysis {
             }
             match myco_store_md::parse_todo(&src) {
                 Ok(doc) => {
-                    for it in doc.items() {
+                    // nested children count as items — dup ids and
+                    // dangling blocks see the whole tree
+                    for it in doc.items().flat_map(|i| i.subtree()) {
                         ids.entry(it.id).or_default().push("TODO.md".into());
                         items.push(Located {
                             item: it.clone(),
@@ -317,7 +324,7 @@ fn analyze(wt: &Path) -> Analysis {
             }
             match myco_store_md::parse_backlog(&src) {
                 Ok(doc) => {
-                    for it in doc.items() {
+                    for it in doc.items().flat_map(|i| i.subtree()) {
                         ids.entry(it.id).or_default().push("BACKLOG.md".into());
                         items.push(Located {
                             item: it.clone(),
@@ -814,6 +821,18 @@ mod tests {
         .unwrap();
         strip_done(&p).unwrap();
         assert_eq!(std::fs::read_to_string(&p).unwrap(), "- [ ] keep\n");
+        // a done *child* leaves same-level siblings alone; a done
+        // *parent* still takes its nested children with it
+        std::fs::write(
+            &p,
+            "- [ ] parent\n  - [x] done child\n  - [ ] kept sibling\n- [x] gone\n  - [ ] kid\n- [ ] last\n",
+        )
+        .unwrap();
+        strip_done(&p).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&p).unwrap(),
+            "- [ ] parent\n  - [ ] kept sibling\n- [ ] last\n"
+        );
     }
 
     #[test]

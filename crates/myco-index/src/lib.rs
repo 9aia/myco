@@ -59,9 +59,14 @@ pub struct RepoSnapshot {
 }
 
 impl RepoSnapshot {
-    /// Items not archived and not `done` — the live ledger.
+    /// Items not archived — the live ledger. Nested children ride
+    /// inside their parents in `items`; they flatten out here so
+    /// org views count them like any item.
     pub fn live_items(&self) -> impl Iterator<Item = &Item> {
-        self.items.iter().filter(|i| !self.archived.contains(&i.id))
+        self.items
+            .iter()
+            .flat_map(Item::subtree)
+            .filter(|i| !self.archived.contains(&i.id))
     }
 }
 

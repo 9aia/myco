@@ -141,15 +141,25 @@ pub struct Ledger {
     pub backlog: BacklogDoc,
 }
 
-/// Which doc a task lives in — and its position inside.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Which doc a task lives in — and its position inside. `path` is
+/// the index trail into the section's item tree: `[2]` is the
+/// third top-level item, `[2,0]` its first child.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskLoc {
     /// `true` = BACKLOG.md, `false` = TODO.md.
     pub backlog: bool,
     /// Section index.
     pub section: usize,
-    /// Item index within the section.
-    pub item: usize,
+    /// Index path within the section — len ≥ 1; deeper than 1
+    /// means a nested child.
+    pub path: Vec<usize>,
+}
+
+impl TaskLoc {
+    /// Is this a nested child (not a top-level line)?
+    pub fn is_child(&self) -> bool {
+        self.path.len() > 1
+    }
 }
 
 impl Ledger {
@@ -161,54 +171,61 @@ impl Ledger {
         })
     }
 
-    /// Locate a task in either doc (`None` when it's not a task or
-    /// doesn't exist).
+    /// Locate a task in either doc — top-level lines and nested
+    /// children alike (`None` when it's not a task or doesn't
+    /// exist).
     pub fn locate(&self, id: ItemId) -> Option<TaskLoc> {
         find_pos(&self.todo.sections, id)
-            .map(|(section, item)| TaskLoc {
+            .map(|(section, path)| TaskLoc {
                 backlog: false,
                 section,
-                item,
+                path,
             })
             .or_else(|| {
-                find_pos(&self.backlog.sections, id).map(|(section, item)| TaskLoc {
+                find_pos(&self.backlog.sections, id).map(|(section, path)| TaskLoc {
                     backlog: true,
                     section,
-                    item,
+                    path,
                 })
             })
     }
 
     /// The item at `loc`.
-    pub fn item(&self, loc: TaskLoc) -> &Item {
+    pub fn item(&self, loc: &TaskLoc) -> &Item {
         let sections = if loc.backlog {
             &self.backlog.sections
         } else {
             &self.todo.sections
         };
-        &sections[loc.section].items[loc.item]
+        item_at(&sections[loc.section].items, &loc.path)
     }
 
     /// Mutable access to the item at `loc`.
-    pub fn item_mut(&mut self, loc: TaskLoc) -> &mut Item {
+    pub fn item_mut(&mut self, loc: &TaskLoc) -> &mut Item {
         let sections = if loc.backlog {
             &mut self.backlog.sections
         } else {
             &mut self.todo.sections
         };
-        &mut sections[loc.section].items[loc.item]
+        item_at_mut(&mut sections[loc.section].items, &loc.path)
     }
 
-    /// Remove the item at `loc`; a section the removal emptied is
-    /// dropped (an empty unsectioned run can't even be emitted).
-    pub fn take(&mut self, loc: TaskLoc) -> Item {
+    /// Remove the item at `loc` — the whole subtree goes with it
+    /// (`done` on a parent removes its children too). A section
+    /// the removal emptied is dropped (an empty unsectioned run
+    /// can't even be emitted).
+    pub fn take(&mut self, loc: &TaskLoc) -> Item {
         let sections = if loc.backlog {
             &mut self.backlog.sections
         } else {
             &mut self.todo.sections
         };
-        let item = sections[loc.section].items.remove(loc.item);
-        if sections[loc.section].items.is_empty() {
+        let mut level = &mut sections[loc.section].items;
+        for &idx in &loc.path[..loc.path.len() - 1] {
+            level = &mut level[idx].children;
+        }
+        let item = level.remove(loc.path[loc.path.len() - 1]);
+        if loc.path.len() == 1 && sections[loc.section].items.is_empty() {
             sections.remove(loc.section);
         }
         item
@@ -233,11 +250,37 @@ impl Ledger {
     }
 }
 
-fn find_pos(sections: &[Section], id: ItemId) -> Option<(usize, usize)> {
-    sections
-        .iter()
-        .enumerate()
-        .find_map(|(si, s)| s.items.iter().position(|i| i.id == id).map(|ii| (si, ii)))
+fn find_pos(sections: &[Section], id: ItemId) -> Option<(usize, Vec<usize>)> {
+    sections.iter().enumerate().find_map(|(si, s)| {
+        let mut path = Vec::new();
+        find_path(&s.items, id, &mut path).then_some((si, path))
+    })
+}
+
+/// Depth-first id search — pushes the index trail onto `path`.
+fn find_path(items: &[Item], id: ItemId, path: &mut Vec<usize>) -> bool {
+    for (i, item) in items.iter().enumerate() {
+        path.push(i);
+        if item.id == id || find_path(&item.children, id, path) {
+            return true;
+        }
+        path.pop();
+    }
+    false
+}
+
+fn item_at<'a>(mut items: &'a [Item], path: &[usize]) -> &'a Item {
+    for &idx in &path[..path.len() - 1] {
+        items = &items[idx].children;
+    }
+    &items[path[path.len() - 1]]
+}
+
+fn item_at_mut<'a>(mut items: &'a mut [Item], path: &[usize]) -> &'a mut Item {
+    for &idx in &path[..path.len() - 1] {
+        items = &mut items[idx].children;
+    }
+    &mut items[path[path.len() - 1]]
 }
 
 fn push_item(sections: &mut Vec<Section>, item: Item, section: Option<&str>) {
@@ -319,6 +362,20 @@ pub fn targets(from: Status) -> String {
 pub fn walk_to(item: &mut Item, to: Status) -> Result<(), String> {
     for step in status_path(item.id, item.status, to)? {
         item.status = item.status.transition_to(step).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Walk every descendant to `to` — subtree moves keep the ledger
+/// consistent: a deferred parent's children can't stay open in
+/// BACKLOG.md, and children park/unpark with their parent. Nodes
+/// already at `to` are left alone (identity isn't a transition).
+pub fn walk_descendants_to(item: &mut Item, to: Status) -> Result<(), String> {
+    for c in &mut item.children {
+        if c.status != to {
+            walk_to(c, to)?;
+        }
+        walk_descendants_to(c, to)?;
     }
     Ok(())
 }
@@ -422,6 +479,42 @@ pub fn print_list(items: &[Item], json_out: bool) -> Result<i32, String> {
     Ok(0)
 }
 
+/// Depth-tagged pre-order view — task list verbs indent children
+/// under their parent by it.
+pub fn tree_view(items: &[Item]) -> Vec<(usize, &Item)> {
+    fn go<'a>(item: &'a Item, depth: usize, out: &mut Vec<(usize, &'a Item)>) {
+        out.push((depth, item));
+        for c in &item.children {
+            go(c, depth + 1, out);
+        }
+    }
+    let mut out = Vec::new();
+    for i in items {
+        go(i, 0, &mut out);
+    }
+    out
+}
+
+/// Like [`print_list`] for depth-tagged items — human output
+/// indents children 2 spaces per level under their parent.
+pub fn print_tree(pairs: &[(usize, &Item)], json_out: bool) -> Result<i32, String> {
+    if json_out {
+        let v: Vec<serde_json::Value> = pairs
+            .iter()
+            .map(|(_, i)| serde_json::to_value(i).unwrap_or(json!(null)))
+            .collect();
+        ops::print_json(&json!(v));
+    } else {
+        for (depth, i) in pairs {
+            for _ in 0..*depth {
+                print!("  ");
+            }
+            println!("{}", compact(i));
+        }
+    }
+    Ok(0)
+}
+
 /// Input bundle for [`new_file`] — one per `<kind> new` call.
 /// `word` is the commit-message noun (`chore: new issue I-001`).
 pub struct NewItem<'a> {
@@ -510,7 +603,7 @@ pub fn find_item(
     let ledger = Ledger::load(store)?;
     if let Some(loc) = ledger.locate(id) {
         let file = if loc.backlog { "BACKLOG.md" } else { "TODO.md" };
-        return Ok(Some((ledger.item(loc).clone(), file.to_string(), None)));
+        return Ok(Some((ledger.item(&loc).clone(), file.to_string(), None)));
     }
     match store.item(id) {
         Ok(f) => {
@@ -590,7 +683,7 @@ mod tests {
         ledger.put_todo(Item::new(ItemId::new(ItemKind::Task, 2), "y"), Some("Now"));
         let loc = ledger.locate(id).unwrap();
         assert!(!loc.backlog);
-        let item = ledger.take(loc);
+        let item = ledger.take(&loc);
         assert_eq!(item.id, id);
         // emptied unsectioned run dropped
         assert!(ledger.todo.sections.iter().all(|s| !s.items.is_empty()));
@@ -602,6 +695,68 @@ mod tests {
         // round-trip through the real store
         let reloaded = Ledger::load(&store).unwrap();
         assert!(reloaded.locate(id).is_some());
+    }
+
+    #[test]
+    fn ledger_locates_and_takes_children() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(dir.path().join("p")).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
+        let store = MdStore::new(root);
+        let t = |n: u32| Item::new(ItemId::new(ItemKind::Task, n), format!("t{n}"));
+        let mut ledger = Ledger::load(&store).unwrap();
+        ledger.put_todo(t(1).child(t(2).child(t(4))).child(t(3)), None);
+        ledger.put_todo(t(5), None);
+        // locate walks the whole tree — the path says where
+        let loc = ledger.locate(ItemId::new(ItemKind::Task, 4)).unwrap();
+        assert_eq!(loc.path, vec![0, 0, 0]);
+        assert!(loc.is_child());
+        assert_eq!(ledger.item(&loc).id.number(), 4);
+        // take on a child removes just that node
+        ledger.take(&loc);
+        let parent = &ledger.todo.sections[0].items[0];
+        assert_eq!(parent.children[0].children.len(), 0);
+        // take on a parent removes the whole subtree; sections
+        // stay (a sibling remains)
+        let loc = ledger.locate(ItemId::new(ItemKind::Task, 1)).unwrap();
+        let gone = ledger.take(&loc);
+        assert_eq!(gone.children.len(), 2);
+        assert!(ledger.locate(ItemId::new(ItemKind::Task, 2)).is_none());
+        assert_eq!(ledger.todo.sections[0].items.len(), 1);
+        // mutation in place reaches children too
+        let loc = ledger.locate(ItemId::new(ItemKind::Task, 5)).unwrap();
+        ledger.item_mut(&loc).children.push(t(6));
+        assert!(ledger.locate(ItemId::new(ItemKind::Task, 6)).is_some());
+        ledger.save(&store).unwrap();
+        assert!(Ledger::load(&store)
+            .unwrap()
+            .locate(ItemId::new(ItemKind::Task, 6))
+            .is_some());
+    }
+
+    #[test]
+    fn walk_descendants_skips_already_there() {
+        let t = |n: u32, s: Status| Item::new(ItemId::new(ItemKind::Task, n), "x").status(s);
+        let mut parent = t(1, Status::Open).child(t(2, Status::InProgress));
+        walk_descendants_to(&mut parent, Status::Deferred).unwrap();
+        assert_eq!(parent.children[0].status, Status::Deferred);
+        // already-deferred nodes don't re-error on the identity walk
+        let mut parked = t(3, Status::Deferred).child(t(4, Status::Deferred));
+        walk_descendants_to(&mut parked, Status::Deferred).unwrap();
+        // unpark: deferred children come back to open
+        walk_descendants_to(&mut parked, Status::Open).unwrap();
+        assert_eq!(parked.children[0].status, Status::Open);
+    }
+
+    #[test]
+    fn tree_view_tags_depth() {
+        let t = |n: u32| Item::new(ItemId::new(ItemKind::Task, n), format!("t{n}"));
+        let items = vec![t(1).child(t(2).child(t(4))).child(t(3)), t(5)];
+        let flat: Vec<(usize, u32)> = tree_view(&items)
+            .into_iter()
+            .map(|(d, i)| (d, i.id.number()))
+            .collect();
+        assert_eq!(flat, [(0, 1), (1, 2), (2, 4), (1, 3), (0, 5)]);
     }
 
     #[test]

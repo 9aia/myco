@@ -52,7 +52,9 @@ impl TodoDoc {
         }
     }
 
-    /// Every item across all sections, in file order.
+    /// Every top-level item across all sections, in file order —
+    /// nested children stay inside their parents (flatten with
+    /// [`Item::subtree`]).
     pub fn items(&self) -> impl Iterator<Item = &Item> {
         self.sections.iter().flat_map(|s| s.items.iter())
     }
@@ -69,7 +71,9 @@ pub struct BacklogDoc {
 }
 
 impl BacklogDoc {
-    /// Every item across all sections, in file order.
+    /// Every top-level item across all sections, in file order —
+    /// nested children stay inside their parents (flatten with
+    /// [`Item::subtree`]).
     pub fn items(&self) -> impl Iterator<Item = &Item> {
         self.sections.iter().flat_map(|s| s.items.iter())
     }

@@ -5,6 +5,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
 {
   "files": {
     "BACKLOG.md": {
+      "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
       "default_status": "deferred",
       "format": "markdown",
       "line": "- T-NNN <title>[ · <token>]…",
@@ -12,6 +13,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     },
     "TODO.md": {
       "checkbox": "[ ] open — done items are removed, git history keeps them",
+      "children": "a `- [ ]` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
       "default_status": "open",
       "format": "markdown",
       "line": "- [ ] T-NNN <title>[ · <token>]…",
@@ -128,6 +130,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     },
     "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms names — `ms` is the milestone token)",
     "label_pattern": "[A-Za-z0-9_-]+",
+    "nesting": "an item's children are a `-`/`[ ]` list indented under it (canonical 2 spaces per level; one level recommended). Children carry the same token grammar — `done`/`defer` on a parent act on the whole subtree, on a child just that node",
     "separator": "·",
     "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] [· note:<text>]",
     "token_order": [
@@ -195,6 +198,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               },
               "type": "array",
               "uniqueItems": true
+            },
+            "children": {
+              "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
             },
             "created": {
               "default": null,
@@ -500,6 +510,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
           "type": "array",
           "uniqueItems": true
         },
+        "children": {
+          "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+          "items": {
+            "$ref": "#"
+          },
+          "type": "array"
+        },
         "created": {
           "default": null,
           "description": "`created:` — `YYYY-MM-DD` when known.",
@@ -604,6 +621,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               },
               "type": "array",
               "uniqueItems": true
+            },
+            "children": {
+              "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
             },
             "created": {
               "default": null,
@@ -968,6 +992,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "type": "array",
               "uniqueItems": true
             },
+            "children": {
+              "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
+            },
             "created": {
               "default": null,
               "description": "`created:` — `YYYY-MM-DD` when known.",
@@ -1196,6 +1227,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               },
               "type": "array",
               "uniqueItems": true
+            },
+            "children": {
+              "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
+              "items": {
+                "$ref": "#/$defs/Item"
+              },
+              "type": "array"
             },
             "created": {
               "default": null,
