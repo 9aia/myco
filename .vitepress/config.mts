@@ -33,6 +33,7 @@ export default defineConfig({
         text: "How-to",
         items: [
           { text: "Hand off work between sessions", link: "/how-to/handoff" },
+          { text: "Session continuity with sepia", link: "/how-to/session-continuity" },
           { text: "Org-wide views", link: "/how-to/org-views" },
         ],
       },
