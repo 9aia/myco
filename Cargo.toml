@@ -58,6 +58,7 @@ tempfile = "3"
 temp-env = "0.3"
 redb = "3"
 tabled = "0.20"
+csv = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

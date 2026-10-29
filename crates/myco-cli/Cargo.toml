@@ -30,6 +30,7 @@ tabled.workspace = true
 camino.workspace = true
 miette.workspace = true
 time.workspace = true
+csv.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

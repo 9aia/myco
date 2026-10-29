@@ -140,20 +140,29 @@ pub fn columns_json<'a>(
     json!(map)
 }
 
-/// The `board` verb.
+/// The `board` verb. `--epic`/`--milestone` scope the columns to
+/// items in that group (both set = AND).
 pub fn run(
     dir: Option<PathBuf>,
     root: Option<PathBuf>,
     md: bool,
+    epic: Option<String>,
+    milestone: Option<String>,
     json_out: bool,
 ) -> Result<i32, String> {
     let (_proj, store) = items::open(dir.as_deref(), root.as_deref())?;
     let scan = digest::scan(&store)?;
+    let live = scan.live().filter(|i| {
+        epic.as_deref().is_none_or(|e| i.epic.as_deref() == Some(e))
+            && milestone
+                .as_deref()
+                .is_none_or(|m| i.milestone.as_deref() == Some(m))
+    });
     if json_out {
-        ops::print_json(&columns_json(scan.live(), None));
+        ops::print_json(&columns_json(live, None));
         return Ok(0);
     }
-    let board = render(scan.live(), None, md);
+    let board = render(live, None, md);
     if board.trim().is_empty() {
         println!("{}: empty board — `myco todo add` something", scan.name);
     } else {

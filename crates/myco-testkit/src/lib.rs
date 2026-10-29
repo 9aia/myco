@@ -128,8 +128,19 @@ pub mod strat {
             .prop_filter("nonempty after trim", |s| !s.is_empty())
     }
 
-    /// A task item valid for a line grammar — `note` is always
-    /// `None` (lines can't carry it) and status avoids `forbid`.
+    /// `[a-z0-9._-]{1,12}` — a valid `epic:`/`ms:` group name.
+    pub fn group_name() -> impl Strategy<Value = String> {
+        "[a-z0-9._-]{1,12}"
+    }
+
+    /// A line-safe `note:` value — trimmed text without `·` or
+    /// newlines (`src/x.rs:12`-style provenance strings).
+    pub fn line_note() -> impl Strategy<Value = String> {
+        "[a-z0-9 .:/_-]{1,40}".prop_map(|s| s.trim().to_string())
+    }
+
+    /// A task item valid for a line grammar — notes are the
+    /// trimmed `note:` token kind only, and status avoids `forbid`.
     pub fn line_item(forbid: &'static [Status]) -> impl Strategy<Value = Item> {
         (
             item_id(ItemKind::Task),
@@ -145,14 +156,20 @@ pub mod strat {
             prop::collection::btree_set(label(), 0..3),
             prop::collection::btree_set(item_id(ItemKind::Task), 0..3),
             prop::option::of(date()),
+            prop::option::of(group_name()),
+            prop::option::of(group_name()),
+            prop::option::of(line_note()),
         )
             .prop_map(
-                |(id, title, status, priority, owner, labels, blocks, created)| {
+                |(id, title, status, priority, owner, labels, blocks, created, epic, ms, note)| {
                     let mut item = Item::new(id, title).status(status).priority(priority);
                     item.owner = owner;
                     item.labels = labels;
                     item.blocks = blocks;
                     item.created = created;
+                    item.epic = epic;
+                    item.milestone = ms;
+                    item.note = note.filter(|n| !n.is_empty());
                     item
                 },
             )
@@ -251,16 +268,33 @@ pub mod strat {
             prop::collection::btree_set(item_id(ItemKind::Task), 0..2),
             prop::option::of(date()),
             prop::option::of("[a-z0-9 .-]{0,40}"),
+            prop::option::of(group_name()),
+            prop::option::of(group_name()),
             prop::collection::vec("(#+ |[a-z0-9 .-]+|- \\[[ x]\\] )[a-z0-9 .-]{0,30}", 0..6),
         )
             .prop_map(
-                |(id, title, status, priority, owner, labels, blocks, created, note, lines)| {
+                |(
+                    id,
+                    title,
+                    status,
+                    priority,
+                    owner,
+                    labels,
+                    blocks,
+                    created,
+                    note,
+                    epic,
+                    ms,
+                    lines,
+                )| {
                     let mut item = Item::new(id, title).status(status).priority(priority);
                     item.owner = owner;
                     item.labels = labels;
                     item.blocks = blocks;
                     item.created = created;
                     item.note = note;
+                    item.epic = epic;
+                    item.milestone = ms;
                     let mut file = ItemFile::new(item);
                     file.body = lines.join("\n\n").trim().to_string();
                     file

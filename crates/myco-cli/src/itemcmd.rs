@@ -50,6 +50,12 @@ pub enum Cmd {
         /// Remove a blocks dep — repeatable.
         #[arg(long)]
         unblock: Vec<ItemId>,
+        /// Epic name — `""` clears the epic.
+        #[arg(long)]
+        epic: Option<String>,
+        /// Milestone name — `""` clears the milestone.
+        #[arg(long)]
+        milestone: Option<String>,
     },
 }
 
@@ -63,6 +69,8 @@ struct SetFlags {
     unlabel: Vec<String>,
     blocks: Vec<String>,
     unblock: Vec<ItemId>,
+    epic: Option<String>,
+    milestone: Option<String>,
 }
 
 impl SetFlags {
@@ -74,6 +82,8 @@ impl SetFlags {
             && self.unlabel.is_empty()
             && self.blocks.is_empty()
             && self.unblock.is_empty()
+            && self.epic.is_none()
+            && self.milestone.is_none()
     }
 }
 
@@ -133,6 +143,20 @@ fn apply_set(item: &mut Item, flags: &SetFlags) -> Result<(), String> {
     for id in &flags.unblock {
         item.blocks.remove(id);
     }
+    for (what, flag, slot) in [
+        ("epic", &flags.epic, &mut item.epic),
+        ("milestone", &flags.milestone, &mut item.milestone),
+    ] {
+        if let Some(name) = flag {
+            if name.is_empty() {
+                *slot = None; // `--epic ""` clears
+            } else if !myco_core::is_valid_group_name(name) {
+                return Err(format!("invalid {what} name {name:?}"));
+            } else {
+                *slot = Some(name.clone());
+            }
+        }
+    }
     Ok(())
 }
 
@@ -177,6 +201,8 @@ pub fn run(
             unlabel,
             blocks,
             unblock,
+            epic,
+            milestone,
         } => {
             let flags = SetFlags {
                 status,
@@ -186,6 +212,8 @@ pub fn run(
                 unlabel,
                 blocks,
                 unblock,
+                epic,
+                milestone,
             };
             if flags.is_noop() {
                 return Err("item set: nothing to change — pass at least one flag".into());

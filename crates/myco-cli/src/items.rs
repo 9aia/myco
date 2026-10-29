@@ -14,8 +14,8 @@ use serde_json::json;
 use crate::discover;
 use crate::ops;
 
-/// `--pri/--owner/--label/--blocks` — the metadata flags shared by
-/// every `add`/`new` verb.
+/// `--pri/--owner/--label/--blocks/--epic/--milestone` — the
+/// metadata flags shared by every `add`/`new` verb.
 #[derive(Debug, Default, clap::Args)]
 pub struct MetaFlags {
     /// Priority: low|med|high|crit.
@@ -30,6 +30,14 @@ pub struct MetaFlags {
     /// Ids this item blocks — comma-separated or repeatable.
     #[arg(long, value_delimiter = ',')]
     pub blocks: Vec<ItemId>,
+    /// Epic name — the delivery grouping this item belongs to
+    /// (`[A-Za-z0-9_.-]+`).
+    #[arg(long)]
+    pub epic: Option<String>,
+    /// Milestone name — the target this item ships under
+    /// (`[A-Za-z0-9_.-]+`).
+    #[arg(long)]
+    pub milestone: Option<String>,
 }
 
 impl MetaFlags {
@@ -50,6 +58,15 @@ impl MetaFlags {
         for b in &self.blocks {
             item.blocks.insert(*b);
         }
+        for (what, name) in [("epic", &self.epic), ("milestone", &self.milestone)] {
+            if let Some(name) = name {
+                if !myco_core::is_valid_group_name(name) {
+                    return Err(format!("invalid {what} name {name:?}"));
+                }
+            }
+        }
+        item.epic = self.epic.clone();
+        item.milestone = self.milestone.clone();
         Ok(())
     }
 }
@@ -377,6 +394,12 @@ pub fn compact(item: &Item) -> String {
     for l in &item.labels {
         s += &format!(" #{l}");
     }
+    if let Some(e) = &item.epic {
+        s += &format!(" epic:{e}");
+    }
+    if let Some(m) = &item.milestone {
+        s += &format!(" ms:{m}");
+    }
     if !item.title.is_empty() {
         s += &format!(" {}", item.title);
     }
@@ -544,10 +567,12 @@ mod tests {
         let i = Item::new(ItemId::new(ItemKind::Task, 1), "the thing")
             .priority(Priority::High)
             .owner(Actor::new("devin").unwrap())
-            .label("core");
+            .label("core")
+            .epic("v2")
+            .milestone("1.0");
         assert_eq!(
             compact(&i),
-            "T-001 open pri:high owner:devin #core the thing"
+            "T-001 open pri:high owner:devin #core epic:v2 ms:1.0 the thing"
         );
         let bare = Item::new(ItemId::new(ItemKind::Task, 2), "");
         assert_eq!(compact(&bare), "T-002 open pri:med");

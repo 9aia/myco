@@ -7,9 +7,10 @@
 //!
 //! `NNNN` = id number padded to 4 digits. TOML frontmatter in
 //! `+++` fences (id, title, status, created, owner, priority,
-//! labels, blocks, note — extendable: unknown keys are ignored on
-//! read for forward-compat); body = free-form markdown (verbatim;
-//! kind templates are `myco-template`'s job).
+//! labels, blocks, note, superseded_by, supersedes, epic,
+//! milestone — extendable: unknown keys are ignored on read for
+//! forward-compat); body = free-form markdown (verbatim; kind
+//! templates are `myco-template`'s job).
 
 use myco_core::{date, Actor, Item, ItemFile, ItemId, ItemKind, Priority, Status};
 use serde::{Deserialize, Serialize};
@@ -105,6 +106,8 @@ struct FrontmatterIn {
     note: Option<String>,
     superseded_by: Option<String>,
     supersedes: Option<String>,
+    epic: Option<String>,
+    milestone: Option<String>,
 }
 
 /// Emit shape — field order IS the frontmatter key order.
@@ -128,6 +131,10 @@ struct FrontmatterOut<'a> {
     superseded_by: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     supersedes: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    epic: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    milestone: Option<&'a str>,
 }
 
 /// Parse an item file's source. `expected_kind` comes from the
@@ -223,6 +230,15 @@ pub fn parse_item_file(
                 .map_err(|e: myco_core::ParseItemIdError| fm_err(e.to_string()))
         })
         .transpose()?;
+    for (key, name) in [("epic", &fm.epic), ("milestone", &fm.milestone)] {
+        if let Some(name) = name {
+            if !myco_core::is_valid_group_name(name) {
+                return Err(fm_err(format!("invalid {key} name {name:?}")));
+            }
+        }
+    }
+    item.epic = fm.epic;
+    item.milestone = fm.milestone;
     // body: everything after the closing fence + one blank line
     let mut body = &src[fence_end..];
     body = body.strip_prefix('\n').unwrap_or(body);
@@ -251,6 +267,8 @@ pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
         note: file.meta.note.as_deref(),
         superseded_by: file.meta.superseded_by.map(|i| i.to_string()),
         supersedes: file.meta.supersedes.map(|i| i.to_string()),
+        epic: file.meta.epic.as_deref(),
+        milestone: file.meta.milestone.as_deref(),
     };
     let toml = toml::to_string(&fm).map_err(|e| EmitError::new("item file", e.to_string()))?;
     let mut out = String::from("+++\n");
@@ -347,6 +365,23 @@ mod tests {
         // bad id values are frontmatter errors
         let bad = "+++\nid = \"ADR-0001\"\ntitle = \"x\"\nstatus = \"open\"\nsuperseded_by = \"nope\"\n+++\n";
         assert!(parse_item_file(bad, ItemKind::Adr, "x.md").is_err());
+    }
+
+    #[test]
+    fn epic_milestone_roundtrip() {
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\nepic = \"v2\"\nmilestone = \"1.0\"\n+++\n";
+        let file = parse_item_file(src, ItemKind::Issue, "issues/issue-0001-x.md").unwrap();
+        assert_eq!(file.meta.epic.as_deref(), Some("v2"));
+        assert_eq!(file.meta.milestone.as_deref(), Some("1.0"));
+        assert_eq!(emit_item_file(&file).unwrap(), src);
+        // invalid group names are frontmatter errors
+        for bad in ["epic = \"has space\"", "milestone = \"a/b\""] {
+            let s = format!("+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\n{bad}\n+++\n");
+            assert!(
+                parse_item_file(&s, ItemKind::Issue, "x.md").is_err(),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

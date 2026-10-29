@@ -20,7 +20,7 @@ pub use actor::{is_valid_actor, Actor, ParseActorError};
 pub use doc::{BacklogDoc, ItemFile, Section, TodoDoc};
 pub use handoff::{is_valid_session, HandoffEntry};
 pub use id::{ItemId, ItemKind, ParseItemIdError};
-pub use item::{is_valid_label, Item, ItemMeta};
+pub use item::{is_valid_group_name, is_valid_label, Item, ItemMeta};
 pub use meta::{NextCounters, ProjectMeta, Registry};
 pub use priority::{ParsePriorityError, Priority};
 pub use status::{InvalidTransition, ParseStatusError, Status};

@@ -4,6 +4,7 @@
 //! ```text
 //! <id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>]
 //!     [· created:<date>] [· #<label>]… [· blocks:<id>[,<id>]…]
+//!     [· epic:<name>] [· ms:<name>] [· note:<text>]
 //! ```
 //!
 //! Metadata tokens come after the title, `·`-separated, in the
@@ -12,7 +13,9 @@
 //! BACKLOG), `pri` = `med`. Unknown/malformed tokens are errors —
 //! `myco check` should catch typos, not swallow them.
 
-use myco_core::{date, is_valid_label, Actor, Item, ItemId, ItemKind, Priority, Status};
+use myco_core::{
+    date, is_valid_group_name, is_valid_label, Actor, Item, ItemId, ItemKind, Priority, Status,
+};
 
 use crate::error::EmitError;
 
@@ -57,6 +60,9 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
     let mut owner = None;
     let mut created = None;
     let mut blocks_seen = false;
+    let mut epic = None;
+    let mut milestone = None;
+    let mut note = None;
     let mut item = Item::new(id, title);
 
     for raw in parts {
@@ -119,9 +125,33 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
                         .insert(bid.parse::<ItemId>().map_err(|e| format!("{e}"))?);
                 }
             }
+            "epic" => {
+                if epic.is_some() {
+                    return Err(bad("duplicate epic: token"));
+                }
+                if !is_valid_group_name(value) {
+                    return Err(bad(format!("invalid epic name {value:?}")));
+                }
+                epic = Some(value.to_string());
+            }
+            "ms" => {
+                if milestone.is_some() {
+                    return Err(bad("duplicate ms: token"));
+                }
+                if !is_valid_group_name(value) {
+                    return Err(bad(format!("invalid milestone name {value:?}")));
+                }
+                milestone = Some(value.to_string());
+            }
+            "note" => {
+                if note.is_some() {
+                    return Err(bad("duplicate note: token"));
+                }
+                note = Some(value.to_string());
+            }
             other => {
                 return Err(bad(format!(
-                    "unknown metadata key {other:?} — expected status|pri|owner|created|blocks or #label"
+                    "unknown metadata key {other:?} — expected status|pri|owner|created|blocks|epic|ms|note or #label"
                 )));
             }
         }
@@ -131,6 +161,9 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
     item.priority = priority.unwrap_or_default();
     item.owner = owner;
     item.created = created;
+    item.epic = epic;
+    item.milestone = milestone;
+    item.note = note;
     Ok(item)
 }
 
@@ -150,6 +183,24 @@ pub(crate) fn check_item(item: &Item, file: &'static str) -> Result<(), EmitErro
     for label in &item.labels {
         if !is_valid_label(label) {
             return Err(err(&format!("invalid label #{label:?}")));
+        }
+    }
+    for (what, name) in [
+        ("epic", item.epic.as_deref()),
+        ("milestone", item.milestone.as_deref()),
+    ] {
+        if let Some(name) = name {
+            if !is_valid_group_name(name) {
+                return Err(err(&format!("invalid {what} name {name:?}")));
+            }
+        }
+    }
+    if let Some(note) = &item.note {
+        if note.is_empty() || note != note.trim() {
+            return Err(err("untrimmed/empty note"));
+        }
+        if note.contains('·') || note.contains('\n') || note.contains('\r') {
+            return Err(err("note contains `·` or a newline"));
         }
     }
     Ok(())
@@ -184,6 +235,15 @@ pub(crate) fn text(item: &Item, spec: &LineSpec) -> Result<String, EmitError> {
         let ids: Vec<String> = item.blocks.iter().map(ItemId::to_string).collect();
         tokens.push(format!("blocks:{}", ids.join(",")));
     }
+    if let Some(epic) = &item.epic {
+        tokens.push(format!("epic:{epic}"));
+    }
+    if let Some(ms) = &item.milestone {
+        tokens.push(format!("ms:{ms}"));
+    }
+    if let Some(note) = &item.note {
+        tokens.push(format!("note:{note}"));
+    }
     for t in tokens {
         s.push_str(" · ");
         s.push_str(&t);
@@ -208,7 +268,7 @@ mod tests {
 
     #[test]
     fn parse_full_line() {
-        let i = item("T-012 Write the thing · status:in-progress · pri:high · owner:devin · created:2026-02-09 · #core · #store · blocks:T-010, I-002");
+        let i = item("T-012 Write the thing · status:in-progress · pri:high · owner:devin · created:2026-02-09 · #core · #store · blocks:T-010, I-002 · epic:v2 · ms:1.0 · note:from src/x.rs:9");
         assert_eq!(i.id, ItemId::new(ItemKind::Task, 12));
         assert_eq!(i.title, "Write the thing");
         assert_eq!(i.status, Status::InProgress);
@@ -218,6 +278,9 @@ mod tests {
         assert!(i.labels.contains("core") && i.labels.contains("store"));
         assert!(i.blocks.contains(&ItemId::new(ItemKind::Task, 10)));
         assert!(i.blocks.contains(&ItemId::new(ItemKind::Issue, 2)));
+        assert_eq!(i.epic.as_deref(), Some("v2"));
+        assert_eq!(i.milestone.as_deref(), Some("1.0"));
+        assert_eq!(i.note.as_deref(), Some("from src/x.rs:9"));
     }
 
     #[test]
@@ -254,6 +317,14 @@ mod tests {
             ("T-001 t · blocks:T-1,,T-2", "empty id"),
             ("T-001 t · blocks:XYZ", "bad block id"),
             ("T-001 t · blocks:T-1 · blocks:T-2", "dup blocks"),
+            ("T-001 t · epic:", "empty epic"),
+            ("T-001 t · epic:has space", "bad epic name"),
+            ("T-001 t · epic:a · epic:b", "dup epic"),
+            ("T-001 t · ms:", "empty ms"),
+            ("T-001 t · ms:has space", "bad ms name"),
+            ("T-001 t · ms:a · ms:b", "dup ms"),
+            ("T-001 t · note:", "empty note"),
+            ("T-001 t · note:a · note:b", "dup note"),
             ("T-001 t · #", "empty label"),
             ("T-001 t · #a b", "bad label char"),
             ("T-001 t · #bad/lab", "bad label char"),
@@ -274,11 +345,14 @@ mod tests {
             .label("store")
             .label("core")
             .blocks(ItemId::new(ItemKind::Issue, 2))
-            .blocks(ItemId::new(ItemKind::Task, 10));
+            .blocks(ItemId::new(ItemKind::Task, 10))
+            .epic("v2")
+            .milestone("1.0")
+            .note("swept from src/x.rs:9");
         let s = text(&i, &TODO).unwrap();
         assert_eq!(
             s,
-            "T-012 Write the thing · status:in-progress · pri:high · owner:devin · created:2026-02-09 · #core · #store · blocks:T-010,I-002"
+            "T-012 Write the thing · status:in-progress · pri:high · owner:devin · created:2026-02-09 · #core · #store · blocks:T-010,I-002 · epic:v2 · ms:1.0 · note:swept from src/x.rs:9"
         );
         // round trip
         assert_eq!(parse_text(&s, &TODO).unwrap(), i);
@@ -300,6 +374,19 @@ mod tests {
         assert!(text(&i, &TODO).is_err());
         i.title = "fine".into();
         i.labels.insert("bad label".into());
+        assert!(text(&i, &TODO).is_err());
+        i.labels.clear();
+        i.epic = Some("bad epic".into());
+        assert!(text(&i, &TODO).is_err());
+        i.epic = None;
+        i.milestone = Some("bad/ms".into());
+        assert!(text(&i, &TODO).is_err());
+        i.milestone = None;
+        i.note = Some("has · dot".into());
+        assert!(text(&i, &TODO).is_err());
+        i.note = Some(" trailing ".into());
+        assert!(text(&i, &TODO).is_err());
+        i.note = Some("two\nlines".into());
         assert!(text(&i, &TODO).is_err());
     }
 }

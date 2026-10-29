@@ -9,12 +9,15 @@
 //!
 //! Phase 6 wires continuity — `handoff`/`resume` over append-only
 //! `handoffs/<ID>.md` files (one per item, any kind); sepia hooks
-//! call them at session boundaries.
+//! call them at session boundaries. Phase 7 lands the Jira-parity
+//! slice — `epic:`/`ms:` item metadata + grouping views,
+//! `absorb` importers (comment sweep, Jira CSV, GitHub dumps).
 
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+mod absorb;
 mod adr;
 mod backlog;
 mod board;
@@ -23,6 +26,7 @@ mod commit;
 mod continuity;
 mod digest;
 mod discover;
+mod group;
 mod indexcmd;
 mod init;
 mod issue;
@@ -166,6 +170,37 @@ enum Cmd {
         /// Emit a markdown table (for docs/READMEs).
         #[arg(long)]
         md: bool,
+        /// Only items in this epic.
+        #[arg(long)]
+        epic: Option<String>,
+        /// Only items in this milestone.
+        #[arg(long)]
+        milestone: Option<String>,
+    },
+    /// Items grouped by epic — bare lists epics with counts, a
+    /// name renders that epic's board (`epic v2` ≡ `board
+    /// --epic v2`).
+    Epic {
+        /// Epic name — omit for the all-epics summary.
+        name: Option<String>,
+        /// Emit a markdown table (with a name).
+        #[arg(long)]
+        md: bool,
+    },
+    /// Items grouped by milestone — bare lists milestones with
+    /// counts, a name renders that milestone's board.
+    Milestone {
+        /// Milestone name — omit for the all-milestones summary.
+        name: Option<String>,
+        /// Emit a markdown table (with a name).
+        #[arg(long)]
+        md: bool,
+    },
+    /// Import work into the ledger — TODO/FIXME comments, Jira
+    /// CSV exports, GitHub issue dumps.
+    Absorb {
+        #[command(subcommand)]
+        cmd: absorb::Cmd,
     },
     /// Aging + velocity + blocked — how the ledger is trending.
     Report,
@@ -201,6 +236,7 @@ fn manifest() -> serde_json::Value {
             "init", "check", "migrate", "commit", "absorb",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
+            "epic", "milestone",
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board",
@@ -208,9 +244,10 @@ fn manifest() -> serde_json::Value {
         ],
         "implemented": [
             "manifest", "gen-cli-docs", "schema",
-            "init", "check", "migrate", "commit",
+            "init", "check", "migrate", "commit", "absorb",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
+            "epic", "milestone",
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board",
@@ -258,7 +295,16 @@ fn main() {
         Cmd::Resume { id, last } => continuity::resume(id, last, dir, root, json),
         Cmd::Schema => schema::run(),
         Cmd::Status { prompt } => status::run(dir, root, prompt, json),
-        Cmd::Board { md } => board::run(dir, root, md, json),
+        Cmd::Board {
+            md,
+            epic,
+            milestone,
+        } => board::run(dir, root, md, epic, milestone, json),
+        Cmd::Epic { name, md } => group::run(group::Group::Epic, name, md, dir, root, json),
+        Cmd::Milestone { name, md } => {
+            group::run(group::Group::Milestone, name, md, dir, root, json)
+        }
+        Cmd::Absorb { cmd } => absorb::run(cmd, dir, root, json, no_commit),
         Cmd::Report => report::run(dir, root, json),
         Cmd::Index { cmd } => indexcmd::run(cmd, json),
         Cmd::Org { cmd } => org::run(cmd, json),

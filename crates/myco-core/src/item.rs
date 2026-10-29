@@ -53,6 +53,15 @@ pub struct Item {
     /// `supersedes:` — the item this one replaces (ADRs).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supersedes: Option<ItemId>,
+    /// `epic:` — the epic (named delivery grouping) this item
+    /// belongs to. Line token `epic:<name>`; a group name, not a
+    /// label — one per item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epic: Option<String>,
+    /// `milestone:` — the milestone this item targets. Line token
+    /// `ms:<name>` (kept short — lines stay readable).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub milestone: Option<String>,
 }
 
 /// The metadata half of an [`crate::ItemFile`] — identical shape to
@@ -75,6 +84,8 @@ impl Item {
             note: None,
             superseded_by: None,
             supersedes: None,
+            epic: None,
+            milestone: None,
         }
     }
 
@@ -132,6 +143,18 @@ impl Item {
         self.supersedes = Some(id);
         self
     }
+
+    /// Builder-style `epic` setter.
+    pub fn epic(mut self, name: impl Into<String>) -> Self {
+        self.epic = Some(name.into());
+        self
+    }
+
+    /// Builder-style `milestone` setter.
+    pub fn milestone(mut self, name: impl Into<String>) -> Self {
+        self.milestone = Some(name.into());
+        self
+    }
 }
 
 /// A `#label` is `[A-Za-z0-9_-]+` — kept permissive on the model,
@@ -140,6 +163,15 @@ pub fn is_valid_label(s: &str) -> bool {
     !s.is_empty()
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+}
+
+/// An `epic:`/`ms:` group name — `[A-Za-z0-9_.-]+`: the label
+/// charset plus `.` for `1.0`-style milestones. Same boundary rule
+/// as labels (the name must fit a `·`-separated line token).
+pub fn is_valid_group_name(s: &str) -> bool {
+    !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
 }
 
 #[cfg(test)]
@@ -198,6 +230,16 @@ mod tests {
     }
 
     #[test]
+    fn group_name_validation() {
+        for ok in ["v2", "q3-launch", "1.0", "alpha_beta", "A1.x"] {
+            assert!(is_valid_group_name(ok), "{ok}");
+        }
+        for bad in ["", "a b", "a/b", "a·b", "a:b", "é"] {
+            assert!(!is_valid_group_name(bad), "{bad}");
+        }
+    }
+
+    #[test]
     fn serde_skips_defaults() {
         let item = Item::new(ItemId::new(ItemKind::Task, 1), "t");
         let json = serde_json::to_value(&item).unwrap();
@@ -206,6 +248,8 @@ mod tests {
         assert!(!obj.contains_key("labels"));
         assert!(!obj.contains_key("blocks"));
         assert!(!obj.contains_key("note"));
+        assert!(!obj.contains_key("epic"));
+        assert!(!obj.contains_key("milestone"));
         // full item round-trips
         let full = Item::new(ItemId::new(ItemKind::Issue, 2), "t")
             .owner("devin".parse().unwrap())
@@ -214,7 +258,9 @@ mod tests {
             .label("l")
             .blocks(ItemId::new(ItemKind::Task, 1))
             .superseded_by(ItemId::new(ItemKind::Adr, 2))
-            .supersedes(ItemId::new(ItemKind::Adr, 1));
+            .supersedes(ItemId::new(ItemKind::Adr, 1))
+            .epic("v2")
+            .milestone("1.0");
         let back: Item = serde_json::from_str(&serde_json::to_string(&full).unwrap()).unwrap();
         assert_eq!(back, full);
     }

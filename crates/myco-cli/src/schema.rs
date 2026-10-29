@@ -108,6 +108,7 @@ pub fn document() -> serde_json::Value {
                 "frontmatter_keys": [
                     "id", "title", "status", "created", "owner", "priority",
                     "labels", "blocks", "note", "superseded_by", "supersedes",
+                    "epic", "milestone",
                 ],
             },
             "handoffs": {
@@ -123,11 +124,13 @@ pub fn document() -> serde_json::Value {
         },
         "line_grammar": {
             "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] \
-                      [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…]",
-            "token_order": ["status", "pri", "owner", "created", "#label", "blocks"],
+                      [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] \
+                      [· epic:<name>] [· ms:<name>] [· note:<text>]",
+            "token_order": ["status", "pri", "owner", "created", "#label", "blocks", "epic", "ms", "note"],
             "separator": "·",
             "defaults": {"status": "doc default (open|deferred)", "pri": "med"},
             "label_pattern": "[A-Za-z0-9_-]+",
+            "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms names — `ms` is the milestone token)",
             "actor_pattern": "[A-Za-z0-9._:-]+ (no leading/trailing ':', no '::')",
         },
     })
@@ -179,6 +182,14 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("superseded_by")));
+        assert!(d["files"]["item_file"]["frontmatter_keys"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("epic")));
+        assert!(d["line_grammar"]["token_order"]
+            .as_array()
+            .unwrap()
+            .ends_with(&[json!("epic"), json!("ms"), json!("note")]));
         assert!(d["line_grammar"]["shape"].as_str().unwrap().contains('·'));
         assert_eq!(d["ids"]["kinds"]["ADR"]["width"], 4);
     }

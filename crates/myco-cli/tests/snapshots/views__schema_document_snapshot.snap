@@ -48,7 +48,9 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
         "blocks",
         "note",
         "superseded_by",
-        "supersedes"
+        "supersedes",
+        "epic",
+        "milestone"
       ]
     },
     "kinds": {
@@ -124,16 +126,20 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "pri": "med",
       "status": "doc default (open|deferred)"
     },
+    "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms names — `ms` is the milestone token)",
     "label_pattern": "[A-Za-z0-9_-]+",
     "separator": "·",
-    "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…]",
+    "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] [· note:<text>]",
     "token_order": [
       "status",
       "pri",
       "owner",
       "created",
       "#label",
-      "blocks"
+      "blocks",
+      "epic",
+      "ms",
+      "note"
     ]
   },
   "priorities": [
@@ -198,6 +204,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "epic": {
+              "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "id": {
               "$ref": "#/$defs/ItemId",
               "description": "Typed id — determines kind, sort, filename."
@@ -209,6 +222,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               },
               "type": "array",
               "uniqueItems": true
+            },
+            "milestone": {
+              "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "note": {
               "description": "Free-form note — handoff/resume payload (phase 6).",
@@ -488,6 +508,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
             "null"
           ]
         },
+        "epic": {
+          "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "$ref": "#/$defs/ItemId",
           "description": "Typed id — determines kind, sort, filename."
@@ -499,6 +526,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
           },
           "type": "array",
           "uniqueItems": true
+        },
+        "milestone": {
+          "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "note": {
           "description": "Free-form note — handoff/resume payload (phase 6).",
@@ -579,6 +613,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "epic": {
+              "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "id": {
               "$ref": "#/$defs/ItemId",
               "description": "Typed id — determines kind, sort, filename."
@@ -590,6 +631,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               },
               "type": "array",
               "uniqueItems": true
+            },
+            "milestone": {
+              "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "note": {
               "description": "Free-form note — handoff/resume payload (phase 6).",
@@ -928,6 +976,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "epic": {
+              "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "id": {
               "$ref": "#/$defs/ItemId",
               "description": "Typed id — determines kind, sort, filename."
@@ -939,6 +994,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               },
               "type": "array",
               "uniqueItems": true
+            },
+            "milestone": {
+              "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "note": {
               "description": "Free-form note — handoff/resume payload (phase 6).",
@@ -1143,6 +1205,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "epic": {
+              "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "id": {
               "$ref": "#/$defs/ItemId",
               "description": "Typed id — determines kind, sort, filename."
@@ -1154,6 +1223,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               },
               "type": "array",
               "uniqueItems": true
+            },
+            "milestone": {
+              "description": "`milestone:` — the milestone this item targets. Line token\n`ms:<name>` (kept short — lines stay readable).",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "note": {
               "description": "Free-form note — handoff/resume payload (phase 6).",

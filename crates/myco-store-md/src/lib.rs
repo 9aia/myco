@@ -15,9 +15,11 @@
 //!
 //! Item-line tokens (`·`-separated, after the title): `status:`,
 //! `pri:` (low|med|high|crit), `owner:`, `created:` (YYYY-MM-DD),
-//! `#label`s, `blocks:T-NNN[,…]`. Canonical order is that order;
-//! defaults (`status:open`/`deferred`, `pri:med`, unset
-//! owner/created/labels/blocks) are omitted.
+//! `#label`s, `blocks:T-NNN[,…]`, `epic:<name>`, `ms:<name>`,
+//! `note:<free text>` (the dedup/provenance slot absorb fills).
+//! Canonical order is that order; defaults (`status:open`/
+//! `deferred`, `pri:med`, unset owner/created/labels/blocks/
+//! epic/ms/note) are omitted.
 //!
 //! Engine: `markdown` (wooorm markdown-rs) parses everything to
 //! mdast for structure + spans. Emit is canonical, hand-written
