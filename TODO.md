@@ -1,6 +1,6 @@
 # TODO — myco
 
-## v2 rewrite (phases — see proposals/v2.md)
+## v2 rewrite (phases — see proposals/proposal-0001)
 
 - [ ] T-001 myco-git — init / check / migrate / auto-commit
 - [ ] T-002 Item verbs — todo/backlog/issue/proposal/plan/adr + item set
