@@ -19,7 +19,7 @@
 //! an entry; `myco check --fix` moves orphaned files (their item
 //! was removed) to `handoffs/archive/`, never rewrites them either.
 
-use markdown::mdast::Node;
+use markdown::mdast::{Node, Root};
 use myco_core::{date, is_valid_session, Actor, HandoffEntry, ItemId};
 use serde::{Deserialize, Serialize};
 
@@ -99,15 +99,18 @@ pub fn parse_handoff_file(
         .map_err(|e: myco_core::ParseItemIdError| fm_err(e.to_string()))?;
 
     // body: mdast gives block structure + spans; offsets are into
-    // `body` (i.e. relative to `fence_end` in `src`)
+    // `body` (i.e. relative to `fence_end` in `src`). Parsed nodes
+    // always carry positions — a missing one degrades to the
+    // whole-file span.
     let body = &src[fence_end..];
-    let err_at = |node: &Node, m: String| match node.position() {
-        Some(pos) => at(
-            fence_end + pos.start.offset,
-            pos.end.offset.saturating_sub(pos.start.offset),
-            m,
-        ),
-        None => whole(m),
+    let err_at = |node: &Node, m: String| {
+        let (o, l) = node.position().map_or((0, body.len()), |pos| {
+            (
+                pos.start.offset,
+                pos.end.offset.saturating_sub(pos.start.offset),
+            )
+        });
+        at(fence_end + o, l, m)
     };
     let ast = mdx::parse(body).map_err(|m| at(fence_end, src.len() - fence_end, m))?;
     let mut blocks = ast.children().into_iter().flatten();
@@ -214,18 +217,19 @@ pub fn emit_entry(entry: &HandoffEntry) -> Result<String, EmitError> {
             return Err(err("session id can't be empty or contain `·`/newline"));
         }
     }
-    match mdx::parse(&entry.note) {
-        Ok(ast) => {
-            let has_h2 = ast
-                .children()
-                .into_iter()
-                .flatten()
-                .any(|n| matches!(n, Node::Heading(h) if h.depth == 2));
-            if has_h2 {
-                return Err(err("note can't contain a `##` heading"));
-            }
-        }
-        Err(m) => return Err(err(&format!("note isn't parseable markdown — {m}"))),
+    // markdown-rs is effectively infallible for CommonMark — an
+    // unparseable note can't hide a `##` heading, so emit proceeds
+    let ast = mdx::parse(&entry.note).unwrap_or(Node::Root(Root {
+        children: Vec::new(),
+        position: None,
+    }));
+    if ast
+        .children()
+        .into_iter()
+        .flatten()
+        .any(|n| matches!(n, Node::Heading(h) if h.depth == 2))
+    {
+        return Err(err("note can't contain a `##` heading"));
     }
     let mut head = format!("{} · {}", date::render(entry.date), entry.actor);
     if let Some(s) = &entry.session {
@@ -363,6 +367,8 @@ mod tests {
             ("+++\nitem = \"X-001\"\n+++\n\n# Handoffs — T-001\n", "bad id"),
             ("+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-002\n", "title mismatch"),
             ("+++\nitem = \"T-001\"\n+++\n\n## 2026-01-01 · devin\nnote\n", "no title"),
+            ("+++\nitem = \"T-001\"\n+++\n", "empty body"),
+            ("+++\nitem = \"T-001\"\n+++\n\njust a paragraph\n", "non-heading block"),
             ("+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\nstray\n", "content before entry"),
             ("+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## not a date · devin\nn\n", "bad date"),
             ("+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## 2026-01-01\ntext\n", "one field"),

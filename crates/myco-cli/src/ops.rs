@@ -126,3 +126,36 @@ pub fn print_json(v: &serde_json::Value) {
         serde_json::to_string_pretty(v).unwrap_or_else(|_| v.to_string())
     );
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let st = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(st.success(), "git {args:?}");
+    }
+
+    #[test]
+    fn commit_paths_clean_tree_is_noop() {
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        // enabled but nothing dirty under the path → false, no commit
+        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], true).unwrap());
+        // disabled short-circuits before even checking
+        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], false).unwrap());
+        std::fs::write(d.path().join("other.txt"), "x").unwrap();
+        // dirty elsewhere doesn't count — only the named paths do
+        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], true).unwrap());
+    }
+}

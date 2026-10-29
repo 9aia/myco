@@ -266,13 +266,11 @@ impl Store for MdStore {
             });
         };
         let name = path.file_name().unwrap_or_default();
-        let target = path
+        let parent = path
             .parent()
-            .map(|p| p.join(ARCHIVE_DIR).join(name))
             .ok_or_else(|| Error::Invalid(format!("no parent dir for {path}")))?;
-        if let Some(p) = target.parent() {
-            std::fs::create_dir_all(p).map_err(Error::Io)?;
-        }
+        let target = parent.join(ARCHIVE_DIR).join(name);
+        std::fs::create_dir_all(parent.join(ARCHIVE_DIR)).map_err(Error::Io)?;
         std::fs::rename(&path, &target).map_err(Error::Io)
     }
 
@@ -845,5 +843,61 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files.iter().any(|f| f.archived));
         assert!(files.iter().any(|f| !f.archived));
+    }
+
+    #[test]
+    fn handoff_io_errors_propagate() {
+        let (_d, s) = store();
+        let t1 = ItemId::new(ItemKind::Task, 1);
+        // a directory where the handoff file should be → Io, not
+        // NotFound, on both read paths
+        std::fs::create_dir_all(s.root().join("handoffs/T-001.md")).unwrap();
+        assert!(matches!(s.read_handoffs(t1), Err(Error::Io(_))));
+        assert!(matches!(
+            s.append_handoff(t1, &entry("n")),
+            Err(Error::Io(_))
+        ));
+        // same, but only the archived slot
+        std::fs::remove_dir_all(s.root().join("handoffs/T-001.md")).unwrap();
+        std::fs::create_dir_all(s.root().join("handoffs/archive/T-001.md")).unwrap();
+        assert!(matches!(s.read_handoffs(t1), Err(Error::Io(_))));
+        assert!(matches!(
+            s.append_handoff(t1, &entry("n")),
+            Err(Error::Io(_))
+        ));
+    }
+
+    #[test]
+    fn append_handoff_normalizes_missing_trailing_newline() {
+        let (_d, s) = store();
+        let t1 = ItemId::new(ItemKind::Task, 1);
+        std::fs::create_dir_all(s.root().join("handoffs")).unwrap();
+        std::fs::write(
+            s.root().join("handoffs/T-001.md"),
+            "+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## 2026-01-01 · luis\nnote",
+        )
+        .unwrap();
+        s.append_handoff(t1, &entry("next")).unwrap();
+        assert_eq!(s.read_handoffs(t1).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn list_handoff_files_io_and_nonutf8() {
+        use std::os::unix::ffi::OsStrExt;
+        let (_d, s) = store();
+        // `handoffs` is a regular file → read_dir fails non-NotFound
+        std::fs::write(s.root().join("handoffs"), "x").unwrap();
+        assert!(matches!(s.list_handoff_files(), Err(Error::Io(_))));
+        // non-UTF8 filenames are skipped, not fatal
+        std::fs::remove_file(s.root().join("handoffs")).unwrap();
+        let dir = s.root().join("handoffs");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.as_std_path().join(std::ffi::OsStr::from_bytes(b"\xff")),
+            "x",
+        )
+        .unwrap();
+        std::fs::write(dir.join("stray.txt"), "x").unwrap();
+        assert!(s.list_handoff_files().unwrap().is_empty());
     }
 }

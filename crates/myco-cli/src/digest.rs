@@ -194,8 +194,8 @@ pub fn counts(scan: &Scan) -> Counts {
                     ItemKind::Issue => &mut c.issues,
                     ItemKind::Proposal => &mut c.proposals,
                     ItemKind::Adr => &mut c.adrs,
-                    ItemKind::Plan => &mut c.plans,
-                    ItemKind::Task => unreachable!(),
+                    // tasks took the first arm — only plans remain
+                    ItemKind::Plan | ItemKind::Task => &mut c.plans,
                 };
                 if archived || i.status == Status::Done {
                     slot.resolved += 1;

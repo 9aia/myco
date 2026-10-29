@@ -152,21 +152,23 @@ pub fn run(
 ) -> Result<i32, String> {
     let (_proj, store) = items::open(dir.as_deref(), root.as_deref())?;
     let scan = digest::scan(&store)?;
-    let live = scan.live().filter(|i| {
-        epic.as_deref().is_none_or(|e| i.epic.as_deref() == Some(e))
-            && milestone
-                .as_deref()
-                .is_none_or(|m| i.milestone.as_deref() == Some(m))
-    });
+    let live: Vec<&Item> = scan
+        .live()
+        .filter(|i| {
+            epic.as_deref().is_none_or(|e| i.epic.as_deref() == Some(e))
+                && milestone
+                    .as_deref()
+                    .is_none_or(|m| i.milestone.as_deref() == Some(m))
+        })
+        .collect();
     if json_out {
-        ops::print_json(&columns_json(live, None));
+        ops::print_json(&columns_json(live.into_iter(), None));
         return Ok(0);
     }
-    let board = render(live, None, md);
-    if board.trim().is_empty() {
+    if live.is_empty() {
         println!("{}: empty board — `myco todo add` something", scan.name);
     } else {
-        println!("{board}");
+        println!("{}", render(live.into_iter(), None, md));
     }
     Ok(0)
 }
@@ -219,6 +221,13 @@ mod tests {
         assert!(md.contains("myco:I-001 owned"));
         // markdown table: header + separator + rows
         assert!(md.lines().any(|l| l.contains("---")));
+    }
+
+    #[test]
+    fn card_bare_id_for_empty_title() {
+        let i = Item::new(ItemId::new(ItemKind::Task, 9), "");
+        assert_eq!(card(&i, None), "T-009");
+        assert_eq!(card(&i, Some("myco")), "myco:T-009");
     }
 
     #[test]

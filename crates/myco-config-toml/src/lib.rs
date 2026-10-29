@@ -64,4 +64,34 @@ mod tests {
         assert_eq!(cfg.project_dir.as_deref(), Some("project"));
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn default_search_builds_candidates() {
+        // no explicit path, no MYCO_CONFIG → ./myco.toml +
+        // ~/.config/myco/myco.toml are probed (and miss in a
+        // bare cwd)
+        let src = TomlSource { path: None };
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("HOME", Some("/nonexistent-home")),
+            ],
+            || {
+                let dir =
+                    std::env::temp_dir().join(format!("myco-cfg-none-{}", std::process::id()));
+                std::fs::create_dir_all(&dir).unwrap();
+                let cwd = std::env::current_dir().unwrap();
+                std::env::set_current_dir(&dir).unwrap();
+                // no myco.toml anywhere reachable → search error
+                let first = src.load();
+                assert!(first.is_err(), "expected search error: {first:?}");
+                // ./myco.toml is found on the default search
+                std::fs::write(dir.join("myco.toml"), "project_dir = \"proj\"\n").unwrap();
+                let out = src.load().unwrap();
+                std::env::set_current_dir(cwd).unwrap();
+                assert_eq!(out.project_dir.as_deref(), Some("proj"));
+                let _ = std::fs::remove_dir_all(&dir);
+            },
+        );
+    }
 }

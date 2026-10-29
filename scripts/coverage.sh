@@ -24,8 +24,12 @@ done
 
 # Prefer nextest when installed so coverage sees the same test
 # selection/isolation as a normal `cargo nextest run`.
+# xtask is the check/test/coverage harness itself — measuring its
+# coverage is circular, so it is excluded from every report.
 if cargo nextest --version >/dev/null 2>&1; then
-    exec cargo llvm-cov nextest --workspace --no-tests=pass "$@"
+    exec cargo llvm-cov nextest --workspace --no-tests=pass \
+        --ignore-filename-regex 'xtask' "$@"
 else
-    exec cargo llvm-cov --workspace "$@"
+    exec cargo llvm-cov --workspace \
+        --ignore-filename-regex 'xtask' "$@"
 fi

@@ -398,6 +398,50 @@ mod tests {
     }
 
     #[test]
+    fn create_orphan_branch_update_ref_failure() {
+        let d = repo();
+        // a stale lock file makes `update-ref` fail after the
+        // commit objects were already created
+        let refs = d.path().join(".git/refs/heads");
+        std::fs::create_dir_all(&refs).unwrap();
+        std::fs::write(refs.join("project.lock"), "").unwrap();
+        let e = create_orphan_branch(d.path(), "project", "init").unwrap_err();
+        assert!(matches!(e, Error::Git { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn main_worktree_none_on_bare_repo() {
+        let d = tmpdir("bare");
+        assert!(git(&d, &["init", "-q", "--bare", "b.git"]));
+        assert_eq!(main_worktree(&d.join("b.git")), None);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn fetch_push_without_origin_fail_quietly() {
+        let d = repo();
+        assert!(!sync(d.path()));
+        assert!(commit_all(d.path(), "c0"));
+        assert!(tag(d.path(), "v1"));
+        assert!(!push_tag(d.path(), "v1"));
+    }
+
+    #[test]
+    fn worktree_remove_and_prune() {
+        let d = repo();
+        assert!(commit_all(d.path(), "c0"));
+        create_orphan_branch(d.path(), "project", "init").unwrap();
+        let wt = d.path().join("project");
+        assert!(worktree_add_branch(d.path(), &wt, "project"));
+        assert!(worktree_remove(d.path(), &wt));
+        assert!(!wt.exists());
+        // remove a stale worktree dir manually, then prune metadata
+        assert!(worktree_add_branch(d.path(), &wt, "project"));
+        std::fs::remove_dir_all(&wt).unwrap();
+        assert!(worktree_prune(d.path()));
+    }
+
+    #[test]
     fn error_display_variants() {
         let e = Error::Git {
             args: "status".into(),

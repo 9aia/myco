@@ -432,4 +432,49 @@ mod tests {
         assert!(out.contains("\\*"));
         assert_eq!(parse_todo(&out).unwrap(), doc);
     }
+
+    #[test]
+    fn nested_non_line_item_errors() {
+        // a nested done item — parse_li's status check rejects it
+        // and the error propagates out of the nested-children loop
+        let src = "# TODO — x\n\n- [ ] T-001 a\n  - [x] T-002 done\n";
+        assert!(parse_todo(src).is_err());
+        // a nested item with no line head errors too
+        let src = "# TODO — x\n\n- [ ] T-001 a\n  - \n    ```\n    c\n    ```\n";
+        assert!(parse_todo(src).is_err());
+    }
+
+    #[test]
+    fn nested_list_skips_non_listitem_children() {
+        // defensive: a real parser never puts non-ListItems in a
+        // list, but a hand-built mdast may
+        let li = markdown::mdast::ListItem {
+            checked: Some(false),
+            spread: false,
+            position: None,
+            children: vec![
+                Node::Paragraph(markdown::mdast::Paragraph {
+                    children: vec![Node::Text(markdown::mdast::Text {
+                        value: "T-001 x".into(),
+                        position: None,
+                    })],
+                    position: None,
+                }),
+                Node::List(markdown::mdast::List {
+                    ordered: false,
+                    start: None,
+                    spread: false,
+                    position: None,
+                    children: vec![Node::Paragraph(markdown::mdast::Paragraph {
+                        children: vec![],
+                        position: None,
+                    })],
+                }),
+            ],
+        };
+        let node = Node::ListItem(li.clone());
+        let item = parse_li("", &node, &li).unwrap();
+        assert_eq!(item.id.number(), 1);
+        assert!(item.children.is_empty());
+    }
 }

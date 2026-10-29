@@ -1010,5 +1010,93 @@ mod tests {
             Some("7")
         );
         assert_eq!(gh_number(None), None);
+        // non-scalar shapes → None
+        assert_eq!(gh_login(&serde_json::json!(5)), None);
+        assert_eq!(gh_number(Some(&serde_json::json!(true))), None);
+        assert_eq!(gh_login(&serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn comment_title_paren_edges() {
+        let kinds = vec!["TODO".to_string()];
+        // unclosed attribution paren — kept as text
+        assert_eq!(
+            comment_title("// TODO(unclosed: thing", &kinds),
+            "(unclosed: thing"
+        );
+        // paren closed but not followed by `:` or whitespace — the
+        // `(x)` stays part of the title
+        assert_eq!(comment_title("TODO(x)y", &kinds), "(x)y");
+    }
+
+    #[test]
+    fn labels_dedup_and_csv_ragged() {
+        // a repeated label isn't inserted twice, junk pieces drop
+        assert_eq!(
+            labels_from(&["bug,bug;bug,*,,ui".to_string()]),
+            vec!["bug".to_string(), "ui".to_string()]
+        );
+        // col(): no alias present, and all-empty values → None
+        let mut row = std::collections::BTreeMap::new();
+        assert_eq!(col(&row, &["x", "y"]), None);
+        row.insert("x".to_string(), vec!["  ".to_string()]);
+        assert_eq!(col(&row, &["x", "y"]), None, "whitespace-only");
+        row.insert("x".to_string(), vec!["".to_string(), "v".to_string()]);
+        assert_eq!(col(&row, &["x", "y"]), Some("v"));
+        // read_csv: ragged rows + empty cells are skipped
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("x.csv");
+        std::fs::write(&f, "a,b,c\n1,,3\n1,2,3,4\n").unwrap();
+        let rows = read_csv(&f).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].get("b"), None, "empty cell not collected");
+        assert!(rows[0]["a"].contains(&"1".to_string()));
+        // 4th cell has no header → dropped
+        assert_eq!(rows[1].values().flatten().count(), 3);
+        // missing file → error
+        assert!(read_csv(&d.path().join("nope.csv")).is_err());
+    }
+
+    #[test]
+    fn github_json_rows_all_shapes() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("issues.json");
+        std::fs::write(
+            &f,
+            r#"[
+                {"number": 7, "title": "one", "state": "open",
+                 "labels": [{"name": "bug"}, "ui", 5],
+                 "assignees": [{"login": "a"}, {"name": "b"}, "c", 5],
+                 "assignee": {"login": "d"}, "epic": "v2",
+                 "milestone": {"title": "1.0"}, "priority": "high",
+                 "body": "text"},
+                {"id": "9", "title": "two", "state": "closed",
+                 "labels": "solo", "milestone": "2.0", "epic": 42},
+            {"number": 8, "title": "labels-obj", "state": "open",
+                 "labels": {"name": "solitary"}, "milestone": null}
+            ]"#,
+        )
+        .unwrap();
+        let rows = read_github_json(&f).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0]["key"], vec!["7".to_string()]);
+        assert_eq!(rows[0]["labels"], vec!["bug".to_string(), "ui".to_string()]);
+        assert_eq!(
+            rows[0]["assignees"],
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+        assert_eq!(rows[0]["assignee"], vec!["d".to_string()]);
+        assert_eq!(rows[0]["milestone"], vec!["1.0".to_string()]);
+        assert_eq!(rows[0]["body"], vec!["text".to_string()]);
+        // string label + scalar milestone/epic fall through
+        assert_eq!(rows[1]["labels"], vec!["solo".to_string()]);
+        assert_eq!(rows[1]["epic"], vec!["42".to_string()]);
+        // malformed inputs error
+        std::fs::write(&f, "not json").unwrap();
+        assert!(read_github_json(&f).is_err());
+        std::fs::write(&f, "{\"a\":1}").unwrap();
+        assert!(read_github_json(&f).is_err());
+        std::fs::write(&f, "[5]").unwrap();
+        assert!(read_github_json(&f).is_err());
     }
 }

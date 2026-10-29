@@ -18,7 +18,7 @@
 //!   honored; unrecognized tails fold back into the title so no
 //!   text disappears.
 
-use markdown::mdast::Node;
+use markdown::mdast::{Node, Root};
 use myco_core::{date, is_valid_label, Actor, Item, ItemId, ItemKind, Status};
 
 use crate::mdx;
@@ -101,18 +101,16 @@ struct Conv {
 
 fn convert(src: &str) -> Conv {
     let src = mdx::normalize(src);
-    let Ok(ast) = mdx::parse(&src) else {
-        // markdown-rs is effectively infallible for CommonMark;
-        // treat a failure as an empty doc rather than panicking
-        return Conv {
-            h1: None,
-            doc: LegacyDoc::default(),
-        };
-    };
     let mut conv = Conv {
         h1: None,
         doc: LegacyDoc::default(),
     };
+    // markdown-rs is effectively infallible for CommonMark; a
+    // failure degrades to an empty doc rather than panicking
+    let ast = mdx::parse(&src).unwrap_or(Node::Root(Root {
+        children: Vec::new(),
+        position: None,
+    }));
     let blocks = ast.children().into_iter().flatten().collect::<Vec<_>>();
     for (i, block) in blocks.iter().enumerate() {
         match block {
@@ -221,11 +219,8 @@ fn collapse_ws(s: &str) -> String {
 /// the title (`·` isn't emittable, so the separator becomes ` - `).
 /// `None` ⇐ the item is `status:done`.
 fn parse_item_text(text: &str) -> Option<LegacyItem> {
-    let text = text.trim();
-    if text.is_empty() {
-        return None;
-    }
-    let mut parts = text.split('·');
+    // callers only hand in non-empty collapsed text
+    let mut parts = text.trim().split('·');
     let head = parts.next().unwrap_or_default().trim();
     let mut head_parts = head.splitn(2, char::is_whitespace);
     let first = head_parts.next().unwrap_or_default();
@@ -443,5 +438,48 @@ mod tests {
         assert_eq!(doc.sections.len(), 2);
         assert_eq!(doc.sections[0].name.as_deref(), Some("deep"));
         assert_eq!(doc.sections[1].name.as_deref(), Some("second h1"));
+    }
+
+    #[test]
+    fn non_item_blocks_and_inline_nodes_are_skipped() {
+        // code blocks, rules and html blocks aren't sections/items
+        let src = "# TODO — x\n\n```rust\nlet x = 1;\n```\n\n---\n\n<div>html</div>\n\n- one\n";
+        let (_r, doc) = parse_legacy_todo(src, "x");
+        let titles: Vec<_> = doc.items().map(|i| i.item.title.as_str()).collect();
+        assert_eq!(titles, ["one"]);
+    }
+
+    #[test]
+    fn inline_markup_flattens() {
+        // `~~` isn't enabled so it stays literal; hard breaks and
+        // childless inline nodes (images) drop out
+        let src = "# TODO — x\n\n- a ~~gone~~ `code` ![alt](i.png) two\\\n  wrapped\n";
+        let (_r, doc) = parse_legacy_todo(src, "x");
+        let t = &doc.items().next().unwrap().item.title;
+        assert_eq!(t, "a ~~gone~~ code two wrapped");
+    }
+
+    #[test]
+    fn token_edges() {
+        // `created:` is honored
+        let src = "# TODO — x\n\n- T-004 t · created:2024-01-02\n";
+        let (_r, doc) = parse_legacy_todo(src, "x");
+        let i = doc.items().next().unwrap();
+        assert!(i.item.created.is_some());
+        // bad status isn't `done` — the token folds into the title
+        let src = "# TODO — x\n\n- x · status:bogus\n";
+        let (_r, doc) = parse_legacy_todo(src, "x");
+        let i = doc.items().next().unwrap();
+        assert!(i.item.title.contains("status:bogus"), "{}", i.item.title);
+        // unparseable blocks entries drop the token (parsed ids
+        // already landed) — it folds into the title
+        let src = "# TODO — x\n\n- x · blocks:NOPE,T-001\n";
+        let (_r, doc) = parse_legacy_todo(src, "x");
+        let i = doc.items().next().unwrap();
+        assert!(
+            i.item.title.contains("blocks:NOPE,T-001"),
+            "{}",
+            i.item.title
+        );
     }
 }

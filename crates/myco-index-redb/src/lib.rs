@@ -277,4 +277,40 @@ mod tests {
         assert!(matches!(i.repos(), Err(Error::Codec(_))));
         assert!(matches!(i.register(&entry("x")), Err(Error::Codec(_))));
     }
+
+    #[test]
+    fn data_dir_falls_back_to_home_then_dot() {
+        let d = tempfile::tempdir().unwrap();
+        let home = d.path().to_str().unwrap();
+        // no MYCO_HOME/XDG → ~/.local/share/myco
+        temp_env::with_vars(
+            [
+                ("MYCO_HOME", None::<&str>),
+                ("XDG_DATA_HOME", None::<&str>),
+                ("HOME", Some(home)),
+            ],
+            || {
+                assert_eq!(data_dir(), d.path().join(".local/share/myco"));
+            },
+        );
+        // HOME unset too → ./.local/share/myco
+        temp_env::with_vars(
+            [
+                ("MYCO_HOME", None::<&str>),
+                ("XDG_DATA_HOME", None::<&str>),
+                ("HOME", None::<&str>),
+            ],
+            || {
+                assert_eq!(data_dir(), PathBuf::from("./.local/share/myco"));
+            },
+        );
+    }
+
+    #[test]
+    fn unreadable_registry_is_io_error() {
+        let (_d, i) = idx();
+        // repos.toml as a directory — exists but can't be read
+        std::fs::create_dir(i.registry_path()).unwrap();
+        assert!(matches!(i.repos(), Err(Error::Io(_))));
+    }
 }

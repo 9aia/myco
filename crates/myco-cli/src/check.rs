@@ -283,13 +283,11 @@ fn transform_file(
             }
         }
     }
-    if let Some(src) = read(wt, read_rel) {
-        if let Some(new) = f(&src) {
-            fixes.push(Fix::Write {
-                rel: write_rel.to_string(),
-                contents: new,
-            });
-        }
+    if let Some(new) = read(wt, read_rel).and_then(|src| f(&src)) {
+        fixes.push(Fix::Write {
+            rel: write_rel.to_string(),
+            contents: new,
+        });
     }
 }
 
@@ -544,10 +542,11 @@ fn analyze(wt: &Path) -> Analysis {
     }
 
     // --- item dirs --------------------------------------------------
-    for kind in FILE_KINDS {
-        let Some(dir_name) = myco_store_md::item_dir(kind) else {
-            continue;
-        };
+    // FILE_KINDS is all file-backed, so item_dir never yields None
+    for (kind, dir_name) in FILE_KINDS
+        .into_iter()
+        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
+    {
         let dir = wt.join(dir_name);
         if !dir.is_dir() {
             a.findings.push(Finding::at(
@@ -664,9 +663,8 @@ fn analyze(wt: &Path) -> Analysis {
                         });
                     match moved {
                         Some((id, file)) => {
-                            let Some(dir2) = myco_store_md::item_dir(id.kind()) else {
-                                continue;
-                            };
+                            // parsed under id.kind() → file-backed
+                            let dir2 = myco_store_md::item_dir(id.kind()).unwrap_or("");
                             let to = myco_store_md::item_filename(&id, &file.meta.title)
                                 .map(|f| format!("{dir2}/{f}"))
                                 .unwrap_or_else(|| rel.clone());
@@ -696,10 +694,10 @@ fn analyze(wt: &Path) -> Analysis {
     // archived item files keep their ids — a handoff for an
     // archived item isn't orphaned (filenames only; cold storage
     // isn't parsed or normalized)
-    for kind in FILE_KINDS {
-        let Some(dir_name) = myco_store_md::item_dir(kind) else {
-            continue;
-        };
+    for (kind, dir_name) in FILE_KINDS
+        .into_iter()
+        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
+    {
         let adir = wt.join(dir_name).join("archive");
         let names: Vec<String> = match std::fs::read_dir(&adir) {
             Ok(rd) => rd
@@ -874,49 +872,41 @@ fn analyze(wt: &Path) -> Analysis {
             }
             let mut nf = cand.file.clone();
             nf.meta.id = w;
-            let new_rel = myco_store_md::item_dir(w.kind()).and_then(|d| {
-                myco_store_md::item_filename(&w, &nf.meta.title).map(|f| format!("{d}/{f}"))
+            // `w` is a file kind and emit can't fail on a file that
+            // parsed — the renumber always has a destination
+            let to = myco_store_md::item_dir(w.kind())
+                .and_then(|d| {
+                    myco_store_md::item_filename(&w, &nf.meta.title).map(|f| format!("{d}/{f}"))
+                })
+                .unwrap_or_else(|| cand.rel.clone());
+            let text = myco_store_md::emit_item_file(&nf).unwrap_or_default();
+            a.findings.push(Finding::at(
+                &cand.rel,
+                "id-title-mismatch",
+                format!(
+                    "title says {w} but id is {} — renumber to {w}",
+                    cand.current
+                ),
+                true,
+            ));
+            // filename/emit-drift fixes against the old id
+            // are superseded by the renumber
+            a.fixes.retain(|f| {
+                !matches!(f, Fix::Rename { from, .. } if *from == cand.rel)
+                    && !matches!(f, Fix::Write { rel: r, .. } if *r == cand.rel || *r == cand.old_target)
             });
-            match (new_rel, myco_store_md::emit_item_file(&nf)) {
-                (Some(to), Ok(text)) => {
-                    a.findings.push(Finding::at(
-                        &cand.rel,
-                        "id-title-mismatch",
-                        format!(
-                            "title says {w} but id is {} — renumber to {w}",
-                            cand.current
-                        ),
-                        true,
-                    ));
-                    // filename/emit-drift fixes against the old id
-                    // are superseded by the renumber
-                    a.fixes.retain(|f| {
-                        !matches!(f, Fix::Rename { from, .. } if *from == cand.rel)
-                            && !matches!(f, Fix::Write { rel: r, .. } if *r == cand.rel || *r == cand.old_target)
-                    });
-                    a.fixes.push(Fix::Rename {
-                        from: cand.rel.clone(),
-                        to: to.clone(),
-                    });
-                    a.fixes.push(Fix::Write {
-                        rel: to.clone(),
-                        contents: text,
-                    });
-                    granted.insert(w);
-                    winners.insert(cand.rel.clone());
-                    renames.insert(cand.rel.clone(), to);
-                    id_map.insert(cand.current, w);
-                }
-                _ => a.findings.push(Finding::at(
-                    &cand.rel,
-                    "id-title-mismatch",
-                    format!(
-                        "title says {w} but id is {} — renumber manually",
-                        cand.current
-                    ),
-                    false,
-                )),
-            }
+            a.fixes.push(Fix::Rename {
+                from: cand.rel.clone(),
+                to: to.clone(),
+            });
+            a.fixes.push(Fix::Write {
+                rel: to.clone(),
+                contents: text,
+            });
+            granted.insert(w);
+            winners.insert(cand.rel.clone());
+            renames.insert(cand.rel.clone(), to);
+            id_map.insert(cand.current, w);
         }
         // Repoint what referenced the renumbered ids — structured
         // refs only: index paths, `blocks:`/`supersedes` frontmatter
@@ -1033,9 +1023,9 @@ fn apply_fixes(wt: &Path, fixes: &[Fix]) -> Result<usize, String> {
     for f in fixes {
         if let Fix::Rename { from, to } = f {
             let (from, to) = (wt.join(from), wt.join(to));
-            if let Some(p) = to.parent() {
-                std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
-            }
+            to.parent()
+                .map_or(Ok(()), std::fs::create_dir_all)
+                .map_err(|e| e.to_string())?;
             std::fs::rename(&from, &to)
                 .map_err(|e| format!("rename {} → {}: {e}", from.display(), to.display()))?;
             n += 1;
@@ -1323,5 +1313,319 @@ mod tests {
             frontmatter_id("+++\nidentifier = \"I-2\"\nid = \"I-1\"\n+++\n"),
             Some(ItemId::new(ItemKind::Issue, 1))
         );
+    }
+
+    // ---- analyze() over tempdir worktrees ----
+
+    fn write(wt: &Path, rel: &str, src: &str) {
+        let p = wt.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, src).unwrap();
+    }
+
+    fn write_bytes(wt: &Path, rel: &str, src: &[u8]) {
+        let p = wt.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, src).unwrap();
+    }
+
+    fn codes(a: &Analysis) -> Vec<&'static str> {
+        a.findings.iter().map(|f| f.code).collect()
+    }
+
+    #[test]
+    fn analyze_empty_worktree_reports_everything_missing() {
+        let d = tempfile::tempdir().unwrap();
+        let a = analyze(d.path());
+        assert!(codes(&a).contains(&"missing-file"));
+        // every scaffold piece got a repair
+        for rel in [
+            "meta.toml",
+            "TODO.md",
+            "BACKLOG.md",
+            "index.md",
+            "handoffs/.gitkeep",
+        ] {
+            assert!(
+                a.fixes
+                    .iter()
+                    .any(|f| matches!(f, Fix::Write { rel: r, .. } if r == rel)),
+                "no write fix for {rel}"
+            );
+        }
+        assert!(a
+            .findings
+            .iter()
+            .any(|f| f.msg.contains("meta.toml missing")));
+    }
+
+    #[test]
+    fn analyze_meta_parse_error_is_unfixable() {
+        let d = tempfile::tempdir().unwrap();
+        write(d.path(), "meta.toml", "name = [unclosed\n");
+        let a = analyze(d.path());
+        let f = a
+            .findings
+            .iter()
+            .find(|f| f.file == "meta.toml" && f.code == "parse")
+            .expect("parse finding");
+        assert!(!f.fixable);
+        assert!(f.rendered.is_some());
+        // meta_ok false → no counter reconciliation, no meta write
+        assert!(!a
+            .fixes
+            .iter()
+            .any(|f| matches!(f, Fix::Write { rel, .. } if rel == "meta.toml")));
+    }
+
+    #[test]
+    fn analyze_drift_done_and_stray_files() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        // canonical meta via emit — no drift there
+        let meta = ProjectMeta::new("x");
+        write(wt, "meta.toml", &myco_store_md::emit_meta(&meta).unwrap());
+        // a done line → done-item finding + strip fix (the line
+        // itself isn't strict-parseable — the raw scan finds it)
+        let todo = myco_store_md::emit_todo(&myco_core::TodoDoc::new("x")).unwrap();
+        write(wt, "TODO.md", &format!("{todo}- [x] T-009 done\n"));
+        // parseable but uncanonical (token order) → emit-drift;
+        // plus a done line → done-item finding
+        let mut bdoc = myco_core::BacklogDoc::default();
+        bdoc.sections.push(myco_core::Section {
+            name: Some("s".into()),
+            items: vec![Item::new(ItemId::new(ItemKind::Task, 1), "x")
+                .status(myco_core::Status::Deferred)
+                .priority(myco_core::Priority::High)],
+        });
+        let canon = myco_store_md::emit_backlog(&bdoc).unwrap();
+        let line = canon.lines().find(|l| l.starts_with("- ")).unwrap();
+        // `status:deferred` is implicit in BACKLOG — writing it
+        // explicitly parses to the same doc but emits differently
+        let drifted = canon.replace(line, &format!("{line} · status:deferred"));
+        write(wt, "BACKLOG.md", &drifted);
+        write(wt, "index.md", "# x\n");
+        // item dir: a stray non-md, a non-utf8 file, a parse
+        // failure, and a file that belongs to a different kind
+        write(wt, "adrs/notes.txt", "not an item\n");
+        write_bytes(wt, "adrs/noutf8.md", &[0xff, 0xfe, 0x00]);
+        write(wt, "adrs/garbage.md", "# Garbage body heading\n");
+        // parses cleanly; fm title claims nothing, but the body
+        // heading claims ADR-0009 — exercises body_heading via
+        // title_claim (a renumber candidate)
+        write(
+            wt,
+            "adrs/0008-plain.md",
+            "+++\nid = \"ADR-0008\"\ntitle = \"plain title\"\nstatus = \"open\"\n+++\n\n#\nADR-0009: plain\n",
+        );
+        write(
+            wt,
+            "adrs/misplaced.md",
+            "+++\nid = \"I-001\"\ntitle = \"real issue\"\nstatus = \"open\"\n+++\n\nbody\n",
+        );
+        write(wt, "handoffs/.gitkeep", "");
+        // a non-utf8 handoff file → read() fails → skipped
+        write_bytes(wt, "handoffs/T-001.md", &[0xff, 0x00]);
+        let a = analyze(wt);
+        let cs = codes(&a);
+        assert!(cs.contains(&"emit-drift"), "{cs:?}");
+        assert!(cs.contains(&"done-item"), "{cs:?}");
+        assert!(cs.contains(&"unexpected-file"), "{cs:?}");
+        assert!(cs.contains(&"parse"), "{cs:?}");
+        assert!(
+            a.findings.iter().any(|f| f.msg.contains("belongs to")),
+            "{cs:?}"
+        );
+        assert!(a.fixes.iter().any(|f| matches!(f, Fix::StripDone { .. })));
+        assert!(a
+            .fixes
+            .iter()
+            .any(|f| matches!(f, Fix::Rename { from, .. } if from == "adrs/misplaced.md")));
+        // counter reconciliation sees the adopted I-001
+        assert!(a.findings.iter().any(|f| f.code == "counter-behind"));
+    }
+
+    #[test]
+    fn analyze_todo_emit_drift() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        let meta = ProjectMeta::new("x");
+        write(wt, "meta.toml", &myco_store_md::emit_meta(&meta).unwrap());
+        // parseable but uncanonical — explicit `status:open` is
+        // implicit in TODO.md and gets stripped on re-emit
+        write(wt, "TODO.md", "# TODO — x\n\n- [ ] T-001 x · status:open\n");
+        write(
+            wt,
+            "BACKLOG.md",
+            &myco_store_md::emit_backlog(&myco_core::BacklogDoc::default()).unwrap(),
+        );
+        write(wt, "index.md", "# x\n");
+        let a = analyze(wt);
+        assert!(a.findings.iter().any(|f| f.code == "emit-drift"));
+        assert!(a
+            .fixes
+            .iter()
+            .any(|f| matches!(f, Fix::Write { rel, .. } if rel == "TODO.md")));
+    }
+
+    #[test]
+    fn analyze_unreadable_dirs_are_empty_not_errors() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        write(wt, "meta.toml", "name = \"x\"\n\n[next]\n");
+        write(wt, "TODO.md", "# TODO — x\n");
+        write(wt, "BACKLOG.md", "# Backlog\n");
+        write(wt, "index.md", "# x\n");
+        for dir in ["adrs", "handoffs"] {
+            std::fs::create_dir_all(wt.join(dir)).unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(wt.join(dir), std::fs::Permissions::from_mode(0o000))
+                    .unwrap();
+            }
+        }
+        let a = analyze(wt);
+        // unreadable dirs yield no findings and no crash
+        #[cfg(unix)]
+        for dir in ["adrs", "handoffs"] {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(wt.join(dir), std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        assert!(!a.findings.iter().any(
+            |f| f.file == "adrs" || f.file.starts_with("adrs/") && f.code == "unexpected-file"
+        ));
+    }
+
+    /// One file claiming a new number while another item blocks
+    /// the old id — exercises the renumber + repoint machinery.
+    #[test]
+    fn analyze_renumber_wins_and_repoints_pending_writes() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        write(wt, "meta.toml", "name = \"x\"\n\n[next]\nadr = 3\n");
+        write(wt, "TODO.md", "# TODO — x\n");
+        write(wt, "BACKLOG.md", "# Backlog\n");
+        write(wt, "index.md", "# x\n[adr](adrs/0003-three.md)\n");
+        write(wt, "handoffs/ADR-0003.md", "+++\nitem = \"ADR-0003\"\n+++\n\n# Handoffs — ADR-0003\n\n## 2026-01-01 · devin\nnote\n");
+        // title + heading both claim ADR-0001; filename also drifts
+        write(
+            wt,
+            "adrs/0003-three.md",
+            "+++\nid = \"ADR-0003\"\ntitle = \"ADR-0001: First\"\nstatus = \"open\"\n+++\n\n# ADR-0001: First\n\nbody\n",
+        );
+        // non-canonical frontmatter order → emit-drift pending
+        // Write; blocks: the renumbered id → repoint must edit the
+        // pending write, not the file on disk
+        write(
+            wt,
+            "adrs/0002-two.md",
+            "+++\ntitle = \"two\"\nstatus = \"open\"\nblocks = [\"ADR-0003\"]\nid = \"ADR-0002\"\n+++\n\nbody\n",
+        );
+        let a = analyze(wt);
+        assert!(a
+            .findings
+            .iter()
+            .any(|f| f.code == "id-title-mismatch" && f.fixable));
+        // the renumber supersedes the filename fix on the same file
+        assert!(a
+            .fixes
+            .iter()
+            .any(|f| matches!(f, Fix::Rename { from, to } if from == "adrs/0003-three.md" && to.starts_with("adrs/0001-"))));
+        // the pending drift Write for 0002 was repointed in place
+        let w = a
+            .fixes
+            .iter()
+            .find_map(|f| match f {
+                Fix::Write { rel, contents } if rel == "adrs/0002-two.md" => Some(contents),
+                _ => None,
+            })
+            .expect("write fix for 0002");
+        assert!(w.contains("\"ADR-0001\""), "{w}");
+        // index.md repoint queued (as a Write — it exists on disk)
+        assert!(a
+            .fixes
+            .iter()
+            .any(|f| matches!(f, Fix::Write { rel, .. } if rel == "index.md")));
+        // handoff renamed + repointed
+        assert!(a.fixes.iter().any(|f| matches!(
+            f,
+            Fix::Rename { from, to } if from == "handoffs/ADR-0003.md" && to == "handoffs/ADR-0001.md"
+        )));
+    }
+
+    #[test]
+    fn analyze_renumber_collisions_report_manually() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        write(wt, "meta.toml", "name = \"x\"\n\n[next]\nadr = 4\n");
+        write(wt, "TODO.md", "# TODO — x\n");
+        write(wt, "BACKLOG.md", "# Backlog\n");
+        write(wt, "index.md", "# x\n");
+        write(wt, "handoffs/.gitkeep", "");
+        // two files claim ADR-0001 — the first wins, the second
+        // reports a manual finding
+        write(
+            wt,
+            "adrs/0003-a.md",
+            "+++\nid = \"ADR-0003\"\ntitle = \"ADR-0001: A\"\nstatus = \"open\"\n+++\n\nbody\n",
+        );
+        write(
+            wt,
+            "adrs/0004-b.md",
+            "+++\nid = \"ADR-0004\"\ntitle = \"ADR-0001: B\"\nstatus = \"open\"\n+++\n\nbody\n",
+        );
+        // ADR-0002 is held — a claim on it can't be granted
+        write(
+            wt,
+            "adrs/0005-c.md",
+            "+++\nid = \"ADR-0005\"\ntitle = \"ADR-0002: C\"\nstatus = \"open\"\n+++\n\nbody\n",
+        );
+        write(
+            wt,
+            "adrs/0002-held.md",
+            "+++\nid = \"ADR-0002\"\ntitle = \"held\"\nstatus = \"open\"\n+++\n\nbody\n",
+        );
+        let a = analyze(wt);
+        let msgs: Vec<&str> = a
+            .findings
+            .iter()
+            .filter(|f| f.code == "id-title-mismatch" && !f.fixable)
+            .map(|f| f.msg.as_str())
+            .collect();
+        assert!(
+            msgs.iter().any(|m| m.contains("takes ADR-0001 first")),
+            "{msgs:?}"
+        );
+        assert!(msgs.iter().any(|m| m.contains("is held by")), "{msgs:?}");
+    }
+
+    #[test]
+    fn run_on_prints_findings_in_human_mode() {
+        let d = tempfile::tempdir().unwrap();
+        let proj = Project {
+            root: d.path().to_path_buf(),
+            worktree: d.path().to_path_buf(),
+        };
+        // human mode on a broken worktree → findings + fixable hint
+        assert_eq!(run_on(&proj, false, false, true).unwrap(), 1);
+        // --fix repairs the whole missing-scaffold set → clean
+        assert_eq!(run_on(&proj, true, false, true).unwrap(), 0);
+        // and json output agrees
+        assert_eq!(run_on(&proj, false, true, true).unwrap(), 0);
+    }
+
+    #[test]
+    fn apply_fixes_errors_on_blocked_target() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        std::fs::write(wt.join("a.md"), "x").unwrap();
+        // a regular file where the rename's parent dir must go
+        std::fs::write(wt.join("blocker"), "x").unwrap();
+        let fixes = vec![Fix::Rename {
+            from: "a.md".into(),
+            to: "blocker/b.md".into(),
+        }];
+        assert!(apply_fixes(wt, &fixes).is_err());
     }
 }

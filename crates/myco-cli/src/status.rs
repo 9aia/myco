@@ -174,6 +174,18 @@ mod tests {
     }
 
     #[test]
+    fn prompt_block_no_open_items() {
+        // in-progress/blocked but nothing open → no "open:" section
+        let v = vec![
+            Item::new(ItemId::new(ItemKind::Task, 1), "wip").status(Status::InProgress),
+            Item::new(ItemId::new(ItemKind::Task, 2), "stuck").status(Status::Blocked),
+        ];
+        let block = prompt_block(&scan_with(v));
+        assert!(block.contains("in-progress:"), "{block}");
+        assert!(!block.contains("open:"), "{block}");
+    }
+
+    #[test]
     fn digest_json_shape() {
         let s = scan_with(vec![
             Item::new(ItemId::new(ItemKind::Task, 1), "x").status(Status::Blocked)

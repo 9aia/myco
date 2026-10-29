@@ -104,11 +104,12 @@ impl AdoptClaims {
     /// number itself when free, else the next number neither taken
     /// nor wanted by a remaining adoptee. Returns `(id, collided)`.
     fn claim(&mut self, desired: ItemId) -> (ItemId, bool) {
-        if let Some(c) = self.pending.get_mut(&desired) {
-            *c -= 1;
-            if *c == 0 {
-                self.pending.remove(&desired);
-            }
+        // desired was registered into pending in the claim pass —
+        // or_insert keeps the unreachable unclaimed case honest
+        let c = self.pending.entry(desired).or_insert(1);
+        *c -= 1;
+        if *c == 0 {
+            self.pending.remove(&desired);
         }
         if !self.taken.contains(&desired) {
             self.taken.insert(desired);
@@ -178,9 +179,9 @@ fn migrate_pm(
 ) -> Result<(serde_json::Value, i32), String> {
     let root = discover::repo_root_for(dir, root_hint)?;
     let pm = root.join("pm");
-    if !pm.is_dir() {
-        return Err(format!("migrate: no pm/ dir at {}", root.display()));
-    }
+    // run() only routes here when pm/ exists — a vanish between
+    // the two probes just fails at read_dir below
+    debug_assert!(pm.is_dir(), "migrate_pm without pm/ at {}", root.display());
     // ensure the project worktree exists (init when needed)
     let ensured = init::ensure(dir, Some(&root), no_commit)?;
     let wt = ensured.worktree.clone();
@@ -299,6 +300,14 @@ fn commit_pm_removal(root: &Path, enabled: bool) -> Result<bool, String> {
     if !enabled {
         return Ok(false);
     }
+    // `add -u` errors when pm/ holds no tracked files at all —
+    // untracked leftovers aren't ours to commit
+    if myco_git::git_out(root, &["ls-files", "--", "pm"])
+        .map_err(|e| e.to_string())?
+        .is_empty()
+    {
+        return Ok(false);
+    }
     myco_git::git_out(root, &["add", "-u", "--", "pm"]).map_err(|e| e.to_string())?;
     let dirty = myco_git::git_out(root, &["status", "--porcelain", "--", "pm"])
         .map_err(|e| e.to_string())?;
@@ -383,10 +392,10 @@ fn migrate_project(
         taken: store.all_ids().map_err(|e| e.to_string())?,
         pending: BTreeMap::new(),
     };
-    for kind in FILE_KINDS {
-        let Some(dir_name) = myco_store_md::item_dir(kind) else {
-            continue;
-        };
+    for (kind, dir_name) in FILE_KINDS
+        .into_iter()
+        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
+    {
         let dir = wt.join(dir_name);
         let Ok(read) = std::fs::read_dir(&dir) else {
             continue;
@@ -433,10 +442,10 @@ fn migrate_project(
     }
 
     let mut renames: BTreeMap<String, String> = BTreeMap::new();
-    for kind in FILE_KINDS {
-        let Some(dir_name) = myco_store_md::item_dir(kind) else {
-            continue;
-        };
+    for (kind, dir_name) in FILE_KINDS
+        .into_iter()
+        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
+    {
         let dir = wt.join(dir_name);
         if !dir.is_dir() {
             continue;
@@ -546,6 +555,11 @@ fn adopt_or_normalize(
         store.save_item(&file).map_err(|e| e.to_string())?;
         let canonical = myco_store_md::item_filename(&id, &file.meta.title)
             .map(|f| format!("{}/{}", myco_store_md::item_dir(kind).unwrap_or(""), f));
+        // save_item removes a drifted name only when it can tie it
+        // to the id — a name without a number is ours to clean up
+        if canonical.as_deref() != Some(rel) {
+            let _ = std::fs::remove_file(wt.join(rel));
+        }
         return Ok(canonical.filter(|c| *c != rel));
     }
     // 2) frontmatter id of a different kind → move + re-emit
@@ -633,10 +647,8 @@ pub fn run(
             "myco migrate ({}): {} items, {} ids allocated, {} done dropped",
             out["mode"], out["converted_items"], out["ids_allocated"], out["dropped_done"]
         );
-        if let Some(moves) = out["files_moved"].as_array() {
-            for m in moves {
-                println!("  {} → {}", m["from"], m["to"]);
-            }
+        for m in out["files_moved"].as_array().into_iter().flatten() {
+            println!("  {} → {}", m["from"], m["to"]);
         }
         for f in out["unparsed"].as_array().into_iter().flatten() {
             eprintln!("  unparsed: {f}");
