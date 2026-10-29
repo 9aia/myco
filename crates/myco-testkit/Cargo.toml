@@ -1,0 +1,24 @@
+[package]
+name = "myco-testkit"
+description = "Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+keywords = ["pm", "myco"]
+categories = ["development-tools"]
+
+[dependencies]
+myco-core.workspace = true
+myco-store.workspace = true
+myco-store-md.workspace = true
+proptest.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

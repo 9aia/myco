@@ -8,8 +8,21 @@ repository.workspace = true
 keywords = ["pm", "myco"]
 categories = ["development-tools"]
 
+[features]
+default = []
+# Derive schemars::JsonSchema on the public model — `myco schema`.
+schema = ["dep:schemars"]
+
 [dependencies]
 serde.workspace = true
+thiserror.workspace = true
+time.workspace = true
+schemars = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Self-dep so `cargo test` compiles the `schema` feature code.
+myco-core = { path = ".", features = ["schema"] }
+serde_json.workspace = true
 
 [lints]
 workspace = true

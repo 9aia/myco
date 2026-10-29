@@ -1,0 +1,12 @@
+---
+source: crates/myco-testkit/tests/golden.rs
+expression: out
+---
+name = "myco"
+
+[next]
+t = 13
+i = 4
+p = 3
+adr = 5
+pl = 2

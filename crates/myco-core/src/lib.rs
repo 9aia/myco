@@ -1,10 +1,27 @@
 //! myco-core — pure domain for the PM ledger: item models, ID
 //! registry, state machine, deps. No I/O, no ports.
 //!
-//! Phase-1 bootstrap keeps only the generic primitives carried over
-//! from the bupha anatomy. The real PM domain (numbered slugs,
-//! `open → claimed → in-progress → blocked → done` transitions,
-//! actor IDs) lands in phase 2 — see `project/proposals/v2.md`.
+//! The numbered-slug domain (`T-012`/`ADR-0004` ids, the owned
+//! `open → claimed → in-progress → blocked → done` state machine,
+//! actor IDs, document models, `meta.toml` counters) is file-spec
+//! agnostic — `myco-store-md` owns the markdown grammar.
+
+pub mod actor;
+pub mod date;
+pub mod doc;
+pub mod id;
+pub mod item;
+pub mod meta;
+pub mod priority;
+pub mod status;
+
+pub use actor::{is_valid_actor, Actor, ParseActorError};
+pub use doc::{BacklogDoc, ItemFile, Section, TodoDoc};
+pub use id::{ItemId, ItemKind, ParseItemIdError};
+pub use item::{is_valid_label, Item, ItemMeta};
+pub use meta::{NextCounters, ProjectMeta, Registry};
+pub use priority::{ParsePriorityError, Priority};
+pub use status::{InvalidTransition, ParseStatusError, Status};
 
 use serde::Deserialize;
 use std::collections::VecDeque;

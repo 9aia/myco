@@ -7,6 +7,9 @@ members = [
     "crates/myco-core",
     "crates/myco-git",
     "crates/myco-shell",
+    "crates/myco-store",
+    "crates/myco-store-md",
+    "crates/myco-testkit",
     "xtask",
 ]
 
@@ -29,11 +32,25 @@ myco-config-toml = { path = "crates/myco-config-toml", version = "0.1.0" }
 myco-core = { path = "crates/myco-core", version = "0.1.0" }
 myco-git = { path = "crates/myco-git", version = "0.1.0" }
 myco-shell = { path = "crates/myco-shell", version = "0.1.0" }
+myco-store = { path = "crates/myco-store", version = "0.1.0" }
+myco-store-md = { path = "crates/myco-store-md", version = "0.1.0" }
+myco-testkit = { path = "crates/myco-testkit", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 clap = { version = "4", features = ["derive"] }
 clap-markdown = "0.1.5"
+thiserror = "2"
+time = { version = "0.3", features = ["serde", "parsing", "formatting", "macros"] }
+camino = "1"
+slug = "0.1"
+markdown = "1"
+mdast_util_to_markdown = "0.0.2"
+schemars = "1"
+miette = "7"
+insta = "1"
+proptest = "1"
+tempfile = "3"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
