@@ -57,8 +57,8 @@ fn collect(root: &Path, dir: &Path, out: &mut Vec<String>) {
 /// the canonical grammar can express (see each fn's docs).
 pub mod strat {
     use myco_core::{
-        Actor, BacklogDoc, Item, ItemFile, ItemId, ItemKind, NextCounters, Priority, ProjectMeta,
-        Section, Status, TodoDoc,
+        Actor, BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, NextCounters, Priority,
+        ProjectMeta, Section, Status, TodoDoc,
     };
     use proptest::prelude::*;
     use time::Date;
@@ -213,6 +213,28 @@ pub mod strat {
             .prop_map(|(name, (t, i, p, adr, pl))| ProjectMeta {
                 name,
                 next: NextCounters { t, i, p, adr, pl },
+            })
+    }
+
+    /// A session id — `[a-z0-9:-]{1,12}` (no `·`, no newline).
+    pub fn session() -> impl Strategy<Value = String> {
+        "[a-z0-9:-]{1,12}"
+    }
+
+    /// A `HandoffEntry` — notes are plain text lines (never a `##`
+    /// heading, which the grammar can't carry inside a note).
+    pub fn handoff_entry() -> impl Strategy<Value = HandoffEntry> {
+        (
+            date(),
+            actor(),
+            prop::option::of(session()),
+            prop::collection::vec("[a-z0-9.:]([a-z0-9 .:]{0,38}[a-z0-9.:])?", 0..4),
+        )
+            .prop_map(|(date, actor, session, lines)| HandoffEntry {
+                date,
+                actor,
+                session,
+                note: lines.join("\n"),
             })
     }
 

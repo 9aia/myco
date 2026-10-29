@@ -8,7 +8,7 @@
 
 use std::collections::BTreeSet;
 
-use myco_core::{BacklogDoc, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
+use myco_core::{BacklogDoc, HandoffEntry, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
 
 /// Project-state persistence.
 pub trait Store {
@@ -78,6 +78,31 @@ pub trait Store {
 
     /// Write `index.md` atomically.
     fn save_index(&self, md: &str) -> Result<(), Error>;
+
+    /// `handoffs/<ID>.md` entries — the live file first, then
+    /// `handoffs/archive/`; an empty vec when no file exists.
+    fn read_handoffs(&self, id: ItemId) -> Result<Vec<HandoffEntry>, Error>;
+
+    /// Append an entry to `handoffs/<ID>.md` — created with the
+    /// canonical header when absent; lands under `archive/` when the
+    /// file already lives there. Append-only: existing bytes are
+    /// never rewritten.
+    fn append_handoff(&self, id: ItemId, entry: &HandoffEntry) -> Result<(), Error>;
+
+    /// Every `handoffs/*.md` file (both scopes) — `myco check`
+    /// diffs the live set against item ids to spot orphans.
+    fn list_handoff_files(&self) -> Result<Vec<HandoffFile>, Error>;
+}
+
+/// A `handoffs/*.md` file on disk — the id comes from the filename
+/// (`handoffs/T-001.md`), not the frontmatter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HandoffFile {
+    /// The item the file records handoffs for.
+    pub id: ItemId,
+    /// `true` when it lives under `handoffs/archive/` — cold storage
+    /// for handoffs whose item was removed.
+    pub archived: bool,
 }
 
 /// Port error — impls map their richer errors into these variants;

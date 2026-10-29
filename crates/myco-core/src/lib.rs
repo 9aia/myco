@@ -9,6 +9,7 @@
 pub mod actor;
 pub mod date;
 pub mod doc;
+pub mod handoff;
 pub mod id;
 pub mod item;
 pub mod meta;
@@ -17,6 +18,7 @@ pub mod status;
 
 pub use actor::{is_valid_actor, Actor, ParseActorError};
 pub use doc::{BacklogDoc, ItemFile, Section, TodoDoc};
+pub use handoff::{is_valid_session, HandoffEntry};
 pub use id::{ItemId, ItemKind, ParseItemIdError};
 pub use item::{is_valid_label, Item, ItemMeta};
 pub use meta::{NextCounters, ProjectMeta, Registry};

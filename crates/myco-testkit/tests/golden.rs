@@ -5,8 +5,8 @@
 
 use myco_core::ItemKind;
 use myco_store_md::{
-    emit_backlog, emit_item_file, emit_meta, emit_todo, parse_backlog, parse_item_file, parse_meta,
-    parse_todo,
+    emit_backlog, emit_handoff_file, emit_item_file, emit_meta, emit_todo, parse_backlog,
+    parse_handoff_file, parse_item_file, parse_meta, parse_todo,
 };
 use myco_testkit::{fixture, fixtures_under};
 
@@ -77,5 +77,21 @@ fn item_emit() {
                 "{f}"
             );
         }
+    }
+}
+
+#[test]
+fn handoffs_emit() {
+    for f in fixtures_under("handoffs") {
+        if f.contains("invalid") {
+            continue;
+        }
+        let src = fixture(&f);
+        let (id, entries) = parse_handoff_file(&src, &f).unwrap_or_else(|e| panic!("{f}: {e}"));
+        let out = emit_handoff_file(&id, &entries).unwrap_or_else(|e| panic!("{f}: {e}"));
+        insta::assert_snapshot!(snap_name(&f), out);
+        // idempotent: re-parse re-emits byte-identical
+        let (id2, e2) = parse_handoff_file(&out, &f).unwrap();
+        assert_eq!(emit_handoff_file(&id2, &e2).unwrap(), out, "{f}");
     }
 }

@@ -4,10 +4,10 @@
 use std::collections::BTreeSet;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use myco_core::{BacklogDoc, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
-use myco_store::{Error, Store};
+use myco_core::{BacklogDoc, HandoffEntry, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
+use myco_store::{Error, HandoffFile, Store};
 
-use crate::{backlog, itemfile, meta, todo};
+use crate::{backlog, handoff, itemfile, meta, todo};
 
 /// The subdir of each item dir holding archived (done, shelved)
 /// item files — `issues/archive/issue-NNNN-*.md`.
@@ -278,6 +278,111 @@ impl Store for MdStore {
 
     fn save_index(&self, md: &str) -> Result<(), Error> {
         write_atomic(&self.path("index.md"), md)
+    }
+
+    fn read_handoffs(&self, id: ItemId) -> Result<Vec<HandoffEntry>, Error> {
+        // live file first, then handoffs/archive/ — like item()
+        for archived in [false, true] {
+            let rel = handoff_rel(id, archived);
+            match self.read(&rel) {
+                Ok(src) => {
+                    let (fid, entries) = handoff::parse_handoff_file(&src, &rel)?;
+                    if fid != id {
+                        return Err(Error::Invalid(format!(
+                            "{rel} frontmatter says item = {fid}"
+                        )));
+                    }
+                    return Ok(entries);
+                }
+                Err(Error::NotFound { .. }) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(Vec::new())
+    }
+
+    fn append_handoff(&self, id: ItemId, entry: &HandoffEntry) -> Result<(), Error> {
+        let block = handoff::emit_entry(entry)?;
+        let live = handoff_rel(id, false);
+        let archived = handoff_rel(id, true);
+        // the entry lands wherever the file already lives — an
+        // archived file stays archived; a new file starts live
+        let existing = match self.read(&live) {
+            Ok(src) => Some((live.clone(), src)),
+            Err(Error::NotFound { .. }) => match self.read(&archived) {
+                Ok(src) => Some((archived, src)),
+                Err(Error::NotFound { .. }) => None,
+                Err(e) => return Err(e),
+            },
+            Err(e) => return Err(e),
+        };
+        match existing {
+            Some((rel, src)) => {
+                // validate before appending — a malformed file is an
+                // error, not a pile-on
+                let (fid, _) = handoff::parse_handoff_file(&src, &rel)?;
+                if fid != id {
+                    return Err(Error::Invalid(format!(
+                        "{rel} frontmatter says item = {fid}"
+                    )));
+                }
+                let mut out = src;
+                if !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                out.push('\n');
+                out.push_str(&block);
+                write_atomic(&self.path(&rel), &out)
+            }
+            None => write_atomic(
+                &self.path(&live),
+                &handoff::emit_handoff_file(&id, std::slice::from_ref(entry))?,
+            ),
+        }
+    }
+
+    fn list_handoff_files(&self) -> Result<Vec<HandoffFile>, Error> {
+        let mut out = Vec::new();
+        for archived in [false, true] {
+            let mut dir = self.path(handoff::HANDOFFS_DIR);
+            if archived {
+                dir = dir.join(handoff::HANDOFFS_ARCHIVE);
+            }
+            let read = match std::fs::read_dir(&dir) {
+                Ok(r) => r,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(Error::Io(e)),
+            };
+            for entry in read {
+                let entry = entry.map_err(Error::Io)?;
+                if entry.path().is_dir() {
+                    continue; // `archive/` itself and stray dirs
+                }
+                let name = entry.file_name();
+                let Some(name) = name.to_str() else {
+                    continue;
+                };
+                if let Some(id) = handoff::parse_handoff_filename(name) {
+                    out.push(HandoffFile { id, archived });
+                }
+            }
+        }
+        out.sort_by_key(|h| (h.id, h.archived));
+        Ok(out)
+    }
+}
+
+/// `handoffs/<ID>.md` or `handoffs/archive/<ID>.md`.
+fn handoff_rel(id: ItemId, archived: bool) -> String {
+    let name = handoff::handoff_filename(&id);
+    if archived {
+        format!(
+            "{}/{}/{name}",
+            handoff::HANDOFFS_DIR,
+            handoff::HANDOFFS_ARCHIVE
+        )
+    } else {
+        format!("{}/{name}", handoff::HANDOFFS_DIR)
     }
 }
 
@@ -598,5 +703,136 @@ mod tests {
         assert!(left.is_empty());
         std::fs::set_permissions(sub.as_std_path(), std::fs::Permissions::from_mode(0o755))
             .unwrap();
+    }
+
+    fn entry(note: &str) -> HandoffEntry {
+        HandoffEntry {
+            date: myco_core::date::parse("2026-10-29").unwrap(),
+            actor: myco_core::Actor::new("devin").unwrap(),
+            session: Some("cli:test".into()),
+            note: note.into(),
+        }
+    }
+
+    #[test]
+    fn handoff_append_read_list() {
+        let (_d, s) = store();
+        let t1 = ItemId::new(ItemKind::Task, 1);
+        let i3 = ItemId::new(ItemKind::Issue, 3);
+        // no file → empty vec, not an error
+        assert!(s.read_handoffs(t1).unwrap().is_empty());
+        assert!(s.list_handoff_files().unwrap().is_empty());
+
+        // first append creates the canonical file
+        s.append_handoff(t1, &entry("Done: a. Next: b.")).unwrap();
+        let path = s.root().join("handoffs/T-001.md");
+        let src = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            src,
+            "+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## 2026-10-29 · devin · session:cli:test\nDone: a. Next: b.\n"
+        );
+
+        // second append is append-only — existing bytes untouched
+        let mut e2 = entry("note two");
+        e2.session = None;
+        s.append_handoff(t1, &e2).unwrap();
+        let src2 = std::fs::read_to_string(&path).unwrap();
+        assert!(src2.starts_with(&src), "{src2}");
+        assert_eq!(
+            src2[src.len()..].trim_end(),
+            "\n## 2026-10-29 · devin\nnote two"
+        );
+        let entries = s.read_handoffs(t1).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[1].note, "note two");
+        assert_eq!(entries[1].session, None);
+
+        // a second item gets its own file; list covers both
+        s.append_handoff(i3, &entry("issue note")).unwrap();
+        assert!(s.root().join("handoffs/I-003.md").exists());
+        let files = s.list_handoff_files().unwrap();
+        assert_eq!(
+            files,
+            vec![
+                HandoffFile {
+                    id: t1,
+                    archived: false
+                },
+                HandoffFile {
+                    id: i3,
+                    archived: false
+                },
+            ]
+        );
+        assert_eq!(s.read_handoffs(i3).unwrap()[0].note, "issue note");
+    }
+
+    #[test]
+    fn handoff_append_errors() {
+        let (_d, s) = store();
+        let t1 = ItemId::new(ItemKind::Task, 1);
+        // frontmatter id mismatch
+        std::fs::create_dir_all(s.root().join("handoffs")).unwrap();
+        std::fs::write(
+            s.root().join("handoffs/T-001.md"),
+            "+++\nitem = \"T-002\"\n+++\n\n# Handoffs — T-002\n",
+        )
+        .unwrap();
+        assert!(matches!(s.read_handoffs(t1), Err(Error::Invalid(_))));
+        assert!(matches!(
+            s.append_handoff(t1, &entry("x")),
+            Err(Error::Invalid(_))
+        ));
+        // malformed existing file → parse error, nothing appended
+        std::fs::write(s.root().join("handoffs/T-001.md"), "garbage\n").unwrap();
+        assert!(matches!(
+            s.append_handoff(t1, &entry("x")),
+            Err(Error::Parse { .. })
+        ));
+        // unemittable entry
+        let bad = HandoffEntry {
+            session: Some("a·b".into()),
+            ..entry("x")
+        };
+        assert!(s.append_handoff(t1, &bad).is_err());
+    }
+
+    #[test]
+    fn handoff_archive_scope() {
+        let (_d, s) = store();
+        let t1 = ItemId::new(ItemKind::Task, 1);
+        // a file under handoffs/archive/ is read + listed
+        std::fs::create_dir_all(s.root().join("handoffs/archive")).unwrap();
+        std::fs::write(
+            s.root().join("handoffs/archive/T-001.md"),
+            "+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## 2026-01-01 · luis\nold\n",
+        )
+        .unwrap();
+        let entries = s.read_handoffs(t1).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].actor.as_str(), "luis");
+        let files = s.list_handoff_files().unwrap();
+        assert_eq!(
+            files,
+            vec![HandoffFile {
+                id: t1,
+                archived: true
+            }]
+        );
+        // appending keeps it in the archive scope
+        s.append_handoff(t1, &entry("new note")).unwrap();
+        assert!(!s.root().join("handoffs/T-001.md").exists());
+        assert_eq!(s.read_handoffs(t1).unwrap().len(), 2);
+        // live file wins when both exist
+        std::fs::write(
+            s.root().join("handoffs/T-001.md"),
+            "+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## 2026-02-02 · devin\nlive\n",
+        )
+        .unwrap();
+        assert_eq!(s.read_handoffs(t1).unwrap().len(), 1);
+        let files = s.list_handoff_files().unwrap();
+        assert_eq!(files.len(), 2);
+        assert!(files.iter().any(|f| f.archived));
+        assert!(files.iter().any(|f| !f.archived));
     }
 }

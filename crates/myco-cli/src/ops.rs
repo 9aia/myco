@@ -14,8 +14,8 @@ use myco_core::{BacklogDoc, ProjectMeta, TodoDoc};
 use myco_store::{Error as StoreError, Store};
 use myco_store_md::MdStore;
 
-/// Files `myco init` / `check --fix` scaffold.
-const ITEM_DIRS: [&str; 4] = ["issues", "proposals", "adrs", "plans"];
+/// Dirs `myco init` / `check --fix` scaffold (with `.gitkeep`).
+const SCAFFOLD_DIRS: [&str; 5] = ["issues", "proposals", "adrs", "plans", "handoffs"];
 
 /// `MdStore` rooted at a worktree path.
 pub fn store_at(worktree: &Path) -> Result<MdStore, String> {
@@ -34,7 +34,8 @@ pub fn index_template(name: &str) -> String {
          - [issues/](issues/) — tracked issues, one md file each\n\
          - [proposals/](proposals/) — design proposals (`P-###`)\n\
          - [plans/](plans/) — execution plans (`PL-###`)\n\
-         - [adrs/](adrs/) — architecture decision records (`ADR-####`)\n"
+         - [adrs/](adrs/) — architecture decision records (`ADR-####`)\n\
+         - [handoffs/](handoffs/) — session handoffs (`myco handoff`/`resume`)\n"
     )
 }
 
@@ -60,7 +61,7 @@ pub fn scaffold(store: &MdStore, name: &str) -> Result<Vec<String>, StoreError> 
         store.save_index(&index_template(name))?;
         created.push("index.md".to_string());
     }
-    for dir in ITEM_DIRS {
+    for dir in SCAFFOLD_DIRS {
         let keep = root.join(dir).join(".gitkeep");
         let empty_dir = match std::fs::read_dir(root.join(dir)) {
             Ok(mut it) => it.next().is_none(),

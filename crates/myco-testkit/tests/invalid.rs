@@ -3,7 +3,7 @@
 #![allow(clippy::unwrap_used)]
 
 use myco_core::ItemKind;
-use myco_store_md::{parse_backlog, parse_item_file, parse_meta, parse_todo};
+use myco_store_md::{parse_backlog, parse_handoff_file, parse_item_file, parse_meta, parse_todo};
 use myco_testkit::{fixture, fixtures_under};
 
 #[test]
@@ -32,6 +32,16 @@ fn item_invalid() {
         let src = fixture(&f);
         // kind mismatch is exercised by asking for Issue files
         let err = parse_item_file(&src, ItemKind::Issue, &f).unwrap_err();
+        insta::assert_snapshot!(f.replace('/', "__").replace('.', "_"), err.to_string());
+    }
+}
+
+#[test]
+fn handoffs_invalid() {
+    for f in fixtures_under("handoffs/invalid") {
+        let src = fixture(&f);
+        let err = parse_handoff_file(&src, &f).unwrap_err();
+        assert!(err.line() >= 1 && err.column() >= 1, "{f}: no span");
         insta::assert_snapshot!(f.replace('/', "__").replace('.', "_"), err.to_string());
     }
 }

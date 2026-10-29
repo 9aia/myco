@@ -148,13 +148,15 @@ pub fn run(
     match cmd {
         Cmd::Show { id } => match items::find_item(&store, id)? {
             Some((item, location, body)) => {
+                let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
                 if json_out {
                     crate::ops::print_json(
-                        &json!({"item": item, "location": location, "body": body}),
+                        &json!({"item": item, "location": location, "handoffs": handoffs, "body": body}),
                     );
                 } else {
                     println!("{}", items::compact(&item));
                     println!("  {location}");
+                    println!("  handoffs: {handoffs}");
                     if let Some(body) = &body {
                         if !body.is_empty() {
                             println!();

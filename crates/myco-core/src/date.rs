@@ -17,6 +17,24 @@ pub fn render(d: Date) -> String {
     d.to_string()
 }
 
+/// Serde adapter for a required `Date` — `#[serde(with = "date::req")]`.
+/// Serializes as `"YYYY-MM-DD"`.
+pub mod req {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use time::Date;
+
+    /// Serialize as `"YYYY-MM-DD"`.
+    pub fn serialize<S: Serializer>(d: &Date, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_str(&d.to_string())
+    }
+
+    /// Deserialize a `"YYYY-MM-DD"` string.
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Date, D::Error> {
+        let s = String::deserialize(d)?;
+        super::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 /// Serde adapter for `Option<Date>` — `#[serde(with = "date::opt")]`.
 pub mod opt {
     use serde::{Deserialize, Deserializer, Serializer};
@@ -73,5 +91,23 @@ mod tests {
             r#"{"d":null}"#
         );
         assert!(serde_json::from_str::<W>(r#"{"d":"bogus"}"#).is_err());
+    }
+
+    #[test]
+    fn serde_req() {
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct W {
+            #[serde(with = "req")]
+            d: time::Date,
+        }
+        let json = serde_json::to_string(&W {
+            d: parse("2026-10-29").unwrap(),
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"d":"2026-10-29"}"#);
+        let back: W = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.d, parse("2026-10-29").unwrap());
+        assert!(serde_json::from_str::<W>(r#"{"d":"nope"}"#).is_err());
+        assert!(serde_json::from_str::<W>(r#"{"d":null}"#).is_err());
     }
 }

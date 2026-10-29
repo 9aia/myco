@@ -8,8 +8,8 @@
 //! read the ledger without the skill.
 
 use myco_core::{
-    BacklogDoc, Item, ItemFile, ItemKind, NextCounters, Priority, ProjectMeta, Section, Status,
-    TodoDoc,
+    BacklogDoc, HandoffEntry, Item, ItemFile, ItemKind, NextCounters, Priority, ProjectMeta,
+    Section, Status, TodoDoc,
 };
 use serde_json::json;
 
@@ -59,6 +59,7 @@ pub fn document() -> serde_json::Value {
             "Priority": schema::<Priority>(),
             "ItemKind": schema::<ItemKind>(),
             "ItemId": schema::<myco_core::ItemId>(),
+            "HandoffEntry": schema::<HandoffEntry>(),
         },
         "statuses": Status::ALL.iter().map(|s| s.token()).collect::<Vec<_>>(),
         "priorities": Priority::ALL.iter().map(|p| p.token()).collect::<Vec<_>>(),
@@ -108,6 +109,16 @@ pub fn document() -> serde_json::Value {
                     "id", "title", "status", "created", "owner", "priority",
                     "labels", "blocks", "note", "superseded_by", "supersedes",
                 ],
+            },
+            "handoffs": {
+                "dir": "handoffs/",
+                "file": "<ID>.md — one append-only file per item, uniform across kinds",
+                "pattern": "<PREFIX>-NNN.md (e.g. T-001.md, ADR-0004.md)",
+                "archive": "handoffs/archive/ — files whose item was removed (`check --fix` moves them here)",
+                "frontmatter_keys": ["item"],
+                "title": "# Handoffs — <ID>",
+                "entry": "## <YYYY-MM-DD> · <actor>[ · session:<id>] + freeform note body",
+                "append_only": true,
             },
         },
         "line_grammar": {

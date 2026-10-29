@@ -7,9 +7,9 @@
 //! agents the verbs; `myco manifest`/`myco schema` are the
 //! self-describing surface.
 //!
-//! Phase 5 wires the views — `schema`, `status [--prompt]`,
-//! `board`, `report`, `index`, `org` — plus the `myco-index(-redb)`
-//! derived cache that powers the cross-repo reads.
+//! Phase 6 wires continuity — `handoff`/`resume` over append-only
+//! `handoffs/<ID>.md` files (one per item, any kind); sepia hooks
+//! call them at session boundaries.
 
 use std::path::PathBuf;
 
@@ -20,6 +20,7 @@ mod backlog;
 mod board;
 mod check;
 mod commit;
+mod continuity;
 mod digest;
 mod discover;
 mod indexcmd;
@@ -125,6 +126,34 @@ enum Cmd {
         #[command(subcommand)]
         cmd: itemcmd::Cmd,
     },
+    /// Attach resumable state at session end — appends a dated
+    /// entry to `handoffs/<ID>.md` (any item kind, live or
+    /// archived; append-only).
+    Handoff {
+        /// Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`,
+        /// `PL-NNN`).
+        id: myco_core::ItemId,
+        /// Handoff note — done/next/open. `-` reads stdin.
+        #[arg(long, value_name = "TEXT|-")]
+        note: String,
+        /// Who wrote it (`devin`, `human:luis`, …; default `cli`).
+        #[arg(long)]
+        actor: Option<myco_core::Actor>,
+        /// Session provenance — a sepia session id, `cli:<pid>`,
+        /// any id string.
+        #[arg(long)]
+        session: Option<String>,
+    },
+    /// Minimal context block to restart work on an item — the
+    /// item, `blocks:` dep titles, latest handoffs, open
+    /// checklist. The single-item `status --prompt`.
+    Resume {
+        /// Any item id.
+        id: myco_core::ItemId,
+        /// Only the latest N handoff entries (default 10).
+        #[arg(long)]
+        last: Option<usize>,
+    },
     /// Cheap digest of the work ledger. `--prompt` = token-sized.
     Status {
         /// Render for an agent prompt (minimal tokens).
@@ -185,6 +214,7 @@ fn manifest() -> serde_json::Value {
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board",
+            "handoff", "resume",
         ],
         "notes": "markdown in project/ is canonical; every verb is one \
                   atomic commit on the `project` branch; the redb index \
@@ -219,6 +249,13 @@ fn main() {
         Cmd::Plan { cmd } => plan::run(cmd, dir, root, json, no_commit),
         Cmd::Adr { cmd } => adr::run(cmd, dir, root, json, no_commit),
         Cmd::Item { cmd } => itemcmd::run(cmd, dir, root, json, no_commit),
+        Cmd::Handoff {
+            id,
+            note,
+            actor,
+            session,
+        } => continuity::handoff(id, &note, actor, session, dir, root, json, no_commit),
+        Cmd::Resume { id, last } => continuity::resume(id, last, dir, root, json),
         Cmd::Schema => schema::run(),
         Cmd::Status { prompt } => status::run(dir, root, prompt, json),
         Cmd::Board { md } => board::run(dir, root, md, json),

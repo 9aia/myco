@@ -19,6 +19,18 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "section": "## <name>",
       "title": "# TODO — <repo>"
     },
+    "handoffs": {
+      "append_only": true,
+      "archive": "handoffs/archive/ — files whose item was removed (`check --fix` moves them here)",
+      "dir": "handoffs/",
+      "entry": "## <YYYY-MM-DD> · <actor>[ · session:<id>] + freeform note body",
+      "file": "<ID>.md — one append-only file per item, uniform across kinds",
+      "frontmatter_keys": [
+        "item"
+      ],
+      "pattern": "<PREFIX>-NNN.md (e.g. T-001.md, ADR-0004.md)",
+      "title": "# Handoffs — <ID>"
+    },
     "index.md": {
       "format": "markdown",
       "verbatim": true
@@ -357,6 +369,38 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
         "sections"
       ],
       "title": "BacklogDoc",
+      "type": "object"
+    },
+    "HandoffEntry": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "description": "One `## <date> · <actor>[ · session:<id>]` entry — a dated note\nfrom one actor's session. `session` is provenance only: a sepia\nsession id, `cli:<pid>`, whatever wrote the entry — myco records\nit, never interprets it.",
+      "properties": {
+        "actor": {
+          "description": "Who wrote it — `devin`, `human:luis`, `claude`, …",
+          "type": "string"
+        },
+        "date": {
+          "description": "Entry date — `YYYY-MM-DD` in the `## ` heading.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Freeform note body — done/next/open, verbatim.",
+          "type": "string"
+        },
+        "session": {
+          "description": "Session provenance (`session:<id>` in the heading); absent\nwhen the writer didn't supply one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "date",
+        "actor",
+        "note"
+      ],
+      "title": "HandoffEntry",
       "type": "object"
     },
     "Item": {

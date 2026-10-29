@@ -3,8 +3,8 @@
 #![allow(clippy::unwrap_used)]
 
 use myco_store_md::{
-    emit_backlog, emit_item_file, emit_meta, emit_todo, parse_backlog, parse_item_file, parse_meta,
-    parse_todo,
+    emit_backlog, emit_handoff_file, emit_item_file, emit_meta, emit_todo, parse_backlog,
+    parse_handoff_file, parse_item_file, parse_meta, parse_todo,
 };
 use myco_testkit::strat;
 use proptest::prelude::*;
@@ -47,5 +47,20 @@ proptest! {
     #[test]
     fn item_id_roundtrip(id in strat::item_kind().prop_flat_map(strat::item_id)) {
         prop_assert_eq!(id.to_string().parse::<myco_core::ItemId>().unwrap(), id);
+    }
+
+    #[test]
+    fn handoffs_roundtrip(
+        id in strat::item_kind().prop_flat_map(strat::item_id),
+        entries in prop::collection::vec(strat::handoff_entry(), 0..5),
+    ) {
+        let out = emit_handoff_file(&id, &entries).unwrap();
+        let (back_id, back) = parse_handoff_file(&out, "handoffs/x.md").unwrap();
+        prop_assert_eq!(back_id, id);
+        prop_assert_eq!(&back, &entries);
+        // fixed point: emit(parse(emit)) is byte-identical
+        let (id2, e2) =
+            parse_handoff_file(&emit_handoff_file(&id, &back).unwrap(), "handoffs/x.md").unwrap();
+        prop_assert_eq!(emit_handoff_file(&id2, &e2).unwrap(), out);
     }
 }

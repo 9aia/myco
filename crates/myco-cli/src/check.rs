@@ -32,7 +32,7 @@ pub struct Finding {
     pub col: usize,
     /// Stable machine code — `parse`, `done-item`, `counter-behind`,
     /// `duplicate-id`, `dangling-blocks`, `filename`, `missing-file`,
-    /// `unexpected-file`, `emit-drift`.
+    /// `unexpected-file`, `emit-drift`, `orphan-handoff`.
     pub code: &'static str,
     /// Human/agent-readable message.
     pub msg: String,
@@ -483,6 +483,121 @@ fn analyze(wt: &Path) -> Analysis {
                         }
                         None => a.findings.push(Finding::parse(&e, false)),
                     }
+                }
+            }
+        }
+    }
+
+    // archived item files keep their ids — a handoff for an
+    // archived item isn't orphaned (filenames only; cold storage
+    // isn't parsed or normalized)
+    for kind in FILE_KINDS {
+        let Some(dir_name) = myco_store_md::item_dir(kind) else {
+            continue;
+        };
+        let adir = wt.join(dir_name).join("archive");
+        let names: Vec<String> = match std::fs::read_dir(&adir) {
+            Ok(rd) => rd
+                .flatten()
+                .filter(|e| e.path().is_file())
+                .filter_map(|e| e.file_name().to_str().map(String::from))
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        for name in names {
+            if let Some(id) = myco_store_md::parse_item_filename(kind, &name) {
+                ids.entry(id)
+                    .or_default()
+                    .push(format!("{dir_name}/archive/{name}"));
+            }
+        }
+    }
+
+    // --- handoffs/ ---------------------------------------------------
+    // one append-only file per item; a live file whose item is
+    // gone (done tasks are removed!) goes to handoffs/archive/
+    let hdir = wt.join("handoffs");
+    if !hdir.is_dir() {
+        a.findings.push(Finding::at(
+            "handoffs",
+            "missing-file",
+            "handoffs/ missing — `myco init` creates it",
+            true,
+        ));
+        a.fixes.push(Fix::Write {
+            rel: "handoffs/.gitkeep".into(),
+            contents: String::new(),
+        });
+    } else {
+        for archived in [false, true] {
+            let dir_rel = if archived {
+                "handoffs/archive"
+            } else {
+                "handoffs"
+            };
+            let dir = wt.join(dir_rel);
+            if !dir.is_dir() {
+                continue; // archive/ is created on demand
+            }
+            let mut names: Vec<String> = match std::fs::read_dir(&dir) {
+                Ok(rd) => rd
+                    .flatten()
+                    .filter(|e| e.path().is_file())
+                    .filter_map(|e| e.file_name().to_str().map(String::from))
+                    .collect(),
+                Err(_) => Vec::new(),
+            };
+            names.sort();
+            for name in names {
+                if name.starts_with('.') {
+                    continue; // .gitkeep et al
+                }
+                let rel = format!("{dir_rel}/{name}");
+                if myco_store_md::parse_handoff_filename(&name).is_none() {
+                    a.findings.push(Finding::at(
+                        &rel,
+                        "unexpected-file",
+                        format!("{rel} isn't a handoff file — expected <ID>.md"),
+                        false,
+                    ));
+                    continue;
+                }
+                let Some(src) = read(wt, &rel) else {
+                    continue;
+                };
+                let fid = match myco_store_md::parse_handoff_file(&src, &rel) {
+                    Ok((fid, _)) => fid,
+                    Err(e) => {
+                        a.findings.push(Finding::parse(&e, false));
+                        continue;
+                    }
+                };
+                let canon = myco_store_md::handoff_filename(&fid);
+                if !archived && !ids.contains_key(&fid) {
+                    // the item is gone — the knowledge stays, cold
+                    let to = format!("handoffs/archive/{canon}");
+                    a.findings.push(Finding::at(
+                        &rel,
+                        "orphan-handoff",
+                        format!("{fid} no longer exists — move {rel} to {to}"),
+                        true,
+                    ));
+                    a.fixes.push(Fix::Rename {
+                        from: rel.clone(),
+                        to,
+                    });
+                } else if name != canon {
+                    let to = format!("{dir_rel}/{canon}");
+                    a.findings.push(Finding::at(
+                        &rel,
+                        "filename",
+                        format!("{rel} should be {to} (id/frontmatter mismatch)"),
+                        true,
+                    ));
+                    a.fixes.push(Fix::Rename {
+                        from: rel.clone(),
+                        to,
+                    });
                 }
             }
         }

@@ -29,9 +29,15 @@
 //! Item files: `issues/issue-NNNN-slug.md`,
 //! `proposals/proposal-NNNN-slug.md`, `adrs/NNNN-slug.md`,
 //! `plans/pl-NNNN-slug.md` — `+++` TOML frontmatter + verbatim body.
+//!
+//! Handoff files: `handoffs/<ID>.md` — one append-only file per
+//! item (any kind): `+++ item +++`, `# Handoffs — <ID>` title,
+//! `## <date> · <actor>[ · session:<id>]` entries + verbatim
+//! notes; `handoffs/archive/` holds files whose item was removed.
 
 mod backlog;
 mod error;
+mod handoff;
 mod itemfile;
 mod legacy;
 mod line;
@@ -42,6 +48,10 @@ mod todo;
 
 pub use backlog::{emit_backlog, parse_backlog};
 pub use error::{EmitError, ParseError};
+pub use handoff::{
+    emit_entry, emit_handoff_file, handoff_filename, parse_handoff_file, parse_handoff_filename,
+    HANDOFFS_ARCHIVE, HANDOFFS_DIR,
+};
 pub use itemfile::{emit_item_file, item_dir, item_filename, parse_item_file, parse_item_filename};
 pub use legacy::{parse_legacy_backlog, parse_legacy_todo, LegacyDoc, LegacyItem, LegacySection};
 pub use meta::{emit_meta, parse_meta};
