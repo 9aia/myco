@@ -45,8 +45,11 @@ arch = pathlib.Path("explanation/architecture.md")
 s = arch.read_text()
 table = "| crate | layer | purpose |\n|---|---|---|\n" + "\n".join(
     f"| `{n}` | {l} | {d} |" for n, l, d in rows)
+# Consume every consecutive table row after the marker — the previous
+# form (\n\|…\|\n?)* let a trailing \n? eat the newline the next
+# iteration needed, so each run replaced only one row and duplicated.
 s = re.sub(
-    r"<!-- crate-map -->(?:\n\|[^\n]*\|\n?)*",
+    r"<!-- crate-map -->\n(?:\|[^\n]*\n?)*",
     "<!-- crate-map -->\n" + table + "\n", s, count=1)
 arch.write_text(s)
 
