@@ -4,7 +4,7 @@ layout: home
 hero:
   name: myco
   text: project management, grown not built
-  tagline: a mycorrhizal network for your agents — tasks, signals, handoffs
+  tagline: a mycorrhizal network for your agents — tasks, signals, handoffs, grown not built
   actions:
     - theme: brand
       text: Getting Started
