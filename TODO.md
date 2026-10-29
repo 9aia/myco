@@ -4,7 +4,7 @@
 
 - [x] Bootstrap from bupha — v0 branch, anatomy copy, rename, prune,
       worktrees, `xtask check` green
-- [ ] `myco-core` + `myco-store-md` — models, ID registry, state
+- [x] `myco-core` + `myco-store-md` — models, ID registry, state
       machine, schemas, golden fixtures (markdown-rs + insta)
 - [ ] `myco-git` — `init` / `check` / `migrate` / auto-commit
 - [ ] Item verbs — todo/backlog/issue/proposal/plan/adr + `item set`
