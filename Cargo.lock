@@ -414,14 +414,20 @@ dependencies = [
 name = "myco"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "clap",
  "clap-markdown",
+ "insta",
+ "miette",
  "myco-config",
  "myco-config-toml",
  "myco-core",
  "myco-git",
  "myco-shell",
+ "myco-store",
+ "myco-store-md",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -455,6 +461,10 @@ dependencies = [
 [[package]]
 name = "myco-git"
 version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "thiserror",
+]
 
 [[package]]
 name = "myco-shell"

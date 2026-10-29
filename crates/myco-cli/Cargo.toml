@@ -18,9 +18,17 @@ myco-config.workspace = true
 myco-config-toml.workspace = true
 myco-git.workspace = true
 myco-shell.workspace = true
+myco-store.workspace = true
+myco-store-md.workspace = true
 clap.workspace = true
 clap-markdown.workspace = true
 serde_json.workspace = true
+camino.workspace = true
+miette.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+insta.workspace = true
 
 [lints]
 workspace = true

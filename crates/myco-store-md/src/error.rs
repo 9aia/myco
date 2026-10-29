@@ -6,7 +6,7 @@ use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
 /// A `project/` file that doesn't fit the grammar.
-#[derive(Debug, Error, Diagnostic)]
+#[derive(Debug, Clone, Error, Diagnostic)]
 #[error("{file}:{line}:{column}: {message}")]
 #[diagnostic(code(myco::store::parse))]
 pub struct ParseError {
@@ -65,6 +65,11 @@ impl ParseError {
     /// Error with no precise location — points at the file start.
     pub fn whole_file(file: impl Into<String>, src: String, message: impl Into<String>) -> Self {
         ParseError::at(file, src, 0, 1, message)
+    }
+
+    /// The file this error points at.
+    pub fn file(&self) -> &str {
+        &self.file
     }
 
     /// 1-based line.

@@ -33,6 +33,7 @@
 mod backlog;
 mod error;
 mod itemfile;
+mod legacy;
 mod line;
 mod mdx;
 mod meta;
@@ -42,6 +43,7 @@ mod todo;
 pub use backlog::{emit_backlog, parse_backlog};
 pub use error::{EmitError, ParseError};
 pub use itemfile::{emit_item_file, item_dir, item_filename, parse_item_file, parse_item_filename};
+pub use legacy::{parse_legacy_backlog, parse_legacy_todo, LegacyDoc, LegacyItem, LegacySection};
 pub use meta::{emit_meta, parse_meta};
 pub use store::{write_atomic, MdStore};
 pub use todo::{emit_todo, parse_todo};

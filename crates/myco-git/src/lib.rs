@@ -4,17 +4,133 @@
 //! primitives: the `project` orphan branch + worktree, and one
 //! atomic commit per verb.
 
-use std::path::Path;
-use std::process::Command;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
-/// Run `git -C <repo> <args>`; true on exit status 0.
+/// Run `git -C <repo> <args>`; true on exit status 0. stdout is
+/// silenced — progress chatter (`HEAD is now at …`, commit summaries)
+/// must never pollute a verb's `--json` stream; stderr stays
+/// inherited so failures are still diagnosable.
 pub fn git(repo: &Path, args: &[&str]) -> bool {
     Command::new("git")
         .arg("-C")
         .arg(repo)
         .args(args)
+        .stdout(Stdio::null())
         .status()
         .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// A git invocation that failed, couldn't spawn, or printed non-UTF8.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Non-zero exit — stderr captured for the message.
+    #[error("git {}: {}", args, stderr)]
+    Git {
+        /// The argv after `git -C <repo>` (for context).
+        args: String,
+        /// Trimmed stderr.
+        stderr: String,
+    },
+    /// The `git` binary couldn't be spawned.
+    #[error("git spawn: {0}")]
+    Spawn(#[from] std::io::Error),
+    /// stdout wasn't valid UTF-8.
+    #[error("git output was not utf-8")]
+    Utf8,
+}
+
+/// `git -C <repo> <args>` → trimmed stdout. stdin is `/dev/null` —
+/// plumbing commands that read stdin (`mktree`) get an immediate
+/// EOF instead of blocking on the caller's terminal.
+pub fn git_out(repo: &Path, args: &[&str]) -> Result<String, Error> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(args)
+        .stdin(Stdio::null())
+        .output()?;
+    if !out.status.success() {
+        return Err(Error::Git {
+            args: args.join(" "),
+            stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        });
+    }
+    String::from_utf8(out.stdout)
+        .map(|s| s.trim().to_string())
+        .map_err(|_| Error::Utf8)
+}
+
+/// `git rev-parse --show-toplevel` — the worktree root containing
+/// `start` (`Err` outside a repo).
+pub fn repo_root(start: &Path) -> Result<PathBuf, Error> {
+    git_out(start, &["rev-parse", "--show-toplevel"]).map(PathBuf::from)
+}
+
+/// True when `start` is inside a git work tree.
+pub fn is_git_repo(start: &Path) -> bool {
+    git(start, &["rev-parse", "--is-inside-work-tree"])
+}
+
+/// `refs/heads/<name>` exists.
+pub fn branch_exists(repo: &Path, name: &str) -> bool {
+    git(
+        repo,
+        &[
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{name}"),
+        ],
+    )
+}
+
+/// Create `name` as an orphan branch via plumbing — `mktree` an
+/// empty tree, `commit-tree` a root commit, `update-ref` the branch.
+/// Unlike `git checkout --orphan` this never disturbs the index or
+/// working tree of the current checkout.
+pub fn create_orphan_branch(repo: &Path, name: &str, msg: &str) -> Result<(), Error> {
+    let tree = git_out(repo, &["mktree"])?;
+    let commit = git_out(repo, &["commit-tree", &tree, "-m", msg])?;
+    git_out(
+        repo,
+        &["update-ref", &format!("refs/heads/{name}"), &commit],
+    )?;
+    Ok(())
+}
+
+/// The branch a worktree dir has checked out (`None` when detached
+/// or not a worktree).
+pub fn worktree_branch(dir: &Path) -> Option<String> {
+    git_out(dir, &["rev-parse", "--abbrev-ref", "HEAD"])
+        .ok()
+        .filter(|b| b != "HEAD" && !b.is_empty())
+}
+
+/// The main (first) worktree of the repo `dir` belongs to — i.e.
+/// the repo root when `dir` is a linked worktree like `project/`.
+/// Derived from `--git-common-dir` (`<main>/.git` → `<main>`).
+pub fn main_worktree(dir: &Path) -> Option<PathBuf> {
+    let common = git_out(
+        dir,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .ok()?;
+    let common = PathBuf::from(common);
+    if common.file_name().is_some_and(|n| n == ".git") {
+        common.parent().map(Path::to_path_buf)
+    } else {
+        // bare repo or worktree-of-worktree — no checkout root
+        None
+    }
+}
+
+/// Uncommitted/untracked changes present (`status --porcelain`
+/// non-empty).
+pub fn has_changes(dir: &Path) -> bool {
+    git_out(dir, &["status", "--porcelain"])
+        .map(|s| !s.is_empty())
         .unwrap_or(false)
 }
 
@@ -141,5 +257,82 @@ mod tests {
         assert!(tag(&d, "v0"));
         assert!(tag_exists(&d, "v0"));
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    fn repo() -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        assert!(git(d.path(), &["init", "-q"]));
+        assert!(git(d.path(), &["config", "user.email", "t@t"]));
+        assert!(git(d.path(), &["config", "user.name", "t"]));
+        d
+    }
+
+    #[test]
+    fn git_out_captures_and_errors() {
+        let d = repo();
+        assert_eq!(
+            git_out(d.path(), &["rev-parse", "--is-inside-work-tree"]).unwrap(),
+            "true"
+        );
+        assert_eq!(repo_root(d.path()).unwrap(), d.path());
+        assert!(is_git_repo(d.path()));
+        let e = git_out(d.path(), &["rev-parse", "--verify", "nope"]).unwrap_err();
+        assert!(matches!(e, Error::Git { .. }));
+        assert!(e.to_string().contains("rev-parse"));
+        assert!(!is_git_repo(&tmpdir("not-a-repo")));
+        assert!(repo_root(&tmpdir("not-a-repo-2")).is_err());
+    }
+
+    #[test]
+    fn orphan_branch_is_unborn_root() {
+        let d = repo();
+        // empty repo: no HEAD yet — plumbing still works
+        assert!(!branch_exists(d.path(), "project"));
+        create_orphan_branch(d.path(), "project", "chore: init project ledger").unwrap();
+        assert!(branch_exists(d.path(), "project"));
+        // root commit exists and has no parents
+        let parents = git_out(d.path(), &["rev-list", "--parents", "-n", "1", "project"])
+            .unwrap()
+            .split_whitespace()
+            .count();
+        assert_eq!(parents, 1, "root commit lists only itself");
+        // main checkout untouched: still on the initial branch
+        let head = git_out(d.path(), &["branch", "--show-current"]).unwrap();
+        assert!(head.is_empty() || head != "project");
+    }
+
+    #[test]
+    fn worktree_branch_and_main_worktree() {
+        let d = repo();
+        assert!(commit_all(d.path(), "c0"));
+        create_orphan_branch(d.path(), "project", "init").unwrap();
+        let wt = d.path().join("project");
+        assert!(worktree_add_branch(d.path(), &wt, "project"));
+        assert_eq!(worktree_branch(&wt).as_deref(), Some("project"));
+        assert_eq!(main_worktree(&wt).unwrap(), d.path());
+        // detached checkout reports no branch
+        let scratch = d.path().join("scratch");
+        assert!(worktree_add_detached(d.path(), &scratch, "project"));
+        assert_eq!(worktree_branch(&scratch), None);
+    }
+
+    #[test]
+    fn has_changes_tracks_porcelain() {
+        let d = repo();
+        assert!(!has_changes(d.path()));
+        std::fs::write(d.path().join("f.txt"), "x").unwrap();
+        assert!(has_changes(d.path()));
+        assert!(commit_all(d.path(), "add f"));
+        assert!(!has_changes(d.path()));
+    }
+
+    #[test]
+    fn error_display_variants() {
+        let e = Error::Git {
+            args: "status".into(),
+            stderr: "boom".into(),
+        };
+        assert_eq!(e.to_string(), "git status: boom");
+        assert_eq!(Error::Utf8.to_string(), "git output was not utf-8");
     }
 }
