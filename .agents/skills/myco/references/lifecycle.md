@@ -42,7 +42,7 @@ Auto-detects two modes:
 - `pm/` dir at the repo root → converted into `project/` (inits the
   worktree first when missing), `pm/` deletion committed on main.
 - Files already on the `project` branch → normalized in place:
-  id-less bullets get ids, `[x]`/done lines drop (history keeps
+  id-less `- [ ]` bullets get ids, `[x]`/done lines drop (history keeps
   them), heading-like lines become sections, unfrontmattered files in
   `issues/`/`proposals/`/`plans/`/`adrs/` are adopted (fresh id +
   frontmatter + canonical filename, body kept verbatim), `index.md`
@@ -63,3 +63,7 @@ batches — worktree changes are otherwise left dirty.
 `myco.toml`'s `project_dir` → walk up from cwd for a qualifying
 `project/` → cwd inside the worktree itself. From anywhere inside a
 repo, plain `myco <verb>` just works.
+
+Note: project-mode expects checkbox items — freeform `- ` bullets
+(pm-style) are NOT converted and will error; use pm-mode, or import
+them via `myco todo add`/`myco backlog add` (or `myco absorb`).

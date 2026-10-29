@@ -15,7 +15,7 @@ jobs:
           components: llvm-tools
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-llvm-cov, cargo-nextest
+          tool: cargo-llvm-cov, cargo-nextest, ripgrep
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
