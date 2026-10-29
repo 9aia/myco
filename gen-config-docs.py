@@ -54,8 +54,9 @@ for name in STRUCTS:
 out += [
     "## Constraints", "",
     "- `deny_unknown_fields`: typos in field names fail the load.",
-    "- Search order: `--config` → `$MYCO_CONFIG` → `./myco.toml` →",
-    "  `~/.config/myco/myco.toml`.",
+    "- Search order: `$MYCO_CONFIG` → `./myco.toml` →",
+    "  `~/.config/myco/myco.toml`. The file is optional — no",
+    "  `myco.toml` anywhere just means defaults.",
     ""]
 OUT.write_text("\n".join(out))
 print(f"wrote {OUT}")

@@ -11,6 +11,8 @@ LAYER = {
     "myco": "binary",
     "myco-core": "domain",
     "myco-config": "port",
+    "myco-store": "port",
+    "myco-index": "port",
 }
 
 # workspace members — match `"crates/…"` paths only (not dep paths)

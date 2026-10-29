@@ -8,13 +8,14 @@ export default defineConfig({
   title: "myco",
   description: "project management, grown not built — agent-first PM",
   base: "/myco/",
+  srcExclude: ["README.md"],
   ignoreDeadLinks: [/\/api\//],
   themeConfig: {
     nav: [
       { text: "Getting Started", link: "/getting-started" },
       { text: "Tutorial", link: "/tutorials/first-item" },
-      { text: "How-to", link: "/how-to/handoff" },
-      { text: "Explanation", link: "/explanation/architecture" },
+      { text: "How-to", link: "/how-to/init-repo" },
+      { text: "Explanation", link: "/explanation/worktree-model" },
       { text: "Reference", link: "/reference/cli" },
       {
         text: "LLMs",
@@ -32,9 +33,13 @@ export default defineConfig({
       {
         text: "How-to",
         items: [
+          { text: "Set up myco on a repository", link: "/how-to/init-repo" },
+          { text: "Run the daily agent loop", link: "/how-to/agent-loop" },
           { text: "Hand off work between sessions", link: "/how-to/handoff" },
           { text: "Session continuity with sepia", link: "/how-to/session-continuity" },
-          { text: "Org-wide views", link: "/how-to/org-views" },
+          { text: "Migrate a legacy ledger", link: "/how-to/migrate" },
+          { text: "Import external work", link: "/how-to/import-work" },
+          { text: "See work across repos", link: "/how-to/org-views" },
         ],
       },
       {
@@ -48,6 +53,8 @@ export default defineConfig({
       {
         text: "Explanation",
         items: [
+          { text: "The worktree model", link: "/explanation/worktree-model" },
+          { text: "The ledger file spec", link: "/explanation/file-spec" },
           { text: "Architecture", link: "/explanation/architecture" },
           { text: "Release model", link: "/explanation/release-model" },
         ],
