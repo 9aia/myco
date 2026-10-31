@@ -58,6 +58,7 @@ pub fn run(dir: Option<&Path>, root: Option<&Path>, no_commit: bool) -> Result<(
             match event::read().map_err(|e| e.to_string())? {
                 Event::Key(k) if matches!(k.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
                     if model.key(k)? {
+                        model.save_session();
                         break;
                     }
                 }

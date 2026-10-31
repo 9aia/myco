@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use myco_core::Ledger;
-use myco_core::{Item, ItemId, ItemKind, Status};
+use myco_core::{Item, ItemFile, ItemId, ItemKind, Status};
 use myco_ops::{discover, items};
 use myco_store::Store;
 use myco_store_md::MdStore;
@@ -19,6 +19,10 @@ pub enum Board {
     Todo,
     /// `BACKLOG.md` — deferred items.
     Backlog,
+    /// File-backed kinds — `issues/`/`proposals/`/`plans/`/`adrs/`,
+    /// grouped under kind headers. Read-only for now: task verbs
+    /// (`done`/`defer`/…) don't apply here.
+    Files,
 }
 
 impl Board {
@@ -27,11 +31,12 @@ impl Board {
         match self {
             Board::Todo => "TODO",
             Board::Backlog => "BACKLOG",
+            Board::Files => "ITEMS",
         }
     }
 
-    /// Tab order for `h`/`l` and the `1`/`2` jumps.
-    pub const ALL: [Board; 2] = [Board::Todo, Board::Backlog];
+    /// Tab order for `h`/`l` and the `1`/`2`/`3` jumps.
+    pub const ALL: [Board; 3] = [Board::Todo, Board::Backlog, Board::Files];
 }
 
 /// UI mode — like pm's: the board handles keys differently per mode.
@@ -43,6 +48,9 @@ pub enum Mode {
     Preview,
     /// `a` — typing a new item title; `Enter` commits, `esc` drops.
     Add,
+    /// `/` — live filter over the current board's items; `Enter`
+    /// keeps the filter, `esc` clears it.
+    Filter,
     /// `?` — keybind overlay; `esc`/`?`/`q` closes.
     Help,
 }
@@ -72,10 +80,14 @@ pub struct Model {
     pub mode: Mode,
     /// `a` input buffer.
     pub input: String,
+    /// `/` live filter — narrows visible item rows when non-empty.
+    pub filter: String,
     /// Status-bar message (last action / error).
     pub status: String,
     /// Editor to open on the next loop turn (`E`).
     pub pending_editor: Option<PathBuf>,
+    /// File-backed items for the `Files` board.
+    files: Vec<ItemFile>,
     /// Multi-key prefix: `g` armed for `gg`, `d` for `dd`.
     pending: Option<char>,
 }
@@ -96,12 +108,39 @@ impl Model {
             sel: 0,
             mode: Mode::Normal,
             input: String::new(),
+            filter: String::new(),
             status: String::new(),
             pending_editor: None,
+            files: Vec::new(),
             pending: None,
         };
+        m.load_files();
         m.rebuild_rows();
+        m.restore_session();
         Ok(m)
+    }
+
+    /// Pull file-backed items for the `Files` board.
+    fn load_files(&mut self) {
+        self.files.clear();
+        for kind in [
+            ItemKind::Issue,
+            ItemKind::Proposal,
+            ItemKind::Plan,
+            ItemKind::Adr,
+        ] {
+            if let Ok(mut v) = self.store.list_items(kind) {
+                self.files.append(&mut v);
+            }
+        }
+    }
+
+    /// Body of a file-backed item (preview on the `Files` board).
+    pub fn file_body(&self, id: ItemId) -> Option<&str> {
+        self.files
+            .iter()
+            .find(|f| f.meta.id == id)
+            .map(|f| f.body.as_str())
     }
 
     /// Reload both docs from disk (`R`, post-editor).
@@ -119,18 +158,59 @@ impl Model {
 
     /// Flatten the active board's sections into rows.
     fn rebuild_rows(&mut self) {
-        let sections = match self.board {
-            Board::Todo => &self.ledger.todo.sections,
-            Board::Backlog => &self.ledger.backlog.sections,
-        };
         self.rows.clear();
-        for s in sections {
-            if let Some(name) = &s.name {
-                self.rows.push(Row::Header(name.clone()));
+        match self.board {
+            Board::Files => {
+                for (kind, label) in [
+                    (ItemKind::Issue, "issues"),
+                    (ItemKind::Proposal, "proposals"),
+                    (ItemKind::Plan, "plans"),
+                    (ItemKind::Adr, "adrs"),
+                ] {
+                    let group: Vec<Item> = self
+                        .files
+                        .iter()
+                        .filter(|f| f.meta.id.kind() == kind)
+                        .map(|f| f.meta.clone())
+                        .collect();
+                    if group.is_empty() {
+                        continue;
+                    }
+                    self.rows.push(Row::Header(label.to_string()));
+                    push_items(&group, 0, &mut self.rows);
+                }
             }
-            push_items(&s.items, 0, &mut self.rows);
+            _ => {
+                let sections = match self.board {
+                    Board::Todo => &self.ledger.todo.sections,
+                    Board::Backlog => &self.ledger.backlog.sections,
+                    Board::Files => unreachable!(),
+                };
+                for s in sections {
+                    if let Some(name) = &s.name {
+                        self.rows.push(Row::Header(name.clone()));
+                    }
+                    push_items(&s.items, 0, &mut self.rows);
+                }
+            }
         }
+        self.apply_filter();
         self.sel = self.first_item_row().unwrap_or(0);
+    }
+
+    /// `/` filter — keep only item rows matching the query
+    /// (title/id/labels, case-insensitive); headers drop out.
+    fn apply_filter(&mut self) {
+        if self.filter.is_empty() {
+            return;
+        }
+        let q = self.filter.to_lowercase();
+        self.rows.retain(|r| {
+            matches!(r, Row::Item { item, .. }
+                if item.title.to_lowercase().contains(&q)
+                    || item.id.to_string().to_lowercase().contains(&q)
+                    || item.labels.iter().any(|l| l.to_lowercase().contains(&q)))
+        });
     }
 
     /// After a mutation: land the cursor back on `id` (or the
@@ -169,11 +249,16 @@ impl Model {
         }
     }
 
-    /// The board file for `E`.
+    /// The file `E` opens — the board doc, or the selected item's
+    /// file on the `Files` board.
     fn board_path(&self) -> PathBuf {
         match self.board {
             Board::Todo => self.proj.worktree.join("TODO.md"),
             Board::Backlog => self.proj.worktree.join("BACKLOG.md"),
+            Board::Files => self
+                .selected()
+                .map(|i| self.proj.worktree.join(items::item_rel_path(i)))
+                .unwrap_or_else(|| self.proj.worktree.clone()),
         }
     }
 
@@ -182,6 +267,7 @@ impl Model {
         match self.mode {
             Mode::Preview => return self.key_preview(k),
             Mode::Add => return self.key_add(k),
+            Mode::Filter => return self.key_filter(k),
             Mode::Help => return self.key_help(k),
             Mode::Normal => {}
         }
@@ -194,6 +280,7 @@ impl Model {
             KeyCode::Char('q') => return Ok(true),
             KeyCode::Char('1') => self.switch_board(0),
             KeyCode::Char('2') => self.switch_board(1),
+            KeyCode::Char('3') => self.switch_board(2),
             KeyCode::Char('h') | KeyCode::Left => self.step_board(-1),
             KeyCode::Char('l') | KeyCode::Right => self.step_board(1),
             KeyCode::Char('j') | KeyCode::Down if alt => self.reorder(1),
@@ -209,8 +296,17 @@ impl Model {
             KeyCode::Char('p') => self.promote_selected()?,
             KeyCode::Char(' ') => self.done_selected()?,
             KeyCode::Char('a') => {
-                self.mode = Mode::Add;
-                self.input.clear();
+                if self.board == Board::Files {
+                    self.status = "add is a TODO/BACKLOG op — `myco <kind> new` for files".into();
+                } else {
+                    self.mode = Mode::Add;
+                    self.input.clear();
+                }
+            }
+            KeyCode::Char('/') => self.mode = Mode::Filter,
+            KeyCode::Char('F') => {
+                self.filter.clear();
+                self.rebuild_rows();
             }
             KeyCode::Enter => {
                 if self.selected().is_some() {
@@ -228,6 +324,29 @@ impl Model {
     fn key_preview(&mut self, k: KeyEvent) -> Result<bool, String> {
         match k.code {
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => self.mode = Mode::Normal,
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    /// `/` filter — chars narrow rows live; `Enter` keeps the
+    /// filter set, `esc` clears it.
+    fn key_filter(&mut self, k: KeyEvent) -> Result<bool, String> {
+        match k.code {
+            KeyCode::Esc => {
+                self.filter.clear();
+                self.mode = Mode::Normal;
+                self.rebuild_rows();
+            }
+            KeyCode::Enter => self.mode = Mode::Normal,
+            KeyCode::Backspace => {
+                self.filter.pop();
+                self.rebuild_rows();
+            }
+            KeyCode::Char(c) => {
+                self.filter.push(c);
+                self.rebuild_rows();
+            }
             _ => {}
         }
         Ok(false)
@@ -419,15 +538,18 @@ impl Model {
             .store
             .alloc_id(ItemKind::Task)
             .map_err(|e| e.to_string())?;
+        if self.board == Board::Files {
+            return Err("add is a TODO/BACKLOG op".into());
+        }
         let item = match self.board {
             Board::Todo => Item::new(id, title).created(items::today()),
-            Board::Backlog => Item::new(id, title)
+            _ => Item::new(id, title)
                 .status(Status::Deferred)
                 .created(items::today()),
         };
         match self.board {
             Board::Todo => self.ledger.put_todo(item.clone(), None),
-            Board::Backlog => self.ledger.put_backlog(item.clone(), None),
+            _ => self.ledger.put_backlog(item.clone(), None),
         }
         items::save_ledger(&self.store, &self.ledger)?;
         items::commit(
@@ -439,6 +561,70 @@ impl Model {
         self.rebuild_rows();
         self.reselect(Some(id));
         Ok(())
+    }
+}
+
+/// `$MYCO_HOME` → `$XDG_DATA_HOME/myco` → `~/.local/share/myco` —
+/// same convention as the index.
+fn data_dir() -> PathBuf {
+    if let Some(d) = std::env::var_os("MYCO_HOME") {
+        return PathBuf::from(d);
+    }
+    if let Some(d) = std::env::var_os("XDG_DATA_HOME") {
+        return PathBuf::from(d).join("myco");
+    }
+    PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/myco")
+}
+
+/// Per-repo session file — `<data_dir>/ui/<hash-of-root>.toml`.
+fn session_path(root: &Path) -> PathBuf {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    root.hash(&mut h);
+    data_dir()
+        .join("ui")
+        .join(format!("{:016x}.toml", h.finish()))
+}
+
+impl Model {
+    /// Persist board + selected item for the next launch (`q`).
+    pub fn save_session(&self) {
+        let board = match self.board {
+            Board::Todo => "todo",
+            Board::Backlog => "backlog",
+            Board::Files => "files",
+        };
+        let item = self
+            .selected_id()
+            .map(|i| i.to_string())
+            .unwrap_or_default();
+        let p = session_path(&self.proj.root);
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(p, format!("board = \"{board}\"\nitem = \"{item}\"\n"));
+    }
+
+    /// Reopen on the last board + item (best effort).
+    fn restore_session(&mut self) {
+        let Ok(src) = std::fs::read_to_string(session_path(&self.proj.root)) else {
+            return;
+        };
+        let get = |key: &str| {
+            src.lines()
+                .find_map(|l| l.split_once('=').filter(|(k, _)| k.trim() == key))
+                .map(|(_, v)| v.trim().trim_matches('"').to_string())
+        };
+        self.board = match get("board").as_deref() {
+            Some("backlog") => Board::Backlog,
+            Some("files") => Board::Files,
+            _ => Board::Todo,
+        };
+        self.rebuild_rows();
+        if let Some(id) = get("item").and_then(|s| s.parse::<ItemId>().ok()) {
+            self.reselect(Some(id));
+        }
     }
 }
 
@@ -489,8 +675,10 @@ mod tests {
             sel: 0,
             mode: Mode::Normal,
             input: String::new(),
+            filter: String::new(),
             status: String::new(),
             pending_editor: None,
+            files: Vec::new(),
             pending: None,
         };
         m.rebuild_rows();
@@ -595,6 +783,25 @@ mod tests {
         m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
             .unwrap();
         assert_eq!(m.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn slash_filters_rows_live() {
+        let mut m = model(|l| {
+            l.put_todo(t(1), None);
+            l.put_todo(t(2), None);
+        });
+        m.key(key('/')).unwrap();
+        for c in "t2".chars() {
+            m.key(key(c)).unwrap();
+        }
+        assert_eq!(m.rows.len(), 1);
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+        // esc clears back to the full board
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.rows.len(), 2);
     }
 
     #[test]

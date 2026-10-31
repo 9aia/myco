@@ -234,6 +234,18 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
         )));
         lines.push(Line::from(note.clone()));
     }
+    // File-backed items render their body (pm's note preview).
+    if let Some(body) = m.file_body(item.id) {
+        lines.push(Line::from(""));
+        for l in body.lines() {
+            let style = if l.starts_with('#') {
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            lines.push(Line::from(Span::styled(l.to_string(), style)));
+        }
+    }
     // wrap rather than clip long titles/notes on narrow screens
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }
@@ -241,8 +253,8 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
 /// Normal-mode hint sets, widest first — `pick_hints` takes the
 /// first that fits so narrow terminals degrade instead of cropping.
 const HINTS: [&str; 3] = [
-    "j/k move · 1/2 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · enter preview · E edit · R reload · ? help · q quit",
-    "j/k move · space done · a add · enter · E edit · ? help · q quit",
+    "j/k move · 1/2/3 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · / filter · enter preview · E edit · R reload · ? help · q quit",
+    "j/k move · space done · a add · / filter · enter · E edit · ? help · q quit",
     "? help · q quit",
 ];
 
@@ -251,6 +263,7 @@ const HINTS: [&str; 3] = [
 fn pick_hints(mode: Mode, width: usize) -> &'static str {
     match mode {
         Mode::Add => "enter add · esc cancel",
+        Mode::Filter => "enter keep · esc clear",
         Mode::Preview => "esc back",
         Mode::Help => "esc/?/q close",
         Mode::Normal => HINTS
@@ -262,10 +275,14 @@ fn pick_hints(mode: Mode, width: usize) -> &'static str {
 }
 
 fn draw_status(f: &mut Frame, m: &Model, area: Rect) {
-    if m.mode == Mode::Add {
+    if m.mode == Mode::Add || m.mode == Mode::Filter {
+        let (prompt, buf) = match m.mode {
+            Mode::Add => ("add> ", &m.input),
+            _ => ("/ ", &m.filter),
+        };
         let line = Line::from(vec![
-            Span::styled("add> ", Style::default().fg(ACCENT)),
-            Span::raw(m.input.clone()),
+            Span::styled(prompt, Style::default().fg(ACCENT)),
+            Span::raw(buf.clone()),
             Span::styled("█", Style::default().fg(ACCENT)),
         ]);
         f.render_widget(Paragraph::new(line), area);
@@ -403,10 +420,10 @@ mod tests {
 
     #[test]
     fn tab_labels_shrink_to_initials() {
-        assert_eq!(tab_labels(80), vec![" TODO ", " BACKLOG "]);
-        assert_eq!(tab_labels(18), vec![" TODO ", " BACKLOG "]);
-        assert_eq!(tab_labels(17), vec!["T", "B"]);
-        assert_eq!(tab_labels(2), vec!["T", "B"]);
+        assert_eq!(tab_labels(80), vec![" TODO ", " BACKLOG ", " ITEMS "]);
+        assert_eq!(tab_labels(26), vec![" TODO ", " BACKLOG ", " ITEMS "]);
+        assert_eq!(tab_labels(25), vec!["T", "B", "I"]);
+        assert_eq!(tab_labels(2), vec!["T", "B", "I"]);
     }
 
     #[test]
