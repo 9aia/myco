@@ -40,7 +40,7 @@ pub struct Finding {
     /// Stable machine code — `parse`, `done-item`, `counter-behind`,
     /// `duplicate-id`, `dangling-blocks`, `dangling-ref`, `filename`,
     /// `missing-file`, `unexpected-file`, `emit-drift`,
-    /// `orphan-handoff`, `id-title-mismatch`.
+    /// `orphan-handoff`, `id-title-mismatch`, `unreadable-file`.
     pub code: &'static str,
     /// Human/agent-readable message.
     pub msg: String,
@@ -100,8 +100,22 @@ fn normalize(src: &str) -> String {
     src.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-fn read(wt: &Path, rel: &str) -> Option<String> {
-    std::fs::read_to_string(wt.join(rel)).ok()
+/// A file read — `Missing` only when the path doesn't exist.
+/// Anything else (permissions, non-UTF8) is `Unreadable` so a
+/// file that exists but can't be read is never reported missing
+/// or scaffolded over by `--fix`.
+enum Read {
+    Missing,
+    Ok(String),
+    Unreadable(String),
+}
+
+fn read(wt: &Path, rel: &str) -> Read {
+    match std::fs::read_to_string(wt.join(rel)) {
+        Ok(s) => Read::Ok(s),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Read::Missing,
+        Err(e) => Read::Unreadable(format!("{rel} exists but can't be read: {e}")),
+    }
 }
 
 /// `<KIND>-<digits>` at the start of a title — `ADR-0008: x`,
@@ -286,7 +300,10 @@ fn transform_file(
             }
         }
     }
-    if let Some(new) = read(wt, read_rel).and_then(|src| f(&src)) {
+    if let Some(new) = match read(wt, read_rel) {
+        Read::Ok(src) => f(&src),
+        _ => None,
+    } {
         fixes.push(Fix::Write {
             rel: write_rel.to_string(),
             contents: new,
@@ -520,10 +537,20 @@ fn analyze(wt: &Path) -> Analysis {
     );
     let mut meta_ok = true;
     let mut meta_dirty = false; // missing or drift — needs a write
+                                // a doc that could hold item ids but didn't yield them — parse
+                                // failure or unreadable — makes the id set incomplete: checks
+                                // that assume every id is known (dangling, orphan, renumber)
+                                // must stand down or they'll mint false findings and dup ids
+    let mut ids_incomplete = false;
 
     // --- meta.toml -------------------------------------------------
     match read(wt, "meta.toml") {
-        None => {
+        Read::Unreadable(m) => {
+            a.findings
+                .push(Finding::at("meta.toml", "unreadable-file", m, false));
+            meta_ok = false;
+        }
+        Read::Missing => {
             a.findings.push(Finding::at(
                 "meta.toml",
                 "missing-file",
@@ -532,7 +559,7 @@ fn analyze(wt: &Path) -> Analysis {
             ));
             meta_dirty = true;
         }
-        Some(src) => match myco_store_md::parse_meta(&src) {
+        Read::Ok(src) => match myco_store_md::parse_meta(&src) {
             Ok(m) => {
                 meta = m;
                 if myco_store_md::emit_meta(&meta)
@@ -557,7 +584,12 @@ fn analyze(wt: &Path) -> Analysis {
 
     // --- TODO.md ---------------------------------------------------
     match read(wt, "TODO.md") {
-        None => {
+        Read::Unreadable(m) => {
+            a.findings
+                .push(Finding::at("TODO.md", "unreadable-file", m, false));
+            ids_incomplete = true;
+        }
+        Read::Missing => {
             a.findings.push(Finding::at(
                 "TODO.md",
                 "missing-file",
@@ -572,7 +604,7 @@ fn analyze(wt: &Path) -> Analysis {
                 });
             }
         }
-        Some(src) => {
+        Read::Ok(src) => {
             let done: Vec<(usize, &str)> = src
                 .lines()
                 .enumerate()
@@ -624,7 +656,10 @@ fn analyze(wt: &Path) -> Analysis {
                         }
                     }
                 }
-                Err(e) => a.findings.push(Finding::parse(&e, false)),
+                Err(e) => {
+                    a.findings.push(Finding::parse(&e, false));
+                    ids_incomplete = true;
+                }
             }
             // item titles reference other ids in prose ("see ADR-0008")
             prose.push(ProseRef {
@@ -638,7 +673,12 @@ fn analyze(wt: &Path) -> Analysis {
 
     // --- BACKLOG.md ------------------------------------------------
     match read(wt, "BACKLOG.md") {
-        None => {
+        Read::Unreadable(m) => {
+            a.findings
+                .push(Finding::at("BACKLOG.md", "unreadable-file", m, false));
+            ids_incomplete = true;
+        }
+        Read::Missing => {
             a.findings.push(Finding::at(
                 "BACKLOG.md",
                 "missing-file",
@@ -652,7 +692,7 @@ fn analyze(wt: &Path) -> Analysis {
                 });
             }
         }
-        Some(src) => {
+        Read::Ok(src) => {
             if src.lines().any(is_done_line) {
                 a.findings.push(Finding::at(
                     "BACKLOG.md",
@@ -691,7 +731,10 @@ fn analyze(wt: &Path) -> Analysis {
                         }
                     }
                 }
-                Err(e) => a.findings.push(Finding::parse(&e, false)),
+                Err(e) => {
+                    a.findings.push(Finding::parse(&e, false));
+                    ids_incomplete = true;
+                }
             }
             prose.push(ProseRef {
                 rel: "BACKLOG.md".into(),
@@ -704,7 +747,11 @@ fn analyze(wt: &Path) -> Analysis {
 
     // --- index.md ---------------------------------------------------
     match read(wt, "index.md") {
-        None => {
+        Read::Unreadable(m) => {
+            a.findings
+                .push(Finding::at("index.md", "unreadable-file", m, false));
+        }
+        Read::Missing => {
             a.findings.push(Finding::at(
                 "index.md",
                 "missing-file",
@@ -717,7 +764,7 @@ fn analyze(wt: &Path) -> Analysis {
             });
         }
         // verbatim freeform — the whole file is scannable prose
-        Some(src) => prose.push(ProseRef {
+        Read::Ok(src) => prose.push(ProseRef {
             rel: "index.md".into(),
             zones: vec![(0, src.len())],
             src,
@@ -768,8 +815,15 @@ fn analyze(wt: &Path) -> Analysis {
                 ));
                 continue;
             }
-            let Some(src) = read(wt, &rel) else {
-                continue;
+            let src = match read(wt, &rel) {
+                Read::Ok(s) => s,
+                Read::Unreadable(m) => {
+                    a.findings
+                        .push(Finding::at(&rel, "unreadable-file", m, false));
+                    ids_incomplete = true;
+                    continue;
+                }
+                Read::Missing => continue,
             };
             match myco_store_md::parse_item_file(&src, kind, &rel) {
                 Ok(file) => {
@@ -883,7 +937,10 @@ fn analyze(wt: &Path) -> Analysis {
                                 src,
                             });
                         }
-                        None => a.findings.push(Finding::parse(&e, false)),
+                        None => {
+                            a.findings.push(Finding::parse(&e, false));
+                            ids_incomplete = true;
+                        }
                     }
                 }
             }
@@ -964,8 +1021,14 @@ fn analyze(wt: &Path) -> Analysis {
                     ));
                     continue;
                 }
-                let Some(src) = read(wt, &rel) else {
-                    continue;
+                let src = match read(wt, &rel) {
+                    Read::Ok(s) => s,
+                    Read::Unreadable(m) => {
+                        a.findings
+                            .push(Finding::at(&rel, "unreadable-file", m, false));
+                        continue;
+                    }
+                    Read::Missing => continue,
                 };
                 let fid = match myco_store_md::parse_handoff_file(&src, &rel) {
                     Ok((fid, _)) => fid,
@@ -975,7 +1038,7 @@ fn analyze(wt: &Path) -> Analysis {
                     }
                 };
                 let canon = myco_store_md::handoff_filename(&fid);
-                if !archived && !ids.contains_key(&fid) {
+                if !archived && !ids_incomplete && !ids.contains_key(&fid) {
                     // the item is gone — the knowledge stays, cold
                     let to = format!("handoffs/archive/{canon}");
                     a.findings.push(Finding::at(
@@ -1027,7 +1090,7 @@ fn analyze(wt: &Path) -> Analysis {
     }
     for l in &items {
         for b in &l.item.blocks {
-            if !ids.contains_key(b) {
+            if !ids_incomplete && !ids.contains_key(b) {
                 a.findings.push(Finding::at(
                     &l.loc,
                     "dangling-blocks",
@@ -1040,27 +1103,31 @@ fn analyze(wt: &Path) -> Analysis {
 
     // bare `PREFIX-NNNN` mentions in prose — a stale ref is
     // informational only (unfixable: `--fix` can't know whether
-    // the ref meant a renumbered item, another repo, or history)
-    for p in &prose {
-        let code = myco_store_md::code_spans(&p.src);
-        for (off, id) in id_ref_tokens(&p.src) {
-            if p.self_ids.contains(&id)
-                || !in_zones(off, &p.zones)
-                || in_zones(off, &code)
-                || ids.contains_key(&id)
-            {
-                continue;
+    // the ref meant a renumbered item, another repo, or history).
+    // Skipped when the id set is incomplete: a ref may resolve to
+    // an id hidden in a doc that failed to parse.
+    if !ids_incomplete {
+        for p in &prose {
+            let code = myco_store_md::code_spans(&p.src);
+            for (off, id) in id_ref_tokens(&p.src) {
+                if p.self_ids.contains(&id)
+                    || !in_zones(off, &p.zones)
+                    || in_zones(off, &code)
+                    || ids.contains_key(&id)
+                {
+                    continue;
+                }
+                let (line, col) = line_col(&p.src, off);
+                a.findings.push(Finding {
+                    file: p.rel.clone(),
+                    line,
+                    col,
+                    code: "dangling-ref",
+                    msg: format!("{id} doesn't exist — stale prose reference"),
+                    fixable: false,
+                    rendered: None,
+                });
             }
-            let (line, col) = line_col(&p.src, off);
-            a.findings.push(Finding {
-                file: p.rel.clone(),
-                line,
-                col,
-                code: "dangling-ref",
-                msg: format!("{id} doesn't exist — stale prose reference"),
-                fixable: false,
-                rendered: None,
-            });
         }
     }
 
@@ -1068,8 +1135,11 @@ fn analyze(wt: &Path) -> Analysis {
     // A title's claimed number wins the id when free — the repair
     // for ids that outran the numbers their titles still carry.
     // Collisions (two titles want one number, or an item holds it)
-    // are reported and skipped for manual resolution.
-    {
+    // are reported and skipped for manual resolution. When the id
+    // set is incomplete, grants are unsafe — a wanted number may
+    // live in a doc that failed to parse — so every candidate is
+    // reported for manual renumber instead.
+    if !ids_incomplete {
         let mut granted: BTreeSet<ItemId> = BTreeSet::new();
         let mut winners: BTreeSet<String> = BTreeSet::new();
         let mut renames: BTreeMap<String, String> = BTreeMap::new();
@@ -1189,7 +1259,7 @@ fn analyze(wt: &Path) -> Analysis {
             }
             for (old, new) in &id_map {
                 let hrel = format!("handoffs/{old}.md");
-                if let Some(src) = read(wt, &hrel) {
+                if let Read::Ok(src) = read(wt, &hrel) {
                     let hto = format!("handoffs/{new}.md");
                     a.fixes.push(Fix::Rename {
                         from: hrel,
@@ -1200,6 +1270,19 @@ fn analyze(wt: &Path) -> Analysis {
                     }
                 }
             }
+        }
+    } else {
+        for cand in &candidates {
+            a.findings.push(Finding::at(
+                &cand.rel,
+                "id-title-mismatch",
+                format!(
+                    "title says {} but id is {} — renumber skipped: \
+                     a ledger file is unreadable or unparsable; fix it first",
+                    cand.wanted, cand.current
+                ),
+                false,
+            ));
         }
     }
 
@@ -1260,6 +1343,13 @@ fn apply_fixes(wt: &Path, fixes: &[Fix]) -> Result<usize, String> {
             to.parent()
                 .map_or(Ok(()), std::fs::create_dir_all)
                 .map_err(|e| e.to_string())?;
+            if to.exists() {
+                return Err(format!(
+                    "rename {} → {} would overwrite an existing file — resolve manually",
+                    from.display(),
+                    to.display()
+                ));
+            }
             std::fs::rename(&from, &to)
                 .map_err(|e| format!("rename {} → {}: {e}", from.display(), to.display()))?;
             n += 1;
@@ -1938,6 +2028,90 @@ mod tests {
             to: "blocker/b.md".into(),
         }];
         assert!(apply_fixes(wt, &fixes).is_err());
+    }
+
+    #[test]
+    fn apply_fixes_refuses_rename_over_existing() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        std::fs::write(wt.join("a.md"), "moved").unwrap();
+        std::fs::write(wt.join("b.md"), "keep me").unwrap();
+        let fixes = vec![Fix::Rename {
+            from: "a.md".into(),
+            to: "b.md".into(),
+        }];
+        let e = apply_fixes(wt, &fixes).unwrap_err();
+        assert!(e.contains("would overwrite"), "{e}");
+        // the target survives untouched
+        assert_eq!(std::fs::read_to_string(wt.join("b.md")).unwrap(), "keep me");
+    }
+
+    // ---- unreadable files ----
+
+    #[test]
+    fn unreadable_todo_is_not_missing_and_not_scaffolded() {
+        let d = tempfile::tempdir().unwrap();
+        write_bytes(d.path(), "TODO.md", b"# TODO \xff\xfe binary\n");
+        let a = analyze(d.path());
+        let f = a
+            .findings
+            .iter()
+            .find(|f| f.file == "TODO.md")
+            .expect("TODO finding");
+        assert_eq!(f.code, "unreadable-file");
+        assert!(!f.fixable);
+        // not reported missing, never scaffolded over
+        assert!(!a
+            .findings
+            .iter()
+            .any(|f| f.file == "TODO.md" && f.code == "missing-file"));
+        assert!(!a
+            .fixes
+            .iter()
+            .any(|f| matches!(f, Fix::Write { rel, .. } if rel == "TODO.md")));
+    }
+
+    #[test]
+    fn unreadable_item_file_reports() {
+        let d = tempfile::tempdir().unwrap();
+        write_bytes(d.path(), "issues/issue-0001-x.md", b"\xff\xfe");
+        let a = analyze(d.path());
+        assert!(a
+            .findings
+            .iter()
+            .any(|f| f.file == "issues/issue-0001-x.md" && f.code == "unreadable-file"));
+    }
+
+    #[test]
+    fn parse_fail_suppresses_dependent_checks() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        // TODO.md fails to parse — T-005 may live in it
+        write(
+            wt,
+            "TODO.md",
+            "# TODO — x\n\n- [ ] T-001 bad · status:bogus\n",
+        );
+        // an issue blocking T-005, and T-005's handoff — both would
+        // look dangling/orphaned if the id set were trusted
+        write(
+            wt,
+            "issues/issue-0001-x.md",
+            "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\nblocks = [\"T-005\"]\n+++\n\nsee T-005 for details\n",
+        );
+        write(
+            wt,
+            "handoffs/T-005.md",
+            "+++\nitem = \"T-005\"\n+++\n\n# Handoffs — T-005\n\n## 2026-01-01 · devin\nnote\n",
+        );
+        let a = analyze(wt);
+        assert!(codes(&a).contains(&"parse"), "{:?}", codes(&a));
+        for code in ["dangling-blocks", "orphan-handoff", "dangling-ref"] {
+            assert!(
+                !codes(&a).contains(&code),
+                "{code} fired despite incomplete id set"
+            );
+        }
     }
 
     // ---- dangling-ref ----
