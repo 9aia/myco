@@ -37,7 +37,9 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/myco-store-md` | Markdown impl — strict parse/emit; owns the file spec |
 | `crates/myco-index` | Index port — the derived, disposable cache (registry + snapshots) |
 | `crates/myco-index-redb` | Index impl — redb snapshots + `repos.toml` under `~/.local/share/myco` |
+| `crates/myco-ops` | Shared ops — discovery, TODO↔BACKLOG ledger, state walks; every verb + the TUI call these |
 | `crates/myco-testkit` | Golden fixtures + conformance for the file spec |
+| `crates/myco-tui` | Interactive board TUI (ratatui) — thin front-end over myco-ops; `myco ui`, feature-gated |
 | `crates/myco-cli` | The `myco` binary — clap, `--json` everywhere, `manifest`/`gen-cli-docs` |
 | `xtask` | check / test / coverage / install / site |
 
