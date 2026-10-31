@@ -236,10 +236,7 @@ pub mod strat {
     /// repo name shares the section-name charset — it fills
     /// `# TODO — <repo>` and must survive the heading too.
     pub fn todo_doc() -> impl Strategy<Value = TodoDoc> {
-        (
-            section_name(),
-            sections(line_item(&[Status::Done])),
-        )
+        (section_name(), sections(line_item(&[Status::Done])))
             .prop_map(|(repo, sections)| TodoDoc { repo, sections })
     }
 

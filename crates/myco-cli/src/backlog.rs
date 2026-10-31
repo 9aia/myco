@@ -66,7 +66,9 @@ pub fn promote_item(store: &myco_store_md::MdStore, id: ItemId) -> Result<Item, 
     if !loc.backlog {
         return Err(format!("{id} isn't in BACKLOG.md — nothing to promote"));
     }
-    let mut item = ledger.take(&loc);
+    let mut item = ledger
+        .take(&loc)
+        .ok_or_else(|| format!("{id}: stale task location"))?;
     items::walk_to(&mut item, Status::Open)?;
     // the subtree unparks with its parent — deferred
     // children come back to open (TODO.md holds no

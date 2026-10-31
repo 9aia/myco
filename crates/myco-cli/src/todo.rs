@@ -82,7 +82,10 @@ pub fn add_item(
                 // a backlog parent's children park with it
                 item.status = Status::Deferred;
             }
-            ledger.item_mut(&loc).children.push(item.clone());
+            let parent = ledger
+                .item_mut(&loc)
+                .ok_or_else(|| format!("{id}: stale task location"))?;
+            parent.children.push(item.clone());
             if loc.backlog {
                 "BACKLOG.md"
             } else {
@@ -113,7 +116,9 @@ pub fn done_item(store: &myco_store_md::MdStore, id: ItemId) -> Result<Item, Str
     }
     // take removes the whole subtree — children die with
     // their parent; done on a child removes just the child
-    let mut item = ledger.take(&loc);
+    let mut item = ledger
+        .take(&loc)
+        .ok_or_else(|| format!("{id}: stale task location"))?;
     items::walk_to(&mut item, Status::Done)?;
     items::save_ledger(store, &ledger)?;
     Ok(item)
@@ -130,7 +135,9 @@ pub fn defer_item(store: &myco_store_md::MdStore, id: ItemId) -> Result<Item, St
     if loc.backlog {
         return Err(format!("{id} is already deferred (BACKLOG.md)"));
     }
-    let mut item = ledger.take(&loc);
+    let mut item = ledger
+        .take(&loc)
+        .ok_or_else(|| format!("{id}: stale task location"))?;
     items::walk_to(&mut item, Status::Deferred)?;
     // the whole subtree parks too — BACKLOG.md is
     // deferred-only

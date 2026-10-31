@@ -64,62 +64,78 @@ impl Ledger {
             })
     }
 
-    /// The item at `loc`.
-    pub fn item(&self, loc: &TaskLoc) -> &Item {
+    /// The item at `loc` — `None` on a stale loc.
+    pub fn item(&self, loc: &TaskLoc) -> Option<&Item> {
         let sections = if loc.backlog {
             &self.backlog.sections
         } else {
             &self.todo.sections
         };
-        item_at(&sections[loc.section].items, &loc.path)
+        item_at(&sections.get(loc.section)?.items, &loc.path)
     }
 
-    /// Mutable access to the item at `loc`.
-    pub fn item_mut(&mut self, loc: &TaskLoc) -> &mut Item {
+    /// Mutable access to the item at `loc` — `None` on a stale loc.
+    pub fn item_mut(&mut self, loc: &TaskLoc) -> Option<&mut Item> {
         let sections = if loc.backlog {
             &mut self.backlog.sections
         } else {
             &mut self.todo.sections
         };
-        item_at_mut(&mut sections[loc.section].items, &loc.path)
+        item_at_mut(&mut sections.get_mut(loc.section)?.items, &loc.path)
     }
 
     /// Remove the item at `loc` — the whole subtree goes with it
     /// (`done` on a parent removes its children too). A section
     /// the removal emptied is dropped (an empty unsectioned run
-    /// can't even be emitted).
-    pub fn take(&mut self, loc: &TaskLoc) -> Item {
+    /// can't even be emitted). `None` on a stale loc — nothing
+    /// is removed.
+    pub fn take(&mut self, loc: &TaskLoc) -> Option<Item> {
         let sections = if loc.backlog {
             &mut self.backlog.sections
         } else {
             &mut self.todo.sections
         };
-        let mut level = &mut sections[loc.section].items;
-        for &idx in &loc.path[..loc.path.len() - 1] {
-            level = &mut level[idx].children;
+        let (last_idx, parents) = loc.path.split_last()?;
+        let section = sections.get_mut(loc.section)?;
+        let mut level = &mut section.items;
+        for &idx in parents {
+            level = &mut level.get_mut(idx)?.children;
         }
-        let item = level.remove(loc.path[loc.path.len() - 1]);
-        if loc.path.len() == 1 && sections[loc.section].items.is_empty() {
+        if *last_idx >= level.len() {
+            return None;
+        }
+        let item = level.remove(*last_idx);
+        if parents.is_empty() && section.items.is_empty() {
             sections.remove(loc.section);
         }
-        item
+        Some(item)
     }
 
     /// Swap the item at `loc` with a sibling — `delta` -1 moves up,
     /// +1 down. Works on nested children (siblings share the
-    /// parent). Returns false at the list edges. `loc` follows the
-    /// item to its new index.
+    /// parent). Returns false at the list edges and on a stale
+    /// `loc`. `loc` follows the item to its new index.
     pub fn move_within(&mut self, loc: &mut TaskLoc, delta: isize) -> bool {
         let sections = if loc.backlog {
             &mut self.backlog.sections
         } else {
             &mut self.todo.sections
         };
-        let mut level = &mut sections[loc.section].items;
-        for &idx in &loc.path[..loc.path.len() - 1] {
-            level = &mut level[idx].children;
+        let (last_idx, parents) = match loc.path.split_last() {
+            Some(p) => p,
+            None => return false,
+        };
+        let Some(section) = sections.get_mut(loc.section) else {
+            return false;
+        };
+        let mut level = &mut section.items;
+        for &idx in parents {
+            match level.get_mut(idx) {
+                Some(it) => level = &mut it.children,
+                None => return false,
+            }
         }
-        let i = loc.path[loc.path.len() - 1] as isize;
+        let i = *last_idx as isize;
         let j = i + delta;
         if j < 0 || j as usize >= level.len() {
             return false;
@@ -162,18 +178,20 @@ fn find_path(items: &[Item], id: ItemId, path: &mut Vec<usize>) -> bool {
     false
 }
 
-fn item_at<'a>(mut items: &'a [Item], path: &[usize]) -> &'a Item {
-    for &idx in &path[..path.len() - 1] {
-        items = &items[idx].children;
+fn item_at<'a>(mut items: &'a [Item], path: &[usize]) -> Option<&'a Item> {
+    let (last, parents) = path.split_last()?;
+    for &idx in parents {
+        items = &items.get(idx)?.children;
     }
-    &items[path[path.len() - 1]]
+    items.get(*last)
 }
 
-fn item_at_mut<'a>(mut items: &'a mut [Item], path: &[usize]) -> &'a mut Item {
-    for &idx in &path[..path.len() - 1] {
-        items = &mut items[idx].children;
+fn item_at_mut<'a>(mut items: &'a mut [Item], path: &[usize]) -> Option<&'a mut Item> {
+    let (last, parents) = path.split_last()?;
+    for &idx in parents {
+        items = &mut items.get_mut(idx)?.children;
     }
-    &mut items[path[path.len() - 1]]
+    items.get_mut(*last)
 }
 
 fn push_item(sections: &mut Vec<Section>, item: Item, section: Option<&str>) {
@@ -221,7 +239,7 @@ mod tests {
         ledger.put_todo(t(2), Some("Now"));
         let loc = ledger.locate(tid(1)).unwrap();
         assert!(!loc.backlog);
-        let item = ledger.take(&loc);
+        let item = ledger.take(&loc).unwrap();
         assert_eq!(item.id, tid(1));
         // emptied unsectioned run dropped
         assert!(ledger.todo.sections.iter().all(|s| !s.items.is_empty()));
@@ -240,21 +258,21 @@ mod tests {
         let loc = ledger.locate(tid(4)).unwrap();
         assert_eq!(loc.path, vec![0, 0, 0]);
         assert!(loc.is_child());
-        assert_eq!(ledger.item(&loc).id.number(), 4);
+        assert_eq!(ledger.item(&loc).unwrap().id.number(), 4);
         // take on a child removes just that node
-        ledger.take(&loc);
+        ledger.take(&loc).unwrap();
         let parent = &ledger.todo.sections[0].items[0];
         assert_eq!(parent.children[0].children.len(), 0);
         // take on a parent removes the whole subtree; sections
         // stay (a sibling remains)
         let loc = ledger.locate(tid(1)).unwrap();
-        let gone = ledger.take(&loc);
+        let gone = ledger.take(&loc).unwrap();
         assert_eq!(gone.children.len(), 2);
         assert!(ledger.locate(tid(2)).is_none());
         assert_eq!(ledger.todo.sections[0].items.len(), 1);
         // mutation in place reaches children too
         let loc = ledger.locate(tid(5)).unwrap();
-        ledger.item_mut(&loc).children.push(t(6));
+        ledger.item_mut(&loc).unwrap().children.push(t(6));
         assert!(ledger.locate(tid(6)).is_some());
     }
 
