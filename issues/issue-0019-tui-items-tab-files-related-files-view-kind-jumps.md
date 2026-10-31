@@ -22,3 +22,7 @@ adrs) and turn it into a real navigation surface:
 The mention-scan half of "related" should ride the link index
 (proposal) rather than rescanning `project/` per keystroke; a
 naive in-memory build is acceptable for v1.
+
+Related: I-013 — TUI hardening covers this board's stale
+`files` data (loaded once, never reloaded) and missing
+force-quit; fix alongside the rename.
