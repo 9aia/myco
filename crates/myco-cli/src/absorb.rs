@@ -523,7 +523,7 @@ fn comments(
         created_ids = ids;
         debug_assert_eq!(created, fresh.len());
     } else {
-        let mut ledger = items::Ledger::load(store)?;
+        let mut ledger = items::load_ledger(store)?;
         for f in &fresh {
             let id = store.alloc_id(ItemKind::Task).map_err(|e| e.to_string())?;
             let item = Item::new(id, &f.title)
@@ -534,7 +534,7 @@ fn comments(
             created_ids.push(id);
         }
         if !created_ids.is_empty() {
-            ledger.save(store)?;
+            items::save_ledger(store, &ledger)?;
         }
     }
     finish(

@@ -12,18 +12,22 @@ pub mod doc;
 pub mod handoff;
 pub mod id;
 pub mod item;
+pub mod ledger;
 pub mod meta;
 pub mod priority;
 pub mod status;
+pub mod walk;
 
 pub use actor::{is_valid_actor, Actor, ParseActorError};
 pub use doc::{BacklogDoc, ItemFile, Section, TodoDoc};
 pub use handoff::{is_valid_session, HandoffEntry};
-pub use id::{ItemId, ItemKind, ParseItemIdError};
-pub use item::{is_valid_group_name, is_valid_label, Item, ItemMeta};
+pub use id::{require_kind, ItemId, ItemKind, ParseItemIdError};
+pub use item::{is_valid_group_name, is_valid_label, tree_view, Item, ItemMeta, NewItemMeta};
+pub use ledger::{Ledger, TaskLoc};
 pub use meta::{NextCounters, ProjectMeta, Registry};
 pub use priority::{ParsePriorityError, Priority};
 pub use status::{InvalidTransition, ParseStatusError, Status};
+pub use walk::{status_path, targets, walk_descendants_to, walk_to};
 
 use serde::Deserialize;
 use std::collections::VecDeque;

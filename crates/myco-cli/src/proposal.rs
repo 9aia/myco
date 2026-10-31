@@ -72,15 +72,17 @@ pub fn run(
             &items::NewItem {
                 kind: ItemKind::Proposal,
                 title,
-                body: &body,
-                meta: &meta,
+                body: body.read()?.as_deref(),
+                meta: &meta.to_meta(),
                 template: templates::proposal,
                 word: "proposal",
                 json_out,
                 no_commit,
             },
         ),
-        Cmd::List { list } => items::list_files(&store, ItemKind::Proposal, false, &list, json_out),
+        Cmd::List { list } => {
+            items::list_files(&store, ItemKind::Proposal, false, &list.filter(), json_out)
+        }
         Cmd::Status { id, status } => {
             items::require_kind(id, ItemKind::Proposal, "proposal status")?;
             let to = proposal_status(&status)?;

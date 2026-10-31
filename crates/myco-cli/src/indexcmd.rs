@@ -92,12 +92,46 @@ pub fn current_head(repo_root: &Path) -> Option<String> {
     myco_git::head_commit(&repo_root.join(discover::DIR))
 }
 
-/// Re-scan + store the snapshot for a registered repo root.
-pub fn rebuild_one(index: &impl Index, root: &Path) -> Result<RepoSnapshot, String> {
+/// Map `items` across scoped worker threads, preserving order —
+/// for the per-repo `git`/fs calls that dominate `org`/`index`
+/// latency. Keep redb I/O out of `f`: the index locks per open.
+pub fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let workers = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .min(16)
+        .min(items.len().max(1));
+    let next = AtomicUsize::new(0);
+    let (tx, rx) = std::sync::mpsc::channel::<(usize, R)>();
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            let tx = tx.clone();
+            let (next, f) = (&next, &f);
+            s.spawn(move || loop {
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                if i >= items.len() {
+                    return;
+                }
+                let _ = tx.send((i, f(&items[i])));
+            });
+        }
+        drop(tx);
+        let mut out: Vec<Option<R>> = items.iter().map(|_| None).collect();
+        for (i, r) in rx {
+            out[i] = Some(r);
+        }
+        out.into_iter()
+            .map(|o| o.unwrap_or_else(|| unreachable!("par_map hole")))
+            .collect()
+    })
+}
+
+/// Re-scan a registered repo root without the redb write — fs +
+/// git only, safe to run in parallel. Callers persist via
+/// `index.save_snapshot` serially (the index locks per open).
+pub fn scan_one(root: &Path) -> Result<RepoSnapshot, String> {
     let proj = repo_at(root)?;
-    let snap = scan_repo(&proj)?;
-    index.save_snapshot(&snap).map_err(|e| e.to_string())?;
-    Ok(snap)
+    scan_repo(&proj)
 }
 
 fn registered_root(index: &impl Index, path: &Path) -> Result<PathBuf, String> {
@@ -182,12 +216,12 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<i32, String> {
         }
         Cmd::List => {
             let repos = index.repos().map_err(|e| e.to_string())?;
+            let heads = par_map(&repos, |r| current_head(r.path.as_std_path()));
             let mut rows = Vec::new();
             let mut out = Vec::new();
-            for r in &repos {
+            for (r, head) in repos.iter().zip(&heads) {
                 let snap = index.snapshot(&r.path).map_err(|e| e.to_string())?;
-                let head = current_head(r.path.as_std_path());
-                let stale = match (&snap, &head) {
+                let stale = match (&snap, head) {
                     (Some(s), Some(h)) => s.head_commit != *h,
                     (Some(_), None) => true, // worktree gone
                     (None, _) => true,       // never scanned
@@ -237,10 +271,17 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<i32, String> {
                 }
                 return Ok(0);
             }
+            // parallel rescans; serial saves + ordered reporting
+            let snaps = par_map(&roots, |r| scan_one(r));
             let mut results = Vec::new();
             let mut failures = Vec::new();
-            for root in &roots {
-                match rebuild_one(&index, root) {
+            for (root, snap) in roots.iter().zip(snaps) {
+                match snap.and_then(|s| {
+                    index
+                        .save_snapshot(&s)
+                        .map_err(|e| e.to_string())
+                        .map(|_| s)
+                }) {
                     Ok(s) => {
                         if !json_out {
                             println!(

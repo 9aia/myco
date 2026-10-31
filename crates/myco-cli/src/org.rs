@@ -61,31 +61,49 @@ fn as_scan(s: &RepoSnapshot) -> digest::Scan {
 }
 
 /// Load every registered repo's snapshot, auto-rebuilding stale
-/// ones (head mismatch or missing).
+/// ones (head mismatch or missing). The per-repo `git`/fs work is
+/// parallel — redb opens lock the file, so index I/O stays serial.
 pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
     let repos = index.repos().map_err(|e| e.to_string())?;
-    let mut out = Vec::new();
-    for r in repos {
-        let root = r.path.as_std_path().to_path_buf();
-        let head = indexcmd::current_head(&root);
-        let cached = index.snapshot(&r.path).map_err(|e| e.to_string())?;
-        let fresh = matches!((&cached, &head), (Some(s), Some(h)) if s.head_commit == *h);
-        if fresh {
+    let roots: Vec<std::path::PathBuf> = repos
+        .iter()
+        .map(|r| r.path.as_std_path().to_path_buf())
+        .collect();
+    let heads = indexcmd::par_map(&roots, |r| indexcmd::current_head(r));
+    let mut cached = Vec::with_capacity(repos.len());
+    for r in &repos {
+        cached.push(index.snapshot(&r.path).map_err(|e| e.to_string())?);
+    }
+    let fresh =
+        |i: usize| matches!((&cached[i], &heads[i]), (Some(s), Some(h)) if s.head_commit == *h);
+    let stale: Vec<usize> = (0..repos.len()).filter(|i| !fresh(*i)).collect();
+    let scans = indexcmd::par_map(&stale, |&i| indexcmd::scan_one(&roots[i]));
+    let mut rebuilt: std::collections::BTreeMap<usize, Result<RepoSnapshot, String>> =
+        stale.iter().copied().zip(scans).collect();
+    let mut out = Vec::with_capacity(repos.len());
+    for (i, c) in cached.iter().enumerate() {
+        if fresh(i) {
             out.push(RepoView {
-                snap: cached,
+                snap: c.clone(),
                 error: None,
                 rebuilt: false,
             });
             continue;
         }
-        match indexcmd::rebuild_one(index, &root) {
-            Ok(s) => out.push(RepoView {
-                snap: Some(s),
-                error: None,
-                rebuilt: true,
-            }),
+        match rebuilt
+            .remove(&i)
+            .unwrap_or_else(|| Err("rescan lost".into()))
+        {
+            Ok(snap) => {
+                index.save_snapshot(&snap).map_err(|e| e.to_string())?;
+                out.push(RepoView {
+                    snap: Some(snap),
+                    error: None,
+                    rebuilt: true,
+                });
+            }
             Err(e) => out.push(RepoView {
-                snap: cached,
+                snap: cached[i].clone(),
                 error: Some(e),
                 rebuilt: false,
             }),

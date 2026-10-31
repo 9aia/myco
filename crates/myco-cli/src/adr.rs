@@ -56,15 +56,17 @@ pub fn run(
             &items::NewItem {
                 kind: ItemKind::Adr,
                 title,
-                body: &body,
-                meta: &meta,
+                body: body.read()?.as_deref(),
+                meta: &meta.to_meta(),
                 template: templates::adr,
                 word: "adr",
                 json_out,
                 no_commit,
             },
         ),
-        Cmd::List { list } => items::list_files(&store, ItemKind::Adr, false, &list, json_out),
+        Cmd::List { list } => {
+            items::list_files(&store, ItemKind::Adr, false, &list.filter(), json_out)
+        }
         Cmd::Supersede { id, by } => {
             items::require_kind(id, ItemKind::Adr, "adr supersede")?;
             items::require_kind(by, ItemKind::Adr, "adr supersede --by")?;

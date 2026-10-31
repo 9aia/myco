@@ -63,7 +63,7 @@ pub fn run(
             parent,
             meta,
         } => {
-            let mut ledger = items::Ledger::load(&store)?;
+            let mut ledger = items::load_ledger(&store)?;
             // validate the parent before allocating — failed adds
             // must not burn ids
             let ploc = match parent {
@@ -98,7 +98,7 @@ pub fn run(
                     "TODO.md"
                 }
             };
-            ledger.save(&store)?;
+            items::save_ledger(&store, &ledger)?;
             let committed = items::commit(&proj.worktree, &format!("chore: add {id}"), no_commit)?;
             items::report(
                 json!({"item": item, "file": file, "parent": parent.map(|p| p.to_string())}),
@@ -109,7 +109,7 @@ pub fn run(
         }
         Cmd::Done { id } => {
             items::require_kind(id, ItemKind::Task, "todo done")?;
-            let mut ledger = items::Ledger::load(&store)?;
+            let mut ledger = items::load_ledger(&store)?;
             let loc = ledger
                 .locate(id)
                 .ok_or_else(|| format!("{id}: no such task"))?;
@@ -122,7 +122,7 @@ pub fn run(
             // their parent; done on a child removes just the child
             let mut item = ledger.take(&loc);
             items::walk_to(&mut item, Status::Done)?;
-            ledger.save(&store)?;
+            items::save_ledger(&store, &ledger)?;
             let committed = items::commit(&proj.worktree, &format!("chore: done {id}"), no_commit)?;
             items::report(
                 json!({"item": item}),
@@ -133,7 +133,7 @@ pub fn run(
         }
         Cmd::Defer { id } => {
             items::require_kind(id, ItemKind::Task, "todo defer")?;
-            let mut ledger = items::Ledger::load(&store)?;
+            let mut ledger = items::load_ledger(&store)?;
             let loc = ledger
                 .locate(id)
                 .ok_or_else(|| format!("{id}: no such task"))?;
@@ -146,7 +146,7 @@ pub fn run(
             // deferred-only
             items::walk_descendants_to(&mut item, Status::Deferred)?;
             ledger.put_backlog(item.clone(), None);
-            ledger.save(&store)?;
+            items::save_ledger(&store, &ledger)?;
             let committed =
                 items::commit(&proj.worktree, &format!("chore: defer {id}"), no_commit)?;
             items::report(

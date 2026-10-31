@@ -103,6 +103,20 @@ impl ItemId {
     }
 }
 
+/// Verbs are kind-locked — `myco issue resolve T-001` is a usage
+/// error, not a lookup failure.
+pub fn require_kind(id: ItemId, kind: ItemKind, verb: &str) -> Result<(), String> {
+    if id.kind() == kind {
+        Ok(())
+    } else {
+        Err(format!(
+            "{verb} takes {}-NNN ids — {id} is a {} item",
+            kind.prefix(),
+            id.kind().prefix()
+        ))
+    }
+}
+
 /// Failure to parse an [`ItemId`] — bad prefix, empty/bad number,
 /// or `0`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -244,6 +258,15 @@ mod tests {
         // kinds sort in declaration order: Task < Issue < Proposal < Adr < Plan
         assert!(ItemId::new(ItemKind::Task, 999) < ItemId::new(ItemKind::Issue, 1));
         assert!(ItemId::new(ItemKind::Adr, 1) < ItemId::new(ItemKind::Plan, 1));
+    }
+
+    #[test]
+    fn require_kind_message() {
+        let t = ItemId::new(ItemKind::Task, 1);
+        assert!(require_kind(t, ItemKind::Task, "todo").is_ok());
+        let i = ItemId::new(ItemKind::Issue, 1);
+        let e = require_kind(i, ItemKind::Task, "todo").unwrap_err();
+        assert!(e.contains("T-NNN"), "{e}");
     }
 
     #[test]

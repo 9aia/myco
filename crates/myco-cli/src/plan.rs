@@ -44,14 +44,16 @@ pub fn run(
             &items::NewItem {
                 kind: ItemKind::Plan,
                 title,
-                body: &body,
-                meta: &meta,
+                body: body.read()?.as_deref(),
+                meta: &meta.to_meta(),
                 template: templates::plan,
                 word: "plan",
                 json_out,
                 no_commit,
             },
         ),
-        Cmd::List { list } => items::list_files(&store, ItemKind::Plan, false, &list, json_out),
+        Cmd::List { list } => {
+            items::list_files(&store, ItemKind::Plan, false, &list.filter(), json_out)
+        }
     }
 }

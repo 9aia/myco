@@ -202,6 +202,98 @@ impl Item {
         self.children.push(child);
         self
     }
+
+    /// `T-001 open pri:high owner:devin #core title` — the compact
+    /// human list line.
+    pub fn compact(&self) -> String {
+        let mut s = format!("{} {} pri:{}", self.id, self.status, self.priority.token());
+        if let Some(o) = &self.owner {
+            s += &format!(" owner:{o}");
+        }
+        for l in &self.labels {
+            s += &format!(" #{l}");
+        }
+        if let Some(e) = &self.epic {
+            s += &format!(" epic:{e}");
+        }
+        if let Some(m) = &self.milestone {
+            s += &format!(" ms:{m}");
+        }
+        if !self.title.is_empty() {
+            s += &format!(" {}", self.title);
+        }
+        s
+    }
+}
+
+/// Optional metadata applied to a freshly-created item — the parsed
+/// `--pri/--owner/--label/--blocks/--epic/--milestone` bundle every
+/// `add`/`new` front-end shares. Validated on `apply`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct NewItemMeta {
+    /// `pri:` override — absent keeps the item default.
+    pub priority: Option<Priority>,
+    /// `owner:` actor.
+    pub owner: Option<Actor>,
+    /// `#label`s to add.
+    pub labels: Vec<String>,
+    /// `blocks:` ids.
+    pub blocks: Vec<ItemId>,
+    /// `epic:` group name.
+    pub epic: Option<String>,
+    /// `ms:` milestone name.
+    pub milestone: Option<String>,
+}
+
+impl NewItemMeta {
+    /// Apply the metadata to `item` — labels and group names are
+    /// validated (invalid tokens can't be emitted by the file
+    /// grammar).
+    pub fn apply(&self, item: &mut Item) -> Result<(), String> {
+        if let Some(p) = self.priority {
+            item.priority = p;
+        }
+        if let Some(o) = &self.owner {
+            item.owner = Some(o.clone());
+        }
+        for l in &self.labels {
+            if !is_valid_label(l) {
+                return Err(format!("invalid label {l:?}"));
+            }
+            item.labels.insert(l.clone());
+        }
+        for b in &self.blocks {
+            item.blocks.insert(*b);
+        }
+        for (what, name) in [("epic", &self.epic), ("milestone", &self.milestone)] {
+            if let Some(name) = name {
+                if !is_valid_group_name(name) {
+                    return Err(format!("invalid {what} name {name:?}"));
+                }
+            }
+        }
+        item.epic = self.epic.clone();
+        item.milestone = self.milestone.clone();
+        Ok(())
+    }
+}
+
+/// Depth-tagged pre-order view — list UIs indent children under
+/// their parent by it.
+pub fn tree_view(items: &[Item]) -> Vec<(usize, &Item)> {
+    fn go<'a>(item: &'a Item, depth: usize, out: &mut Vec<(usize, &'a Item)>) {
+        out.push((depth, item));
+        for c in &item.children {
+            go(c, depth + 1, out);
+        }
+    }
+    let mut out = Vec::new();
+    for i in items {
+        go(i, 0, &mut out);
+    }
+    out
 }
 
 /// A `#label` is `[A-Za-z0-9_-]+` — kept permissive on the model,
@@ -225,7 +317,59 @@ pub fn is_valid_group_name(s: &str) -> bool {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::{ItemId, ItemKind};
+    use crate::{Actor, ItemId, ItemKind};
+
+    #[test]
+    fn compact_line() {
+        let i = Item::new(ItemId::new(ItemKind::Task, 1), "the thing")
+            .priority(Priority::High)
+            .owner(Actor::new("devin").unwrap())
+            .label("core")
+            .epic("v2")
+            .milestone("1.0");
+        assert_eq!(
+            i.compact(),
+            "T-001 open pri:high owner:devin #core epic:v2 ms:1.0 the thing"
+        );
+        let bare = Item::new(ItemId::new(ItemKind::Task, 2), "");
+        assert_eq!(bare.compact(), "T-002 open pri:med");
+    }
+
+    #[test]
+    fn new_item_meta_validates() {
+        let mut item = Item::new(ItemId::new(ItemKind::Task, 1), "x");
+        NewItemMeta {
+            labels: vec!["ok-label".into()],
+            epic: Some("v2.0".into()),
+            ..Default::default()
+        }
+        .apply(&mut item)
+        .unwrap();
+        assert!(item.labels.contains("ok-label"));
+        assert!(NewItemMeta {
+            labels: vec!["bad label".into()],
+            ..Default::default()
+        }
+        .apply(&mut item)
+        .is_err());
+        assert!(NewItemMeta {
+            milestone: Some("bad ms".into()),
+            ..Default::default()
+        }
+        .apply(&mut item)
+        .is_err());
+    }
+
+    #[test]
+    fn tree_view_tags_depth() {
+        let t = |n: u32| Item::new(ItemId::new(ItemKind::Task, n), format!("t{n}"));
+        let items = vec![t(1).child(t(2).child(t(4))).child(t(3)), t(5)];
+        let flat: Vec<(usize, u32)> = tree_view(&items)
+            .into_iter()
+            .map(|(d, i)| (d, i.id.number()))
+            .collect();
+        assert_eq!(flat, [(0, 1), (1, 2), (2, 4), (1, 3), (0, 5)]);
+    }
 
     #[test]
     fn builder() {

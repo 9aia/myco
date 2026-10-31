@@ -1078,7 +1078,6 @@ name = "myco-ops"
 version = "0.1.0"
 dependencies = [
  "camino",
- "clap",
  "myco-config",
  "myco-config-toml",
  "myco-core",

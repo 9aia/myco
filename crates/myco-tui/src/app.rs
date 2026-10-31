@@ -6,8 +6,8 @@
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use myco_core::Ledger;
 use myco_core::{Item, ItemId, ItemKind, Status};
-use myco_ops::items::Ledger;
 use myco_ops::{discover, items};
 use myco_store::Store;
 use myco_store_md::MdStore;
@@ -83,7 +83,7 @@ impl Model {
     /// CLI globals.
     pub fn open(dir: Option<&Path>, root: Option<&Path>, no_commit: bool) -> Result<Self, String> {
         let (proj, store) = items::open(dir, root)?;
-        let ledger = Ledger::load(&store)?;
+        let ledger = items::load_ledger(&store)?;
         let mut m = Model {
             proj,
             store,
@@ -105,7 +105,7 @@ impl Model {
     /// Reload both docs from disk (`R`, post-editor).
     pub fn reload(&mut self) {
         let sel_id = self.selected_id();
-        match Ledger::load(&self.store) {
+        match items::load_ledger(&self.store) {
             Ok(ledger) => {
                 self.ledger = ledger;
                 self.rebuild_rows();
@@ -301,7 +301,7 @@ impl Model {
         }
         let mut item = self.ledger.take(&loc);
         items::walk_to(&mut item, Status::Done)?;
-        self.ledger.save(&self.store)?;
+        items::save_ledger(&self.store, &self.ledger)?;
         items::commit(
             &self.proj.worktree,
             &format!("chore: done {id}"),
@@ -331,7 +331,7 @@ impl Model {
         items::walk_to(&mut item, Status::Deferred)?;
         items::walk_descendants_to(&mut item, Status::Deferred)?;
         self.ledger.put_backlog(item, None);
-        self.ledger.save(&self.store)?;
+        items::save_ledger(&self.store, &self.ledger)?;
         items::commit(
             &self.proj.worktree,
             &format!("chore: defer {id}"),
@@ -361,7 +361,7 @@ impl Model {
         items::walk_to(&mut item, Status::Open)?;
         items::walk_descendants_to(&mut item, Status::Open)?;
         self.ledger.put_todo(item, None);
-        self.ledger.save(&self.store)?;
+        items::save_ledger(&self.store, &self.ledger)?;
         items::commit(
             &self.proj.worktree,
             &format!("chore: promote {id}"),
@@ -382,7 +382,7 @@ impl Model {
             return;
         };
         if self.ledger.move_within(&mut loc, delta) {
-            if let Err(e) = self.ledger.save(&self.store).and_then(|_| {
+            if let Err(e) = items::save_ledger(&self.store, &self.ledger).and_then(|_| {
                 items::commit(
                     &self.proj.worktree,
                     &format!("chore: reorder {id}"),
@@ -416,7 +416,7 @@ impl Model {
             Board::Todo => self.ledger.put_todo(item.clone(), None),
             Board::Backlog => self.ledger.put_backlog(item.clone(), None),
         }
-        self.ledger.save(&self.store)?;
+        items::save_ledger(&self.store, &self.ledger)?;
         items::commit(
             &self.proj.worktree,
             &format!("chore: add {id}"),
@@ -461,7 +461,7 @@ mod tests {
         let worktree = dir.path().join("project");
         std::fs::create_dir_all(&worktree).unwrap();
         let store = MdStore::new(Utf8PathBuf::from_path_buf(worktree.clone()).unwrap());
-        let mut ledger = Ledger::load(&store).unwrap();
+        let mut ledger = items::load_ledger(&store).unwrap();
         populate(&mut ledger);
         let mut m = Model {
             proj: discover::Project {

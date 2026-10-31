@@ -72,8 +72,8 @@ pub fn run(
             &items::NewItem {
                 kind: ItemKind::Issue,
                 title,
-                body: &body,
-                meta: &meta,
+                body: body.read()?.as_deref(),
+                meta: &meta.to_meta(),
                 template: templates::issue,
                 word: "issue",
                 json_out,
@@ -81,7 +81,7 @@ pub fn run(
             },
         ),
         Cmd::List { archived, list } => {
-            items::list_files(&store, ItemKind::Issue, archived, &list, json_out)
+            items::list_files(&store, ItemKind::Issue, archived, &list.filter(), json_out)
         }
         Cmd::Resolve { id, resolution } => {
             items::require_kind(id, ItemKind::Issue, "issue resolve")?;

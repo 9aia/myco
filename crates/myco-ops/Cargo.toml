@@ -1,6 +1,6 @@
 [package]
 name = "myco-ops"
-description = "myco — shared ops layer: discovery, the TODO↔BACKLOG ledger, verb mutations"
+description = "myco — ops I/O shell: project discovery, store open/save, commit-per-mutation, verb plumbing"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,7 +13,6 @@ myco-config-toml.workspace = true
 myco-git.workspace = true
 myco-store.workspace = true
 myco-store-md.workspace = true
-clap.workspace = true
 serde_json.workspace = true
 camino.workspace = true
 time.workspace = true

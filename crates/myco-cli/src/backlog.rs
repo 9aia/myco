@@ -56,9 +56,9 @@ pub fn run(
                 .status(Status::Deferred)
                 .created(items::today());
             meta.apply(&mut item)?;
-            let mut ledger = items::Ledger::load(&store)?;
+            let mut ledger = items::load_ledger(&store)?;
             ledger.put_backlog(item.clone(), section.as_deref());
-            ledger.save(&store)?;
+            items::save_ledger(&store, &ledger)?;
             let committed = items::commit(&proj.worktree, &format!("chore: add {id}"), no_commit)?;
             items::report(
                 json!({"item": item, "file": "BACKLOG.md"}),
@@ -69,7 +69,7 @@ pub fn run(
         }
         Cmd::Promote { id } => {
             items::require_kind(id, ItemKind::Task, "backlog promote")?;
-            let mut ledger = items::Ledger::load(&store)?;
+            let mut ledger = items::load_ledger(&store)?;
             let loc = ledger
                 .locate(id)
                 .ok_or_else(|| format!("{id}: no such task"))?;
@@ -83,7 +83,7 @@ pub fn run(
             // deferred items)
             items::walk_descendants_to(&mut item, Status::Open)?;
             ledger.put_todo(item.clone(), None);
-            ledger.save(&store)?;
+            items::save_ledger(&store, &ledger)?;
             let committed =
                 items::commit(&proj.worktree, &format!("chore: promote {id}"), no_commit)?;
             items::report(

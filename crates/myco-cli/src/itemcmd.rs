@@ -218,7 +218,7 @@ pub fn run(
             if flags.is_noop() {
                 return Err("item set: nothing to change — pass at least one flag".into());
             }
-            let mut ledger = items::Ledger::load(&store)?;
+            let mut ledger = items::load_ledger(&store)?;
             if let Some(loc) = ledger.locate(id) {
                 // task item: mutate in place; a status change may
                 // relocate the line — done deletes the subtree,
@@ -253,7 +253,7 @@ pub fn run(
                     }
                 }
                 let item = ledger.locate(id).map(|l| ledger.item(&l).clone());
-                ledger.save(&store)?;
+                items::save_ledger(&store, &ledger)?;
                 let committed =
                     items::commit(&proj.worktree, &format!("chore: set {id}"), no_commit)?;
                 let human = item
