@@ -1,7 +1,7 @@
 +++
 id = "P-002"
 title = "myco-tui — interactive board TUI over myco verbs"
-status = "in-progress"
+status = "open"
 created = "2026-10-31"
 owner = "devin"
 priority = "high"
