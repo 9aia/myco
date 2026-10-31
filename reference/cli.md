@@ -62,6 +62,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco org board`↴](#myco-org-board)
 * [`myco org init`↴](#myco-org-init)
 * [`myco ui`↴](#myco-ui)
+* [`myco serve`↴](#myco-serve)
 
 ## `myco`
 
@@ -96,6 +97,7 @@ myco — project management, grown not built: agent-first PM CLI
 * `index` — The derived index: register repos, query/rebuild snapshots
 * `org` — Cross-repo views over the index (auto-rebuilds stale repos)
 * `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
+* `serve` — Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it
 
 ###### **Options:**
 
@@ -927,6 +929,14 @@ Re-run `init` on every registered repo — refreshes the worktree scaffold and r
 Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
 
 **Usage:** `myco ui`
+
+
+
+## `myco serve`
+
+Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it
+
+**Usage:** `myco serve`
 
 
 
