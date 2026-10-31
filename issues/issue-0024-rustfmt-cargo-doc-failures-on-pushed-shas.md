@@ -1,7 +1,7 @@
 +++
 id = "I-024"
 title = "rustfmt + cargo doc failures on pushed SHAs"
-status = "open"
+status = "in-progress"
 created = "2026-10-31"
 owner = "devin"
 priority = "high"
