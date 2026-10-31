@@ -271,8 +271,16 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
             lines.push(Line::from(Span::styled(l.to_string(), style)));
         }
     }
-    // wrap rather than clip long titles/notes on narrow screens
-    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
+    // wrap rather than clip long titles/notes on narrow screens;
+    // the pane scrolls (`j`/`k`/… in Preview mode), clamped to the
+    // content so `G` lands on the last line
+    let scroll = (m.preview_scroll as usize).min(lines.len().saturating_sub(1)) as u16;
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((scroll, 0)),
+        area,
+    );
 }
 
 /// Normal-mode hint sets, widest first — `pick_hints` takes the
@@ -290,7 +298,7 @@ fn pick_hints(mode: Mode, width: usize) -> &'static str {
         Mode::Add => "enter add · esc cancel",
         Mode::Filter => "enter keep · esc clear",
         Mode::Command => "enter run · esc cancel",
-        Mode::Preview => "esc back",
+        Mode::Preview => "j/k scroll · esc back",
         Mode::Help => "esc/?/q close",
         Mode::Normal => HINTS
             .iter()
@@ -368,11 +376,11 @@ fn help_lines() -> Vec<Line<'static>> {
         group("nav"),
         bind("j/k, ↑/↓", "move"),
         bind("gg / G", "first / last"),
-        bind("enter", "preview item"),
+        bind("enter", "preview (j/k scroll)"),
         group("tabs"),
-        bind("1 / 2", "TODO / BACKLOG"),
+        bind("1 / 2 / 3", "TODO / BACKLOG / FILES"),
         bind("h/l, ←/→", "switch board"),
-        group("items"),
+        group("items (TODO/BACKLOG)"),
         bind("space, dd", "mark done"),
         bind("D", "defer → BACKLOG"),
         bind("p", "promote → TODO"),
@@ -515,6 +523,6 @@ mod tests {
         assert_eq!(pick_hints(Mode::Normal, len(HINTS[1])), HINTS[2]);
         // tiny terminals still get the minimal set (cropped, not absent)
         assert_eq!(pick_hints(Mode::Normal, 0), HINTS[2]);
-        assert_eq!(pick_hints(Mode::Preview, 0), "esc back");
+        assert_eq!(pick_hints(Mode::Preview, 0), "j/k scroll · esc back");
     }
 }

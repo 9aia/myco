@@ -2,15 +2,22 @@
 //! key maps to. Mirrors pm's design: two board tabs over
 //! `myco_ops::items::Ledger`, a flattened row list, and writes that
 //! end in `items::commit`.
+//!
+//! Locking: the model holds an *unlocked* `MdStore` for reads. Every
+//! mutation takes the exclusive worktree lock for just the
+//! load→mutate→save→commit span (`mutate`), so `myco ui` never
+//! blocks other myco invocations between keypresses — and the fresh
+//! read under the lock means the TUI never saves a stale
+//! startup-snapshot ledger over a concurrent writer's changes.
 
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use myco_core::Ledger;
 use myco_core::{Item, ItemFile, ItemId, ItemKind, Status};
-use myco_ops::items::LockedStore;
-use myco_ops::{discover, items};
+use myco_ops::{discover, items, ops};
 use myco_store::Store;
+use myco_store_md::MdStore;
 use ratatui::layout::Rect;
 
 /// Which ledger doc the board tab shows.
@@ -71,7 +78,10 @@ pub enum Row {
 /// The whole TUI state.
 pub struct Model {
     proj: discover::Project,
-    store: LockedStore,
+    /// Unlocked read handle. Mutations don't go through this field
+    /// alone — `mutate` wraps them in `ops::lock_worktree` + a fresh
+    /// `load_ledger`, so writes are serialized and never stale.
+    store: MdStore,
     ledger: Ledger,
     no_commit: bool,
     /// Active tab.
@@ -98,6 +108,9 @@ pub struct Model {
     pub pending_editor: Option<PathBuf>,
     /// File-backed items for the `Files` board.
     files: Vec<ItemFile>,
+    /// Preview pane scroll offset (`j`/`k`/`PgUp`/`PgDn`/`g`/`G`
+    /// in Preview mode; clamped to the content at draw time).
+    pub preview_scroll: u16,
     /// Multi-key prefix: `g` armed for `gg`, `d` for `dd`.
     pending: Option<char>,
     /// Board-list rect from the last frame — `render::draw` writes
@@ -115,8 +128,15 @@ impl Model {
     /// Discovery + first ledger load. `dir`/`root` override like the
     /// CLI globals.
     pub fn open(dir: Option<&Path>, root: Option<&Path>, no_commit: bool) -> Result<Self, String> {
-        let (proj, store) = items::open(dir, root)?;
-        let ledger = items::load_ledger(&store)?;
+        // Shared read lock for the initial load only — a live writer
+        // fails us fast rather than rendering mid-mutation. It drops
+        // with this scope: holding any lock for the session would
+        // block every other myco invocation while the board is open.
+        let (proj, ledger) = {
+            let (proj, store) = items::open_read(dir, root)?;
+            (proj, items::load_ledger(&store)?)
+        };
+        let store = ops::store_at(&proj.worktree)?;
         let mut m = Model {
             proj,
             store,
@@ -133,6 +153,7 @@ impl Model {
             status: String::new(),
             pending_editor: None,
             files: Vec::new(),
+            preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
             viewport_top: 0,
@@ -144,18 +165,28 @@ impl Model {
         Ok(m)
     }
 
-    /// Pull file-backed items for the `Files` board.
+    /// Pull file-backed items for the `Files` board. Per-kind read
+    /// errors land in the status bar — a broken item file degrades
+    /// the board instead of vanishing silently.
     fn load_files(&mut self) {
         self.files.clear();
+        let mut errs = Vec::new();
         for kind in [
             ItemKind::Issue,
             ItemKind::Proposal,
             ItemKind::Plan,
             ItemKind::Adr,
         ] {
-            if let Ok(mut v) = self.store.list_items(kind) {
-                self.files.append(&mut v);
+            match self.store.list_items(kind) {
+                Ok(mut v) => self.files.append(&mut v),
+                Err(e) => errs.push(format!(
+                    "{}: {e}",
+                    myco_store_md::item_dir(kind).unwrap_or("?")
+                )),
             }
+        }
+        if !errs.is_empty() {
+            self.status = format!("files: {}", errs.join("; "));
         }
     }
 
@@ -167,17 +198,18 @@ impl Model {
             .map(|f| f.body.as_str())
     }
 
-    /// Reload both docs from disk (`R`, post-editor).
+    /// Reload the ledger docs *and* the file-backed items from disk
+    /// (`R`, post-editor). The cursor tries to stay on the same id.
     pub fn reload(&mut self) {
         let sel_id = self.selected_id();
+        let at = self.sel;
         match items::load_ledger(&self.store) {
-            Ok(ledger) => {
-                self.ledger = ledger;
-                self.rebuild_rows();
-                self.reselect(sel_id);
-            }
+            Ok(ledger) => self.ledger = ledger,
             Err(e) => self.status = format!("reload: {e}"),
         }
+        self.load_files();
+        self.rebuild_rows();
+        self.reselect(sel_id, at);
     }
 
     /// Flatten the active board's sections into rows.
@@ -237,9 +269,10 @@ impl Model {
         });
     }
 
-    /// After a mutation: land the cursor back on `id` (or the
-    /// nearest item row).
-    fn reselect(&mut self, id: Option<ItemId>) {
+    /// After a mutation/reload: land the cursor back on `id`, or on
+    /// the item row nearest `from` — the removed/done item's old
+    /// slot — rather than teleporting to the top of the board.
+    fn reselect(&mut self, id: Option<ItemId>, from: usize) {
         if let Some(id) = id {
             if let Some(i) = self
                 .rows
@@ -250,10 +283,29 @@ impl Model {
                 return;
             }
         }
-        self.sel = self
-            .first_item_row()
-            .unwrap_or(0)
-            .min(self.rows.len().saturating_sub(1));
+        self.sel = self.nearest_item_row(from).unwrap_or(0);
+    }
+
+    /// The item row nearest `from` — `from` itself when it's an
+    /// item, else the next item row after it, else the last one
+    /// before it.
+    fn nearest_item_row(&self, from: usize) -> Option<usize> {
+        if self.rows.is_empty() {
+            return None;
+        }
+        let from = from.min(self.rows.len() - 1);
+        if matches!(self.rows[from], Row::Item { .. }) {
+            return Some(from);
+        }
+        match self.rows[from..]
+            .iter()
+            .position(|r| matches!(r, Row::Item { .. }))
+        {
+            Some(off) => Some(from + off),
+            None => self.rows[..from]
+                .iter()
+                .rposition(|r| matches!(r, Row::Item { .. })),
+        }
     }
 
     fn first_item_row(&self) -> Option<usize> {
@@ -274,20 +326,35 @@ impl Model {
     }
 
     /// The file `E` opens — the board doc, or the selected item's
-    /// file on the `Files` board.
-    fn board_path(&self) -> PathBuf {
+    /// file on the `Files` board (`None` when nothing is selected
+    /// there — `E` on an empty Files board has no target).
+    fn board_path(&self) -> Option<PathBuf> {
         match self.board {
-            Board::Todo => self.proj.worktree.join("TODO.md"),
-            Board::Backlog => self.proj.worktree.join("BACKLOG.md"),
+            Board::Todo => Some(self.proj.worktree.join("TODO.md")),
+            Board::Backlog => Some(self.proj.worktree.join("BACKLOG.md")),
             Board::Files => self
                 .selected()
-                .map(|i| self.proj.worktree.join(items::item_rel_path(i)))
-                .unwrap_or_else(|| self.proj.worktree.clone()),
+                .map(|i| self.proj.worktree.join(items::item_rel_path(i))),
         }
     }
 
-    /// Handle one key. Returns `true` to quit.
-    pub fn key(&mut self, k: KeyEvent) -> Result<bool, String> {
+    /// `E` / `:e` — open the board doc (or the file item under the
+    /// cursor) in `$EDITOR`.
+    fn open_editor(&mut self) {
+        match self.board_path() {
+            Some(p) => self.pending_editor = Some(p),
+            None => self.status = "nothing to edit — select a file-backed item".into(),
+        }
+    }
+
+    /// Handle one key. Returns `true` to quit — key errors land in
+    /// the status bar instead of killing the app.
+    pub fn key(&mut self, k: KeyEvent) -> bool {
+        // Ctrl-C is the force-quit and must work from every mode —
+        // even mid-`a`, mid-`:` or under an overlay.
+        if k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL) {
+            return true;
+        }
         match self.mode {
             Mode::Preview => return self.key_preview(k),
             Mode::Add => return self.key_add(k),
@@ -301,25 +368,24 @@ impl Model {
         let was_d = self.pending == Some('d');
         self.pending = None;
         match k.code {
-            KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => return Ok(true),
-            KeyCode::Char('q') => return Ok(true),
+            KeyCode::Char('q') => return true,
             KeyCode::Char('1') => self.switch_board(0),
             KeyCode::Char('2') => self.switch_board(1),
             KeyCode::Char('3') => self.switch_board(2),
             KeyCode::Char('h') | KeyCode::Left => self.step_board(-1),
             KeyCode::Char('l') | KeyCode::Right => self.step_board(1),
-            KeyCode::Char('j') | KeyCode::Down if alt => self.reorder(1),
-            KeyCode::Char('k') | KeyCode::Up if alt => self.reorder(-1),
+            KeyCode::Char('j') | KeyCode::Down if alt => self.mutate(|m| m.reorder(1)),
+            KeyCode::Char('k') | KeyCode::Up if alt => self.mutate(|m| m.reorder(-1)),
             KeyCode::Char('j') | KeyCode::Down => self.move_sel(1),
             KeyCode::Char('k') | KeyCode::Up => self.move_sel(-1),
             KeyCode::Char('g') if was_g => self.sel = self.first_item_row().unwrap_or(0),
             KeyCode::Char('g') => self.pending = Some('g'),
             KeyCode::Char('G') => self.sel = self.last_item_row().unwrap_or(0),
-            KeyCode::Char('d') if was_d => self.done_selected()?,
+            KeyCode::Char('d') if was_d => self.mutate(|m| m.done_selected()),
             KeyCode::Char('d') => self.pending = Some('d'),
-            KeyCode::Char('D') => self.defer_selected()?,
-            KeyCode::Char('p') => self.promote_selected()?,
-            KeyCode::Char(' ') => self.done_selected()?,
+            KeyCode::Char('D') => self.mutate(|m| m.defer_selected()),
+            KeyCode::Char('p') => self.mutate(|m| m.promote_selected()),
+            KeyCode::Char(' ') => self.mutate(|m| m.done_selected()),
             KeyCode::Char('a') => {
                 if self.board == Board::Files {
                     self.status = "add is a TODO/BACKLOG op — `myco <kind> new` for files".into();
@@ -340,27 +406,68 @@ impl Model {
             KeyCode::Enter => {
                 if self.selected().is_some() {
                     self.mode = Mode::Preview;
+                    self.preview_scroll = 0;
                 }
             }
-            KeyCode::Char('E') => self.pending_editor = Some(self.board_path()),
+            KeyCode::Char('E') => self.open_editor(),
             KeyCode::Char('R') => self.reload(),
             KeyCode::Char('?') => self.mode = Mode::Help,
             _ => {}
         }
-        Ok(false)
+        false
     }
 
-    fn key_preview(&mut self, k: KeyEvent) -> Result<bool, String> {
+    /// The one mutation entry point: the `Files` board is read-only
+    /// (task verbs don't apply — `myco <kind>` edits file items),
+    /// and every error lands in the status bar followed by a resync
+    /// from disk, so a failed verb never kills the session.
+    fn mutate(&mut self, f: impl FnOnce(&mut Self) -> Result<(), String>) {
+        if self.board == Board::Files {
+            self.status = "FILES is read-only — task verbs apply to TODO/BACKLOG".into();
+            return;
+        }
+        if let Err(e) = f(self) {
+            // resync — the write may have partially landed, or
+            // another writer moved the rows under us
+            self.reload();
+            self.status = e;
+        }
+    }
+
+    /// Exclusive worktree lock for one mutation span — the fresh
+    /// `load_ledger` each caller does under it is what keeps a
+    /// long-lived TUI from clobbering concurrent CLI/agent writes.
+    fn lock(&self) -> Result<ops::WorktreeLock, String> {
+        ops::lock_worktree(&self.proj.worktree)
+    }
+
+    /// Preview mode: `esc`/`enter`/`q` back to the board;
+    /// `j`/`k`/`PgUp`/`PgDn`/`g`/`G` scroll the detail pane.
+    fn key_preview(&mut self, k: KeyEvent) -> bool {
         match k.code {
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => self.mode = Mode::Normal,
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.preview_scroll = self.preview_scroll.saturating_add(1);
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.preview_scroll = self.preview_scroll.saturating_sub(1);
+            }
+            KeyCode::PageDown => {
+                self.preview_scroll = self.preview_scroll.saturating_add(10);
+            }
+            KeyCode::PageUp => {
+                self.preview_scroll = self.preview_scroll.saturating_sub(10);
+            }
+            KeyCode::Char('g') | KeyCode::Home => self.preview_scroll = 0,
+            KeyCode::Char('G') | KeyCode::End => self.preview_scroll = u16::MAX,
             _ => {}
         }
-        Ok(false)
+        false
     }
 
     /// `/` filter — chars narrow rows live; `Enter` keeps the
     /// filter set, `esc` clears it.
-    fn key_filter(&mut self, k: KeyEvent) -> Result<bool, String> {
+    fn key_filter(&mut self, k: KeyEvent) -> bool {
         match k.code {
             KeyCode::Esc => {
                 self.filter.clear();
@@ -372,18 +479,20 @@ impl Model {
                 self.filter.pop();
                 self.rebuild_rows();
             }
-            KeyCode::Char(c) => {
+            // plain chars only — modifier chords (ctrl+d, alt+x)
+            // aren't filter text
+            KeyCode::Char(c) if k.modifiers.is_empty() || k.modifiers == KeyModifiers::SHIFT => {
                 self.filter.push(c);
                 self.rebuild_rows();
             }
             _ => {}
         }
-        Ok(false)
+        false
     }
 
     /// `:` command line — chars append, `Enter` runs `exec_command`,
     /// `esc` drops the line.
-    fn key_command(&mut self, k: KeyEvent) -> Result<bool, String> {
+    fn key_command(&mut self, k: KeyEvent) -> bool {
         match k.code {
             KeyCode::Esc => self.mode = Mode::Normal,
             KeyCode::Enter => {
@@ -394,10 +503,12 @@ impl Model {
             KeyCode::Backspace => {
                 self.cmdline.pop();
             }
-            KeyCode::Char(c) => self.cmdline.push(c),
+            KeyCode::Char(c) if k.modifiers.is_empty() || k.modifiers == KeyModifiers::SHIFT => {
+                self.cmdline.push(c);
+            }
             _ => {}
         }
-        Ok(false)
+        false
     }
 
     /// Run one `:` line — first word is the command, the rest its
@@ -405,16 +516,16 @@ impl Model {
     /// from disk, `e` opens the board doc in `$EDITOR`, `go <id>`
     /// and a bare `<id>` jump the cursor, `set id`/`noid` toggles
     /// the id column (`numbers`/`nonumbers` also accepted).
-    fn exec_command(&mut self, line: &str) -> Result<bool, String> {
+    fn exec_command(&mut self, line: &str) -> bool {
         let line = line.trim();
         let mut parts = line.splitn(2, char::is_whitespace);
         let cmd = parts.next().unwrap_or("");
         let arg = parts.next().unwrap_or("").trim();
         match cmd {
             "" => {}
-            "q" | "q!" => return Ok(true),
+            "q" | "q!" => return true,
             "w" => self.reload(),
-            "e" => self.pending_editor = Some(self.board_path()),
+            "e" => self.open_editor(),
             "go" => match arg.parse::<ItemId>() {
                 Ok(id) => self.jump_to(id),
                 Err(_) => self.status = format!(":go expects an id, got {arg:?}"),
@@ -429,7 +540,7 @@ impl Model {
                 Err(_) => self.status = format!("unknown command :{cmd}"),
             },
         }
-        Ok(false)
+        false
     }
 
     /// `:<id>` / `:go <id>` — land the cursor on the item when it's
@@ -440,38 +551,40 @@ impl Model {
             .iter()
             .any(|r| matches!(r, Row::Item { item, .. } if item.id == id))
         {
-            self.reselect(Some(id));
+            self.reselect(Some(id), self.sel);
         } else {
             self.status = format!("{id}: not on this board");
         }
     }
 
     /// Help is a dead end — every key but the closers is swallowed.
-    fn key_help(&mut self, k: KeyEvent) -> Result<bool, String> {
+    fn key_help(&mut self, k: KeyEvent) -> bool {
         match k.code {
             KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => self.mode = Mode::Normal,
             _ => {}
         }
-        Ok(false)
+        false
     }
 
-    fn key_add(&mut self, k: KeyEvent) -> Result<bool, String> {
+    fn key_add(&mut self, k: KeyEvent) -> bool {
         match k.code {
             KeyCode::Esc => self.mode = Mode::Normal,
             KeyCode::Enter => {
                 let title = self.input.trim().to_string();
                 self.mode = Mode::Normal;
                 if !title.is_empty() {
-                    self.add_item(&title)?;
+                    self.mutate(|m| m.add_item(&title));
                 }
             }
             KeyCode::Backspace => {
                 self.input.pop();
             }
-            KeyCode::Char(c) => self.input.push(c),
+            KeyCode::Char(c) if k.modifiers.is_empty() || k.modifiers == KeyModifiers::SHIFT => {
+                self.input.push(c);
+            }
             _ => {}
         }
-        Ok(false)
+        false
     }
 
     /// Mouse input (Normal mode only — acting on clicks under an
@@ -561,137 +674,137 @@ impl Model {
     /// `Space`/`dd` — the `todo done` verb: walk to done, remove the
     /// line (and its subtree), one commit.
     fn done_selected(&mut self) -> Result<(), String> {
-        let id = match self.selected_id() {
-            Some(id) => id,
-            None => return Ok(()),
+        let Some(id) = self.selected_id() else {
+            return Ok(());
         };
-        let loc = self
-            .ledger
+        let _lock = self.lock()?;
+        let mut ledger = items::load_ledger(&self.store)?;
+        let loc = ledger
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
         if loc.backlog {
             self.status = format!("{id} is deferred — `p` promotes it first");
             return Ok(());
         }
-        let mut item = self
-            .ledger
+        let mut item = ledger
             .take(&loc)
             .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Done)?;
-        items::save_ledger(&self.store, &self.ledger)?;
+        items::save_ledger(&self.store, &ledger)?;
         items::commit(
             &self.proj.worktree,
             &format!("chore: done {id}"),
             self.no_commit,
         )?;
+        self.ledger = ledger;
         self.status = format!("done {id} — {}", item.title);
+        let at = self.sel;
         self.rebuild_rows();
-        self.reselect(None);
+        self.reselect(None, at);
         Ok(())
     }
 
     /// `D` — `todo defer`: park the subtree into BACKLOG.md.
     fn defer_selected(&mut self) -> Result<(), String> {
-        let id = match self.selected_id() {
-            Some(id) => id,
-            None => return Ok(()),
+        let Some(id) = self.selected_id() else {
+            return Ok(());
         };
-        let loc = self
-            .ledger
+        let _lock = self.lock()?;
+        let mut ledger = items::load_ledger(&self.store)?;
+        let loc = ledger
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
         if loc.backlog {
             self.status = format!("{id} is already deferred");
             return Ok(());
         }
-        let mut item = self
-            .ledger
+        let mut item = ledger
             .take(&loc)
             .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Deferred)?;
         items::walk_descendants_to(&mut item, Status::Deferred)?;
-        self.ledger.put_backlog(item, None);
-        items::save_ledger(&self.store, &self.ledger)?;
+        ledger.put_backlog(item, None);
+        items::save_ledger(&self.store, &ledger)?;
         items::commit(
             &self.proj.worktree,
             &format!("chore: defer {id}"),
             self.no_commit,
         )?;
+        self.ledger = ledger;
         self.status = format!("deferred {id} → BACKLOG.md");
+        let at = self.sel;
         self.rebuild_rows();
-        self.reselect(None);
+        self.reselect(None, at);
         Ok(())
     }
 
     /// `p` — `backlog promote`: unpark the subtree into TODO.md.
     fn promote_selected(&mut self) -> Result<(), String> {
-        let id = match self.selected_id() {
-            Some(id) => id,
-            None => return Ok(()),
+        let Some(id) = self.selected_id() else {
+            return Ok(());
         };
-        let loc = self
-            .ledger
+        let _lock = self.lock()?;
+        let mut ledger = items::load_ledger(&self.store)?;
+        let loc = ledger
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
         if !loc.backlog {
             self.status = format!("{id} isn't in BACKLOG.md");
             return Ok(());
         }
-        let mut item = self
-            .ledger
+        let mut item = ledger
             .take(&loc)
             .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Open)?;
         items::walk_descendants_to(&mut item, Status::Open)?;
-        self.ledger.put_todo(item, None);
-        items::save_ledger(&self.store, &self.ledger)?;
+        ledger.put_todo(item, None);
+        items::save_ledger(&self.store, &ledger)?;
         items::commit(
             &self.proj.worktree,
             &format!("chore: promote {id}"),
             self.no_commit,
         )?;
+        self.ledger = ledger;
         self.status = format!("promoted {id} → TODO.md");
         self.rebuild_rows();
-        self.reselect(Some(id));
+        self.reselect(Some(id), self.sel);
         Ok(())
     }
 
     /// `Alt+↑/↓` — sibling reorder (pm's backlog priority move).
-    fn reorder(&mut self, delta: isize) {
+    fn reorder(&mut self, delta: isize) -> Result<(), String> {
         let Some(id) = self.selected_id() else {
-            return;
+            return Ok(());
         };
-        let Some(mut loc) = self.ledger.locate(id) else {
-            return;
+        let _lock = self.lock()?;
+        let mut ledger = items::load_ledger(&self.store)?;
+        let Some(mut loc) = ledger.locate(id) else {
+            return Err(format!("{id}: no such task"));
         };
-        if self.ledger.move_within(&mut loc, delta) {
-            if let Err(e) = items::save_ledger(&self.store, &self.ledger).and_then(|_| {
-                items::commit(
-                    &self.proj.worktree,
-                    &format!("chore: reorder {id}"),
-                    self.no_commit,
-                )
-                .map(|_| ())
-            }) {
-                self.status = format!("reorder {id}: {e}");
-                self.reload();
-            } else {
-                self.status = format!("reordered {id}");
-                self.rebuild_rows();
-                self.reselect(Some(id));
-            }
+        if !ledger.move_within(&mut loc, delta) {
+            return Ok(());
         }
+        items::save_ledger(&self.store, &ledger)?;
+        items::commit(
+            &self.proj.worktree,
+            &format!("chore: reorder {id}"),
+            self.no_commit,
+        )?;
+        self.ledger = ledger;
+        self.status = format!("reordered {id}");
+        self.rebuild_rows();
+        self.reselect(Some(id), self.sel);
+        Ok(())
     }
 
     /// `a` Enter — `todo add`/`backlog add` for the active board.
     fn add_item(&mut self, title: &str) -> Result<(), String> {
+        let _lock = self.lock()?;
+        let mut ledger = items::load_ledger(&self.store)?;
         let id = self
             .store
             .alloc_id(ItemKind::Task)
             .map_err(|e| e.to_string())?;
-        if self.board == Board::Files {
-            return Err("add is a TODO/BACKLOG op".into());
-        }
         let item = match self.board {
             Board::Todo => Item::new(id, title).created(items::today()),
             _ => Item::new(id, title)
@@ -699,18 +812,19 @@ impl Model {
                 .created(items::today()),
         };
         match self.board {
-            Board::Todo => self.ledger.put_todo(item.clone(), None),
-            _ => self.ledger.put_backlog(item.clone(), None),
+            Board::Todo => ledger.put_todo(item.clone(), None),
+            _ => ledger.put_backlog(item.clone(), None),
         }
-        items::save_ledger(&self.store, &self.ledger)?;
+        items::save_ledger(&self.store, &ledger)?;
         items::commit(
             &self.proj.worktree,
             &format!("chore: add {id}"),
             self.no_commit,
         )?;
+        self.ledger = ledger;
         self.status = format!("added {}", items::compact(&item));
         self.rebuild_rows();
-        self.reselect(Some(id));
+        self.reselect(Some(id), self.sel);
         Ok(())
     }
 }
@@ -774,7 +888,7 @@ impl Model {
         };
         self.rebuild_rows();
         if let Some(id) = get("item").and_then(|s| s.parse::<ItemId>().ok()) {
-            self.reselect(Some(id));
+            self.reselect(Some(id), 0);
         }
     }
 }
@@ -805,16 +919,17 @@ mod tests {
     }
 
     /// A model over a temp `project/` dir — `no_commit` keeps git
-    /// out of the loop (autocommit short-circuits).
+    /// out of the loop (autocommit short-circuits). The populated
+    /// ledger is saved to disk too: mutations re-read under the
+    /// lock, so in-memory-only items would look deleted to them.
     fn model(populate: impl FnOnce(&mut Ledger)) -> Model {
         let dir = tempfile::tempdir().unwrap();
         let worktree = dir.path().join("project");
         std::fs::create_dir_all(&worktree).unwrap();
-        let store = LockedStore::unlocked(myco_store_md::MdStore::new(
-            Utf8PathBuf::from_path_buf(worktree.clone()).unwrap(),
-        ));
+        let store = MdStore::new(Utf8PathBuf::from_path_buf(worktree.clone()).unwrap());
         let mut ledger = items::load_ledger(&store).unwrap();
         populate(&mut ledger);
+        items::save_ledger(&store, &ledger).unwrap();
         let mut m = Model {
             proj: discover::Project {
                 root: dir.path().to_path_buf(),
@@ -834,6 +949,7 @@ mod tests {
             status: String::new(),
             pending_editor: None,
             files: Vec::new(),
+            preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
             viewport_top: 0,
@@ -870,12 +986,12 @@ mod tests {
             l.todo.sections[1].items = vec![t(2)];
         });
         // rows: H S, t1, H T, t2 — j from t1 lands on t2
-        m.key(key('j')).unwrap();
+        m.key(key('j'));
         assert_eq!(m.selected().unwrap().id.number(), 2);
         // edge: no wrap
-        m.key(key('j')).unwrap();
+        m.key(key('j'));
         assert_eq!(m.selected().unwrap().id.number(), 2);
-        m.key(key('k')).unwrap();
+        m.key(key('k'));
         assert_eq!(m.selected().unwrap().id.number(), 1);
     }
 
@@ -886,24 +1002,24 @@ mod tests {
             l.put_todo(t(2), None);
             l.put_backlog(t(3).status(Status::Deferred), None);
         });
-        m.key(key('G')).unwrap();
+        m.key(key('G'));
         assert_eq!(m.selected().unwrap().id.number(), 2);
-        m.key(key('g')).unwrap();
-        m.key(key('g')).unwrap();
+        m.key(key('g'));
+        m.key(key('g'));
         assert_eq!(m.selected().unwrap().id.number(), 1);
-        m.key(key('2')).unwrap();
+        m.key(key('2'));
         assert_eq!(m.board, Board::Backlog);
         assert_eq!(m.selected().unwrap().id.number(), 3);
-        m.key(key('1')).unwrap();
+        m.key(key('1'));
         assert_eq!(m.board, Board::Todo);
     }
 
     #[test]
     fn dd_remembers_the_prefix_and_dones() {
         let mut m = model(|l| l.put_todo(t(1), None));
-        m.key(key('d')).unwrap();
+        m.key(key('d'));
         assert!(m.selected().is_some()); // still there — only armed
-        m.key(key('d')).unwrap();
+        m.key(key('d'));
         assert!(m.selected().is_none());
         assert!(m.ledger.locate(ItemId::new(ItemKind::Task, 1)).is_none());
     }
@@ -911,11 +1027,11 @@ mod tests {
     #[test]
     fn defer_and_promote_cross_boards() {
         let mut m = model(|l| l.put_todo(t(1), None));
-        m.key(key('D')).unwrap();
+        m.key(key('D'));
         let loc = m.ledger.locate(ItemId::new(ItemKind::Task, 1)).unwrap();
         assert!(loc.backlog);
-        m.key(key('2')).unwrap();
-        m.key(key('p')).unwrap();
+        m.key(key('2'));
+        m.key(key('p'));
         let loc = m.ledger.locate(ItemId::new(ItemKind::Task, 1)).unwrap();
         assert!(!loc.backlog);
         assert_eq!(m.board, Board::Backlog); // board stays put
@@ -924,23 +1040,57 @@ mod tests {
     #[test]
     fn help_toggles_and_swallows_keys() {
         let mut m = model(|_| {});
-        m.key(key('?')).unwrap();
+        m.key(key('?'));
         assert_eq!(m.mode, Mode::Help);
         // other keys are swallowed, not applied to the board
-        m.key(key('j')).unwrap();
+        m.key(key('j'));
         assert_eq!(m.mode, Mode::Help);
         // ? closes
-        m.key(key('?')).unwrap();
+        m.key(key('?'));
         assert_eq!(m.mode, Mode::Normal);
         // q closes rather than quitting
-        m.key(key('?')).unwrap();
-        assert!(!m.key(key('q')).unwrap());
+        m.key(key('?'));
+        assert!(!m.key(key('q')));
         assert_eq!(m.mode, Mode::Normal);
         // esc closes
-        m.key(key('?')).unwrap();
-        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
-            .unwrap();
+        m.key(key('?'));
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(m.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn ctrl_c_quits_from_every_mode() {
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        for (enter, mode) in [
+            (
+                Box::new(|_m: &mut Model| {}) as Box<dyn Fn(&mut Model)>,
+                Mode::Normal,
+            ),
+            (Box::new(|m: &mut Model| m.mode = Mode::Add), Mode::Add),
+            (
+                Box::new(|m: &mut Model| m.mode = Mode::Filter),
+                Mode::Filter,
+            ),
+            (
+                Box::new(|m: &mut Model| m.mode = Mode::Command),
+                Mode::Command,
+            ),
+            (Box::new(|m: &mut Model| m.mode = Mode::Help), Mode::Help),
+            (
+                Box::new(|m: &mut Model| m.mode = Mode::Preview),
+                Mode::Preview,
+            ),
+        ] {
+            let mut m = model(|_| {});
+            enter(&mut m);
+            assert_eq!(m.mode, mode);
+            assert!(m.key(ctrl_c), "ctrl-c should quit from {mode:?}");
+        }
+        // and the chord never leaks into a text buffer
+        let mut m = model(|_| {});
+        m.mode = Mode::Add;
+        m.key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        assert!(m.input.is_empty());
     }
 
     #[test]
@@ -949,15 +1099,14 @@ mod tests {
             l.put_todo(t(1), None);
             l.put_todo(t(2), None);
         });
-        m.key(key('/')).unwrap();
+        m.key(key('/'));
         for c in "t2".chars() {
-            m.key(key(c)).unwrap();
+            m.key(key(c));
         }
         assert_eq!(m.rows.len(), 1);
         assert_eq!(m.selected().unwrap().id.number(), 2);
         // esc clears back to the full board
-        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
-            .unwrap();
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(m.mode, Mode::Normal);
         assert_eq!(m.rows.len(), 2);
     }
@@ -1011,12 +1160,11 @@ mod tests {
     #[test]
     fn add_mode_commits_title() {
         let mut m = model(|_| {});
-        m.key(key('a')).unwrap();
+        m.key(key('a'));
         for c in "ship it".chars() {
-            m.key(key(c)).unwrap();
+            m.key(key(c));
         }
-        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
-            .unwrap();
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(m.mode, Mode::Normal);
         let item = m.selected().unwrap();
         assert_eq!(item.title, "ship it");
@@ -1025,13 +1173,12 @@ mod tests {
     /// Drive `:` + `line` + `Enter` — returns the key() result so
     /// `:q` tests can assert the quit flag.
     fn cmd(m: &mut Model, line: &str) -> bool {
-        m.key(key(':')).unwrap();
+        m.key(key(':'));
         assert_eq!(m.mode, Mode::Command);
         for c in line.chars() {
-            m.key(key(c)).unwrap();
+            m.key(key(c));
         }
         m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
-            .unwrap()
     }
 
     #[test]
@@ -1039,7 +1186,6 @@ mod tests {
         let mut m = model(|l| l.put_todo(t(1), None));
         // another writer lands a task while the board is open
         let mut other = items::load_ledger(&m.store).unwrap();
-        other.put_todo(t(1), None);
         other.put_todo(t(2), None);
         items::save_ledger(&m.store, &other).unwrap();
         assert_eq!(m.rows.len(), 1);
@@ -1083,12 +1229,11 @@ mod tests {
         assert_eq!(m.mode, Mode::Normal);
         assert_eq!(m.status, "unknown command :bogus");
         // esc drops a half-typed line and re-entry starts empty
-        m.key(key(':')).unwrap();
-        m.key(key('w')).unwrap();
-        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
-            .unwrap();
+        m.key(key(':'));
+        m.key(key('w'));
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(m.mode, Mode::Normal);
-        m.key(key(':')).unwrap();
+        m.key(key(':'));
         assert_eq!(m.cmdline, "");
     }
 
@@ -1098,5 +1243,162 @@ mod tests {
         assert!(cmd(&mut m, "q"));
         let mut m = model(|_| {});
         assert!(cmd(&mut m, "q!"));
+    }
+
+    /// Write a file-backed item (Issue stands in for all file
+    /// kinds) into the model's worktree.
+    fn save_issue(m: &Model, n: u32, title: &str) {
+        let item = Item::new(ItemId::new(ItemKind::Issue, n), title);
+        m.store
+            .save_item(&ItemFile::new(item).body("body"))
+            .unwrap();
+    }
+
+    #[test]
+    fn files_board_is_read_only() {
+        let mut m = model(|_| {});
+        save_issue(&m, 1, "the issue");
+        m.load_files();
+        m.key(key('3'));
+        assert_eq!(m.board, Board::Files);
+        assert_eq!(m.selected().unwrap().id, ItemId::new(ItemKind::Issue, 1));
+        // every mutation key is a status hint, not an exit or a write
+        for c in [' ', 'D', 'p'] {
+            m.status.clear();
+            m.key(key(c));
+            assert!(m.status.contains("read-only"), "{c:?} → {:?}", m.status);
+        }
+        m.status.clear();
+        m.key(key('d'));
+        m.key(key('d'));
+        assert!(m.status.contains("read-only"));
+        m.status.clear();
+        m.key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT));
+        assert!(m.status.contains("read-only"));
+        // `a` keeps its own hint
+        m.status.clear();
+        m.key(key('a'));
+        assert!(m.status.contains("add is a TODO/BACKLOG op"));
+        assert_eq!(m.mode, Mode::Normal);
+        // nothing was written — the issue file is untouched
+        let f = m.store.item(ItemId::new(ItemKind::Issue, 1)).unwrap();
+        assert_eq!(f.meta.title, "the issue");
+    }
+
+    #[test]
+    fn files_board_nav_preview_edit_still_work() {
+        let mut m = model(|_| {});
+        save_issue(&m, 1, "the issue");
+        m.load_files();
+        m.key(key('3'));
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Preview);
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Normal);
+        // `E` opens the item's own file
+        m.key(key('E'));
+        let p = m.pending_editor.take().unwrap();
+        assert!(p.to_string_lossy().contains("issues"), "{p:?}");
+    }
+
+    #[test]
+    fn e_on_empty_files_board_is_a_hint() {
+        let mut m = model(|_| {});
+        m.key(key('3'));
+        assert!(m.selected().is_none());
+        m.key(key('E'));
+        assert!(m.pending_editor.is_none());
+        assert!(!m.status.is_empty());
+    }
+
+    #[test]
+    fn mutation_errors_land_in_status_not_exit() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        // corrupt the ledger on disk — the mutation's fresh
+        // re-read fails, but the board keeps running
+        std::fs::write(m.proj.worktree.join("TODO.md"), "garbage\n").unwrap();
+        assert!(!m.key(key(' ')));
+        assert!(!m.status.is_empty());
+        assert_eq!(m.mode, Mode::Normal);
+        // …and it recovers once the ledger does
+        let mut fixed = items::load_ledger(&m.store).unwrap_or_else(|_| {
+            Ledger::new(
+                myco_core::TodoDoc::new("x"),
+                myco_core::BacklogDoc::default(),
+            )
+        });
+        fixed.put_todo(t(1), None);
+        items::save_ledger(&m.store, &fixed).unwrap();
+        m.key(key(' '));
+        assert!(m.status.starts_with("done T-001"), "{}", m.status);
+        assert!(m.selected().is_none());
+    }
+
+    #[test]
+    fn mutation_sees_writes_since_launch() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        // a CLI/agent lands T-2 while the board is open — the
+        // stale-startup-snapshot clobber would lose it
+        let mut other = items::load_ledger(&m.store).unwrap();
+        other.put_todo(t(2), None);
+        items::save_ledger(&m.store, &other).unwrap();
+        m.key(key(' ')); // done T-1
+        let disk = items::load_ledger(&m.store).unwrap();
+        assert!(disk.locate(ItemId::new(ItemKind::Task, 1)).is_none());
+        assert!(disk.locate(ItemId::new(ItemKind::Task, 2)).is_some());
+        // and the in-memory board reflects the fresh ledger too
+        assert!(m.ledger.locate(ItemId::new(ItemKind::Task, 2)).is_some());
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+    }
+
+    #[test]
+    fn done_lands_on_the_next_item_not_the_top() {
+        let mut m = model(|l| {
+            l.put_todo(t(1), None);
+            l.put_todo(t(2), None);
+            l.put_todo(t(3), None);
+        });
+        m.key(key('j'));
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+        m.key(key(' '));
+        // T-3 slid up into T-2's slot — the cursor follows it
+        assert_eq!(m.selected().unwrap().id.number(), 3);
+        // at the end of the board it falls back to the item before
+        m.key(key(' '));
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+    }
+
+    #[test]
+    fn reload_picks_up_new_files() {
+        let mut m = model(|_| {});
+        assert!(m.files.is_empty());
+        save_issue(&m, 1, "landed mid-session");
+        m.key(key('R'));
+        assert_eq!(m.files.len(), 1);
+        m.key(key('3'));
+        assert_eq!(m.selected().unwrap().id, ItemId::new(ItemKind::Issue, 1));
+    }
+
+    #[test]
+    fn preview_scrolls_and_closes() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Preview);
+        m.key(key('j'));
+        m.key(key('j'));
+        assert_eq!(m.preview_scroll, 2);
+        m.key(key('k'));
+        assert_eq!(m.preview_scroll, 1);
+        m.key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
+        assert_eq!(m.preview_scroll, 11);
+        m.key(key('g'));
+        assert_eq!(m.preview_scroll, 0);
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Normal);
+        // re-entering resets the scroll
+        m.preview_scroll = 7;
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Preview);
+        assert_eq!(m.preview_scroll, 0);
     }
 }
