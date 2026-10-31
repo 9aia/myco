@@ -60,6 +60,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco org status`↴](#myco-org-status)
 * [`myco org board`↴](#myco-org-board)
 * [`myco org init`↴](#myco-org-init)
+* [`myco ui`↴](#myco-ui)
 
 ## `myco`
 
@@ -92,6 +93,7 @@ myco — project management, grown not built: agent-first PM CLI
 * `report` — Aging + velocity + blocked — how the ledger is trending
 * `index` — The derived index: register repos, query/rebuild snapshots
 * `org` — Cross-repo views over the index (auto-rebuilds stale repos)
+* `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
 
 ###### **Options:**
 
@@ -897,6 +899,14 @@ Org kanban — repo-prefixed cards over every live item
 Re-run `init` on every registered repo — refreshes the worktree scaffold and root files (.gitignore, the AGENTS.md agent-awareness block). The rollout path for new scaffolding
 
 **Usage:** `myco org init`
+
+
+
+## `myco ui`
+
+Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
+
+**Usage:** `myco ui`
 
 
 

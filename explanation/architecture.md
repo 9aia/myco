@@ -29,12 +29,14 @@ Design rules:
 | `myco-config` | port | Config port: where myco.toml-shaped config comes from |
 | `myco-index` | port | Index port: the derived, disposable cache powering status/board/report/org views |
 | `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
+| `myco-ops` | ops | myco — shared ops layer: discovery, the TODO↔BACKLOG ledger, verb mutations |
 | `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
 | `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
 | `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
 | `myco-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `myco-store-md` | adapter | Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec |
 | `myco-testkit` | adapter | Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec |
+| `myco-tui` | adapter | myco — interactive board TUI (ratatui); a thin front-end over myco-ops |
 | `myco` | binary | myco — project management, grown not built: agent-first PM CLI |
 
 
