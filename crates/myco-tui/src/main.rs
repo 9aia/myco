@@ -1,7 +1,9 @@
-//! myco-tui — interactive board TUI over `myco-ops`. Stub until
-//! the ratatui front-end lands (tracked as T-019).
+//! myco-tui — interactive board TUI over `myco-ops`. Standalone
+//! entry; `myco ui` embeds the same `myco_tui::run`.
 
 fn main() {
-    eprintln!("myco-tui: not implemented yet — `myco board` is the static view");
-    std::process::exit(2);
+    if let Err(e) = myco_tui::run(None, None, false) {
+        eprintln!("myco-tui: error: {e}");
+        std::process::exit(1);
+    }
 }
