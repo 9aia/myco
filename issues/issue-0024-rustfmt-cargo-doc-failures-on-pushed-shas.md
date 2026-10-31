@@ -7,4 +7,4 @@ owner = "devin"
 priority = "high"
 +++
 
-From bupha T-029 CI audit (2026-10-31): myco:main rustfmt failures and myco:docs cargo doc failures on specific pushed SHAs. Gate is working — code isn't. Fix formatting and doc build.
+From the bupha CI audit (2026-10-31): myco:main rustfmt failures and myco:docs cargo doc failures on specific pushed SHAs. Gate is working — code isn't. Fix formatting and doc build.
