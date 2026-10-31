@@ -5,7 +5,7 @@
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{Board, Mode, Model, Row};
@@ -29,6 +29,9 @@ pub fn draw(f: &mut Frame, m: &Model) {
         _ => draw_board(f, m, body),
     }
     draw_status(f, m, status);
+    if m.mode == Mode::Help {
+        draw_help(f, area);
+    }
 }
 
 fn draw_tabs(f: &mut Frame, m: &Model, area: Rect) {
@@ -159,19 +162,47 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
     f.render_widget(Paragraph::new(lines), area);
 }
 
-fn draw_status(f: &mut Frame, m: &Model, area: Rect) {
-    let hints = match m.mode {
+/// Normal-mode hint sets, widest first — `pick_hints` takes the
+/// first that fits so narrow terminals degrade instead of cropping.
+const HINTS: [&str; 3] = [
+    "j/k move · 1/2 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · enter preview · E edit · R reload · ? help · q quit",
+    "j/k move · space done · a add · enter · E edit · ? help · q quit",
+    "? help · q quit",
+];
+
+/// The hint line for `mode` that fits `width` columns (including the
+/// leading space). The minimal set always wins as the fallback.
+fn pick_hints(mode: Mode, width: usize) -> &'static str {
+    match mode {
         Mode::Add => "enter add · esc cancel",
         Mode::Preview => "esc back",
-        Mode::Normal => "j/k move · 1/2 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · enter preview · E edit · R reload · q quit",
-    };
-    let line = if m.mode == Mode::Add {
-        Line::from(vec![
+        Mode::Help => "esc/?/q close",
+        Mode::Normal => HINTS
+            .iter()
+            .copied()
+            .find(|h| h.chars().count() < width)
+            .unwrap_or(HINTS[HINTS.len() - 1]),
+    }
+}
+
+fn draw_status(f: &mut Frame, m: &Model, area: Rect) {
+    if m.mode == Mode::Add {
+        let line = Line::from(vec![
             Span::styled("add> ", Style::default().fg(ACCENT)),
             Span::raw(m.input.clone()),
             Span::styled("█", Style::default().fg(ACCENT)),
-        ])
-    } else if m.status.is_empty() {
+        ]);
+        f.render_widget(Paragraph::new(line), area);
+        return;
+    }
+    // The status message eats columns first; hints get what remains.
+    let status_w = if m.status.is_empty() {
+        0
+    } else {
+        m.status.chars().count() + 2
+    };
+    let hints = pick_hints(m.mode, (area.width as usize).saturating_sub(status_w));
+    let line = if m.status.is_empty() {
         Line::from(Span::styled(
             format!(" {hints}"),
             Style::default().fg(MUTED),
@@ -183,4 +214,88 @@ fn draw_status(f: &mut Frame, m: &Model, area: Rect) {
         ])
     };
     f.render_widget(Paragraph::new(line), area);
+}
+
+/// A `width`×`height` rect centered in `area`, clamped to fit.
+fn centered(area: Rect, width: u16, height: u16) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    Rect {
+        x: area.x + (area.width - width) / 2,
+        y: area.y + (area.height - height) / 2,
+        width,
+        height,
+    }
+}
+
+/// The `?` overlay — every bind, grouped like the status bar hints.
+fn help_lines() -> Vec<Line<'static>> {
+    fn group(name: &'static str) -> Line<'static> {
+        Line::from(Span::styled(
+            name,
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ))
+    }
+    fn bind(keys: &'static str, desc: &'static str) -> Line<'static> {
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(format!("{keys:<12}"), Style::default().fg(ACCENT)),
+            Span::styled(desc, Style::default().fg(MUTED)),
+        ])
+    }
+    // No blank separators — the whole list must fit a 24-row screen.
+    vec![
+        group("nav"),
+        bind("j/k, ↑/↓", "move"),
+        bind("gg / G", "first / last"),
+        bind("enter", "preview item"),
+        group("tabs"),
+        bind("1 / 2", "TODO / BACKLOG"),
+        bind("h/l, ←/→", "switch board"),
+        group("items"),
+        bind("space, dd", "mark done"),
+        bind("D", "defer → BACKLOG"),
+        bind("p", "promote → TODO"),
+        bind("alt+j/k, ↑/↓", "reorder"),
+        group("edit"),
+        bind("a", "add item"),
+        bind("E", "open in $EDITOR"),
+        bind("R", "reload"),
+        group("misc"),
+        bind("?", "this help"),
+        bind("q, ctrl+c", "quit"),
+        Line::from(Span::styled(
+            "esc / ? / q to close",
+            Style::default().fg(MUTED),
+        )),
+    ]
+}
+
+fn draw_help(f: &mut Frame, area: Rect) {
+    let lines = help_lines();
+    let width = lines.iter().map(Line::width).max().unwrap_or(0) as u16 + 4;
+    let height = lines.len() as u16 + 2;
+    let popup = centered(area, width, height);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(ACCENT))
+        .title(Span::styled(" keys ", Style::default().fg(ACCENT)));
+    f.render_widget(Paragraph::new(lines).block(block), popup);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hints_degrade_full_to_minimal() {
+        let len = |h: &str| h.chars().count();
+        assert_eq!(pick_hints(Mode::Normal, len(HINTS[0]) + 1), HINTS[0]);
+        assert_eq!(pick_hints(Mode::Normal, len(HINTS[0])), HINTS[1]);
+        assert_eq!(pick_hints(Mode::Normal, len(HINTS[1])), HINTS[2]);
+        // tiny terminals still get the minimal set (cropped, not absent)
+        assert_eq!(pick_hints(Mode::Normal, 0), HINTS[2]);
+        assert_eq!(pick_hints(Mode::Preview, 0), "esc back");
+    }
 }

@@ -7,7 +7,7 @@
 //! reference (`9aia/pm`, `docs/tui.md` there) — the keymap is
 //! vim-style: `j/k` move, `h/l`/`1`/`2` boards, `Space`/`dd` done,
 //! `D` defer, `p` promote, `Alt+↑/↓` reorder, `a` add, `Enter`/`esc`
-//! preview, `E` $EDITOR, `R` reload, `q` quit.
+//! preview, `E` $EDITOR, `R` reload, `?` help, `q` quit.
 
 mod app;
 mod render;

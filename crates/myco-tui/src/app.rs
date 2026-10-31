@@ -43,6 +43,8 @@ pub enum Mode {
     Preview,
     /// `a` — typing a new item title; `Enter` commits, `esc` drops.
     Add,
+    /// `?` — keybind overlay; `esc`/`?`/`q` closes.
+    Help,
 }
 
 /// A flattened display row — section headers aren't selectable.
@@ -180,6 +182,7 @@ impl Model {
         match self.mode {
             Mode::Preview => return self.key_preview(k),
             Mode::Add => return self.key_add(k),
+            Mode::Help => return self.key_help(k),
             Mode::Normal => {}
         }
         let alt = k.modifiers.contains(KeyModifiers::ALT);
@@ -216,6 +219,7 @@ impl Model {
             }
             KeyCode::Char('E') => self.pending_editor = Some(self.board_path()),
             KeyCode::Char('R') => self.reload(),
+            KeyCode::Char('?') => self.mode = Mode::Help,
             _ => {}
         }
         Ok(false)
@@ -224,6 +228,15 @@ impl Model {
     fn key_preview(&mut self, k: KeyEvent) -> Result<bool, String> {
         match k.code {
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => self.mode = Mode::Normal,
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    /// Help is a dead end — every key but the closers is swallowed.
+    fn key_help(&mut self, k: KeyEvent) -> Result<bool, String> {
+        match k.code {
+            KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q') => self.mode = Mode::Normal,
             _ => {}
         }
         Ok(false)
@@ -560,6 +573,28 @@ mod tests {
         let loc = m.ledger.locate(ItemId::new(ItemKind::Task, 1)).unwrap();
         assert!(!loc.backlog);
         assert_eq!(m.board, Board::Backlog); // board stays put
+    }
+
+    #[test]
+    fn help_toggles_and_swallows_keys() {
+        let mut m = model(|_| {});
+        m.key(key('?')).unwrap();
+        assert_eq!(m.mode, Mode::Help);
+        // other keys are swallowed, not applied to the board
+        m.key(key('j')).unwrap();
+        assert_eq!(m.mode, Mode::Help);
+        // ? closes
+        m.key(key('?')).unwrap();
+        assert_eq!(m.mode, Mode::Normal);
+        // q closes rather than quitting
+        m.key(key('?')).unwrap();
+        assert!(!m.key(key('q')).unwrap());
+        assert_eq!(m.mode, Mode::Normal);
+        // esc closes
+        m.key(key('?')).unwrap();
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(m.mode, Mode::Normal);
     }
 
     #[test]
