@@ -7,7 +7,8 @@
 //! reference (`9aia/pm`, `docs/tui.md` there) — the keymap is
 //! vim-style: `j/k` move, `h/l`/`1`/`2` boards, `Space`/`dd` done,
 //! `D` defer, `p` promote, `Alt+↑/↓` reorder, `a` add, `Enter`/`esc`
-//! preview, `E` $EDITOR, `R` reload, `?` help, `q` quit.
+//! preview, `E` $EDITOR, `R` reload, `?` help, `q` quit — plus mouse:
+//! the wheel scrolls, a click selects an item row or a board tab.
 
 mod app;
 mod render;
@@ -17,7 +18,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyEventKind};
+use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -31,7 +32,7 @@ struct Guard;
 impl Drop for Guard {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        let _ = execute!(io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
     }
 }
 
@@ -41,7 +42,8 @@ pub fn run(dir: Option<&Path>, root: Option<&Path>, no_commit: bool) -> Result<(
     let mut model = app::Model::open(dir, root, no_commit)?;
     enable_raw_mode().map_err(|e| format!("raw mode: {e}"))?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen).map_err(|e| format!("alt screen: {e}"))?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
+        .map_err(|e| format!("alt screen: {e}"))?;
     let _guard = Guard;
     let mut terminal =
         Terminal::new(CrosstermBackend::new(stdout)).map_err(|e| format!("terminal: {e}"))?;
@@ -52,7 +54,7 @@ pub fn run(dir: Option<&Path>, root: Option<&Path>, no_commit: bool) -> Result<(
             model.reload();
         }
         terminal
-            .draw(|f| render::draw(f, &model))
+            .draw(|f| render::draw(f, &mut model))
             .map_err(|e| format!("draw: {e}"))?;
         if event::poll(Duration::from_millis(250)).map_err(|e| e.to_string())? {
             match event::read().map_err(|e| e.to_string())? {
@@ -62,6 +64,7 @@ pub fn run(dir: Option<&Path>, root: Option<&Path>, no_commit: bool) -> Result<(
                         break;
                     }
                 }
+                Event::Mouse(m) => model.mouse(m),
                 Event::Resize(..) => {}
                 _ => {}
             }
@@ -76,11 +79,21 @@ fn run_editor(
     path: &Path,
 ) -> Result<(), String> {
     disable_raw_mode().map_err(|e| e.to_string())?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen).map_err(|e| e.to_string())?;
+    execute!(
+        terminal.backend_mut(),
+        DisableMouseCapture,
+        LeaveAlternateScreen
+    )
+    .map_err(|e| e.to_string())?;
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
     let status = Command::new(&editor).arg(path).status();
     enable_raw_mode().map_err(|e| e.to_string())?;
-    execute!(terminal.backend_mut(), EnterAlternateScreen).map_err(|e| e.to_string())?;
+    execute!(
+        terminal.backend_mut(),
+        EnterAlternateScreen,
+        EnableMouseCapture
+    )
+    .map_err(|e| e.to_string())?;
     terminal.clear().map_err(|e| e.to_string())?;
     status.map_err(|e| format!("$EDITOR {editor}: {e}"))?;
     Ok(())

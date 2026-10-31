@@ -23,8 +23,9 @@ fn chrome(height: u16) -> (bool, bool) {
     (height >= 3, height >= 5)
 }
 
-/// One full frame.
-pub fn draw(f: &mut Frame, m: &Model) {
+/// One full frame. Also records the tab/board geometry on `m` so
+/// the next mouse event can hit-test against where rows landed.
+pub fn draw(f: &mut Frame, m: &mut Model) {
     let area = f.area();
     let (show_tabs, show_status) = chrome(area.height);
     let mut constraints = Vec::with_capacity(3);
@@ -40,7 +41,10 @@ pub fn draw(f: &mut Frame, m: &Model) {
     let mut next = 0;
     if show_tabs {
         draw_tabs(f, m, chunks[next]);
+        m.tabs_area = Some(chunks[next]);
         next += 1;
+    } else {
+        m.tabs_area = None;
     }
     match m.mode {
         Mode::Preview => draw_preview(f, m, chunks[next]),
@@ -87,6 +91,21 @@ fn draw_tabs(f: &mut Frame, m: &Model, area: Rect) {
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
+/// Click hit-test for the tab row: which tab does column `x` land
+/// on in a `width`-wide bar? The leading and separator columns
+/// belong to no tab. Mirrors the span layout `draw_tabs` emits.
+pub fn tab_hit(width: u16, x: u16) -> Option<usize> {
+    let mut col = 1u16; // leading space
+    for (i, label) in tab_labels(width as usize).iter().enumerate() {
+        let w = label.chars().count() as u16;
+        if (col..col + w).contains(&x) {
+            return Some(i);
+        }
+        col += w + 1; // the separator after each tab
+    }
+    None
+}
+
 /// Fit `spans` into `width` columns; when they overflow, keep the
 /// longest prefix that leaves one column for a muted `…`. Widths are
 /// char counts — wide glyphs may still let ratatui clip the tail.
@@ -119,7 +138,7 @@ fn ellipsize<'a>(spans: Vec<Span<'a>>, width: usize) -> Vec<Span<'a>> {
     out
 }
 
-fn draw_board(f: &mut Frame, m: &Model, area: Rect) {
+fn draw_board(f: &mut Frame, m: &mut Model, area: Rect) {
     // the highlight symbol eats two columns of every row
     let row_w = (area.width as usize).saturating_sub(2);
     let items: Vec<ListItem> = m
@@ -159,6 +178,9 @@ fn draw_board(f: &mut Frame, m: &Model, area: Rect) {
         .highlight_symbol("▸ ");
     let mut state = ListState::default().with_selected(Some(m.sel));
     f.render_stateful_widget(list, area, &mut state);
+    // remember where the rows landed for mouse hit-testing
+    m.board_area = area;
+    m.viewport_top = state.offset();
 }
 
 fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
@@ -354,6 +376,8 @@ fn help_lines() -> Vec<Line<'static>> {
         bind("a", "add item"),
         bind("E", "open in $EDITOR"),
         bind("R", "reload"),
+        group("mouse"),
+        bind("click, wheel", "select, scroll"),
         group("misc"),
         bind("?", "this help"),
         bind("q, ctrl+c", "quit"),
@@ -424,6 +448,24 @@ mod tests {
         assert_eq!(tab_labels(26), vec![" TODO ", " BACKLOG ", " ITEMS "]);
         assert_eq!(tab_labels(25), vec!["T", "B", "I"]);
         assert_eq!(tab_labels(2), vec!["T", "B", "I"]);
+    }
+
+    #[test]
+    fn tab_hit_matches_drawn_columns() {
+        // full labels: " " + " TODO " + " " + " BACKLOG " + " " + " ITEMS "
+        assert_eq!(tab_hit(80, 0), None); // leading separator
+        assert_eq!(tab_hit(80, 1), Some(0));
+        assert_eq!(tab_hit(80, 6), Some(0));
+        assert_eq!(tab_hit(80, 7), None); // separator between tabs
+        assert_eq!(tab_hit(80, 8), Some(1));
+        assert_eq!(tab_hit(80, 16), Some(1));
+        assert_eq!(tab_hit(80, 18), Some(2));
+        assert_eq!(tab_hit(80, 24), Some(2));
+        assert_eq!(tab_hit(80, 40), None); // past the last tab
+                                           // narrow terminal: initials "T"/"B"/"I" at cols 1, 3, 5
+        assert_eq!(tab_hit(10, 1), Some(0));
+        assert_eq!(tab_hit(10, 3), Some(1));
+        assert_eq!(tab_hit(10, 5), Some(2));
     }
 
     #[test]

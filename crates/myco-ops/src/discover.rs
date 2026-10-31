@@ -114,10 +114,22 @@ pub fn discover(dir: Option<&Path>, root: Option<&Path>) -> Result<Project, Stri
         return Ok(Project { root, worktree: wt });
     }
 
-    Err(format!(
-        "no project worktree found above {} — run `myco init` first",
-        cwd.display()
-    ))
+    Err(no_project_error(&cwd))
+}
+
+/// Tailor the dead-end message — `init` can only help inside a repo.
+fn no_project_error(cwd: &Path) -> String {
+    match myco_git::repo_root(cwd) {
+        Ok(root) => format!(
+            "no project worktree found above {} — run `myco init` in {}",
+            cwd.display(),
+            root.display()
+        ),
+        Err(_) => format!(
+            "no myco project above {} — not inside a git repository",
+            cwd.display()
+        ),
+    }
 }
 
 /// Resolve the repo root for `myco init` / `migrate` — the verbs
@@ -208,6 +220,20 @@ mod tests {
         assert!(!qualifies(d.path()));
         std::fs::write(d.path().join("TODO.md"), "x").unwrap();
         assert!(qualifies(d.path()));
+    }
+
+    #[test]
+    fn no_project_error_adapts_to_git_context() {
+        // inside a repo → init hint naming the root
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        let msg = no_project_error(d.path());
+        assert!(msg.contains("run `myco init` in"), "{msg}");
+
+        // outside any repo → no init hint
+        let outside = tempfile::tempdir().unwrap();
+        let msg = no_project_error(outside.path());
+        assert!(msg.contains("not inside a git repository"), "{msg}");
     }
 
     #[test]

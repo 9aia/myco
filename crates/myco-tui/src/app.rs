@@ -5,12 +5,13 @@
 
 use std::path::{Path, PathBuf};
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use myco_core::Ledger;
 use myco_core::{Item, ItemFile, ItemId, ItemKind, Status};
 use myco_ops::{discover, items};
 use myco_store::Store;
 use myco_store_md::MdStore;
+use ratatui::layout::Rect;
 
 /// Which ledger doc the board tab shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +91,15 @@ pub struct Model {
     files: Vec<ItemFile>,
     /// Multi-key prefix: `g` armed for `gg`, `d` for `dd`.
     pending: Option<char>,
+    /// Board-list rect from the last frame — `render::draw` writes
+    /// it so mouse clicks and wheel hits map to rows.
+    pub board_area: Rect,
+    /// First row index visible in `board_area` — the scroll offset
+    /// the `List` widget chose to keep `sel` on screen.
+    pub viewport_top: usize,
+    /// Tab-bar rect when the frame is tall enough to draw one —
+    /// for click-to-switch hit-testing.
+    pub tabs_area: Option<Rect>,
 }
 
 impl Model {
@@ -113,6 +123,9 @@ impl Model {
             pending_editor: None,
             files: Vec::new(),
             pending: None,
+            board_area: Rect::default(),
+            viewport_top: 0,
+            tabs_area: None,
         };
         m.load_files();
         m.rebuild_rows();
@@ -380,6 +393,46 @@ impl Model {
         Ok(false)
     }
 
+    /// Mouse input (Normal mode only — acting on clicks under an
+    /// overlay or mid-`a`/`/` edit would be surprising): the wheel
+    /// moves the cursor over the board list, a left click picks a
+    /// board tab on the tab row or selects the item row under it.
+    pub fn mouse(&mut self, ev: MouseEvent) {
+        if self.mode != Mode::Normal {
+            return;
+        }
+        let pos = (ev.column, ev.row).into();
+        match ev.kind {
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+                if self.board_area.contains(pos) {
+                    let delta = if ev.kind == MouseEventKind::ScrollUp {
+                        -1
+                    } else {
+                        1
+                    };
+                    self.move_sel(delta);
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some(tabs) = self.tabs_area {
+                    if ev.row == tabs.y {
+                        if let Some(i) =
+                            crate::render::tab_hit(tabs.width, ev.column.saturating_sub(tabs.x))
+                        {
+                            self.switch_board(i);
+                        }
+                        return;
+                    }
+                }
+                if self.board_area.contains(pos) {
+                    let row = self.viewport_top + usize::from(ev.row - self.board_area.y);
+                    self.select_row(row);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn last_item_row(&self) -> Option<usize> {
         self.rows
             .iter()
@@ -398,6 +451,14 @@ impl Model {
                 self.sel = i as usize;
                 break;
             }
+        }
+    }
+
+    /// Mouse click — land the cursor on `row`, but only on items:
+    /// headers aren't selectable and misses keep `sel` put.
+    pub fn select_row(&mut self, row: usize) {
+        if matches!(self.rows.get(row), Some(Row::Item { .. })) {
+            self.sel = row;
         }
     }
 
@@ -680,6 +741,9 @@ mod tests {
             pending_editor: None,
             files: Vec::new(),
             pending: None,
+            board_area: Rect::default(),
+            viewport_top: 0,
+            tabs_area: None,
         };
         m.rebuild_rows();
         // keep the tempdir alive for the test's duration
@@ -802,6 +866,52 @@ mod tests {
             .unwrap();
         assert_eq!(m.mode, Mode::Normal);
         assert_eq!(m.rows.len(), 2);
+    }
+
+    fn click(x: u16, y: u16) -> MouseEvent {
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: x,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn click_selects_items_and_wheel_moves() {
+        let mut m = model(|l| {
+            l.todo.sections.push(Section::named("S"));
+            l.todo.sections[0].items = vec![t(1), t(2)];
+        });
+        // rows: H S, t1, t2 — select_row only takes Item rows
+        m.select_row(0);
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+        m.select_row(2);
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+        m.select_row(9); // out of range — sel stays put
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+
+        // a click in the board area maps viewport y → row index
+        m.board_area = Rect::new(0, 1, 80, 20);
+        m.viewport_top = 0;
+        m.mouse(click(0, 2)); // y 2 → rows[1] = t1
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+        // wheel over the board moves the cursor
+        m.mouse(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 0,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+        // clicks outside the board area don't move the cursor
+        m.mouse(click(0, 0));
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+
+        // a click on the tab row switches boards
+        m.tabs_area = Some(Rect::new(0, 0, 80, 1));
+        m.mouse(click(8, 0)); // " BACKLOG " starts at col 8
+        assert_eq!(m.board, Board::Backlog);
     }
 
     #[test]
