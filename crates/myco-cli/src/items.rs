@@ -46,11 +46,6 @@ impl MetaFlags {
             milestone: self.milestone.clone(),
         }
     }
-
-    /// Apply the flags to a freshly-created item.
-    pub fn apply(&self, item: &mut Item) -> Result<(), String> {
-        self.to_meta().apply(item)
-    }
 }
 
 /// `--status/--owner/--label` list filters, shared by every `list`.

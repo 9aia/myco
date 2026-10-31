@@ -207,6 +207,27 @@ pub fn new_file(
     )
 }
 
+/// The read behind [`list_files`] — live item files (plus
+/// `archive/` entries when `include_archived`), filtered, as
+/// data. Non-CLI front-ends (`myco serve`) shape it themselves.
+pub fn query_files(
+    store: &MdStore,
+    kind: ItemKind,
+    include_archived: bool,
+    filter: &Filter,
+) -> Result<Vec<Item>, String> {
+    let mut found = store.list_items(kind).map_err(|e| e.to_string())?;
+    if include_archived {
+        found.extend(store.list_archived(kind).map_err(|e| e.to_string())?);
+    }
+    Ok(found
+        .into_iter()
+        .map(|f| f.meta)
+        .filter(|i| filter.matches(i))
+        .take(filter.take())
+        .collect())
+}
+
 /// The shared `<kind> list` — live item files, plus `archive/`
 /// entries when `include_archived`.
 pub fn list_files(
@@ -216,16 +237,7 @@ pub fn list_files(
     filter: &Filter,
     json_out: bool,
 ) -> Result<i32, String> {
-    let mut found = store.list_items(kind).map_err(|e| e.to_string())?;
-    if include_archived {
-        found.extend(store.list_archived(kind).map_err(|e| e.to_string())?);
-    }
-    let found: Vec<Item> = found
-        .into_iter()
-        .map(|f| f.meta)
-        .filter(|i| filter.matches(i))
-        .take(filter.take())
-        .collect();
+    let found = query_files(store, kind, include_archived, filter)?;
     print_list(&found, json_out)
 }
 

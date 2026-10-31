@@ -1001,6 +1001,7 @@ dependencies = [
  "myco-store-md",
  "myco-tui",
  "schemars",
+ "serde",
  "serde_json",
  "sigpipe",
  "tabled",

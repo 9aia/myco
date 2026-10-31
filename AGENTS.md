@@ -52,8 +52,8 @@ proposals, plans, ADRs, handoffs). Neighbors own theirs:
 
 - **sturn** — ephemeral coordination (live claims/ops/topics).
 - **kuda** — code memory; myco indexes *work items*, not code.
-- **peregrin** — orchestration; optional `myco serve` (ndjson) is a
-  later ADR.
+- **peregrin** — orchestration; it embeds the ledger through
+  `myco serve` (JSON-RPC 2.0 on stdio — ADR-0001).
 - **bupha** — CI gate; `myco check` in pipelines, `Item: T-012`
   commit trailers.
 - **mycena** — surfaces TODO/FIXME in code → `myco absorb`.

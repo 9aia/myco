@@ -125,9 +125,60 @@ fn stale_claims<'a>(
         .collect()
 }
 
+/// The report payload — aging + velocity + blocked + stale
+/// claims — shared by `--json` and `myco serve`. `worktree` is
+/// where the project-branch history lives (velocity reads the
+/// git log).
+pub fn report_json(
+    store: &myco_store_md::MdStore,
+    worktree: &std::path::Path,
+) -> Result<serde_json::Value, String> {
+    let scan = digest::scan(store)?;
+    let today = items::today();
+    let aging = aging(scan.active(), today);
+    let log = myco_git::log(worktree, None).map_err(|e| e.to_string())?;
+    let velocity = velocity(&log);
+    let blocked = scan.in_status(Status::Blocked);
+    let stale = stale_claims(store, &scan, today);
+    Ok(json!({
+        "repo": scan.name,
+        "as_of": date::render(today),
+        "aging": {
+            "<7d": aging.lt7,
+            "7-30d": aging.d7_30,
+            ">30d": aging.gt30,
+            "undated": aging.undated,
+        },
+        "velocity": velocity
+            .iter()
+            .map(|((y, w), t)| json!({
+                "week": format!("{y}-W{w:02}"),
+                "new": t.new,
+                "done": t.done,
+            }))
+            .collect::<Vec<_>>(),
+        "blocked": blocked
+            .iter()
+            .map(|i| serde_json::to_value(i).unwrap_or(json!(null)))
+            .collect::<Vec<_>>(),
+        "stale_claims": stale
+            .iter()
+            .map(|(i, idle)| json!({
+                "id": i.id.to_string(),
+                "title": i.title,
+                "idle_days": idle,
+            }))
+            .collect::<Vec<_>>(),
+    }))
+}
+
 /// The `report` verb.
 pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Result<i32, String> {
     let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
+    if json_out {
+        ops::print_json(&report_json(&store, &proj.worktree)?);
+        return Ok(0);
+    }
     let scan = digest::scan(&store)?;
     let today = items::today();
     let aging = aging(scan.active(), today);
@@ -135,39 +186,6 @@ pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Resul
     let velocity = velocity(&log);
     let blocked = scan.in_status(Status::Blocked);
     let stale = stale_claims(&store, &scan, today);
-    if json_out {
-        ops::print_json(&json!({
-            "repo": scan.name,
-            "as_of": date::render(today),
-            "aging": {
-                "<7d": aging.lt7,
-                "7-30d": aging.d7_30,
-                ">30d": aging.gt30,
-                "undated": aging.undated,
-            },
-            "velocity": velocity
-                .iter()
-                .map(|((y, w), t)| json!({
-                    "week": format!("{y}-W{w:02}"),
-                    "new": t.new,
-                    "done": t.done,
-                }))
-                .collect::<Vec<_>>(),
-            "blocked": blocked
-                .iter()
-                .map(|i| serde_json::to_value(i).unwrap_or(json!(null)))
-                .collect::<Vec<_>>(),
-            "stale_claims": stale
-                .iter()
-                .map(|(i, idle)| json!({
-                    "id": i.id.to_string(),
-                    "title": i.title,
-                    "idle_days": idle,
-                }))
-                .collect::<Vec<_>>(),
-        }));
-        return Ok(0);
-    }
     println!("{} — report as of {}", scan.name, date::render(today));
     println!(
         "aging:    <7d {} · 7-30d {} · >30d {} · undated {}",

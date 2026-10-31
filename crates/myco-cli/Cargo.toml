@@ -26,6 +26,7 @@ myco-store-md.workspace = true
 myco-tui = { workspace = true, optional = true }
 clap.workspace = true
 clap-markdown.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 schemars.workspace = true
 tabled.workspace = true

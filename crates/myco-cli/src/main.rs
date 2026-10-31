@@ -40,6 +40,7 @@ mod plan;
 mod proposal;
 mod report;
 mod schema;
+mod serve;
 mod status;
 mod templates;
 mod todo;
@@ -250,6 +251,11 @@ enum Cmd {
     /// preview, writes through the same ops the verbs use.
     #[cfg(feature = "tui")]
     Ui,
+    /// Sequential request/response verb surface on stdio —
+    /// JSON-RPC 2.0, one line in / one line out. For embedding
+    /// (peregrin spawns one per repo); stdin IS the wire, so
+    /// no served method reads content from it.
+    Serve,
     /// Print the CLI reference as markdown (docs pipeline).
     #[command(hide = true, name = "gen-cli-docs")]
     GenCliDocs,
@@ -266,6 +272,11 @@ fn manifest() -> serde_json::Value {
             "store": "markdown",
             "index": "redb",
             "protocol": 1,
+            "serve": {
+                "protocol": 1,
+                "transport": "stdio",
+                "wire": "jsonrpc-2.0",
+            },
         },
         "verbs": [
             "manifest", "schema",
@@ -276,7 +287,7 @@ fn manifest() -> serde_json::Value {
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
-            "handoff", "resume", "interrupt", "ui",
+            "handoff", "resume", "interrupt", "ui", "serve",
         ],
         "implemented": [
             "manifest", "gen-cli-docs", "schema",
@@ -288,7 +299,7 @@ fn manifest() -> serde_json::Value {
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
             "handoff", "resume", "interrupt",
-            "ui",
+            "ui", "serve",
         ],
         "notes": "markdown in project/ is canonical; every verb is one \
                   atomic commit on the `project` branch; the redb index \
@@ -369,6 +380,7 @@ fn main() {
         Cmd::Org { cmd } => org::run(cmd, json, no_commit),
         #[cfg(feature = "tui")]
         Cmd::Ui => myco_tui::run(dir.as_deref(), root.as_deref(), no_commit).map(|_| 0),
+        Cmd::Serve => serve::run(dir, root, no_commit),
     };
     match result {
         Ok(code) => std::process::exit(code),

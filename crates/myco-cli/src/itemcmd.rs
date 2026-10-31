@@ -63,15 +63,15 @@ pub enum Cmd {
 /// status transition check.
 #[derive(Default)]
 pub(crate) struct SetFlags {
-    status: Option<Status>,
-    pri: Option<Priority>,
-    owner: Option<Actor>,
-    label: Vec<String>,
-    unlabel: Vec<String>,
-    blocks: Vec<String>,
-    unblock: Vec<ItemId>,
-    epic: Option<String>,
-    milestone: Option<String>,
+    pub(crate) status: Option<Status>,
+    pub(crate) pri: Option<Priority>,
+    pub(crate) owner: Option<Actor>,
+    pub(crate) label: Vec<String>,
+    pub(crate) unlabel: Vec<String>,
+    pub(crate) blocks: Vec<String>,
+    pub(crate) unblock: Vec<ItemId>,
+    pub(crate) epic: Option<String>,
+    pub(crate) milestone: Option<String>,
 }
 
 impl SetFlags {
@@ -84,7 +84,7 @@ impl SetFlags {
         }
     }
 
-    fn is_noop(&self) -> bool {
+    pub(crate) fn is_noop(&self) -> bool {
         self.status.is_none()
             && self.pri.is_none()
             && self.owner.is_none()
@@ -245,6 +245,24 @@ pub fn run(
                 &human,
             )
         }
+    }
+}
+
+/// The `item show` payload — `{item, location, handoffs,
+/// interrupted, body}` — the `myco serve` method surface.
+pub(crate) fn show_json(
+    store: &myco_store_md::MdStore,
+    id: ItemId,
+) -> Result<serde_json::Value, String> {
+    match items::find_item(store, id)? {
+        Some((item, location, body)) => {
+            let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
+            let interrupted = crate::continuity::is_interrupted(store, id);
+            Ok(
+                json!({"item": item, "location": location, "handoffs": handoffs, "interrupted": interrupted, "body": body}),
+            )
+        }
+        None => Err(format!("{id}: no such item")),
     }
 }
 

@@ -1276,6 +1276,52 @@ fn apply_fixes(wt: &Path, fixes: &[Fix]) -> Result<usize, String> {
     Ok(n)
 }
 
+/// The finding a non-Ok AGENTS.md state produces — shared by
+/// `run_on` and [`check_json`].
+fn agents_md_finding(state: crate::agentmd::State) -> Finding {
+    Finding::at(
+        "AGENTS.md",
+        "agents-md",
+        match state {
+            crate::agentmd::State::Missing => {
+                "AGENTS.md missing — `check --fix` creates it with the agent-awareness block"
+            }
+            crate::agentmd::State::Absent => {
+                "AGENTS.md lacks the managed agent-awareness block — `check --fix` appends it"
+            }
+            crate::agentmd::State::Drift => {
+                "AGENTS.md agent-awareness block isn't canonical — `check --fix` rewrites it"
+            }
+            crate::agentmd::State::Ok => unreachable!(),
+        },
+        true,
+    )
+}
+
+/// The read-only `check` payload — the `--json` report shape
+/// without running a fix pass. Served by `myco serve` (the
+/// verdict rides in `ok`; there's no exit code on the wire).
+pub fn check_json(proj: &Project) -> Result<serde_json::Value, String> {
+    let mut analysis = analyze(&proj.worktree);
+    let agents_md = crate::agentmd::block_state(&proj.root);
+    if agents_md != crate::agentmd::State::Ok {
+        analysis.findings.push(agents_md_finding(agents_md));
+    }
+    let remaining = &analysis.findings;
+    Ok(json!({
+        "ok": remaining.is_empty(),
+        "worktree": proj.worktree.to_string_lossy(),
+        "repo_root": proj.root.to_string_lossy(),
+        "agents_md": agents_md.as_str(),
+        "errors": remaining.iter().map(|f| json!({
+            "file": f.file, "line": f.line, "col": f.col,
+            "code": f.code, "msg": f.msg, "fixable": f.fixable,
+        })).collect::<Vec<_>>(),
+        "fixes_available": analysis.fixes.len(),
+        "fixes_applied": 0,
+    }))
+}
+
 /// The `check` verb. Exit 1 with findings, 0 when clean.
 pub fn run(
     dir: Option<PathBuf>,
@@ -1320,23 +1366,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             )?;
             agents_md = crate::agentmd::block_state(&proj.root);
         } else {
-            analysis.findings.push(Finding::at(
-                "AGENTS.md",
-                "agents-md",
-                match agents_md {
-                    crate::agentmd::State::Missing => {
-                        "AGENTS.md missing — `check --fix` creates it with the agent-awareness block"
-                    }
-                    crate::agentmd::State::Absent => {
-                        "AGENTS.md lacks the managed agent-awareness block — `check --fix` appends it"
-                    }
-                    crate::agentmd::State::Drift => {
-                        "AGENTS.md agent-awareness block isn't canonical — `check --fix` rewrites it"
-                    }
-                    crate::agentmd::State::Ok => unreachable!(),
-                },
-                true,
-            ));
+            analysis.findings.push(agents_md_finding(agents_md));
         }
     }
 

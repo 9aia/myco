@@ -177,7 +177,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "in-progress": [
       "blocked",
       "done",
-      "deferred"
+      "deferred",
+      "open"
     ],
     "open": [
       "claimed",
