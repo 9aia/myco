@@ -50,12 +50,27 @@ totals: tasks 167o/0c/1ip/0b backlog 326 issues 1o p 5o pl 7o/1r adr 59o
 
 Per-repo counts (`o`pen / `c`laimed / `i`n-`p`rogress /
 `b`locked), the snapshot commit, org totals, then items grouped
-by owner. A rebuilt repo is marked `(rebuilt)`.
+by owner. A rebuilt repo is marked `(rebuilt)`. Repos with no
+live items are folded into a `… +N idle repos` footer —
+`myco org status --all` lists them too; repos whose snapshot
+failed always surface.
 
 ```sh
-myco org board          # org kanban — repo-prefixed cards over every live item
-myco org board --md     # markdown table for docs/READMEs
+myco org board                # org kanban — repo-prefixed cards over every live item
+myco org board --repo sepia   # one repo only (name or registered path)
+myco org board --all          # every card — no row cap
+myco org board --md           # markdown table for docs/READMEs
 ```
 
 Cards are prefixed with the repo name (`thal:T-118 …`) so one
 board spans the whole org.
+
+## Board output
+
+Human boards — `org board`, `board`, `epic <name>`,
+`milestone <name>` — are fitted to the terminal: sized to its
+width (`$MYCO_WIDTH` overrides; 100 columns when piped) and
+capped at a screenful of rows (~25) with a `… +N more` footer —
+`--all` lifts the cap. `--md` and `--json` are unbounded. Output
+is ANSI-colored on a tty: `NO_COLOR` disables color,
+`CLICOLOR_FORCE`/`FORCE_COLOR` force it on.

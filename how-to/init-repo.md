@@ -19,15 +19,23 @@ myco init
 | `project/index.md` | human-readable ledger index |
 | `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs |
 | `.gitignore` += `project/` | keeps the worktree out of code commits |
+| `AGENTS.md` | gains a marker-delimited, myco-managed *Agent awareness* block |
 
 `init` commits the scaffold on the `project` branch — your code
-branch only gains the `.gitignore` line.
+branch only gains the `.gitignore` line and the `AGENTS.md`
+block. The block teaches agents the myco workflow; it's delimited
+by `<!-- myco:agent-awareness -->` markers so prose elsewhere in
+the file is preserved — a hand-written *Agent awareness* section
+is upgraded in place. `check` validates it as an
+`agents-md` finding and `check --fix` repairs it.
 
 ## Re-running init
 
 `init` is idempotent: a valid existing worktree gets its scaffold
 verified/repaired instead of re-created. It is the safe "is this
-repo set up?" probe.
+repo set up?" probe. `myco org init` re-runs it on every
+registered repo — the rollout path when scaffolding (like the
+`AGENTS.md` block) is introduced or updated.
 
 ## Overrides and discovery
 

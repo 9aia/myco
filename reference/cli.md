@@ -59,6 +59,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco org`↴](#myco-org)
 * [`myco org status`↴](#myco-org-status)
 * [`myco org board`↴](#myco-org-board)
+* [`myco org init`↴](#myco-org-init)
 
 ## `myco`
 
@@ -70,8 +71,8 @@ myco — project management, grown not built: agent-first PM CLI
 
 * `manifest` — Capabilities + protocol version — agent self-discovery
 * `schema` — The file/state spec, machine-readable JSON Schema
-* `init` — Scaffold `project/`: orphan branch + worktree + .gitignore + seed files. Idempotent — a valid existing worktree gets its scaffold verified/repaired
-* `check` — Validate schemas + state machine, repair file/index drift. Exit 1 with findings; `--fix` applies safe repairs + commits
+* `init` — Scaffold `project/`: orphan branch + worktree + .gitignore + seed files + the managed AGENTS.md agent-awareness block. Idempotent — existing worktree and AGENTS.md prose are preserved, only the marked block is (re)written
+* `check` — Validate schemas + state machine, repair file/index drift; also validates the managed AGENTS.md block on the repo root. Exit 1 with findings; `--fix` applies safe repairs + commits
 * `migrate` — Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch
 * `commit` — Stage + commit worktree changes (conventional message)
 * `todo` — TODO.md tasks — add / done / defer / list
@@ -119,7 +120,7 @@ The file/state spec, machine-readable JSON Schema
 
 ## `myco init`
 
-Scaffold `project/`: orphan branch + worktree + .gitignore + seed files. Idempotent — a valid existing worktree gets its scaffold verified/repaired
+Scaffold `project/`: orphan branch + worktree + .gitignore + seed files + the managed AGENTS.md agent-awareness block. Idempotent — existing worktree and AGENTS.md prose are preserved, only the marked block is (re)written
 
 **Usage:** `myco init`
 
@@ -127,7 +128,7 @@ Scaffold `project/`: orphan branch + worktree + .gitignore + seed files. Idempot
 
 ## `myco check`
 
-Validate schemas + state machine, repair file/index drift. Exit 1 with findings; `--fix` applies safe repairs + commits
+Validate schemas + state machine, repair file/index drift; also validates the managed AGENTS.md block on the repo root. Exit 1 with findings; `--fix` applies safe repairs + commits
 
 **Usage:** `myco check [OPTIONS]`
 
@@ -230,6 +231,7 @@ List tasks
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 
 
@@ -292,6 +294,7 @@ List backlog items
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 
 
@@ -346,6 +349,7 @@ List issues (live files; `--archived` includes `issues/archive/`)
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 
 
@@ -438,6 +442,7 @@ List proposals
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 
 
@@ -501,6 +506,7 @@ List plans
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 
 
@@ -552,6 +558,7 @@ List ADRs
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 
 
@@ -675,6 +682,7 @@ Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md
 ###### **Options:**
 
 * `--md` — Emit a markdown table (for docs/READMEs)
+* `--all` — Show every card — no row cap
 * `--epic <EPIC>` — Only items in this epic
 * `--milestone <MILESTONE>` — Only items in this milestone
 
@@ -693,6 +701,7 @@ Items grouped by epic — bare lists epics with counts, a name renders that epic
 ###### **Options:**
 
 * `--md` — Emit a markdown table (with a name)
+* `--all` — Show every card — no row cap (with a name)
 
 
 
@@ -709,6 +718,7 @@ Items grouped by milestone — bare lists milestones with counts, a name renders
 ###### **Options:**
 
 * `--md` — Emit a markdown table (with a name)
+* `--all` — Show every card — no row cap (with a name)
 
 
 
@@ -852,6 +862,7 @@ Cross-repo views over the index (auto-rebuilds stale repos)
 
 * `status` — Per-repo counts + org totals + items grouped by owner
 * `board` — Org kanban — repo-prefixed cards over every live item
+* `init` — Re-run `init` on every registered repo — refreshes the worktree scaffold and root files (.gitignore, the AGENTS.md agent-awareness block). The rollout path for new scaffolding
 
 
 
@@ -859,7 +870,11 @@ Cross-repo views over the index (auto-rebuilds stale repos)
 
 Per-repo counts + org totals + items grouped by owner
 
-**Usage:** `myco org status`
+**Usage:** `myco org status [OPTIONS]`
+
+###### **Options:**
+
+* `--all` — Show repos with no live items too
 
 
 
@@ -872,6 +887,16 @@ Org kanban — repo-prefixed cards over every live item
 ###### **Options:**
 
 * `--md` — Emit a markdown table (for docs/READMEs)
+* `--all` — Show every card — no row cap
+* `--repo <REPO>` — Only this repo's items (name or registered path)
+
+
+
+## `myco org init`
+
+Re-run `init` on every registered repo — refreshes the worktree scaffold and root files (.gitignore, the AGENTS.md agent-awareness block). The rollout path for new scaffolding
+
+**Usage:** `myco org init`
 
 
 
