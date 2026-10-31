@@ -1,7 +1,7 @@
 +++
 id = "ADR-0001"
 title = "ndjson serve wire for peregrin embedding"
-status = "in-progress"
+status = "done"
 created = "2026-10-29"
 priority = "medium"
 +++
