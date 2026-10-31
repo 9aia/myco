@@ -12,6 +12,7 @@
 //! `myco index rebuild` derives it back from the worktrees.
 
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use myco_index::{Error, Index, RepoEntry, RepoSnapshot};
@@ -25,6 +26,16 @@ const REGISTRY: &str = "repos.toml";
 
 /// The redb file name inside the index dir.
 const DB: &str = "index.redb";
+
+/// Total time a contended index lock is retried before giving up —
+/// lets concurrent `myco` processes queue instead of crash.
+const LOCK_RETRY_BUDGET: Duration = Duration::from_secs(2);
+
+/// First backoff after a busy lock; doubles each retry.
+const LOCK_RETRY_MIN: Duration = Duration::from_millis(10);
+
+/// Longest backoff between retries.
+const LOCK_RETRY_MAX: Duration = Duration::from_millis(320);
 
 /// The index dir: `$MYCO_HOME` → `$XDG_DATA_HOME/myco` →
 /// `~/.local/share/myco`. The `$MYCO_HOME` override is how tests
@@ -47,6 +58,36 @@ pub fn data_dir() -> PathBuf {
 struct Registry {
     #[serde(default)]
     repo: Vec<RepoEntry>,
+}
+
+/// Open `index.redb` at `path`, retrying on lock contention
+/// ([`redb::DatabaseError::DatabaseAlreadyOpen`]) with exponential
+/// backoff until `budget` is spent. Anything else — corrupt file,
+/// IO, upgrade required — fails immediately.
+fn open_db(path: &Utf8Path, budget: Duration) -> Result<Database, Error> {
+    let start = Instant::now();
+    let mut backoff = LOCK_RETRY_MIN;
+    let mut attempt = 0u64;
+    loop {
+        match Database::create(path.as_std_path()) {
+            Ok(db) => return Ok(db),
+            Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
+                let left = budget.saturating_sub(start.elapsed());
+                if left.is_zero() {
+                    return Err(Error::Backend(format!(
+                        "index busy — another myco process holds {DB} (waited ~{:.1}s)",
+                        budget.as_secs_f64()
+                    )));
+                }
+                // counter-based stagger — spreads contenders, no rand dep
+                let jitter = Duration::from_millis((attempt % 4) * 5);
+                std::thread::sleep((backoff + jitter).min(left));
+                backoff = (backoff * 2).min(LOCK_RETRY_MAX);
+                attempt += 1;
+            }
+            Err(e) => return Err(Error::Backend(format!("open {path}: {e}"))),
+        }
+    }
 }
 
 /// redb-backed index rooted at an index dir.
@@ -100,8 +141,7 @@ impl RedbIndex {
     }
 
     fn db(&self) -> Result<Database, Error> {
-        Database::create(self.db_path().as_std_path())
-            .map_err(|e| Error::Backend(format!("open {}: {e}", self.db_path())))
+        open_db(&self.db_path(), LOCK_RETRY_BUDGET)
     }
 
     fn write_snapshot(&self, path: &Utf8Path, value: Option<&str>) -> Result<(), Error> {
@@ -304,6 +344,37 @@ mod tests {
                 assert_eq!(data_dir(), PathBuf::from("./.local/share/myco"));
             },
         );
+    }
+
+    #[test]
+    fn contended_open_retries_until_free() {
+        let (_d, i) = idx();
+        // a second "myco" holds the lock for a beat, then drops
+        let holder = Database::create(i.db_path().as_std_path()).unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(80));
+            drop(holder);
+        });
+        // write queues behind the holder instead of dying
+        let e = entry("busy");
+        i.save_snapshot(&snap(&e, "h1")).unwrap();
+        release.join().unwrap();
+        assert_eq!(i.snapshot(&e.path).unwrap().unwrap().head_commit, "h1");
+    }
+
+    #[test]
+    fn contended_open_reports_index_busy() {
+        let (_d, i) = idx();
+        let _holder = Database::create(i.db_path().as_std_path()).unwrap();
+        // test-scale budget — same path, no 2s wait
+        let err = match open_db(&i.db_path(), Duration::from_millis(50)) {
+            Ok(_) => panic!("expected busy error"),
+            Err(e) => e,
+        };
+        match err {
+            Error::Backend(msg) => assert!(msg.contains("index busy"), "got: {msg}"),
+            e => panic!("expected backend error, got {e:?}"),
+        }
     }
 
     #[test]

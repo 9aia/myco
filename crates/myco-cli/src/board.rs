@@ -5,6 +5,7 @@
 //! markdown table for embedding in docs; `--json` is the columns
 //! map.
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use myco_core::{Item, Status};
@@ -252,11 +253,12 @@ struct Row {
 
 /// Card text — `T-012 the title`, with an optional prefix
 /// (`myco:`) for org boards.
-fn card(item: &Item, prefix: Option<&str>) -> String {
+fn card(item: &Item, prefix: Option<&str>, interrupted: bool) -> String {
     let id = match prefix {
         Some(p) => format!("{p}:{}", item.id),
         None => item.id.to_string(),
     };
+    let id = if interrupted { format!("{id} ⚡") } else { id };
     if item.title.is_empty() {
         id
     } else {
@@ -282,15 +284,21 @@ fn columns<'a>(items: impl Iterator<Item = &'a Item>) -> [Vec<&'a Item>; 5] {
 
 /// Render the board. `prefix` puts `repo:` on every card (org).
 /// `fit` constrains human output (`--md` passes [`Fit::UNBOUNDED`]).
+/// `interrupted` ids get a `⚡` marker on their card.
 pub fn render<'a>(
     items: impl Iterator<Item = &'a Item>,
     prefix: Option<&str>,
     md: bool,
     fit: Fit,
+    interrupted: &BTreeSet<myco_core::ItemId>,
 ) -> String {
     let cols = columns(items);
-    let cards: [Vec<String>; 5] =
-        std::array::from_fn(|c| cols[c].iter().map(|i| card(i, prefix)).collect());
+    let cards: [Vec<String>; 5] = std::array::from_fn(|c| {
+        cols[c]
+            .iter()
+            .map(|i| card(i, prefix, interrupted.contains(&i.id)))
+            .collect()
+    });
     render_cards(&cards, md, fit)
 }
 
@@ -414,7 +422,14 @@ pub fn run(
     if live.is_empty() {
         println!("{}: empty board — `myco todo add` something", scan.name);
     } else {
-        ops::print_paged(&render(live.into_iter(), None, md, Fit::terminal(all)));
+        let interrupted = crate::continuity::interrupted_set(&store, live.iter().copied());
+        ops::print_paged(&render(
+            live.into_iter(),
+            None,
+            md,
+            Fit::terminal(all),
+            &interrupted,
+        ));
     }
     Ok(0)
 }
@@ -457,11 +472,17 @@ mod tests {
     #[test]
     fn render_grid_and_md() {
         let v = items();
-        let grid = render(v.iter(), None, false, Fit::UNBOUNDED);
+        let grid = render(v.iter(), None, false, Fit::UNBOUNDED, &BTreeSet::new());
         assert!(grid.contains("Backlog"));
         assert!(grid.contains("In Progress"));
         assert!(grid.contains("T-004 wip"));
-        let md = render(v.iter(), Some("myco"), true, Fit::UNBOUNDED);
+        let md = render(
+            v.iter(),
+            Some("myco"),
+            true,
+            Fit::UNBOUNDED,
+            &BTreeSet::new(),
+        );
         assert!(md.starts_with('|'));
         assert!(md.contains("myco:T-001 parked"));
         assert!(md.contains("myco:I-001 owned"));
@@ -502,7 +523,7 @@ mod tests {
     #[test]
     fn colorize_dims_chrome_and_bolds_ids() {
         let v = [Item::new(ItemId::new(ItemKind::Task, 8), "work")];
-        let plain = render(v.iter(), None, false, Fit::UNBOUNDED);
+        let plain = render(v.iter(), None, false, Fit::UNBOUNDED, &BTreeSet::new());
         let out = colorize(&plain);
         // borders dimmed
         assert!(out.contains("\x1b[2m+"), "{out}");
@@ -531,7 +552,7 @@ mod tests {
             width: 60,
             max_rows: 25,
         };
-        let out = render(v.iter(), None, false, fit);
+        let out = render(v.iter(), None, false, fit, &BTreeSet::new());
         assert!(out.contains("… +5 more"), "{out}");
         for line in out.lines() {
             assert!(
@@ -540,15 +561,15 @@ mod tests {
             );
         }
         // --all-equivalent: uncapped renders every row
-        let full = render(v.iter(), None, false, Fit::UNBOUNDED);
+        let full = render(v.iter(), None, false, Fit::UNBOUNDED, &BTreeSet::new());
         assert!(full.contains("number 30"));
     }
 
     #[test]
     fn card_bare_id_for_empty_title() {
         let i = Item::new(ItemId::new(ItemKind::Task, 9), "");
-        assert_eq!(card(&i, None), "T-009");
-        assert_eq!(card(&i, Some("myco")), "myco:T-009");
+        assert_eq!(card(&i, None, false), "T-009");
+        assert_eq!(card(&i, Some("myco"), false), "myco:T-009");
     }
 
     #[test]

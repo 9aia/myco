@@ -102,11 +102,14 @@ pub fn run(
             if members.is_empty() {
                 println!("{}: no items in {} {name:?}", scan.name, group.name());
             } else {
+                let interrupted =
+                    crate::continuity::interrupted_set(&store, members.iter().copied());
                 ops::print_paged(&board::render(
                     members.into_iter(),
                     None,
                     md,
                     board::Fit::terminal(all),
+                    &interrupted,
                 ));
             }
             Ok(0)

@@ -64,7 +64,7 @@ impl Status {
         match self {
             Open => &[Claimed, InProgress, Deferred],
             Claimed => &[InProgress, Open, Deferred],
-            InProgress => &[Blocked, Done, Deferred],
+            InProgress => &[Blocked, Done, Deferred, Open],
             Blocked => &[InProgress, Open, Deferred],
             Deferred => &[Open],
             Done => &[],
@@ -137,6 +137,9 @@ mod tests {
             (InProgress, Blocked),
             (InProgress, Done),
             (InProgress, Deferred),
+            // un-starting work — a session dies mid-task, the item
+            // honestly returns to open (`myco interrupt`)
+            (InProgress, Open),
             (Blocked, InProgress),
             (Blocked, Open),
             (Blocked, Deferred),

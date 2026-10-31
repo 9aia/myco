@@ -61,7 +61,8 @@ pub enum Cmd {
 
 /// The set-verb flag bundle — applied to an `Item` after the
 /// status transition check.
-struct SetFlags {
+#[derive(Default)]
+pub(crate) struct SetFlags {
     status: Option<Status>,
     pri: Option<Priority>,
     owner: Option<Actor>,
@@ -74,6 +75,15 @@ struct SetFlags {
 }
 
 impl SetFlags {
+    /// A status-only mutation — `myco interrupt` drives a legal
+    /// step through the same relocation path as `item set`.
+    pub(crate) fn status(to: Status) -> Self {
+        SetFlags {
+            status: Some(to),
+            ..Default::default()
+        }
+    }
+
     fn is_noop(&self) -> bool {
         self.status.is_none()
             && self.pri.is_none()
@@ -173,14 +183,18 @@ pub fn run(
         Cmd::Show { id } => match items::find_item(&store, id)? {
             Some((item, location, body)) => {
                 let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
+                let interrupted = crate::continuity::is_interrupted(&store, id);
                 if json_out {
                     crate::ops::print_json(
-                        &json!({"item": item, "location": location, "handoffs": handoffs, "body": body}),
+                        &json!({"item": item, "location": location, "handoffs": handoffs, "interrupted": interrupted, "body": body}),
                     );
                 } else {
                     println!("{}", items::compact(&item));
                     println!("  {location}");
                     println!("  handoffs: {handoffs}");
+                    if interrupted {
+                        println!("  ⚡ interrupted — latest handoff marks it; `myco resume {id}`");
+                    }
                     if let Some(body) = &body {
                         if !body.is_empty() {
                             println!();
@@ -218,68 +232,75 @@ pub fn run(
             if flags.is_noop() {
                 return Err("item set: nothing to change — pass at least one flag".into());
             }
-            let mut ledger = items::load_ledger(&store)?;
-            if let Some(loc) = ledger.locate(id) {
-                // task item: mutate in place; a status change may
-                // relocate the line — done deletes the subtree,
-                // deferred detaches the node into BACKLOG.md
-                // (children park with it), an active status moves
-                // backlog nodes into TODO.md (children unpark).
-                // Nested children that keep their doc stay nested.
-                let status_change = flags.status.is_some();
-                apply_set(ledger.item_mut(&loc), &flags)?;
-                if status_change {
-                    match ledger.item(&loc).status {
-                        Status::Done => {
-                            ledger.take(&loc);
-                        }
-                        Status::Deferred => {
-                            let mut item = ledger.take(&loc);
-                            items::walk_descendants_to(&mut item, Status::Deferred)?;
-                            ledger.put_backlog(item, None);
-                        }
-                        _ if loc.backlog => {
-                            let mut item = ledger.take(&loc);
-                            items::walk_descendants_to(&mut item, Status::Open)?;
-                            ledger.put_todo(item, None);
-                        }
-                        _ if !loc.is_child() => {
-                            // top-level items re-land at the
-                            // section tail — same as before
-                            let item = ledger.take(&loc);
-                            ledger.put_todo(item, None);
-                        }
-                        _ => {} // a TODO child stays nested
-                    }
+            let (item, location) = mutate_item(&store, id, &flags)?;
+            let committed = items::commit(&proj.worktree, &format!("chore: set {id}"), no_commit)?;
+            let human = item
+                .as_ref()
+                .map(|i| format!("set {}", items::compact(i)))
+                .unwrap_or_else(|| format!("set {id} done — line removed"));
+            items::report(
+                json!({"item": item, "location": location}),
+                committed,
+                json_out,
+                &human,
+            )
+        }
+    }
+}
+
+/// Apply `flags` to one item anywhere in the ledger and save —
+/// the shared mutation behind `item set` and `interrupt`. Writes
+/// but does NOT commit; the caller owns the commit message.
+/// Returns the post-mutation item (`None` when done removed a task
+/// line) and a location label for reporting.
+pub(crate) fn mutate_item(
+    store: &myco_store_md::MdStore,
+    id: ItemId,
+    flags: &SetFlags,
+) -> Result<(Option<Item>, String), String> {
+    let mut ledger = items::load_ledger(store)?;
+    if let Some(loc) = ledger.locate(id) {
+        // task item: mutate in place; a status change may
+        // relocate the line — done deletes the subtree,
+        // deferred detaches the node into BACKLOG.md
+        // (children park with it), an active status moves
+        // backlog nodes into TODO.md (children unpark).
+        // Nested children that keep their doc stay nested.
+        let status_change = flags.status.is_some();
+        apply_set(ledger.item_mut(&loc), flags)?;
+        if status_change {
+            match ledger.item(&loc).status {
+                Status::Done => {
+                    ledger.take(&loc);
                 }
-                let item = ledger.locate(id).map(|l| ledger.item(&l).clone());
-                items::save_ledger(&store, &ledger)?;
-                let committed =
-                    items::commit(&proj.worktree, &format!("chore: set {id}"), no_commit)?;
-                let human = item
-                    .as_ref()
-                    .map(|i| format!("set {}", items::compact(i)))
-                    .unwrap_or_else(|| format!("set {id} done — line removed"));
-                items::report(
-                    json!({"item": item, "location": "tasks"}),
-                    committed,
-                    json_out,
-                    &human,
-                )
-            } else {
-                let mut file = items::item_for_edit(&store, id)?;
-                apply_set(&mut file.meta, &flags)?;
-                let item = file.meta.clone();
-                store.save_item(&file).map_err(|e| e.to_string())?;
-                let committed =
-                    items::commit(&proj.worktree, &format!("chore: set {id}"), no_commit)?;
-                items::report(
-                    json!({"item": item, "location": items::item_rel_path(&item)}),
-                    committed,
-                    json_out,
-                    &format!("set {}", items::compact(&item)),
-                )
+                Status::Deferred => {
+                    let mut item = ledger.take(&loc);
+                    items::walk_descendants_to(&mut item, Status::Deferred)?;
+                    ledger.put_backlog(item, None);
+                }
+                _ if loc.backlog => {
+                    let mut item = ledger.take(&loc);
+                    items::walk_descendants_to(&mut item, Status::Open)?;
+                    ledger.put_todo(item, None);
+                }
+                _ if !loc.is_child() => {
+                    // top-level items re-land at the
+                    // section tail — same as before
+                    let item = ledger.take(&loc);
+                    ledger.put_todo(item, None);
+                }
+                _ => {} // a TODO child stays nested
             }
         }
+        let item = ledger.locate(id).map(|l| ledger.item(&l).clone());
+        items::save_ledger(store, &ledger)?;
+        Ok((item, "tasks".to_string()))
+    } else {
+        let mut file = items::item_for_edit(store, id)?;
+        apply_set(&mut file.meta, flags)?;
+        let item = file.meta.clone();
+        store.save_item(&file).map_err(|e| e.to_string())?;
+        let location = items::item_rel_path(&item);
+        Ok((Some(item), location))
     }
 }

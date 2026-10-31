@@ -152,6 +152,25 @@ enum Cmd {
         #[arg(long)]
         session: Option<String>,
     },
+    /// A session ended with work still claimed/in-progress/
+    /// blocked — revert the item to `open` + `interrupted`
+    /// handoff, one commit. Session-lifecycle hooks (sepia, CLI
+    /// session-end) call this; myco never detects sessions itself.
+    Interrupt {
+        /// Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`,
+        /// `PL-NNN`).
+        id: myco_core::ItemId,
+        /// Extra context appended to the `interrupted` note.
+        #[arg(long, value_name = "TEXT")]
+        note: Option<String>,
+        /// Who interrupted it (default `cli`).
+        #[arg(long)]
+        actor: Option<myco_core::Actor>,
+        /// Session provenance — a sepia session id, `cli:<pid>`,
+        /// any id string.
+        #[arg(long)]
+        session: Option<String>,
+    },
     /// Minimal context block to restart work on an item — the
     /// item, `blocks:` dep titles, latest handoffs, open
     /// checklist. The single-item `status --prompt`.
@@ -256,8 +275,8 @@ fn manifest() -> serde_json::Value {
             "epic", "milestone",
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
-            "org status", "org board",
-            "handoff", "resume", "serve",
+            "org status", "org board", "org init",
+            "handoff", "resume", "interrupt", "serve",
         ],
         "implemented": [
             "manifest", "gen-cli-docs", "schema",
@@ -267,8 +286,8 @@ fn manifest() -> serde_json::Value {
             "epic", "milestone",
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
-            "org status", "org board",
-            "handoff", "resume",
+            "org status", "org board", "org init",
+            "handoff", "resume", "interrupt",
             "ui",
         ],
         "notes": "markdown in project/ is canonical; every verb is one \
@@ -314,6 +333,21 @@ fn main() {
             actor,
             session,
         } => continuity::handoff(id, &note, actor, session, dir, root, json, no_commit),
+        Cmd::Interrupt {
+            id,
+            note,
+            actor,
+            session,
+        } => continuity::interrupt(
+            id,
+            note.as_deref(),
+            actor,
+            session,
+            dir,
+            root,
+            json,
+            no_commit,
+        ),
         Cmd::Resume { id, last } => continuity::resume(id, last, dir, root, json),
         Cmd::Schema => schema::run(),
         Cmd::Status { prompt } => status::run(dir, root, prompt, json),

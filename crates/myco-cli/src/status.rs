@@ -5,9 +5,10 @@
 //! open-by-priority, one per line, no prose); `--json` is the
 //! structured digest.
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use myco_core::{Item, Status};
+use myco_core::{Item, ItemId, Status};
 use serde_json::json;
 
 use crate::{digest, items, ops};
@@ -15,15 +16,22 @@ use crate::{digest, items, ops};
 /// Hard cap on `--prompt` lines — the block must stay token-cheap.
 pub const PROMPT_MAX_LINES: usize = 60;
 
-/// `<id> <pri> <title>` — one prompt line, no prose.
-fn prompt_item(i: &Item) -> String {
-    format!("{} {} {}", i.id, i.priority.token(), i.title)
+/// `<id> <pri> <title> [⚡]` — one prompt line, no prose; `⚡`
+/// marks an interrupted item (latest handoff is an interrupt).
+fn prompt_item(i: &Item, interrupted: bool) -> String {
+    format!(
+        "{} {} {}{}",
+        i.id,
+        i.priority.token(),
+        i.title,
+        if interrupted { " ⚡" } else { "" }
+    )
 }
 
 /// The `--prompt` block, capped at [`PROMPT_MAX_LINES`] — the open
 /// group (always last, always largest) is truncated with a
 /// `… +N more` marker when it would overflow.
-pub fn prompt_block(scan: &digest::Scan) -> String {
+pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> String {
     let c = digest::counts(scan);
     let mut out = vec![format!("repo:{} {}", scan.name, c.oneline())];
     let section = |name: &str, items: &[&Item], room: usize| -> Vec<String> {
@@ -31,7 +39,12 @@ pub fn prompt_block(scan: &digest::Scan) -> String {
             return Vec::new();
         }
         let mut v = vec![format!("{name}:")];
-        v.extend(items.iter().map(|i| prompt_item(i)).take(room));
+        v.extend(
+            items
+                .iter()
+                .map(|i| prompt_item(i, interrupted.contains(&i.id)))
+                .take(room),
+        );
         v
     };
     // sections in spec order; the open tail absorbs the budget
@@ -88,12 +101,18 @@ pub fn run(
 ) -> Result<i32, String> {
     let (_proj, store) = items::open(dir.as_deref(), root.as_deref())?;
     let scan = digest::scan(&store)?;
+    let interrupted = crate::continuity::interrupted_set(&store, scan.live());
     if prompt {
-        println!("{}", prompt_block(&scan));
+        println!("{}", prompt_block(&scan, &interrupted));
         return Ok(0);
     }
     if json_out {
-        ops::print_json(&digest_json(&scan));
+        let mut v = digest_json(&scan);
+        v["interrupted"] = json!(interrupted
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>());
+        ops::print_json(&v);
         return Ok(0);
     }
     // human: counts + the two groups an agent asks about first
@@ -108,7 +127,15 @@ pub fn run(
         if !list.is_empty() {
             println!("{name}:");
             for i in list {
-                println!("  {}", items::compact(i));
+                println!(
+                    "  {}{}",
+                    items::compact(i),
+                    if interrupted.contains(&i.id) {
+                        " ⚡"
+                    } else {
+                        ""
+                    }
+                );
             }
         }
     }
@@ -141,7 +168,7 @@ mod tests {
             Item::new(ItemId::new(ItemKind::Task, 4), "done").status(Status::Done),
             Item::new(ItemId::new(ItemKind::Task, 6), "parked").status(Status::Deferred),
         ];
-        let block = prompt_block(&scan_with(v.clone()));
+        let block = prompt_block(&scan_with(v.clone()), &BTreeSet::new());
         let lines: Vec<&str> = block.lines().collect();
         assert_eq!(
             lines[0],
@@ -167,7 +194,7 @@ mod tests {
                 format!("task {n}"),
             ));
         }
-        let block = prompt_block(&scan_with(v));
+        let block = prompt_block(&scan_with(v), &BTreeSet::new());
         let lines: Vec<&str> = block.lines().collect();
         assert!(lines.len() <= PROMPT_MAX_LINES, "{}", lines.len());
         assert!(block.contains("… +"), "{}", block);
@@ -180,7 +207,7 @@ mod tests {
             Item::new(ItemId::new(ItemKind::Task, 1), "wip").status(Status::InProgress),
             Item::new(ItemId::new(ItemKind::Task, 2), "stuck").status(Status::Blocked),
         ];
-        let block = prompt_block(&scan_with(v));
+        let block = prompt_block(&scan_with(v), &BTreeSet::new());
         assert!(block.contains("in-progress:"), "{block}");
         assert!(!block.contains("open:"), "{block}");
     }

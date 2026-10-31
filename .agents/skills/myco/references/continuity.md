@@ -30,6 +30,24 @@ Also leave statuses honest before exiting: work in flight stays
 `in-progress` or `blocked` (never silently `open`), finished work
 gets `item set <ID> --status done` (or `todo done`).
 
+## Abnormal end — `myco interrupt`
+
+```bash
+myco interrupt T-012 [--note "ctx"] [--actor devin] [--session sepia:<id>]
+```
+
+Session ended with work still `claimed`/`in-progress`/`blocked`?
+The item reverts to `open` and gets an `interrupted` handoff in one
+commit — the board stays honest, the log keeps the event. Hooks
+call this: sepia owns session lifecycle; CLI `SessionEnd` hooks
+can too (interrupt each in-progress item you own). myco never
+detects sessions itself.
+
+Interrupted items surface as `⚡` in `status`, `status --prompt`,
+`board`, and `item show`. An `in-progress` item idle >3d with no
+interrupt is flagged under `report`'s "stale claims" — the
+no-hook safety net.
+
 ## Restart — `myco resume`
 
 ```bash

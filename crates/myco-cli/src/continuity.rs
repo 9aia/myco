@@ -1,18 +1,22 @@
-//! `myco handoff` / `myco resume` — the continuity pair. At
-//! session end `handoff` appends a `## <today> · <actor>` entry
-//! plus note to `handoffs/<ID>.md` (append-only, one file per
-//! item, uniform across kinds). At session start `resume` emits
-//! the minimal restart context — the item, its `blocks:` dep
-//! titles, the latest handoff entries, the open checklist — sized
-//! for a prompt, the single-item counterpart of `status --prompt`.
+//! `myco handoff` / `myco resume` / `myco interrupt` — the
+//! continuity trio. At session end `handoff` appends a
+//! `## <today> · <actor>` entry plus note to `handoffs/<ID>.md`
+//! (append-only, one file per item, uniform across kinds). At
+//! session start `resume` emits the minimal restart context — the
+//! item, its `blocks:` dep titles, the latest handoff entries,
+//! the open checklist — sized for a prompt, the single-item
+//! counterpart of `status --prompt`. `interrupt` is the abnormal
+//! end: a work-state item (claimed/in-progress/blocked) reverts
+//! to `open` and gets an `interrupted` handoff in one commit.
 //!
 //! sepia owns session lifecycle; it calls these verbs from hooks.
 //! `--session` is provenance only: a sepia session id,
 //! `cli:<pid>`, whatever — myco records it, never interprets it.
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use myco_core::{is_valid_session, Actor, HandoffEntry, ItemId};
+use myco_core::{is_valid_session, Actor, HandoffEntry, ItemId, Status};
 use myco_store::Store;
 use serde_json::json;
 
@@ -23,6 +27,32 @@ const DEFAULT_ACTOR: &str = "cli";
 
 /// Handoff entries shown by default (`--last` overrides).
 const DEFAULT_LAST: usize = 10;
+
+/// The note prefix `interrupt` writes — also the derivation rule:
+/// an item "was interrupted" when its latest handoff note starts
+/// with this word. No dedicated status — the event lives in the
+/// append-only log; status/board/report surfaces derive the flag.
+pub const INTERRUPT_NOTE: &str = "interrupted";
+
+/// Did the item's latest handoff mark it interrupted?
+pub fn is_interrupted(store: &impl Store, id: ItemId) -> bool {
+    store
+        .read_handoffs(id)
+        .ok()
+        .and_then(|entries| entries.last().map(|e| e.note.clone()))
+        .is_some_and(|n| n.trim_start().starts_with(INTERRUPT_NOTE))
+}
+
+/// The interrupted subset of `items` — for status/board markers.
+pub fn interrupted_set<'a>(
+    store: &impl Store,
+    items: impl Iterator<Item = &'a myco_core::Item>,
+) -> BTreeSet<ItemId> {
+    items
+        .filter(|i| is_interrupted(store, i.id))
+        .map(|i| i.id)
+        .collect()
+}
 
 /// `--note` inline, or `-` for stdin.
 fn read_note(note: &str) -> Result<String, String> {
@@ -92,6 +122,70 @@ pub fn handoff(
         committed,
         json_out,
         &format!("handoff {id} → {rel}"),
+    )
+}
+
+/// The `interrupt` verb — a session ended with work still
+/// claimed/in-progress/blocked. Reverts the item to `open` and
+/// appends an `interrupted` handoff entry in one atomic commit.
+/// Called by whoever owns session lifecycle (sepia hooks, CLI
+/// session-end hooks) — myco never detects sessions itself.
+#[allow(clippy::too_many_arguments)]
+pub fn interrupt(
+    id: ItemId,
+    note: Option<&str>,
+    actor: Option<Actor>,
+    session: Option<String>,
+    dir: Option<PathBuf>,
+    root: Option<PathBuf>,
+    json_out: bool,
+    no_commit: bool,
+) -> Result<i32, String> {
+    let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
+    let Some((item, _, _)) = items::find_item(&store, id)? else {
+        return Err(format!("{id}: no such item"));
+    };
+    match item.status {
+        Status::Claimed | Status::InProgress | Status::Blocked => {}
+        s => {
+            return Err(format!(
+                "{id}: status is {s} — nothing to interrupt \
+                 (only claimed/in-progress/blocked revert to open)"
+            ));
+        }
+    }
+    if let Some(s) = &session {
+        if !is_valid_session(s) {
+            return Err(format!(
+                "invalid --session {s:?} — no empty, no `·`, no newlines"
+            ));
+        }
+    }
+    // revert through the shared mutation path (relocation rules
+    // included), then the marker handoff — one commit covers both
+    crate::itemcmd::mutate_item(&store, id, &crate::itemcmd::SetFlags::status(Status::Open))?;
+    let note = match note.map(str::trim).filter(|n| !n.is_empty()) {
+        Some(extra) => format!("{INTERRUPT_NOTE} — {extra}"),
+        None => INTERRUPT_NOTE.to_string(),
+    };
+    let entry = HandoffEntry {
+        date: items::today(),
+        actor: match actor {
+            Some(a) => a,
+            None => Actor::new(DEFAULT_ACTOR).map_err(|e| e.to_string())?,
+        },
+        session,
+        note,
+    };
+    store
+        .append_handoff(id, &entry)
+        .map_err(|e| e.to_string())?;
+    let committed = items::commit(&proj.worktree, &format!("chore: interrupt {id}"), no_commit)?;
+    items::report(
+        json!({"id": id.to_string(), "status": "open", "entry": entry}),
+        committed,
+        json_out,
+        &format!("interrupted {id} → open"),
     )
 }
 

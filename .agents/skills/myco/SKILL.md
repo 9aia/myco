@@ -48,6 +48,7 @@ myco <verb> --help     # every verb, self-documenting
 | Design / plan / decision docs | `myco proposal new` · `myco plan new` · `myco adr new` |
 | Inspect / mutate any item | `myco item show T-NNN` · `myco item set T-NNN …` |
 | Session end (resumable state) | `myco handoff T-NNN --note "done/next/open"` |
+| Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
 | Restart work on an item | `myco resume T-NNN` |
 | Views | `myco board` · `report` · `epic` · `milestone` |
 | Cross-repo | `myco index add <repo>` · `myco org status` |

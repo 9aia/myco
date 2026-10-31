@@ -97,6 +97,34 @@ pub fn velocity(log: &[myco_git::LogEntry]) -> BTreeMap<(i32, u8), WeekTally> {
     weeks
 }
 
+/// Days idle before an `in-progress` item counts as a stale claim
+/// — the no-hook safety net: nobody called `myco interrupt`, but
+/// work clearly isn't moving. Claimed items are excluded —
+/// parking a claim is legitimate; in-progress idle is a leak.
+pub const STALE_CLAIM_DAYS: i64 = 3;
+
+/// `in-progress` items whose last activity (latest handoff, else
+/// `created`) is older than [`STALE_CLAIM_DAYS`] — interrupted in
+/// practice even if no hook fired.
+fn stale_claims<'a>(
+    store: &impl myco_store::Store,
+    scan: &'a digest::Scan,
+    today: time::Date,
+) -> Vec<(&'a myco_core::Item, i64)> {
+    scan.in_status(Status::InProgress)
+        .into_iter()
+        .filter_map(|i| {
+            let last = store
+                .read_handoffs(i.id)
+                .ok()
+                .and_then(|h| h.last().map(|e| e.date))
+                .or(i.created)?;
+            let idle = (today - last).whole_days();
+            (idle > STALE_CLAIM_DAYS).then_some((i, idle))
+        })
+        .collect()
+}
+
 /// The `report` verb.
 pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Result<i32, String> {
     let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
@@ -106,6 +134,7 @@ pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Resul
     let log = myco_git::log(&proj.worktree, None).map_err(|e| e.to_string())?;
     let velocity = velocity(&log);
     let blocked = scan.in_status(Status::Blocked);
+    let stale = stale_claims(&store, &scan, today);
     if json_out {
         ops::print_json(&json!({
             "repo": scan.name,
@@ -128,6 +157,14 @@ pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Resul
                 .iter()
                 .map(|i| serde_json::to_value(i).unwrap_or(json!(null)))
                 .collect::<Vec<_>>(),
+            "stale_claims": stale
+                .iter()
+                .map(|(i, idle)| json!({
+                    "id": i.id.to_string(),
+                    "title": i.title,
+                    "idle_days": idle,
+                }))
+                .collect::<Vec<_>>(),
         }));
         return Ok(0);
     }
@@ -149,6 +186,12 @@ pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Resul
         println!("blocked:");
         for i in blocked {
             println!("  {}", items::compact(i));
+        }
+    }
+    if !stale.is_empty() {
+        println!("stale claims (in-progress >{STALE_CLAIM_DAYS}d idle — interrupted?):");
+        for (i, idle) in stale {
+            println!("  {} · {idle}d", items::compact(i));
         }
     }
     Ok(0)

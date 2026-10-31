@@ -18,10 +18,13 @@ myco report                # aging + velocity + blocked — the trend
 ```
 
 `board` answers "what's in flight right now"; `report` answers "how
-is the ledger trending" (stale items, throughput, stuck work). Human
-boards shrink to the terminal width (`$MYCO_WIDTH` overrides) and
-cap at ~25 rows — `--all` lifts the cap; `--md`/`--json` always emit
-everything. List verbs take `--limit N` for the same job. On a tty,
+is the ledger trending" (stale items, throughput, stuck work) plus
+"stale claims" — `in-progress` items idle >3d, interrupted in
+practice. A `⚡` marks items whose latest handoff is an interrupt
+(`myco interrupt`). Human boards shrink to the terminal width
+(`$MYCO_WIDTH` overrides) and cap at ~25 rows — `--all` lifts the
+cap; `--md`/`--json` always emit everything. List verbs take
+`--limit N` for the same job. On a tty,
 long output pages through `$MYCO_PAGER`/`$PAGER`/`less -FRSX`;
 piped or agent output never pages.
 
