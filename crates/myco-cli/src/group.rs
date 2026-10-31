@@ -49,11 +49,13 @@ fn counts(scan: &digest::Scan, group: Group) -> BTreeMap<&str, usize> {
     m
 }
 
-/// The shared `epic`/`milestone` verb body.
+/// The shared `epic`/`milestone` verb body. `all` lifts the board
+/// row cap when a name renders a group board.
 pub fn run(
     group: Group,
     name: Option<String>,
     md: bool,
+    all: bool,
     dir: Option<PathBuf>,
     root: Option<PathBuf>,
     json_out: bool,
@@ -100,7 +102,10 @@ pub fn run(
             if members.is_empty() {
                 println!("{}: no items in {} {name:?}", scan.name, group.name());
             } else {
-                println!("{}", board::render(members.into_iter(), None, md));
+                println!(
+                    "{}",
+                    board::render(members.into_iter(), None, md, board::Fit::terminal(all))
+                );
             }
             Ok(0)
         }

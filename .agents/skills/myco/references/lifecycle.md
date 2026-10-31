@@ -19,10 +19,17 @@ myco init            # inside the repo (or --root <path>)
 ```
 
 Creates the orphan branch + worktree + `meta.toml` + seed files,
-appends `project/` to `.gitignore` (committed on the current branch).
-Idempotent — a valid existing worktree gets scaffold gaps repaired,
-never overwritten. Refuses to clobber a `project/` dir that isn't a
-worktree: move it aside first, then init and copy content back.
+appends `project/` to `.gitignore`, and syncs the managed
+`<!-- myco:agent-awareness -->` block into `AGENTS.md` (both
+committed on the current branch — prose outside the markers is
+preserved; a hand-written `## Agent awareness` section is upgraded
+in place). Idempotent — a valid existing worktree gets scaffold
+gaps repaired, never overwritten. Refuses to clobber a `project/`
+dir that isn't a worktree: move it aside first, then init and copy
+content back.
+
+`myco org init` re-runs init across every repo registered in the
+index — the rollout path for new scaffolding.
 
 ## `myco check` — validate + repair
 
@@ -32,8 +39,10 @@ myco check --fix     # apply safe repairs, commit
 ```
 
 Validates the file spec and the state machine, detects file/index
-drift. Run it after any forced hand-edit, after merge/rebase surgery
-inside the worktree, and as the CI gate.
+drift — plus the root `AGENTS.md` managed block (`agents-md`
+finding; `--fix` writes/appends/rewrites it and commits on the
+current branch). Run it after any forced hand-edit, after
+merge/rebase surgery inside the worktree, and as the CI gate.
 
 ## `myco migrate` — legacy → v2
 

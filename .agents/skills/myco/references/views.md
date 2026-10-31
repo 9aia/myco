@@ -9,14 +9,19 @@ cache — never the ledger).
 ```bash
 myco status [--prompt]     # digest; --prompt is the token-sized agent form
 myco board                 # kanban: Backlog | Open | Claimed |
-                           #   In Progress | Blocked
+                           #   In Progress | Blocked — fits the
+                           #   terminal, top ~25 rows
+myco board --all           # every card, no row cap
 myco board --md            # same, as a markdown table (docs/READMEs)
 myco board --epic v2 --milestone 0.2   # filtered lanes
 myco report                # aging + velocity + blocked — the trend
 ```
 
 `board` answers "what's in flight right now"; `report` answers "how
-is the ledger trending" (stale items, throughput, stuck work).
+is the ledger trending" (stale items, throughput, stuck work). Human
+boards shrink to the terminal width (`$MYCO_WIDTH` overrides) and
+cap at ~25 rows — `--all` lifts the cap; `--md`/`--json` always emit
+everything. List verbs take `--limit N` for the same job.
 
 ## Groupings — `epic` / `milestone`
 
@@ -46,7 +51,9 @@ myco index rebuild [<path>]    # re-scan one or all
 myco index remove <path>       # unregister
 
 myco org status                # per-repo counts + totals + by-owner
+                               #   (idle repos hidden; --all shows them)
 myco org board                 # org kanban, repo-prefixed cards
+myco org board --repo thal     # one repo's cards only
 ```
 
 `org` views auto-rebuild stale snapshots — register each repo once

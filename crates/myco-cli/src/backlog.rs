@@ -98,6 +98,7 @@ pub fn run(
             let found: Vec<(usize, &Item)> = items::tree_view(&all)
                 .into_iter()
                 .filter(|(_, i)| list.matches(i))
+                .take(list.take())
                 .collect();
             items::print_tree(&found, json_out)
         }

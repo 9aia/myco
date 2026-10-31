@@ -1,10 +1,12 @@
 //! `myco init` — orphan `project` branch (plumbing, never
 //! `checkout --orphan`), `git worktree add project project`,
-//! canonical scaffold, `project/` into the parent `.gitignore`.
+//! canonical scaffold, `project/` into the parent `.gitignore`,
+//! the managed agent-awareness block into `AGENTS.md`.
 //!
 //! Idempotent: an existing branch is reused, an existing valid
 //! worktree gets its scaffold verified/repaired instead of being
-//! overwritten.
+//! overwritten, and `AGENTS.md` prose outside the marked block is
+//! preserved.
 
 use std::path::{Path, PathBuf};
 
@@ -28,7 +30,9 @@ pub struct InitOutcome {
     pub files_created: Vec<String>,
     /// `.gitignore` gained `project/` this run.
     pub gitignore_updated: bool,
-    /// A commit was made (worktree scaffold or .gitignore).
+    /// `AGENTS.md` gained/refreshed the managed block this run.
+    pub agents_md_updated: bool,
+    /// A commit was made (worktree scaffold or root files).
     pub committed: bool,
 }
 
@@ -91,11 +95,25 @@ pub fn ensure(
         committed = true;
     }
 
+    // AGENTS.md managed block — same branch, own commit
+    let agents_md_updated = crate::agentmd::sync(&root)? != crate::agentmd::Change::Unchanged;
+    if agents_md_updated
+        && ops::commit_paths(
+            &root,
+            "chore: manage AGENTS.md agent-awareness block",
+            &["AGENTS.md"],
+            enabled,
+        )?
+    {
+        committed = true;
+    }
+
     Ok(InitOutcome {
         root,
         worktree,
         files_created,
         gitignore_updated,
+        agents_md_updated,
         committed,
     })
 }
@@ -146,6 +164,7 @@ pub fn run(
             "repo_root": out.root.to_string_lossy(),
             "files_created": out.files_created,
             "gitignore_updated": out.gitignore_updated,
+            "agents_md_updated": out.agents_md_updated,
             "committed": out.committed,
         }));
     } else {
@@ -164,6 +183,9 @@ pub fn run(
         }
         if out.gitignore_updated {
             println!("  .gitignore += project/");
+        }
+        if out.agents_md_updated {
+            println!("  AGENTS.md += agent-awareness block");
         }
         if !out.committed {
             println!("  (no commits — nothing changed or --no-commit)");
@@ -217,6 +239,11 @@ mod tests {
         assert!(log.lines().count() >= 2, "orphan root + scaffold commit");
         let gi = std::fs::read_to_string(d.path().join(".gitignore")).unwrap();
         assert!(gi.contains("project/"));
+        // AGENTS.md gained the managed block, committed on the
+        // current branch
+        assert!(out.agents_md_updated);
+        let ag = std::fs::read_to_string(d.path().join("AGENTS.md")).unwrap();
+        assert!(ag.contains(crate::agentmd::BEGIN));
         // meta name = repo dir name
         let meta = std::fs::read_to_string(wt.join("meta.toml")).unwrap();
         assert!(meta.contains(&format!(
@@ -228,6 +255,7 @@ mod tests {
         let out2 = ensure(None, Some(d.path()), false).unwrap();
         assert!(out2.files_created.is_empty());
         assert!(!out2.gitignore_updated);
+        assert!(!out2.agents_md_updated);
     }
 
     #[test]

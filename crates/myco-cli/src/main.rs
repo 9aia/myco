@@ -19,6 +19,7 @@ use clap::{Parser, Subcommand};
 
 mod absorb;
 mod adr;
+mod agentmd;
 mod backlog;
 mod board;
 mod check;
@@ -76,11 +77,14 @@ enum Cmd {
     /// The file/state spec, machine-readable JSON Schema.
     Schema,
     /// Scaffold `project/`: orphan branch + worktree + .gitignore +
-    /// seed files. Idempotent — a valid existing worktree gets its
-    /// scaffold verified/repaired.
+    /// seed files + the managed AGENTS.md agent-awareness block.
+    /// Idempotent — existing worktree and AGENTS.md prose are
+    /// preserved, only the marked block is (re)written.
     Init,
-    /// Validate schemas + state machine, repair file/index drift.
-    /// Exit 1 with findings; `--fix` applies safe repairs + commits.
+    /// Validate schemas + state machine, repair file/index drift;
+    /// also validates the managed AGENTS.md block on the repo
+    /// root. Exit 1 with findings; `--fix` applies safe repairs +
+    /// commits.
     Check {
         /// Repair drift in place instead of only reporting.
         #[arg(long)]
@@ -170,6 +174,9 @@ enum Cmd {
         /// Emit a markdown table (for docs/READMEs).
         #[arg(long)]
         md: bool,
+        /// Show every card — no row cap.
+        #[arg(long)]
+        all: bool,
         /// Only items in this epic.
         #[arg(long)]
         epic: Option<String>,
@@ -186,6 +193,9 @@ enum Cmd {
         /// Emit a markdown table (with a name).
         #[arg(long)]
         md: bool,
+        /// Show every card — no row cap (with a name).
+        #[arg(long)]
+        all: bool,
     },
     /// Items grouped by milestone — bare lists milestones with
     /// counts, a name renders that milestone's board.
@@ -195,6 +205,9 @@ enum Cmd {
         /// Emit a markdown table (with a name).
         #[arg(long)]
         md: bool,
+        /// Show every card — no row cap (with a name).
+        #[arg(long)]
+        all: bool,
     },
     /// Import work into the ledger — TODO/FIXME comments, Jira
     /// CSV exports, GitHub issue dumps.
@@ -297,17 +310,20 @@ fn main() {
         Cmd::Status { prompt } => status::run(dir, root, prompt, json),
         Cmd::Board {
             md,
+            all,
             epic,
             milestone,
-        } => board::run(dir, root, md, epic, milestone, json),
-        Cmd::Epic { name, md } => group::run(group::Group::Epic, name, md, dir, root, json),
-        Cmd::Milestone { name, md } => {
-            group::run(group::Group::Milestone, name, md, dir, root, json)
+        } => board::run(dir, root, md, all, epic, milestone, json),
+        Cmd::Epic { name, md, all } => {
+            group::run(group::Group::Epic, name, md, all, dir, root, json)
+        }
+        Cmd::Milestone { name, md, all } => {
+            group::run(group::Group::Milestone, name, md, all, dir, root, json)
         }
         Cmd::Absorb { cmd } => absorb::run(cmd, dir, root, json, no_commit),
         Cmd::Report => report::run(dir, root, json),
         Cmd::Index { cmd } => indexcmd::run(cmd, json),
-        Cmd::Org { cmd } => org::run(cmd, json),
+        Cmd::Org { cmd } => org::run(cmd, json, no_commit),
     };
     match result {
         Ok(code) => std::process::exit(code),

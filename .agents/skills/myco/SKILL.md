@@ -51,7 +51,7 @@ myco <verb> --help     # every verb, self-documenting
 | Restart work on an item | `myco resume T-NNN` |
 | Views | `myco board` · `report` · `epic` · `milestone` |
 | Cross-repo | `myco index add <repo>` · `myco org status` |
-| Housekeeping | `myco init` · `check` · `migrate` · `commit` |
+| Housekeeping | `myco init` · `check` · `migrate` · `commit` · `org init` |
 
 ## The daily loop
 

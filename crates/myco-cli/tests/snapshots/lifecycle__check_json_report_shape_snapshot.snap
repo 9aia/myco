@@ -1,8 +1,10 @@
 ---
 source: crates/myco-cli/tests/lifecycle.rs
+assertion_line: 512
 expression: "serde_json::to_string_pretty(&v).unwrap()"
 ---
 {
+  "agents_md": "ok",
   "errors": [
     {
       "code": "done-item",

@@ -106,13 +106,15 @@ fn init_scaffolds_worktree_and_is_idempotent() {
     let log = git(&wt, &["log", "--format=%s"]);
     assert!(log.contains("chore: init project ledger"));
     assert!(log.contains("chore: init project branch"));
-    // .gitignore entry + its commit on the current branch
+    // .gitignore entry + AGENTS.md block, each committed on the
+    // current branch
     let gi = std::fs::read_to_string(d.path().join(".gitignore")).unwrap();
     assert!(gi.contains("project/"));
-    assert_eq!(
-        git(d.path(), &["log", "-1", "--format=%s"]),
-        "chore: ignore project/ worktree mount point"
-    );
+    let ag = std::fs::read_to_string(d.path().join("AGENTS.md")).unwrap();
+    assert!(ag.contains("<!-- myco:agent-awareness -->"));
+    let main_log = git(d.path(), &["log", "--format=%s"]);
+    assert!(main_log.contains("chore: ignore project/ worktree mount point"));
+    assert!(main_log.contains("chore: manage AGENTS.md agent-awareness block"));
     // main's index/tree untouched: project/ contents were never
     // committed to the current branch
     assert_eq!(git(d.path(), &["status", "--porcelain"]), "");
@@ -121,6 +123,7 @@ fn init_scaffolds_worktree_and_is_idempotent() {
     let v2 = init(d.path());
     assert_eq!(v2["files_created"], serde_json::json!([]));
     assert_eq!(v2["gitignore_updated"], false);
+    assert_eq!(v2["agents_md_updated"], false);
 }
 
 fn json_f(s: &str) -> Value {
@@ -495,6 +498,39 @@ fn check_fix_strips_done_from_backlog() {
     let backlog = std::fs::read_to_string(wt.join("BACKLOG.md")).unwrap();
     assert!(backlog.contains("T-001 keep"));
     assert!(!backlog.contains("T-002"));
+}
+
+#[test]
+fn check_flags_and_fixes_agents_md() {
+    let d = repo();
+    init(d.path());
+    // a repo whose AGENTS.md lacks the managed block flags it
+    std::fs::remove_file(d.path().join("AGENTS.md")).unwrap();
+    let out = run(d.path(), &["check"]);
+    assert_eq!(code(&out), 1);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("agents-md"), "{err}");
+    // --fix creates + commits it on the current branch
+    let out = run(d.path(), &["check", "--fix"]);
+    assert_eq!(code(&out), 0, "{}", String::from_utf8_lossy(&out.stderr));
+    let ag = std::fs::read_to_string(d.path().join("AGENTS.md")).unwrap();
+    assert!(ag.contains("<!-- myco:agent-awareness -->"));
+    assert!(git(d.path(), &["log", "--format=%s"])
+        .contains("chore: manage AGENTS.md agent-awareness block"));
+    // and a hand-written section gets upgraded, not duplicated
+    std::fs::write(
+        d.path().join("AGENTS.md"),
+        "# R\n\n## Agent awareness\n\n- custom\n",
+    )
+    .unwrap();
+    let out = run(d.path(), &["check"]);
+    assert_eq!(code(&out), 1);
+    let out = run(d.path(), &["check", "--fix"]);
+    assert_eq!(code(&out), 0);
+    let ag = std::fs::read_to_string(d.path().join("AGENTS.md")).unwrap();
+    assert!(!ag.contains("custom"));
+    assert_eq!(ag.matches("<!-- myco:agent-awareness -->").count(), 1);
+    assert!(ag.starts_with("# R\n"));
 }
 
 #[test]

@@ -58,6 +58,8 @@ tempfile = "3"
 temp-env = "0.3"
 redb = "3"
 tabled = "0.20"
+terminal_size = "0.4"
+unicode-width = "0.2"
 csv = "1"
 
 [workspace.lints.rust]

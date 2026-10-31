@@ -1304,24 +1304,62 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             analysis = analyze(wt);
         }
     }
+    // root-side: the managed AGENTS.md block lives on the checked-
+    // out branch, not in the worktree — validated/repaired against
+    // proj.root separately.
+    let mut agents_md = crate::agentmd::block_state(&proj.root);
+    let mut root_repaired = false;
+    if agents_md != crate::agentmd::State::Ok {
+        if fix {
+            crate::agentmd::sync(&proj.root)?;
+            root_repaired = ops::commit_paths(
+                &proj.root,
+                "chore: manage AGENTS.md agent-awareness block",
+                &["AGENTS.md"],
+                ops::commits_enabled(no_commit),
+            )?;
+            agents_md = crate::agentmd::block_state(&proj.root);
+        } else {
+            analysis.findings.push(Finding::at(
+                "AGENTS.md",
+                "agents-md",
+                match agents_md {
+                    crate::agentmd::State::Missing => {
+                        "AGENTS.md missing — `check --fix` creates it with the agent-awareness block"
+                    }
+                    crate::agentmd::State::Absent => {
+                        "AGENTS.md lacks the managed agent-awareness block — `check --fix` appends it"
+                    }
+                    crate::agentmd::State::Drift => {
+                        "AGENTS.md agent-awareness block isn't canonical — `check --fix` rewrites it"
+                    }
+                    crate::agentmd::State::Ok => unreachable!(),
+                },
+                true,
+            ));
+        }
+    }
+
     let remaining: Vec<&Finding> = analysis.findings.iter().collect();
     let fixes_available = analysis.fixes.len();
     if fixes_applied > 0 {
         let msg = format!("chore: check --fix ({fixes_applied} repairs)");
         ops::autocommit(wt, &msg, ops::commits_enabled(no_commit))?;
     }
+    let repairs = fixes_applied + usize::from(root_repaired);
     let ok = remaining.is_empty();
     if json_out {
         ops::print_json(&json!({
             "ok": ok,
             "worktree": wt.to_string_lossy(),
             "repo_root": proj.root.to_string_lossy(),
+            "agents_md": agents_md.as_str(),
             "errors": remaining.iter().map(|f| json!({
                 "file": f.file, "line": f.line, "col": f.col,
                 "code": f.code, "msg": f.msg, "fixable": f.fixable,
             })).collect::<Vec<_>>(),
             "fixes_available": fixes_available,
-            "fixes_applied": fixes_applied,
+            "fixes_applied": repairs,
         }));
     } else {
         for f in &remaining {
@@ -1331,8 +1369,8 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
                 eprintln!("{}:{}:{} [{}] {}", f.file, f.line, f.col, f.code, f.msg);
             }
         }
-        if fixes_applied > 0 {
-            eprintln!("check --fix: applied {fixes_applied} repairs");
+        if repairs > 0 {
+            eprintln!("check --fix: applied {repairs} repairs");
         }
         if !ok {
             eprintln!(

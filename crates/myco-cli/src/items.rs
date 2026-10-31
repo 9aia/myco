@@ -83,6 +83,9 @@ pub struct ListFlags {
     /// Keep only items carrying all of these labels (repeatable).
     #[arg(long)]
     pub label: Vec<String>,
+    /// Keep only the first N items after filtering.
+    #[arg(long, value_name = "N")]
+    pub limit: Option<usize>,
 }
 
 impl ListFlags {
@@ -94,6 +97,11 @@ impl ListFlags {
                 .as_deref()
                 .is_none_or(|o| item.owner.as_ref().map(Actor::as_str) == Some(o))
             && self.label.iter().all(|l| item.labels.contains(l))
+    }
+
+    /// `--limit N` as a `.take()` bound.
+    pub fn take(&self) -> usize {
+        self.limit.unwrap_or(usize::MAX)
     }
 }
 
@@ -581,6 +589,7 @@ pub fn list_files(
         .into_iter()
         .map(|f| f.meta)
         .filter(|i| list.matches(i))
+        .take(list.take())
         .collect();
     print_list(&found, json_out)
 }

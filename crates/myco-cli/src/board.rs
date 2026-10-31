@@ -11,8 +11,114 @@ use myco_core::{Item, Status};
 use serde_json::json;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::{digest, items, ops};
+
+/// Default cap on board rows for human output (`--all` lifts it) —
+/// a screenful, so a huge ledger can't bury the terminal.
+pub const DEFAULT_MAX_ROWS: usize = 25;
+
+/// The ascii style's per-table overhead: `| ` + ` ` per column
+/// (3×5) plus the outer borders (1).
+const TABLE_OVERHEAD: usize = 16;
+
+/// Human-render constraints for the board — width budget + row
+/// cap. `--md`/`--json` use [`Fit::UNBOUNDED`]; caps are a terminal
+/// concern only.
+#[derive(Debug, Clone, Copy)]
+pub struct Fit {
+    /// Total table width budget in terminal columns.
+    pub width: usize,
+    /// Max data rows before a `… +N more` footer.
+    pub max_rows: usize,
+}
+
+impl Fit {
+    /// No constraints — markdown + JSON output.
+    pub const UNBOUNDED: Fit = Fit {
+        width: usize::MAX,
+        max_rows: usize::MAX,
+    };
+
+    /// Fit for human output — `all` lifts the row cap.
+    pub fn terminal(all: bool) -> Fit {
+        Fit {
+            width: term_width(),
+            max_rows: if all { usize::MAX } else { DEFAULT_MAX_ROWS },
+        }
+    }
+}
+
+/// Display width budget: `$MYCO_WIDTH` → tty width → 100 piped.
+fn term_width() -> usize {
+    if let Some(w) = std::env::var("MYCO_WIDTH")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+    {
+        return w;
+    }
+    terminal_size::terminal_size()
+        .map(|(w, _)| usize::from(w.0))
+        .unwrap_or(100)
+}
+
+/// `…`-truncate `s` to `w` display columns.
+fn truncate(s: &str, w: usize) -> String {
+    if UnicodeWidthStr::width(s) <= w {
+        return s.to_string();
+    }
+    let mut out = String::new();
+    let mut used = 0;
+    for ch in s.chars() {
+        let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if used + cw > w.saturating_sub(1) {
+            break;
+        }
+        out.push(ch);
+        used += cw;
+    }
+    out.push('…');
+    out
+}
+
+/// Water-fill `budget` across the five columns: a column under the
+/// fair share keeps its natural width and the rest split what's
+/// left. Never grows a column past its natural width.
+fn fit_widths(natural: [usize; 5], budget: usize) -> [usize; 5] {
+    let mut out = natural;
+    let mut locked = [false; 5];
+    let mut open = 5usize;
+    let mut rem = budget;
+    loop {
+        if open == 0 {
+            break;
+        }
+        let share = rem / open;
+        let mut extra = rem - share * open;
+        let mut progressed = false;
+        for c in 0..5 {
+            if !locked[c] && out[c] <= share {
+                locked[c] = true;
+                open -= 1;
+                rem -= out[c];
+                progressed = true;
+            }
+        }
+        if !progressed {
+            for c in 0..5 {
+                if !locked[c] {
+                    // every open column wants more than the share
+                    out[c] = share + usize::from(extra > 0);
+                    extra = extra.saturating_sub(1);
+                    locked[c] = true;
+                    open -= 1;
+                }
+            }
+        }
+    }
+    out
+}
 
 /// Column order — a `deferred` item is a backlog item wherever it
 /// lives, and `done` has no column (done leaves the ledger).
@@ -70,20 +176,46 @@ fn columns<'a>(items: impl Iterator<Item = &'a Item>) -> [Vec<&'a Item>; 5] {
 }
 
 /// Render the board. `prefix` puts `repo:` on every card (org).
-pub fn render<'a>(items: impl Iterator<Item = &'a Item>, prefix: Option<&str>, md: bool) -> String {
+/// `fit` constrains human output (`--md` passes [`Fit::UNBOUNDED`]).
+pub fn render<'a>(
+    items: impl Iterator<Item = &'a Item>,
+    prefix: Option<&str>,
+    md: bool,
+    fit: Fit,
+) -> String {
     let cols = columns(items);
     let cards: [Vec<String>; 5] =
         std::array::from_fn(|c| cols[c].iter().map(|i| card(i, prefix)).collect());
-    render_cards(&cards, md)
+    render_cards(&cards, md, fit)
 }
 
 /// Render five columns of card strings — shared with `org board`,
 /// which builds mixed-repo cards itself.
-pub fn render_cards(cards: &[Vec<String>; 5], md: bool) -> String {
+pub fn render_cards(cards: &[Vec<String>; 5], md: bool, fit: Fit) -> String {
+    let fit = if md { Fit::UNBOUNDED } else { fit };
+    // shrink cards to the terminal budget — wide columns split
+    // what's left once narrow ones keep their natural width
+    let headers = ["Backlog", "Open", "Claimed", "In Progress", "Blocked"];
+    let natural: [usize; 5] = std::array::from_fn(|c| {
+        cards[c]
+            .iter()
+            .map(|s| UnicodeWidthStr::width(s.as_str()))
+            .max()
+            .unwrap_or(0)
+            .max(UnicodeWidthStr::width(headers[c]))
+    });
+    let budget = fit.width.saturating_sub(TABLE_OVERHEAD);
+    let widths = fit_widths(natural, budget);
     let height = cards.iter().map(Vec::len).max().unwrap_or(0);
-    let mut rows = Vec::with_capacity(height);
-    for r in 0..height {
-        let cell = |c: usize| cards[c].get(r).cloned().unwrap_or_default();
+    let shown = height.min(fit.max_rows);
+    let mut rows = Vec::with_capacity(shown);
+    for r in 0..shown {
+        let cell = |c: usize| {
+            cards[c]
+                .get(r)
+                .map(|s| truncate(s, widths[c]))
+                .unwrap_or_default()
+        };
         rows.push(Row {
             backlog: cell(0),
             open: cell(1),
@@ -96,7 +228,12 @@ pub fn render_cards(cards: &[Vec<String>; 5], md: bool) -> String {
     if md {
         table.with(Style::markdown());
     }
-    table.to_string()
+    let mut out = table.to_string();
+    let hidden: usize = cards.iter().map(|c| c.len().saturating_sub(shown)).sum();
+    if hidden > 0 {
+        out.push_str(&format!("\n… +{hidden} more (`--all` to show)"));
+    }
+    out
 }
 
 /// Bucket `(label, item)` pairs into the five columns, sorting
@@ -141,11 +278,12 @@ pub fn columns_json<'a>(
 }
 
 /// The `board` verb. `--epic`/`--milestone` scope the columns to
-/// items in that group (both set = AND).
+/// items in that group (both set = AND); `--all` lifts the row cap.
 pub fn run(
     dir: Option<PathBuf>,
     root: Option<PathBuf>,
     md: bool,
+    all: bool,
     epic: Option<String>,
     milestone: Option<String>,
     json_out: bool,
@@ -168,7 +306,7 @@ pub fn run(
     if live.is_empty() {
         println!("{}: empty board — `myco todo add` something", scan.name);
     } else {
-        println!("{}", render(live.into_iter(), None, md));
+        println!("{}", render(live.into_iter(), None, md, Fit::terminal(all)));
     }
     Ok(0)
 }
@@ -211,16 +349,65 @@ mod tests {
     #[test]
     fn render_grid_and_md() {
         let v = items();
-        let grid = render(v.iter(), None, false);
+        let grid = render(v.iter(), None, false, Fit::UNBOUNDED);
         assert!(grid.contains("Backlog"));
         assert!(grid.contains("In Progress"));
         assert!(grid.contains("T-004 wip"));
-        let md = render(v.iter(), Some("myco"), true);
+        let md = render(v.iter(), Some("myco"), true, Fit::UNBOUNDED);
         assert!(md.starts_with('|'));
         assert!(md.contains("myco:T-001 parked"));
         assert!(md.contains("myco:I-001 owned"));
         // markdown table: header + separator + rows
         assert!(md.lines().any(|l| l.contains("---")));
+    }
+
+    #[test]
+    fn fit_widths_water_fills() {
+        // narrow columns keep natural width; the wide one gets
+        // what's left of the budget
+        assert_eq!(fit_widths([500, 4, 4, 4, 4], 84), [68, 4, 4, 4, 4]);
+        // everything fits → natural widths unchanged
+        assert_eq!(fit_widths([20, 10, 8, 11, 7], 100), [20, 10, 8, 11, 7]);
+        // several wide columns split evenly (remainder to the first)
+        assert_eq!(fit_widths([30, 30, 30, 4, 4], 50), [14, 14, 14, 4, 4]);
+        // never grown past natural
+        assert_eq!(fit_widths([80, 4, 4, 4, 4], 100), [80, 4, 4, 4, 4]);
+    }
+
+    #[test]
+    fn truncate_fits_display_width() {
+        assert_eq!(truncate("short", 10), "short");
+        assert_eq!(truncate("T-148 Fix https://long-url", 10), "T-148 Fix…");
+        assert_eq!(truncate("ab", 1), "…");
+    }
+
+    #[test]
+    fn render_caps_rows_and_width() {
+        let mut v = Vec::new();
+        for n in 1..=30 {
+            v.push(
+                Item::new(
+                    ItemId::new(ItemKind::Task, n),
+                    format!("a fairly long task title number {n}"),
+                )
+                .status(Status::Deferred),
+            );
+        }
+        let fit = Fit {
+            width: 60,
+            max_rows: 25,
+        };
+        let out = render(v.iter(), None, false, fit);
+        assert!(out.contains("… +5 more"), "{out}");
+        for line in out.lines() {
+            assert!(
+                UnicodeWidthStr::width(line) <= 60 + 5, // +header slack
+                "{line}"
+            );
+        }
+        // --all-equivalent: uncapped renders every row
+        let full = render(v.iter(), None, false, Fit::UNBOUNDED);
+        assert!(full.contains("number 30"));
     }
 
     #[test]
