@@ -568,8 +568,8 @@
 <a href=#568 id=568 data-nosnippet>568</a>    <span class="attr">#[test]
 <a href=#569 id=569 data-nosnippet>569</a>    </span><span class="kw">fn </span>card_bare_id_for_empty_title() {
 <a href=#570 id=570 data-nosnippet>570</a>        <span class="kw">let </span>i = Item::new(ItemId::new(ItemKind::Task, <span class="number">9</span>), <span class="string">""</span>);
-<a href=#571 id=571 data-nosnippet>571</a>        <span class="macro">assert_eq!</span>(card(<span class="kw-2">&amp;</span>i, <span class="prelude-val">None</span>), <span class="string">"T-009"</span>);
-<a href=#572 id=572 data-nosnippet>572</a>        <span class="macro">assert_eq!</span>(card(<span class="kw-2">&amp;</span>i, <span class="prelude-val">Some</span>(<span class="string">"myco"</span>)), <span class="string">"myco:T-009"</span>);
+<a href=#571 id=571 data-nosnippet>571</a>        <span class="macro">assert_eq!</span>(card(<span class="kw-2">&amp;</span>i, <span class="prelude-val">None</span>, <span class="bool-val">false</span>), <span class="string">"T-009"</span>);
+<a href=#572 id=572 data-nosnippet>572</a>        <span class="macro">assert_eq!</span>(card(<span class="kw-2">&amp;</span>i, <span class="prelude-val">Some</span>(<span class="string">"myco"</span>), <span class="bool-val">false</span>), <span class="string">"myco:T-009"</span>);
 <a href=#573 id=573 data-nosnippet>573</a>    }
 <a href=#574 id=574 data-nosnippet>574</a>
 <a href=#575 id=575 data-nosnippet>575</a>    <span class="attr">#[test]

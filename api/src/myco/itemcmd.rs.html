@@ -63,15 +63,15 @@
 <a href=#63 id=63 data-nosnippet>63</a>/// status transition check.
 <a href=#64 id=64 data-nosnippet>64</a></span><span class="attr">#[derive(Default)]
 <a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>SetFlags {
-<a href=#66 id=66 data-nosnippet>66</a>    status: <span class="prelude-ty">Option</span>&lt;Status&gt;,
-<a href=#67 id=67 data-nosnippet>67</a>    pri: <span class="prelude-ty">Option</span>&lt;Priority&gt;,
-<a href=#68 id=68 data-nosnippet>68</a>    owner: <span class="prelude-ty">Option</span>&lt;Actor&gt;,
-<a href=#69 id=69 data-nosnippet>69</a>    label: Vec&lt;String&gt;,
-<a href=#70 id=70 data-nosnippet>70</a>    unlabel: Vec&lt;String&gt;,
-<a href=#71 id=71 data-nosnippet>71</a>    blocks: Vec&lt;String&gt;,
-<a href=#72 id=72 data-nosnippet>72</a>    unblock: Vec&lt;ItemId&gt;,
-<a href=#73 id=73 data-nosnippet>73</a>    epic: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#74 id=74 data-nosnippet>74</a>    milestone: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) status: <span class="prelude-ty">Option</span>&lt;Status&gt;,
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) pri: <span class="prelude-ty">Option</span>&lt;Priority&gt;,
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) owner: <span class="prelude-ty">Option</span>&lt;Actor&gt;,
+<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) label: Vec&lt;String&gt;,
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) unlabel: Vec&lt;String&gt;,
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) blocks: Vec&lt;String&gt;,
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) unblock: Vec&lt;ItemId&gt;,
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) epic: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) milestone: <span class="prelude-ty">Option</span>&lt;String&gt;,
 <a href=#75 id=75 data-nosnippet>75</a>}
 <a href=#76 id=76 data-nosnippet>76</a>
 <a href=#77 id=77 data-nosnippet>77</a><span class="kw">impl </span>SetFlags {
@@ -84,7 +84,7 @@
 <a href=#84 id=84 data-nosnippet>84</a>        }
 <a href=#85 id=85 data-nosnippet>85</a>    }
 <a href=#86 id=86 data-nosnippet>86</a>
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">fn </span>is_noop(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>is_noop(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
 <a href=#88 id=88 data-nosnippet>88</a>        <span class="self">self</span>.status.is_none()
 <a href=#89 id=89 data-nosnippet>89</a>            &amp;&amp; <span class="self">self</span>.pri.is_none()
 <a href=#90 id=90 data-nosnippet>90</a>            &amp;&amp; <span class="self">self</span>.owner.is_none()
@@ -248,60 +248,78 @@
 <a href=#248 id=248 data-nosnippet>248</a>    }
 <a href=#249 id=249 data-nosnippet>249</a>}
 <a href=#250 id=250 data-nosnippet>250</a>
-<a href=#251 id=251 data-nosnippet>251</a><span class="doccomment">/// Apply `flags` to one item anywhere in the ledger and save —
-<a href=#252 id=252 data-nosnippet>252</a>/// the shared mutation behind `item set` and `interrupt`. Writes
-<a href=#253 id=253 data-nosnippet>253</a>/// but does NOT commit; the caller owns the commit message.
-<a href=#254 id=254 data-nosnippet>254</a>/// Returns the post-mutation item (`None` when done removed a task
-<a href=#255 id=255 data-nosnippet>255</a>/// line) and a location label for reporting.
-<a href=#256 id=256 data-nosnippet>256</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>mutate_item(
-<a href=#257 id=257 data-nosnippet>257</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
-<a href=#258 id=258 data-nosnippet>258</a>    id: ItemId,
-<a href=#259 id=259 data-nosnippet>259</a>    flags: <span class="kw-2">&amp;</span>SetFlags,
-<a href=#260 id=260 data-nosnippet>260</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="prelude-ty">Option</span>&lt;Item&gt;, String), String&gt; {
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(store)<span class="question-mark">?</span>;
-<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(loc) = ledger.locate(id) {
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="comment">// task item: mutate in place; a status change may
-<a href=#264 id=264 data-nosnippet>264</a>        // relocate the line — done deletes the subtree,
-<a href=#265 id=265 data-nosnippet>265</a>        // deferred detaches the node into BACKLOG.md
-<a href=#266 id=266 data-nosnippet>266</a>        // (children park with it), an active status moves
-<a href=#267 id=267 data-nosnippet>267</a>        // backlog nodes into TODO.md (children unpark).
-<a href=#268 id=268 data-nosnippet>268</a>        // Nested children that keep their doc stay nested.
-<a href=#269 id=269 data-nosnippet>269</a>        </span><span class="kw">let </span>status_change = flags.status.is_some();
-<a href=#270 id=270 data-nosnippet>270</a>        apply_set(ledger.item_mut(<span class="kw-2">&amp;</span>loc), flags)<span class="question-mark">?</span>;
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">if </span>status_change {
-<a href=#272 id=272 data-nosnippet>272</a>            <span class="kw">match </span>ledger.item(<span class="kw-2">&amp;</span>loc).status {
-<a href=#273 id=273 data-nosnippet>273</a>                Status::Done =&gt; {
-<a href=#274 id=274 data-nosnippet>274</a>                    ledger.take(<span class="kw-2">&amp;</span>loc);
-<a href=#275 id=275 data-nosnippet>275</a>                }
-<a href=#276 id=276 data-nosnippet>276</a>                Status::Deferred =&gt; {
-<a href=#277 id=277 data-nosnippet>277</a>                    <span class="kw">let </span><span class="kw-2">mut </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
-<a href=#278 id=278 data-nosnippet>278</a>                    items::walk_descendants_to(<span class="kw-2">&amp;mut </span>item, Status::Deferred)<span class="question-mark">?</span>;
-<a href=#279 id=279 data-nosnippet>279</a>                    ledger.put_backlog(item, <span class="prelude-val">None</span>);
-<a href=#280 id=280 data-nosnippet>280</a>                }
-<a href=#281 id=281 data-nosnippet>281</a>                <span class="kw">_ if </span>loc.backlog =&gt; {
-<a href=#282 id=282 data-nosnippet>282</a>                    <span class="kw">let </span><span class="kw-2">mut </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
-<a href=#283 id=283 data-nosnippet>283</a>                    items::walk_descendants_to(<span class="kw-2">&amp;mut </span>item, Status::Open)<span class="question-mark">?</span>;
-<a href=#284 id=284 data-nosnippet>284</a>                    ledger.put_todo(item, <span class="prelude-val">None</span>);
-<a href=#285 id=285 data-nosnippet>285</a>                }
-<a href=#286 id=286 data-nosnippet>286</a>                <span class="kw">_ if </span>!loc.is_child() =&gt; {
-<a href=#287 id=287 data-nosnippet>287</a>                    <span class="comment">// top-level items re-land at the
-<a href=#288 id=288 data-nosnippet>288</a>                    // section tail — same as before
-<a href=#289 id=289 data-nosnippet>289</a>                    </span><span class="kw">let </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
-<a href=#290 id=290 data-nosnippet>290</a>                    ledger.put_todo(item, <span class="prelude-val">None</span>);
-<a href=#291 id=291 data-nosnippet>291</a>                }
-<a href=#292 id=292 data-nosnippet>292</a>                <span class="kw">_ </span>=&gt; {} <span class="comment">// a TODO child stays nested
-<a href=#293 id=293 data-nosnippet>293</a>            </span>}
-<a href=#294 id=294 data-nosnippet>294</a>        }
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span>item = ledger.locate(id).map(|l| ledger.item(<span class="kw-2">&amp;</span>l).clone());
-<a href=#296 id=296 data-nosnippet>296</a>        items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
-<a href=#297 id=297 data-nosnippet>297</a>        <span class="prelude-val">Ok</span>((item, <span class="string">"tasks"</span>.to_string()))
-<a href=#298 id=298 data-nosnippet>298</a>    } <span class="kw">else </span>{
-<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">let </span><span class="kw-2">mut </span>file = items::item_for_edit(store, id)<span class="question-mark">?</span>;
-<a href=#300 id=300 data-nosnippet>300</a>        apply_set(<span class="kw-2">&amp;mut </span>file.meta, flags)<span class="question-mark">?</span>;
-<a href=#301 id=301 data-nosnippet>301</a>        <span class="kw">let </span>item = file.meta.clone();
-<a href=#302 id=302 data-nosnippet>302</a>        store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">let </span>location = items::item_rel_path(<span class="kw-2">&amp;</span>item);
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="prelude-val">Ok</span>((<span class="prelude-val">Some</span>(item), location))
-<a href=#305 id=305 data-nosnippet>305</a>    }
-<a href=#306 id=306 data-nosnippet>306</a>}
+<a href=#251 id=251 data-nosnippet>251</a><span class="doccomment">/// The `item show` payload — `{item, location, handoffs,
+<a href=#252 id=252 data-nosnippet>252</a>/// interrupted, body}` — the `myco serve` method surface.
+<a href=#253 id=253 data-nosnippet>253</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>show_json(
+<a href=#254 id=254 data-nosnippet>254</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
+<a href=#255 id=255 data-nosnippet>255</a>    id: ItemId,
+<a href=#256 id=256 data-nosnippet>256</a>) -&gt; <span class="prelude-ty">Result</span>&lt;serde_json::Value, String&gt; {
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="kw">match </span>items::find_item(store, id)<span class="question-mark">? </span>{
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="prelude-val">Some</span>((item, location, body)) =&gt; {
+<a href=#259 id=259 data-nosnippet>259</a>            <span class="kw">let </span>handoffs = store.read_handoffs(id).map_err(|e| e.to_string())<span class="question-mark">?</span>.len();
+<a href=#260 id=260 data-nosnippet>260</a>            <span class="kw">let </span>interrupted = <span class="kw">crate</span>::continuity::is_interrupted(store, id);
+<a href=#261 id=261 data-nosnippet>261</a>            <span class="prelude-val">Ok</span>(
+<a href=#262 id=262 data-nosnippet>262</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"location"</span>: location, <span class="string">"handoffs"</span>: handoffs, <span class="string">"interrupted"</span>: interrupted, <span class="string">"body"</span>: body}),
+<a href=#263 id=263 data-nosnippet>263</a>            )
+<a href=#264 id=264 data-nosnippet>264</a>        }
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"{id}: no such item"</span>)),
+<a href=#266 id=266 data-nosnippet>266</a>    }
+<a href=#267 id=267 data-nosnippet>267</a>}
+<a href=#268 id=268 data-nosnippet>268</a>
+<a href=#269 id=269 data-nosnippet>269</a><span class="doccomment">/// Apply `flags` to one item anywhere in the ledger and save —
+<a href=#270 id=270 data-nosnippet>270</a>/// the shared mutation behind `item set` and `interrupt`. Writes
+<a href=#271 id=271 data-nosnippet>271</a>/// but does NOT commit; the caller owns the commit message.
+<a href=#272 id=272 data-nosnippet>272</a>/// Returns the post-mutation item (`None` when done removed a task
+<a href=#273 id=273 data-nosnippet>273</a>/// line) and a location label for reporting.
+<a href=#274 id=274 data-nosnippet>274</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>mutate_item(
+<a href=#275 id=275 data-nosnippet>275</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
+<a href=#276 id=276 data-nosnippet>276</a>    id: ItemId,
+<a href=#277 id=277 data-nosnippet>277</a>    flags: <span class="kw-2">&amp;</span>SetFlags,
+<a href=#278 id=278 data-nosnippet>278</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="prelude-ty">Option</span>&lt;Item&gt;, String), String&gt; {
+<a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(store)<span class="question-mark">?</span>;
+<a href=#280 id=280 data-nosnippet>280</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(loc) = ledger.locate(id) {
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="comment">// task item: mutate in place; a status change may
+<a href=#282 id=282 data-nosnippet>282</a>        // relocate the line — done deletes the subtree,
+<a href=#283 id=283 data-nosnippet>283</a>        // deferred detaches the node into BACKLOG.md
+<a href=#284 id=284 data-nosnippet>284</a>        // (children park with it), an active status moves
+<a href=#285 id=285 data-nosnippet>285</a>        // backlog nodes into TODO.md (children unpark).
+<a href=#286 id=286 data-nosnippet>286</a>        // Nested children that keep their doc stay nested.
+<a href=#287 id=287 data-nosnippet>287</a>        </span><span class="kw">let </span>status_change = flags.status.is_some();
+<a href=#288 id=288 data-nosnippet>288</a>        apply_set(ledger.item_mut(<span class="kw-2">&amp;</span>loc), flags)<span class="question-mark">?</span>;
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">if </span>status_change {
+<a href=#290 id=290 data-nosnippet>290</a>            <span class="kw">match </span>ledger.item(<span class="kw-2">&amp;</span>loc).status {
+<a href=#291 id=291 data-nosnippet>291</a>                Status::Done =&gt; {
+<a href=#292 id=292 data-nosnippet>292</a>                    ledger.take(<span class="kw-2">&amp;</span>loc);
+<a href=#293 id=293 data-nosnippet>293</a>                }
+<a href=#294 id=294 data-nosnippet>294</a>                Status::Deferred =&gt; {
+<a href=#295 id=295 data-nosnippet>295</a>                    <span class="kw">let </span><span class="kw-2">mut </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
+<a href=#296 id=296 data-nosnippet>296</a>                    items::walk_descendants_to(<span class="kw-2">&amp;mut </span>item, Status::Deferred)<span class="question-mark">?</span>;
+<a href=#297 id=297 data-nosnippet>297</a>                    ledger.put_backlog(item, <span class="prelude-val">None</span>);
+<a href=#298 id=298 data-nosnippet>298</a>                }
+<a href=#299 id=299 data-nosnippet>299</a>                <span class="kw">_ if </span>loc.backlog =&gt; {
+<a href=#300 id=300 data-nosnippet>300</a>                    <span class="kw">let </span><span class="kw-2">mut </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
+<a href=#301 id=301 data-nosnippet>301</a>                    items::walk_descendants_to(<span class="kw-2">&amp;mut </span>item, Status::Open)<span class="question-mark">?</span>;
+<a href=#302 id=302 data-nosnippet>302</a>                    ledger.put_todo(item, <span class="prelude-val">None</span>);
+<a href=#303 id=303 data-nosnippet>303</a>                }
+<a href=#304 id=304 data-nosnippet>304</a>                <span class="kw">_ if </span>!loc.is_child() =&gt; {
+<a href=#305 id=305 data-nosnippet>305</a>                    <span class="comment">// top-level items re-land at the
+<a href=#306 id=306 data-nosnippet>306</a>                    // section tail — same as before
+<a href=#307 id=307 data-nosnippet>307</a>                    </span><span class="kw">let </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
+<a href=#308 id=308 data-nosnippet>308</a>                    ledger.put_todo(item, <span class="prelude-val">None</span>);
+<a href=#309 id=309 data-nosnippet>309</a>                }
+<a href=#310 id=310 data-nosnippet>310</a>                <span class="kw">_ </span>=&gt; {} <span class="comment">// a TODO child stays nested
+<a href=#311 id=311 data-nosnippet>311</a>            </span>}
+<a href=#312 id=312 data-nosnippet>312</a>        }
+<a href=#313 id=313 data-nosnippet>313</a>        <span class="kw">let </span>item = ledger.locate(id).map(|l| ledger.item(<span class="kw-2">&amp;</span>l).clone());
+<a href=#314 id=314 data-nosnippet>314</a>        items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
+<a href=#315 id=315 data-nosnippet>315</a>        <span class="prelude-val">Ok</span>((item, <span class="string">"tasks"</span>.to_string()))
+<a href=#316 id=316 data-nosnippet>316</a>    } <span class="kw">else </span>{
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">let </span><span class="kw-2">mut </span>file = items::item_for_edit(store, id)<span class="question-mark">?</span>;
+<a href=#318 id=318 data-nosnippet>318</a>        apply_set(<span class="kw-2">&amp;mut </span>file.meta, flags)<span class="question-mark">?</span>;
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">let </span>item = file.meta.clone();
+<a href=#320 id=320 data-nosnippet>320</a>        store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#321 id=321 data-nosnippet>321</a>        <span class="kw">let </span>location = items::item_rel_path(<span class="kw-2">&amp;</span>item);
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="prelude-val">Ok</span>((<span class="prelude-val">Some</span>(item), location))
+<a href=#323 id=323 data-nosnippet>323</a>    }
+<a href=#324 id=324 data-nosnippet>324</a>}
 </code></pre></div></section></main></body></html>

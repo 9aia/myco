@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["STALE_CLAIM_DAYS"],"enum":["Verb"],"fn":["aging","classify","run","stale_claims","velocity"],"struct":["Aging","WeekTally"]};
+window.SIDEBAR_ITEMS = {"constant":["STALE_CLAIM_DAYS"],"enum":["Verb"],"fn":["aging","classify","report_json","run","stale_claims","velocity"],"struct":["Aging","WeekTally"]};

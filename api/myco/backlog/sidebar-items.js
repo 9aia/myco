@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Cmd"],"fn":["run"]};
+window.SIDEBAR_ITEMS = {"enum":["Cmd"],"fn":["add_item","promote_item","run"]};

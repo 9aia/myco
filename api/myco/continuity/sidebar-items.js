@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_ACTOR","DEFAULT_LAST","INTERRUPT_NOTE"],"fn":["handoff","interrupt","interrupted_set","is_interrupted","open_checklist","read_note","resume"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_ACTOR","DEFAULT_LAST","INTERRUPT_NOTE"],"fn":["handoff","interrupt","interrupt_item","interrupted_set","is_interrupted","open_checklist","read_note","record_handoff","resume","resume_data","resume_json"],"struct":["ResumeData"]};
