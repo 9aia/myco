@@ -1,7 +1,7 @@
 name = "myco"
 
 [next]
-t = 25
+t = 26
 i = 1
 p = 3
 adr = 2
