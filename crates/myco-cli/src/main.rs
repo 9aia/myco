@@ -276,7 +276,7 @@ fn manifest() -> serde_json::Value {
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
-            "handoff", "resume", "interrupt", "serve",
+            "handoff", "resume", "interrupt", "ui",
         ],
         "implemented": [
             "manifest", "gen-cli-docs", "schema",

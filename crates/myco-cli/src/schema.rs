@@ -164,7 +164,7 @@ mod tests {
         // transitions mirror the state machine exactly
         assert_eq!(
             d["transitions"]["in-progress"],
-            json!(["blocked", "done", "deferred"])
+            json!(["blocked", "done", "deferred", "open"])
         );
         assert_eq!(d["transitions"]["done"], json!([]));
         assert_eq!(

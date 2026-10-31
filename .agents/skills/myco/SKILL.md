@@ -50,7 +50,7 @@ myco <verb> --help     # every verb, self-documenting
 | Session end (resumable state) | `myco handoff T-NNN --note "done/next/open"` |
 | Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
 | Restart work on an item | `myco resume T-NNN` |
-| Views | `myco board` · `report` · `epic` · `milestone` |
+| Views | `myco board` · `report` · `epic` · `milestone` · `ui` (interactive TUI) |
 | Cross-repo | `myco index add <repo>` · `myco org status` |
 | Housekeeping | `myco init` · `check` · `migrate` · `commit` · `org init` |
 

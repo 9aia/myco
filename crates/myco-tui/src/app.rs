@@ -52,6 +52,9 @@ pub enum Mode {
     /// `/` — live filter over the current board's items; `Enter`
     /// keeps the filter, `esc` clears it.
     Filter,
+    /// `:` — ex-style command line (`:q` `:w` `:e` `:<id>` `:go <id>`
+    /// `:set id`); `Enter` runs it, `esc` drops the line.
+    Command,
     /// `?` — keybind overlay; `esc`/`?`/`q` closes.
     Help,
 }
@@ -83,6 +86,12 @@ pub struct Model {
     pub input: String,
     /// `/` live filter — narrows visible item rows when non-empty.
     pub filter: String,
+    /// `:` command-line buffer — separate from `input` so an `a`
+    /// draft isn't clobbered.
+    pub cmdline: String,
+    /// Item rows render their `T-NNN` id span — `:set id` /
+    /// `:set noid` (vim aliases `numbers`/`nonumbers` accepted).
+    pub show_ids: bool,
     /// Status-bar message (last action / error).
     pub status: String,
     /// Editor to open on the next loop turn (`E`).
@@ -119,6 +128,8 @@ impl Model {
             mode: Mode::Normal,
             input: String::new(),
             filter: String::new(),
+            cmdline: String::new(),
+            show_ids: true,
             status: String::new(),
             pending_editor: None,
             files: Vec::new(),
@@ -281,6 +292,7 @@ impl Model {
             Mode::Preview => return self.key_preview(k),
             Mode::Add => return self.key_add(k),
             Mode::Filter => return self.key_filter(k),
+            Mode::Command => return self.key_command(k),
             Mode::Help => return self.key_help(k),
             Mode::Normal => {}
         }
@@ -317,6 +329,10 @@ impl Model {
                 }
             }
             KeyCode::Char('/') => self.mode = Mode::Filter,
+            KeyCode::Char(':') => {
+                self.mode = Mode::Command;
+                self.cmdline.clear();
+            }
             KeyCode::Char('F') => {
                 self.filter.clear();
                 self.rebuild_rows();
@@ -363,6 +379,71 @@ impl Model {
             _ => {}
         }
         Ok(false)
+    }
+
+    /// `:` command line — chars append, `Enter` runs `exec_command`,
+    /// `esc` drops the line.
+    fn key_command(&mut self, k: KeyEvent) -> Result<bool, String> {
+        match k.code {
+            KeyCode::Esc => self.mode = Mode::Normal,
+            KeyCode::Enter => {
+                let line = std::mem::take(&mut self.cmdline);
+                self.mode = Mode::Normal;
+                return self.exec_command(&line);
+            }
+            KeyCode::Backspace => {
+                self.cmdline.pop();
+            }
+            KeyCode::Char(c) => self.cmdline.push(c),
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    /// Run one `:` line — first word is the command, the rest its
+    /// args. v1 keeps the set small: `q`/`q!` quit, `w` reloads
+    /// from disk, `e` opens the board doc in `$EDITOR`, `go <id>`
+    /// and a bare `<id>` jump the cursor, `set id`/`noid` toggles
+    /// the id column (`numbers`/`nonumbers` also accepted).
+    fn exec_command(&mut self, line: &str) -> Result<bool, String> {
+        let line = line.trim();
+        let mut parts = line.splitn(2, char::is_whitespace);
+        let cmd = parts.next().unwrap_or("");
+        let arg = parts.next().unwrap_or("").trim();
+        match cmd {
+            "" => {}
+            "q" | "q!" => return Ok(true),
+            "w" => self.reload(),
+            "e" => self.pending_editor = Some(self.board_path()),
+            "go" => match arg.parse::<ItemId>() {
+                Ok(id) => self.jump_to(id),
+                Err(_) => self.status = format!(":go expects an id, got {arg:?}"),
+            },
+            "set" => match arg {
+                "id" | "numbers" => self.show_ids = true,
+                "noid" | "nonumbers" => self.show_ids = false,
+                _ => self.status = ":set takes id / noid".into(),
+            },
+            _ => match cmd.parse::<ItemId>() {
+                Ok(id) => self.jump_to(id),
+                Err(_) => self.status = format!("unknown command :{cmd}"),
+            },
+        }
+        Ok(false)
+    }
+
+    /// `:<id>` / `:go <id>` — land the cursor on the item when it's
+    /// a row on this board.
+    fn jump_to(&mut self, id: ItemId) {
+        if self
+            .rows
+            .iter()
+            .any(|r| matches!(r, Row::Item { item, .. } if item.id == id))
+        {
+            self.reselect(Some(id));
+        } else {
+            self.status = format!("{id}: not on this board");
+        }
     }
 
     /// Help is a dead end — every key but the closers is swallowed.
@@ -737,6 +818,8 @@ mod tests {
             mode: Mode::Normal,
             input: String::new(),
             filter: String::new(),
+            cmdline: String::new(),
+            show_ids: true,
             status: String::new(),
             pending_editor: None,
             files: Vec::new(),
@@ -926,5 +1009,82 @@ mod tests {
         assert_eq!(m.mode, Mode::Normal);
         let item = m.selected().unwrap();
         assert_eq!(item.title, "ship it");
+    }
+
+    /// Drive `:` + `line` + `Enter` — returns the key() result so
+    /// `:q` tests can assert the quit flag.
+    fn cmd(m: &mut Model, line: &str) -> bool {
+        m.key(key(':')).unwrap();
+        assert_eq!(m.mode, Mode::Command);
+        for c in line.chars() {
+            m.key(key(c)).unwrap();
+        }
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .unwrap()
+    }
+
+    #[test]
+    fn colon_w_reloads_from_disk() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        // another writer lands a task while the board is open
+        let mut other = items::load_ledger(&m.store).unwrap();
+        other.put_todo(t(2), None);
+        items::save_ledger(&m.store, &other).unwrap();
+        assert_eq!(m.rows.len(), 1);
+        assert!(!cmd(&mut m, "w"));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.rows.len(), 2);
+    }
+
+    #[test]
+    fn colon_id_and_go_jump_the_cursor() {
+        let mut m = model(|l| {
+            l.put_todo(t(1), None);
+            l.put_todo(t(2), None);
+        });
+        cmd(&mut m, "T-2");
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+        cmd(&mut m, "go T-1");
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+        // a valid id that's not a row here reports instead of moving
+        cmd(&mut m, "T-9");
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+        assert_eq!(m.status, "T-009: not on this board");
+    }
+
+    #[test]
+    fn colon_set_toggles_ids() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        assert!(m.show_ids);
+        cmd(&mut m, "set noid");
+        assert!(!m.show_ids);
+        cmd(&mut m, "set id");
+        assert!(m.show_ids);
+        cmd(&mut m, "set bogus");
+        assert_eq!(m.status, ":set takes id / noid");
+    }
+
+    #[test]
+    fn colon_unknown_and_esc_cancel() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        assert!(!cmd(&mut m, "bogus arg"));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.status, "unknown command :bogus");
+        // esc drops a half-typed line and re-entry starts empty
+        m.key(key(':')).unwrap();
+        m.key(key('w')).unwrap();
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(m.mode, Mode::Normal);
+        m.key(key(':')).unwrap();
+        assert_eq!(m.cmdline, "");
+    }
+
+    #[test]
+    fn colon_q_quits() {
+        let mut m = model(|_| {});
+        assert!(cmd(&mut m, "q"));
+        let mut m = model(|_| {});
+        assert!(cmd(&mut m, "q!"));
     }
 }

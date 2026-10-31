@@ -3,7 +3,7 @@
 //! ```text
 //! open        → claimed | in-progress | deferred
 //! claimed     → in-progress | open | deferred
-//! in-progress → blocked | done | deferred
+//! in-progress → blocked | done | deferred | open
 //! blocked     → in-progress | open | deferred
 //! deferred    → open
 //! done        → (terminal)

@@ -40,8 +40,8 @@ pub trait Store {
     fn save_backlog(&self, doc: &BacklogDoc) -> Result<(), Error>;
 
     /// Load one item file by id (`I-003` → `issues/issue-0003-*.md`).
-    /// Live files win over `archive/` copies; a same-id file in both
-    /// is a duplicate-id error. [`Error::NotFound`] when absent.
+    /// A same-id file in both live and `archive/` is a duplicate-id
+    /// error. [`Error::NotFound`] when absent.
     fn item(&self, id: ItemId) -> Result<ItemFile, Error>;
 
     /// Write an item file atomically. Filename derives from the

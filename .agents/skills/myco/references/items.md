@@ -24,7 +24,7 @@ targets (e.g. `open → done` must go through `in-progress`).
 ```
 open     → claimed | in-progress | deferred
 claimed  → in-progress | open | deferred
-in-progress → blocked | done | deferred
+in-progress → blocked | done | deferred | open
 blocked  → in-progress | open | deferred
 deferred → open
 done     → (terminal)

@@ -32,8 +32,9 @@ agent ──► myco <verb> ──► write md ──► commit on `project` bra
 - **auto-commit per verb** — agents never touch git; every mutation
   is one atomic commit on the `project` branch (`--no-commit` opt-out)
 - **ports-and-adapters crates** — `myco-core` (pure domain) +
-  `myco-config`/`myco-git`/`myco-shell` infra today; store-md,
-  index-redb, template, testkit land per phase
+  `myco-config`/`myco-git`/`myco-shell` infra, `myco-store-md`,
+  `myco-index-redb`, `myco-testkit`, `myco-ops`, `myco-tui`;
+  `myco-template` is planned
 
 ## Position in the stack
 
@@ -44,9 +45,9 @@ coordination), **kuda** (code memory), **peregrin** (orchestration),
 
 ## Status
 
-Phase 1 bootstrap — the bupha anatomy, pruned to PM infra. The verb
-surface is stubbed; `myco manifest` and `gen-cli-docs` work today.
-Roadmap: `project/proposals/v2.md` (phases 2–9).
+Working — the full verb surface is implemented (`myco manifest`
+lists it), including the `myco ui` board TUI. `myco-template` and
+`myco serve` are planned (`project/proposals/`, `project/adrs/`).
 
 ## Install
 
