@@ -449,15 +449,15 @@ mod tests {
 
     #[test]
     fn tab_labels_shrink_to_initials() {
-        assert_eq!(tab_labels(80), vec![" TODO ", " BACKLOG ", " ITEMS "]);
-        assert_eq!(tab_labels(26), vec![" TODO ", " BACKLOG ", " ITEMS "]);
-        assert_eq!(tab_labels(25), vec!["T", "B", "I"]);
-        assert_eq!(tab_labels(2), vec!["T", "B", "I"]);
+        assert_eq!(tab_labels(80), vec![" TODO ", " BACKLOG ", " FILES "]);
+        assert_eq!(tab_labels(26), vec![" TODO ", " BACKLOG ", " FILES "]);
+        assert_eq!(tab_labels(25), vec!["T", "B", "F"]);
+        assert_eq!(tab_labels(2), vec!["T", "B", "F"]);
     }
 
     #[test]
     fn tab_hit_matches_drawn_columns() {
-        // full labels: " " + " TODO " + " " + " BACKLOG " + " " + " ITEMS "
+        // full labels: " " + " TODO " + " " + " BACKLOG " + " " + " FILES "
         assert_eq!(tab_hit(80, 0), None); // leading separator
         assert_eq!(tab_hit(80, 1), Some(0));
         assert_eq!(tab_hit(80, 6), Some(0));

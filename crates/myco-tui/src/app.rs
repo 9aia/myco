@@ -32,7 +32,7 @@ impl Board {
         match self {
             Board::Todo => "TODO",
             Board::Backlog => "BACKLOG",
-            Board::Files => "ITEMS",
+            Board::Files => "FILES",
         }
     }
 
@@ -573,7 +573,10 @@ impl Model {
             self.status = format!("{id} is deferred — `p` promotes it first");
             return Ok(());
         }
-        let mut item = self.ledger.take(&loc);
+        let mut item = self
+            .ledger
+            .take(&loc)
+            .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Done)?;
         items::save_ledger(&self.store, &self.ledger)?;
         items::commit(
@@ -601,7 +604,10 @@ impl Model {
             self.status = format!("{id} is already deferred");
             return Ok(());
         }
-        let mut item = self.ledger.take(&loc);
+        let mut item = self
+            .ledger
+            .take(&loc)
+            .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Deferred)?;
         items::walk_descendants_to(&mut item, Status::Deferred)?;
         self.ledger.put_backlog(item, None);
@@ -631,7 +637,10 @@ impl Model {
             self.status = format!("{id} isn't in BACKLOG.md");
             return Ok(());
         }
-        let mut item = self.ledger.take(&loc);
+        let mut item = self
+            .ledger
+            .take(&loc)
+            .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Open)?;
         items::walk_descendants_to(&mut item, Status::Open)?;
         self.ledger.put_todo(item, None);
