@@ -274,6 +274,10 @@ fn manifest() -> serde_json::Value {
 }
 
 fn main() {
+    // Restore conventional-Unix SIGPIPE behavior (die silently on
+    // EPIPE) — `println!` would otherwise panic when piped to a
+    // reader that closes early (e.g. `myco board | head`).
+    sigpipe::reset();
     let cli = Cli::parse();
     let json = cli.json;
     let no_commit = cli.no_commit;

@@ -63,6 +63,111 @@ fn term_width() -> usize {
         .unwrap_or(100)
 }
 
+/// ANSI on? `NO_COLOR` kills it, `CLICOLOR_FORCE`/`FORCE_COLOR`
+/// force it, else only on a tty.
+fn color_enabled() -> bool {
+    use std::io::IsTerminal;
+    if std::env::var_os("NO_COLOR").is_some() {
+        return false;
+    }
+    if std::env::var("CLICOLOR_FORCE")
+        .or_else(|_| std::env::var("FORCE_COLOR"))
+        .is_ok_and(|v| v != "0")
+    {
+        return true;
+    }
+    std::io::stdout().is_terminal()
+}
+
+/// `\x1b[<code>m…\x1b[0m` wrapper — raw escapes, no dep.
+fn sgr(code: &str, s: &str) -> String {
+    format!("\x1b[{code}m{s}\x1b[0m")
+}
+
+fn dim(s: &str) -> String {
+    sgr("2", s)
+}
+
+/// Per-lane header tints — parked lanes dim, active lanes bright.
+const HEADER_STYLE: [(&str, &str); 5] = [
+    ("Backlog", "2"),
+    ("Open", "1;36"),
+    ("Claimed", "1;33"),
+    ("In Progress", "1;32"),
+    ("Blocked", "1;31"),
+];
+
+/// `T-008` / `thal:T-118` / `ADR-0001` — the leading card token.
+fn looks_like_id(tok: &str) -> bool {
+    let id = tok.rsplit(':').next().unwrap_or(tok);
+    let mut parts = id.split('-');
+    matches!(parts.next(), Some(k) if !k.is_empty() && k.chars().all(|c| c.is_ascii_uppercase()))
+        && matches!(parts.next(), Some(n) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// A header cell (` Name `) gets its lane tint, padding kept.
+fn style_header_cell(cell: &str) -> String {
+    let name = cell.trim();
+    if let Some((_, code)) = HEADER_STYLE.iter().find(|(n, _)| *n == name) {
+        let lead = &cell[..cell.len() - cell.trim_start().len()];
+        let trail = &cell[cell.trim_end().len()..];
+        return format!("{lead}{}{trail}", sgr(code, name));
+    }
+    cell.to_string()
+}
+
+/// A card cell gets its leading item id bolded.
+fn style_card_cell(cell: &str) -> String {
+    let lead_len = cell.len() - cell.trim_start().len();
+    let trail_start = cell.trim_end().len();
+    if lead_len >= trail_start {
+        return cell.to_string();
+    }
+    let body = &cell[lead_len..trail_start];
+    let id_len = body.find(' ').unwrap_or(body.len());
+    let (id, rest) = body.split_at(id_len);
+    if !looks_like_id(id) {
+        return cell.to_string();
+    }
+    format!(
+        "{}{}{rest}{}",
+        &cell[..lead_len],
+        sgr("1", id),
+        &cell[trail_start..]
+    )
+}
+
+/// Paint a rendered board: dim the `+-|` chrome so content pops,
+/// tint the header lane names, bold card ids, dim the footer.
+fn colorize(out: &str) -> String {
+    let pipe = dim("|");
+    let mut header_done = false;
+    let mut lines = Vec::new();
+    for line in out.split('\n') {
+        if line.is_empty() {
+            lines.push(String::new());
+        } else if line.starts_with('+') {
+            lines.push(dim(line));
+        } else if line.starts_with('|') {
+            let styled: Vec<String> = line
+                .split('|')
+                .map(|cell| {
+                    if header_done {
+                        style_card_cell(cell)
+                    } else {
+                        style_header_cell(cell)
+                    }
+                })
+                .collect();
+            header_done = true;
+            lines.push(styled.join(&pipe));
+        } else {
+            lines.push(dim(line));
+        }
+    }
+    lines.join("\n")
+}
+
 /// `…`-truncate `s` to `w` display columns.
 fn truncate(s: &str, w: usize) -> String {
     if UnicodeWidthStr::width(s) <= w {
@@ -233,6 +338,9 @@ pub fn render_cards(cards: &[Vec<String>; 5], md: bool, fit: Fit) -> String {
     if hidden > 0 {
         out.push_str(&format!("\n… +{hidden} more (`--all` to show)"));
     }
+    if !md && color_enabled() {
+        out = colorize(&out);
+    }
     out
 }
 
@@ -379,6 +487,32 @@ mod tests {
         assert_eq!(truncate("short", 10), "short");
         assert_eq!(truncate("T-148 Fix https://long-url", 10), "T-148 Fix…");
         assert_eq!(truncate("ab", 1), "…");
+    }
+
+    #[test]
+    fn looks_like_id_covers_kinds_and_prefixes() {
+        for id in ["T-008", "I-1", "P-001", "PL-12", "ADR-0001", "thal:T-118"] {
+            assert!(looks_like_id(id), "{id}");
+        }
+        for not in ["", "task", "a-1", "T-x", "-1", "1-2"] {
+            assert!(!looks_like_id(not), "{not}");
+        }
+    }
+
+    #[test]
+    fn colorize_dims_chrome_and_bolds_ids() {
+        let v = [Item::new(ItemId::new(ItemKind::Task, 8), "work")];
+        let plain = render(v.iter(), None, false, Fit::UNBOUNDED);
+        let out = colorize(&plain);
+        // borders dimmed
+        assert!(out.contains("\x1b[2m+"), "{out}");
+        // header tinted
+        assert!(out.contains("\x1b[1;36mOpen\x1b[0m"), "{out}");
+        assert!(out.contains("\x1b[1;31mBlocked\x1b[0m"), "{out}");
+        // card id bold
+        assert!(out.contains("\x1b[1mT-008\x1b[0m"), "{out}");
+        // content untouched
+        assert!(out.contains("work"), "{out}");
     }
 
     #[test]

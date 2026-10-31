@@ -19,6 +19,21 @@ fn run(args: &[&str]) -> ExitStatus {
     })
 }
 
+/// `run` with a working directory — for commands that must execute
+/// inside a child tree (the docs/ worktree).
+fn run_in(dir: &str, args: &[&str]) -> ExitStatus {
+    let empty: &[&str] = &[];
+    let (prog, rest) = args.split_first().unwrap_or((&"true", empty));
+    Command::new(prog)
+        .args(rest)
+        .current_dir(dir)
+        .status()
+        .unwrap_or_else(|e| {
+            eprintln!("xtask: failed to spawn {prog}: {e}");
+            std::process::exit(1)
+        })
+}
+
 fn have(tool: &str) -> bool {
     Command::new(tool)
         .arg("--version")
@@ -99,9 +114,11 @@ fn site() -> i32 {
         eprintln!("no docs/ worktree — `git worktree add docs docs` first");
         return 1;
     }
+    // run inside docs/ — works for bun and npm alike (`bun --cwd`
+    // isn't a `bun run` flag, so flag plumbing gets fragile)
     let pkg = if have("bun") { "bun" } else { "npm" };
-    let _ = run(&[pkg, "--prefix", "docs", "install"]).success();
-    run(&[pkg, "--prefix", "docs", "run", "docs:build"])
+    let _ = run_in("docs", &[pkg, "install"]).success();
+    run_in("docs", &[pkg, "run", "docs:build"])
         .code()
         .unwrap_or(1)
 }

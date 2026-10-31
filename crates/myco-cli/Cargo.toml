@@ -33,6 +33,7 @@ camino.workspace = true
 miette.workspace = true
 time.workspace = true
 csv.workspace = true
+sigpipe.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
