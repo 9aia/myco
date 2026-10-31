@@ -1,11 +1,13 @@
 //! Drawing — tab bar on top, board list filling the frame, status
 //! bar at the bottom. Preview mode swaps the list for the item
-//! detail pane (pm's `Enter` full-pane preview).
+//! detail pane (pm's `Enter` full-pane preview). Everything degrades
+//! per frame: rows truncate with `…` on narrow screens, chrome bars
+//! yield to the list on short ones, and `?` folds into columns.
 
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::{Board, Mode, Model, Row};
@@ -13,32 +15,68 @@ use crate::app::{Board, Mode, Model, Row};
 const ACCENT: Color = Color::Indexed(69); // pm's nav blue
 const MUTED: Color = Color::Indexed(241);
 
+/// Chrome budget — which fixed rows the screen can afford, so the
+/// list keeps a real viewport on short terminals. `(tabs, status)`:
+/// tabs cost a row at height ≥3, the status bar only at height ≥5
+/// (at 4 rows it yields to a three-row viewport).
+fn chrome(height: u16) -> (bool, bool) {
+    (height >= 3, height >= 5)
+}
+
 /// One full frame.
 pub fn draw(f: &mut Frame, m: &Model) {
     let area = f.area();
-    let [tabs, body, status] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(0),
-        Constraint::Length(1),
-    ])
-    .areas(area);
-
-    draw_tabs(f, m, tabs);
-    match m.mode {
-        Mode::Preview => draw_preview(f, m, body),
-        _ => draw_board(f, m, body),
+    let (show_tabs, show_status) = chrome(area.height);
+    let mut constraints = Vec::with_capacity(3);
+    if show_tabs {
+        constraints.push(Constraint::Length(1));
     }
-    draw_status(f, m, status);
+    constraints.push(Constraint::Min(0));
+    if show_status {
+        constraints.push(Constraint::Length(1));
+    }
+    let chunks = Layout::vertical(constraints).split(area);
+
+    let mut next = 0;
+    if show_tabs {
+        draw_tabs(f, m, chunks[next]);
+        next += 1;
+    }
+    match m.mode {
+        Mode::Preview => draw_preview(f, m, chunks[next]),
+        _ => draw_board(f, m, chunks[next]),
+    }
+    if show_status {
+        draw_status(f, m, chunks[next + 1]);
+    }
     if m.mode == Mode::Help {
         draw_help(f, area);
     }
 }
 
+/// Tab captions for `width` columns — full names when they fit,
+/// initials when they don't (the `1`/`2`/`h`/`l` binds still work).
+fn tab_labels(width: usize) -> Vec<String> {
+    let full: Vec<String> = Board::ALL
+        .iter()
+        .map(|b| format!(" {} ", b.label()))
+        .collect();
+    // leading space + one separator per tab
+    let need: usize = full.iter().map(|s| s.chars().count()).sum::<usize>() + full.len() + 1;
+    if need <= width {
+        full
+    } else {
+        Board::ALL
+            .iter()
+            .map(|b| b.label()[..1].to_string())
+            .collect()
+    }
+}
+
 fn draw_tabs(f: &mut Frame, m: &Model, area: Rect) {
     let mut spans = vec![Span::raw(" ")];
-    for b in Board::ALL {
-        let label = format!(" {} ", b.label());
-        let style = if b == m.board {
+    for (b, label) in Board::ALL.iter().zip(tab_labels(area.width as usize)) {
+        let style = if *b == m.board {
             Style::default().fg(Color::White).bg(ACCENT)
         } else {
             Style::default().fg(MUTED)
@@ -49,14 +87,51 @@ fn draw_tabs(f: &mut Frame, m: &Model, area: Rect) {
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
+/// Fit `spans` into `width` columns; when they overflow, keep the
+/// longest prefix that leaves one column for a muted `…`. Widths are
+/// char counts — wide glyphs may still let ratatui clip the tail.
+fn ellipsize<'a>(spans: Vec<Span<'a>>, width: usize) -> Vec<Span<'a>> {
+    let total: usize = spans.iter().map(|s| s.content.chars().count()).sum();
+    if total <= width {
+        return spans;
+    }
+    if width == 0 {
+        return Vec::new();
+    }
+    let keep = width - 1; // reserve a column for the ellipsis
+    let mut out = Vec::new();
+    let mut used = 0;
+    for span in spans {
+        let n = span.content.chars().count();
+        if used + n <= keep {
+            used += n;
+            out.push(span);
+        } else {
+            let take = keep - used;
+            if take > 0 {
+                let cut: String = span.content.chars().take(take).collect();
+                out.push(Span::styled(cut, span.style));
+            }
+            break;
+        }
+    }
+    out.push(Span::styled("…", Style::default().fg(MUTED)));
+    out
+}
+
 fn draw_board(f: &mut Frame, m: &Model, area: Rect) {
+    // the highlight symbol eats two columns of every row
+    let row_w = (area.width as usize).saturating_sub(2);
     let items: Vec<ListItem> = m
         .rows
         .iter()
         .map(|r| match r {
-            Row::Header(name) => ListItem::new(Line::from(Span::styled(
-                format!("## {name}"),
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            Row::Header(name) => ListItem::new(Line::from(ellipsize(
+                vec![Span::styled(
+                    format!("## {name}"),
+                    Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                )],
+                row_w,
             ))),
             Row::Item { item, depth } => {
                 let indent = "  ".repeat(*depth);
@@ -74,7 +149,7 @@ fn draw_board(f: &mut Frame, m: &Model, area: Rect) {
                     meta += &format!(" #{l}");
                 }
                 spans.push(Span::styled(meta, Style::default().fg(MUTED)));
-                ListItem::new(Line::from(spans))
+                ListItem::new(Line::from(ellipsize(spans, row_w)))
             }
         })
         .collect();
@@ -159,7 +234,8 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
         )));
         lines.push(Line::from(note.clone()));
     }
-    f.render_widget(Paragraph::new(lines), area);
+    // wrap rather than clip long titles/notes on narrow screens
+    f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), area);
 }
 
 /// Normal-mode hint sets, widest first — `pick_hints` takes the
@@ -271,22 +347,101 @@ fn help_lines() -> Vec<Line<'static>> {
     ]
 }
 
+/// Break `lines` into side-by-side columns: as many as the screen
+/// height needs (one when everything fits vertically), capped by
+/// what the width affords. `inner` is the box content area.
+fn help_columns(lines: &[Line<'static>], area: Rect) -> Vec<Vec<Line<'static>>> {
+    let inner_h = area.height.saturating_sub(2).max(1) as usize;
+    let inner_w = area.width.saturating_sub(2).max(1) as usize;
+    let col_w = lines.iter().map(Line::width).max().unwrap_or(0) + 3;
+    let fits = (inner_w / col_w.max(1)).max(1); // columns the width allows
+    let needs = lines.len().div_ceil(inner_h).max(1); // columns the height wants
+    let n = fits.min(needs);
+    let per = lines.len().div_ceil(n);
+    lines.chunks(per).map(<[Line]>::to_vec).collect()
+}
+
 fn draw_help(f: &mut Frame, area: Rect) {
-    let lines = help_lines();
-    let width = lines.iter().map(Line::width).max().unwrap_or(0) as u16 + 4;
-    let height = lines.len() as u16 + 2;
+    let cols = help_columns(&help_lines(), area);
+    let col_ws: Vec<u16> = cols
+        .iter()
+        .map(|c| c.iter().map(Line::width).max().unwrap_or(0) as u16 + 3)
+        .collect();
+    let width = col_ws.iter().sum::<u16>() + 2;
+    let height = cols.iter().map(Vec::len).max().unwrap_or(0) as u16 + 2;
     let popup = centered(area, width, height);
     f.render_widget(Clear, popup);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(ACCENT))
         .title(Span::styled(" keys ", Style::default().fg(ACCENT)));
-    f.render_widget(Paragraph::new(lines).block(block), popup);
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+    let rects = Layout::horizontal(col_ws.iter().map(|w| Constraint::Length(*w))).split(inner);
+    for (lines, rect) in cols.iter().zip(rects.iter()) {
+        f.render_widget(Paragraph::new(lines.clone()), *rect);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rendered text of a span set, for truncation assertions.
+    fn text(spans: &[Span]) -> String {
+        spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn chrome_yields_to_the_viewport() {
+        assert_eq!(chrome(24), (true, true));
+        assert_eq!(chrome(5), (true, true));
+        assert_eq!(chrome(4), (true, false)); // status yields: 3-row list
+        assert_eq!(chrome(3), (true, false));
+        assert_eq!(chrome(2), (false, false)); // everything yields
+    }
+
+    #[test]
+    fn tab_labels_shrink_to_initials() {
+        assert_eq!(tab_labels(80), vec![" TODO ", " BACKLOG "]);
+        assert_eq!(tab_labels(18), vec![" TODO ", " BACKLOG "]);
+        assert_eq!(tab_labels(17), vec!["T", "B"]);
+        assert_eq!(tab_labels(2), vec!["T", "B"]);
+    }
+
+    #[test]
+    fn ellipsize_cuts_with_ellipsis() {
+        let spans = || vec![Span::raw("hello world")];
+        assert_eq!(text(&ellipsize(spans(), 20)), "hello world");
+        assert_eq!(text(&ellipsize(spans(), 11)), "hello world");
+        assert_eq!(text(&ellipsize(spans(), 8)), "hello w…");
+        assert_eq!(text(&ellipsize(spans(), 1)), "…");
+        assert!(ellipsize(spans(), 0).is_empty());
+        // styles survive the cut: an accent id keeps its color
+        let out = ellipsize(
+            vec![
+                Span::styled("T-001", Style::default().fg(ACCENT)),
+                Span::raw(" a long title here"),
+            ],
+            10,
+        );
+        assert_eq!(text(&out), "T-001 a l…");
+        assert_eq!(out[0].style.fg, Some(ACCENT));
+    }
+
+    #[test]
+    fn help_columns_only_when_short_and_wide() {
+        let lines = help_lines();
+        // plenty of room: one column
+        assert_eq!(help_columns(&lines, Rect::new(0, 0, 80, 24)).len(), 1);
+        // short but narrow: stays one column, crops
+        assert_eq!(help_columns(&lines, Rect::new(0, 0, 30, 10)).len(), 1);
+        // short and wide: folds into columns that fit the height
+        let cols = help_columns(&lines, Rect::new(0, 0, 120, 10));
+        assert!(cols.len() >= 2);
+        assert!(cols.iter().all(|c| c.len() <= 8));
+        assert_eq!(cols.iter().map(Vec::len).sum::<usize>(), lines.len());
+    }
 
     #[test]
     fn hints_degrade_full_to_minimal() {
