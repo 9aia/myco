@@ -1337,6 +1337,15 @@ pub fn run(
 /// Check on an already-resolved project (migrate reuses it).
 pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Result<i32, String> {
     let wt = &proj.worktree;
+    // --fix writes the worktree — the exclusive lock keeps the
+    // repair loop from interleaving with another verb's
+    // load→mutate→save→commit. A plain check still takes the
+    // shared read lock so it can't report on a mid-verb ledger.
+    let _lock = if fix {
+        ops::lock_worktree(wt)?
+    } else {
+        ops::lock_shared(wt)?
+    };
     let mut analysis = analyze(wt);
     let mut fixes_applied = 0usize;
     if fix {

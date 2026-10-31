@@ -65,11 +65,7 @@ fn as_scan(s: &RepoSnapshot) -> digest::Scan {
 /// parallel — redb opens lock the file, so index I/O stays serial.
 pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
     let repos = index.repos().map_err(|e| e.to_string())?;
-    let roots: Vec<std::path::PathBuf> = repos
-        .iter()
-        .map(|r| r.path.as_std_path().to_path_buf())
-        .collect();
-    let heads = indexcmd::par_map(&roots, |r| indexcmd::current_head(r));
+    let heads = indexcmd::par_map(&repos, indexcmd::current_head);
     let mut cached = Vec::with_capacity(repos.len());
     for r in &repos {
         cached.push(index.snapshot(&r.path).map_err(|e| e.to_string())?);
@@ -77,7 +73,7 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
     let fresh =
         |i: usize| matches!((&cached[i], &heads[i]), (Some(s), Some(h)) if s.head_commit == *h);
     let stale: Vec<usize> = (0..repos.len()).filter(|i| !fresh(*i)).collect();
-    let scans = indexcmd::par_map(&stale, |&i| indexcmd::scan_one(&roots[i]));
+    let scans = indexcmd::par_map(&stale, |&i| indexcmd::scan_one(&repos[i]));
     let mut rebuilt: std::collections::BTreeMap<usize, Result<RepoSnapshot, String>> =
         stale.iter().copied().zip(scans).collect();
     let mut out = Vec::with_capacity(repos.len());

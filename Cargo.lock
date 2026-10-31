@@ -1005,6 +1005,7 @@ dependencies = [
  "serde_json",
  "sigpipe",
  "tabled",
+ "temp-env",
  "tempfile",
  "terminal_size",
  "time",

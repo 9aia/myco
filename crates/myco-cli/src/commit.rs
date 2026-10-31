@@ -21,6 +21,9 @@ pub fn run(
     no_commit: bool,
 ) -> Result<i32, String> {
     let proj = discover::discover(dir.as_deref(), root.as_deref())?;
+    // committing sweeps pending writes — don't catch another
+    // verb mid-mutation
+    let _lock = ops::lock_worktree(&proj.worktree)?;
     let msg = message.unwrap_or_else(|| DEFAULT_MSG.to_string());
     let enabled = ops::commits_enabled(no_commit);
     let dirty = myco_git::has_changes(&proj.worktree).map_err(|e| e.to_string())?;

@@ -44,6 +44,9 @@ pub fn ensure(
     no_commit: bool,
 ) -> Result<InitOutcome, String> {
     let root = discover::repo_root_for(dir, root_hint)?;
+    // hold the repo lock across branch/worktree/scaffold + commit
+    // — init mutates like any other verb
+    let _lock = ops::lock_worktree(&root)?;
     let worktree = discover::worktree_path(dir, &root);
     let enabled = ops::commits_enabled(no_commit);
     let mut committed = false;

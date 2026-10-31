@@ -320,7 +320,7 @@ pub fn resume(
     root: Option<PathBuf>,
     json_out: bool,
 ) -> Result<i32, String> {
-    let (_proj, store) = items::open(dir.as_deref(), root.as_deref())?;
+    let (_proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
     let d = resume_data(&store, id, last)?;
     if json_out {
         ops::print_json(&json!({

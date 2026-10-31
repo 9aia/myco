@@ -57,14 +57,139 @@ pub fn today() -> time::Date {
     time::OffsetDateTime::now_utc().date()
 }
 
-/// Resolve the project + open the store — every item verb's start.
+/// A store handle holding the worktree lock — exclusive from
+/// [`open`] (mutating verbs), shared from [`open_read`]. The lock
+/// releases when this drops. Derefs to [`MdStore`], so `&locked`
+/// coerces to `&MdStore` at every call site.
+pub struct LockedStore {
+    store: MdStore,
+    _lock: Option<ops::WorktreeLock>,
+}
+
+impl LockedStore {
+    /// A store holding no lock — for tests and callers that
+    /// guarantee a single writer by construction.
+    pub fn unlocked(store: MdStore) -> Self {
+        LockedStore { store, _lock: None }
+    }
+}
+
+impl std::ops::Deref for LockedStore {
+    type Target = MdStore;
+
+    fn deref(&self) -> &MdStore {
+        &self.store
+    }
+}
+
+/// `LockedStore` is a full [`Store`] — pure delegation, so
+/// `&locked` satisfies `&impl Store` bounds (generic params don't
+/// deref-coerce).
+impl Store for LockedStore {
+    fn meta(&self) -> Result<myco_core::ProjectMeta, myco_store::Error> {
+        self.store.meta()
+    }
+    fn save_meta(&self, m: &myco_core::ProjectMeta) -> Result<(), myco_store::Error> {
+        self.store.save_meta(m)
+    }
+    fn alloc_id(&self, kind: ItemKind) -> Result<ItemId, myco_store::Error> {
+        self.store.alloc_id(kind)
+    }
+    fn all_ids(&self) -> Result<std::collections::BTreeSet<ItemId>, myco_store::Error> {
+        self.store.all_ids()
+    }
+    fn todo(&self) -> Result<myco_core::TodoDoc, myco_store::Error> {
+        self.store.todo()
+    }
+    fn save_todo(&self, doc: &myco_core::TodoDoc) -> Result<(), myco_store::Error> {
+        self.store.save_todo(doc)
+    }
+    fn backlog(&self) -> Result<myco_core::BacklogDoc, myco_store::Error> {
+        self.store.backlog()
+    }
+    fn save_backlog(&self, doc: &myco_core::BacklogDoc) -> Result<(), myco_store::Error> {
+        self.store.save_backlog(doc)
+    }
+    fn item(&self, id: ItemId) -> Result<ItemFile, myco_store::Error> {
+        self.store.item(id)
+    }
+    fn save_item(&self, file: &ItemFile) -> Result<(), myco_store::Error> {
+        self.store.save_item(file)
+    }
+    fn remove_item(&self, id: ItemId) -> Result<(), myco_store::Error> {
+        self.store.remove_item(id)
+    }
+    fn list_items(&self, kind: ItemKind) -> Result<Vec<ItemFile>, myco_store::Error> {
+        self.store.list_items(kind)
+    }
+    fn list_archived(&self, kind: ItemKind) -> Result<Vec<ItemFile>, myco_store::Error> {
+        self.store.list_archived(kind)
+    }
+    fn archive_item(&self, id: ItemId) -> Result<(), myco_store::Error> {
+        self.store.archive_item(id)
+    }
+    fn is_archived(&self, id: ItemId) -> Result<bool, myco_store::Error> {
+        self.store.is_archived(id)
+    }
+    fn index_md(&self) -> Result<String, myco_store::Error> {
+        self.store.index_md()
+    }
+    fn save_index(&self, md: &str) -> Result<(), myco_store::Error> {
+        self.store.save_index(md)
+    }
+    fn read_handoffs(&self, id: ItemId) -> Result<Vec<myco_core::HandoffEntry>, myco_store::Error> {
+        self.store.read_handoffs(id)
+    }
+    fn append_handoff(
+        &self,
+        id: ItemId,
+        entry: &myco_core::HandoffEntry,
+    ) -> Result<(), myco_store::Error> {
+        self.store.append_handoff(id, entry)
+    }
+    fn list_handoff_files(&self) -> Result<Vec<myco_store::HandoffFile>, myco_store::Error> {
+        self.store.list_handoff_files()
+    }
+}
+
+/// Resolve the project + open the store under the exclusive
+/// mutation lock — every verb that writes the ledger takes this
+/// path. The lock spans discovery → mutation → the per-verb
+/// autocommit; contention fails fast (`another myco process is
+/// writing — retry`) instead of corrupting the ledger.
 pub fn open(
     dir: Option<&Path>,
     root: Option<&Path>,
-) -> Result<(discover::Project, MdStore), String> {
+) -> Result<(discover::Project, LockedStore), String> {
     let proj = discover::discover(dir, root)?;
+    let lock = ops::lock_worktree(&proj.worktree)?;
     let store = ops::store_at(&proj.worktree)?;
-    Ok((proj, store))
+    Ok((
+        proj,
+        LockedStore {
+            store,
+            _lock: Some(lock),
+        },
+    ))
+}
+
+/// Resolve + open under the shared read lock — read-only verbs
+/// (`status`, `board`, `list`, `resume`, …). Readers don't block
+/// each other; a reader meeting a live writer fails fast.
+pub fn open_read(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+) -> Result<(discover::Project, LockedStore), String> {
+    let proj = discover::discover(dir, root)?;
+    let lock = ops::lock_shared(&proj.worktree)?;
+    let store = ops::store_at(&proj.worktree)?;
+    Ok((
+        proj,
+        LockedStore {
+            store,
+            _lock: Some(lock),
+        },
+    ))
 }
 
 /// The standard mutation tail — one atomic commit on the worktree.
@@ -281,6 +406,62 @@ pub fn find_item(
 mod tests {
     use super::*;
     use myco_core::ItemKind;
+
+    /// A plain `project/` dir that qualifies via `TODO.md` — the
+    /// no-repo fallback lock path.
+    fn project_dir() -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let wt = dir.path().join("project");
+        std::fs::create_dir_all(&wt).unwrap();
+        std::fs::write(wt.join("TODO.md"), "# TODO — x\n").unwrap();
+        (dir, wt)
+    }
+
+    #[test]
+    fn open_serializes_mutating_verbs() {
+        let (_d, wt) = project_dir();
+        let (_p, store) = open(Some(wt.as_path()), None).unwrap();
+        // a second writer (even in-process — the lock is per
+        // open-file-description) fails fast instead of racing
+        // the load→mutate→save
+        let err = open(Some(wt.as_path()), None).err().unwrap();
+        assert!(err.contains("another myco process is writing"), "{err}");
+        // readers fail fast while a writer holds the lock…
+        assert!(open_read(Some(wt.as_path()), None).is_err());
+        drop(store);
+        // …and everyone succeeds once it drops — a fresh writer,
+        // then concurrent readers
+        let (_p, store) = open(Some(wt.as_path()), None).unwrap();
+        drop(store);
+        let (_p2, r2) = open_read(Some(wt.as_path()), None).unwrap();
+        let (_p3, r3) = open_read(Some(wt.as_path()), None).unwrap();
+        drop((r2, r3));
+    }
+
+    #[test]
+    fn concurrent_open_fails_fast_no_dup_ids() {
+        let (_d, wt) = project_dir();
+        let (_p, s1) = open(Some(wt.as_path()), None).unwrap();
+        let id1 = s1.alloc_id(ItemKind::Task).unwrap();
+        // a racing verb can't even open — prove the failure is
+        // the lock, not the store, by retrying after the drop
+        let wt2 = wt.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let racing = std::thread::spawn(move || {
+            tx.send(open(Some(wt2.as_path()), None).map(|_| ()))
+                .unwrap();
+        });
+        let err = rx.recv().unwrap().unwrap_err();
+        assert!(err.contains("another myco process"), "{err}");
+        drop(s1);
+        // after release, a fresh verb allocates the *next* id —
+        // the lock is what kept two alloc_id RMWs from both
+        // reading "next = id1" and handing out a duplicate
+        let (_p, s2) = open(Some(wt.as_path()), None).unwrap();
+        let id2 = s2.alloc_id(ItemKind::Task).unwrap();
+        assert_ne!(id1, id2);
+        racing.join().unwrap();
+    }
 
     #[test]
     fn ledger_load_save_roundtrip() {

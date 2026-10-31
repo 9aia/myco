@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use myco_core::Ledger;
 use myco_core::{Item, ItemFile, ItemId, ItemKind, Status};
+use myco_ops::items::LockedStore;
 use myco_ops::{discover, items};
 use myco_store::Store;
-use myco_store_md::MdStore;
 use ratatui::layout::Rect;
 
 /// Which ledger doc the board tab shows.
@@ -71,7 +71,7 @@ pub enum Row {
 /// The whole TUI state.
 pub struct Model {
     proj: discover::Project,
-    store: MdStore,
+    store: LockedStore,
     ledger: Ledger,
     no_commit: bool,
     /// Active tab.
@@ -801,7 +801,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let worktree = dir.path().join("project");
         std::fs::create_dir_all(&worktree).unwrap();
-        let store = MdStore::new(Utf8PathBuf::from_path_buf(worktree.clone()).unwrap());
+        let store = LockedStore::unlocked(myco_store_md::MdStore::new(
+            Utf8PathBuf::from_path_buf(worktree.clone()).unwrap(),
+        ));
         let mut ledger = items::load_ledger(&store).unwrap();
         populate(&mut ledger);
         let mut m = Model {

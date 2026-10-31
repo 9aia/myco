@@ -182,9 +182,12 @@ fn migrate_pm(
     // run() only routes here when pm/ exists — a vanish between
     // the two probes just fails at read_dir below
     debug_assert!(pm.is_dir(), "migrate_pm without pm/ at {}", root.display());
-    // ensure the project worktree exists (init when needed)
+    // ensure the project worktree exists (init when needed) —
+    // its lock releases with it; the migration's own RMW takes
+    // a fresh one held through the commit
     let ensured = init::ensure(dir, Some(&root), no_commit)?;
     let wt = ensured.worktree.clone();
+    let _lock = ops::lock_worktree(&wt)?;
     let store = ops::store_at(&wt)?;
     let mut stats = Stats::default();
 
@@ -330,6 +333,7 @@ fn migrate_project(
 ) -> Result<(serde_json::Value, i32), String> {
     let proj = discover::discover(dir, root_hint)?;
     let wt = &proj.worktree;
+    let _lock = ops::lock_worktree(wt)?;
     let store = ops::store_at(wt)?;
     let mut stats = Stats::default();
 

@@ -174,7 +174,7 @@ pub fn report_json(
 
 /// The `report` verb.
 pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Result<i32, String> {
-    let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
+    let (proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
     if json_out {
         ops::print_json(&report_json(&store, &proj.worktree)?);
         return Ok(0);

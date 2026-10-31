@@ -139,16 +139,22 @@ pub fn worktree_branch(dir: &Path) -> Option<String> {
         .filter(|b| b != "HEAD" && !b.is_empty())
 }
 
+/// `git rev-parse --path-format=absolute --git-common-dir` — the
+/// shared git dir for all of `dir`'s worktrees (`<main>/.git`),
+/// resolved from inside any of them.
+pub fn common_dir(dir: &Path) -> Result<PathBuf, Error> {
+    git_out(
+        dir,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )
+    .map(PathBuf::from)
+}
+
 /// The main (first) worktree of the repo `dir` belongs to — i.e.
 /// the repo root when `dir` is a linked worktree like `project/`.
 /// Derived from `--git-common-dir` (`<main>/.git` → `<main>`).
 pub fn main_worktree(dir: &Path) -> Option<PathBuf> {
-    let common = git_out(
-        dir,
-        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    )
-    .ok()?;
-    let common = PathBuf::from(common);
+    let common = common_dir(dir).ok()?;
     if common.file_name().is_some_and(|n| n == ".git") {
         common.parent().map(Path::to_path_buf)
     } else {

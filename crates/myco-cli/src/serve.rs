@@ -394,8 +394,14 @@ impl Server {
         }
     }
 
-    fn open(&self) -> Result<(crate::discover::Project, myco_store_md::MdStore), Fail> {
+    /// Exclusive-locked store — mutating methods.
+    fn open(&self) -> Result<(crate::discover::Project, items::LockedStore), Fail> {
         items::open(self.dir.as_deref(), self.root.as_deref()).map_err(Fail::Verb)
+    }
+
+    /// Shared-locked store — read methods.
+    fn open_read(&self) -> Result<(crate::discover::Project, items::LockedStore), Fail> {
+        items::open_read(self.dir.as_deref(), self.root.as_deref()).map_err(Fail::Verb)
     }
 
     fn commit(&self, wt: &std::path::Path, msg: &str) -> Result<bool, Fail> {
@@ -475,7 +481,7 @@ impl Server {
             "schema" => Ok(schema::document()),
             "status" => {
                 let p: StatusParams = parse_params(params)?;
-                let (_proj, store) = self.open()?;
+                let (_proj, store) = self.open_read()?;
                 if p.prompt {
                     status::prompt_json(&store).map_err(Fail::Verb)
                 } else {
@@ -484,7 +490,7 @@ impl Server {
             }
             "board" => {
                 let p: BoardParams = parse_params(params)?;
-                let (_proj, store) = self.open()?;
+                let (_proj, store) = self.open_read()?;
                 let scan = digest::scan(&store).map_err(Fail::Verb)?;
                 let live: Vec<&myco_core::Item> = scan
                     .live()
@@ -501,18 +507,18 @@ impl Server {
             }
             "item.show" => {
                 let p: IdParams = parse_params(params)?;
-                let (_proj, store) = self.open()?;
+                let (_proj, store) = self.open_read()?;
                 itemcmd::show_json(&store, p.id).map_err(Fail::Verb)
             }
             "todo.list" | "backlog.list" => {
                 let p: ListParams = parse_params(params)?;
-                let (_proj, store) = self.open()?;
+                let (_proj, store) = self.open_read()?;
                 let found = todo::list_items(&store, method == "backlog.list", &p.filter())?;
                 Ok(items_json(&found))
             }
             "issue.list" | "proposal.list" | "plan.list" | "adr.list" => {
                 let p: ListParams = parse_params(params)?;
-                let (_proj, store) = self.open()?;
+                let (_proj, store) = self.open_read()?;
                 let kind = match method {
                     "issue.list" => ItemKind::Issue,
                     "proposal.list" => ItemKind::Proposal,
@@ -524,16 +530,16 @@ impl Server {
                 Ok(items_json(&found))
             }
             "report" => {
-                let (proj, store) = self.open()?;
+                let (proj, store) = self.open_read()?;
                 report::report_json(&store, &proj.worktree).map_err(Fail::Verb)
             }
             "resume" => {
                 let p: IdParams = parse_params(params)?;
-                let (_proj, store) = self.open()?;
+                let (_proj, store) = self.open_read()?;
                 continuity::resume_json(&store, p.id, p.last).map_err(Fail::Verb)
             }
             "check" => {
-                let (proj, _store) = self.open()?;
+                let (proj, _store) = self.open_read()?;
                 check::check_json(&proj).map_err(Fail::Verb)
             }
             "todo.add" => {

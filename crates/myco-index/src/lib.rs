@@ -22,6 +22,13 @@ pub struct RepoEntry {
     pub path: Utf8PathBuf,
     /// Display name (project `meta.toml` name at registration).
     pub name: String,
+    /// The `project/` worktree the index scans — set at
+    /// registration so `--dir`/`project_dir` worktrees (not at
+    /// `<path>/project`) stay reachable. Empty means the
+    /// conventional location (registries written before this
+    /// field existed).
+    #[serde(default)]
+    pub worktree: Utf8PathBuf,
 }
 
 impl RepoEntry {
@@ -30,6 +37,23 @@ impl RepoEntry {
         RepoEntry {
             path,
             name: name.into(),
+            worktree: Utf8PathBuf::new(),
+        }
+    }
+
+    /// Record the scanned worktree path.
+    pub fn with_worktree(mut self, worktree: Utf8PathBuf) -> Self {
+        self.worktree = worktree;
+        self
+    }
+
+    /// The worktree to scan — the registered `worktree`, else the
+    /// conventional `<path>/project`.
+    pub fn worktree_path(&self) -> Utf8PathBuf {
+        if self.worktree.as_str().is_empty() {
+            self.path.join("project")
+        } else {
+            self.worktree.clone()
         }
     }
 }

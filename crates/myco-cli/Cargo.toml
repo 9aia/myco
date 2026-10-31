@@ -46,6 +46,7 @@ tui = ["dep:myco-tui"]
 
 [dev-dependencies]
 tempfile.workspace = true
+temp-env.workspace = true
 insta.workspace = true
 
 [lints]

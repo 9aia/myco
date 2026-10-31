@@ -64,7 +64,13 @@ pub fn run(
     json_out: bool,
     no_commit: bool,
 ) -> Result<i32, String> {
-    let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
+    // `list` is read-only — the shared lock keeps parallel
+    // readers unblocked; everything else mutates.
+    let (proj, store) = if matches!(cmd, Cmd::List { .. }) {
+        items::open_read(dir.as_deref(), root.as_deref())?
+    } else {
+        items::open(dir.as_deref(), root.as_deref())?
+    };
     match cmd {
         Cmd::New { title, body, meta } => items::new_file(
             &proj,

@@ -24,6 +24,10 @@ const SNAPSHOTS: TableDefinition<&str, &str> = TableDefinition::new("snapshots")
 /// The registry file name inside the index dir.
 const REGISTRY: &str = "repos.toml";
 
+/// The registry lock file — serializes the `repos.toml`
+/// read-modify-write across concurrent `myco` processes.
+const REGISTRY_LOCK: &str = "repos.toml.lock";
+
 /// The redb file name inside the index dir.
 const DB: &str = "index.redb";
 
@@ -131,13 +135,61 @@ impl RedbIndex {
         }
     }
 
+    /// Take the registry lock — `try_lock` with the same retry
+    /// budget/backoff as [`open_db`]. Held across the
+    /// load→mutate→save of `register`/`remove`; a contended
+    /// registry queues instead of losing updates.
+    fn lock_registry(&self) -> Result<std::fs::File, Error> {
+        let path = self.dir.join(REGISTRY_LOCK);
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)?;
+        let start = Instant::now();
+        let mut backoff = LOCK_RETRY_MIN;
+        let mut attempt = 0u64;
+        loop {
+            match file.try_lock() {
+                Ok(()) => return Ok(file),
+                Err(std::fs::TryLockError::WouldBlock) => {
+                    let left = LOCK_RETRY_BUDGET.saturating_sub(start.elapsed());
+                    if left.is_zero() {
+                        return Err(Error::Backend(format!(
+                            "index busy — another myco process holds {REGISTRY_LOCK} \
+                             (waited ~{:.1}s)",
+                            LOCK_RETRY_BUDGET.as_secs_f64()
+                        )));
+                    }
+                    // same stagger as open_db — spreads contenders
+                    let jitter = Duration::from_millis((attempt % 4) * 5);
+                    std::thread::sleep((backoff + jitter).min(left));
+                    backoff = (backoff * 2).min(LOCK_RETRY_MAX);
+                    attempt += 1;
+                }
+                Err(std::fs::TryLockError::Error(e)) => return Err(Error::Io(e)),
+            }
+        }
+    }
+
     fn save_registry(&self, reg: &Registry) -> Result<(), Error> {
         let src = toml::to_string(reg).map_err(|e| Error::Codec(format!("{REGISTRY}: {e}")))?;
         let path = self.registry_path();
-        let tmp = path.with_extension("toml.tmp");
-        std::fs::write(&tmp, src)?;
-        std::fs::rename(&tmp, &path)?;
-        Ok(())
+        // pid-tagged tmp — writers are serialized by the lock, but
+        // a stale tmp from a killed process must not be clobbered
+        // by a live one mid-rename. No fsync: the registry is a
+        // disposable cache — the rename is the atomicity, not
+        // power-loss durability — and the sync dominates the
+        // critical section contenders queue behind.
+        let tmp = path.with_extension(format!("toml.{}.tmp", std::process::id()));
+        let write = (|| -> std::io::Result<()> {
+            std::fs::write(&tmp, src)?;
+            std::fs::rename(&tmp, &path)
+        })();
+        if write.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        write.map_err(Error::Io)
     }
 
     fn db(&self) -> Result<Database, Error> {
@@ -171,23 +223,31 @@ impl RedbIndex {
 
 impl Index for RedbIndex {
     fn register(&self, repo: &RepoEntry) -> Result<(), Error> {
+        let _lock = self.lock_registry()?;
         let mut reg = self.load_registry()?;
         match reg.repo.iter_mut().find(|r| r.path == repo.path) {
-            Some(r) => r.name = repo.name.clone(),
+            Some(r) => {
+                r.name = repo.name.clone();
+                r.worktree = repo.worktree.clone();
+            }
             None => reg.repo.push(repo.clone()),
         }
         self.save_registry(&reg)
     }
 
     fn remove(&self, path: &Utf8Path) -> Result<bool, Error> {
+        let _lock = self.lock_registry()?;
         let mut reg = self.load_registry()?;
         let before = reg.repo.len();
         reg.repo.retain(|r| r.path != path);
         if reg.repo.len() == before {
             return Ok(false);
         }
-        self.save_registry(&reg)?;
+        // drop the snapshot before the registry write — a failure
+        // here leaves a registered repo with no snapshot (stale →
+        // rebuild), not an orphan snapshot keyed to nothing
         self.write_snapshot(path, None)?;
+        self.save_registry(&reg)?;
         Ok(true)
     }
 
@@ -212,9 +272,11 @@ impl Index for RedbIndex {
         else {
             return Ok(None);
         };
-        serde_json::from_str(v.value())
-            .map(Some)
-            .map_err(|e| Error::Codec(format!("snapshot {path}: {e}")))
+        // a corrupt snapshot reads as a missing one — the index
+        // is a disposable cache, so callers see "never scanned",
+        // mark it stale, and rebuild instead of erroring every
+        // read (one bad row used to brick `org`/`index list`)
+        Ok(serde_json::from_str(v.value()).ok())
     }
 
     fn save_snapshot(&self, snapshot: &RepoSnapshot) -> Result<(), Error> {
@@ -375,6 +437,58 @@ mod tests {
             Error::Backend(msg) => assert!(msg.contains("index busy"), "got: {msg}"),
             e => panic!("expected backend error, got {e:?}"),
         }
+    }
+
+    #[test]
+    fn concurrent_registers_dont_lose_entries() {
+        let (_d, i) = idx();
+        // N writers RMW the registry at once — the lockfile
+        // serializes them, so every entry lands. Unlocked, the
+        // load→mutate→save + shared tmp name lost most updates.
+        let n = 8;
+        std::thread::scope(|s| {
+            for k in 0..n {
+                let i = &i;
+                s.spawn(move || i.register(&entry(&format!("r{k}"))).unwrap());
+            }
+        });
+        assert_eq!(i.repos().unwrap().len(), n);
+    }
+
+    #[test]
+    fn corrupt_snapshot_reads_as_missing() {
+        let (_d, i) = idx();
+        let e = entry("x");
+        // poison the row directly — truncated/old-schema JSON
+        {
+            let db = Database::create(i.db_path().as_std_path()).unwrap();
+            let tx = db.begin_write().unwrap();
+            {
+                let mut t = tx.open_table(SNAPSHOTS).unwrap();
+                t.insert(e.path.as_str(), "{not json").unwrap();
+            }
+            tx.commit().unwrap();
+        }
+        // used to be Error::Codec bricking org/index list — now
+        // "never scanned", so callers mark it stale and rebuild
+        assert!(i.snapshot(&e.path).unwrap().is_none());
+    }
+
+    #[test]
+    fn register_updates_name_and_worktree() {
+        let (_d, i) = idx();
+        i.register(&entry("x")).unwrap();
+        // re-register refreshes the recorded worktree too — a repo
+        // whose project dir moved must not keep the old path
+        i.register(
+            &RepoEntry::new(Utf8PathBuf::from("/repos/x"), "x2")
+                .with_worktree(Utf8PathBuf::from("/elsewhere/pm")),
+        )
+        .unwrap();
+        let repos = i.repos().unwrap();
+        assert_eq!(repos.len(), 1);
+        assert_eq!(repos[0].name, "x2");
+        assert_eq!(repos[0].worktree_path(), Utf8PathBuf::from("/elsewhere/pm"));
     }
 
     #[test]

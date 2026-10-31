@@ -7,7 +7,7 @@
 //! actually changed — a no-op verb leaves no noise in the audit
 //! trail.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use camino::Utf8PathBuf;
 use myco_core::{BacklogDoc, ProjectMeta, TodoDoc};
@@ -22,6 +22,80 @@ pub fn store_at(worktree: &Path) -> Result<MdStore, String> {
     let root = Utf8PathBuf::from_path_buf(worktree.to_path_buf())
         .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
     Ok(MdStore::new(root))
+}
+
+/// Name of the lock file — inside the repo's shared git dir
+/// (`<main>/.git/myco.lock`) so it never lands in a ledger commit
+/// (`git add -A` can't see it) and covers the `project/` worktree
+/// of every checkout of the repo.
+const LOCK_FILE: &str = "myco.lock";
+
+/// RAII guard for a worktree lock — an OS advisory lock (`flock`)
+/// on the repo's lock file. The lock releases when the guard
+/// drops (or the process dies — the OS cleans up).
+#[derive(Debug)]
+pub struct WorktreeLock {
+    _file: std::fs::File,
+}
+
+/// The file the lock lives on: `<git-common-dir>/myco.lock` — the
+/// common dir is shared by a repo's worktrees and exists before
+/// `myco init` creates the worktree, so one path covers init and
+/// every verb. A dir outside any repo falls back to a dotfile
+/// inside itself (nothing can autocommit there anyway, and the
+/// ledger spec ignores dotfiles).
+fn lock_path(dir: &Path) -> Result<PathBuf, String> {
+    match myco_git::common_dir(dir) {
+        Ok(git) => Ok(git.join(LOCK_FILE)),
+        Err(_) => {
+            if dir.is_dir() {
+                Ok(dir.join(".myco.lock"))
+            } else {
+                Err(format!("{} is not a directory", dir.display()))
+            }
+        }
+    }
+}
+
+fn lock_at(dir: &Path, exclusive: bool) -> Result<WorktreeLock, String> {
+    let path = lock_path(dir)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .map_err(|e| format!("open {}: {e}", path.display()))?;
+    let taken = if exclusive {
+        file.try_lock()
+    } else {
+        file.try_lock_shared()
+    };
+    match taken {
+        Ok(()) => Ok(WorktreeLock { _file: file }),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            Err("another myco process is writing — retry".into())
+        }
+        Err(std::fs::TryLockError::Error(e)) => Err(format!("lock {}: {e}", path.display())),
+    }
+}
+
+/// The exclusive mutation lock — every load→mutate→save→commit
+/// verb holds it for the verb's whole life (including the
+/// autocommit). Fail-fast on contention: concurrent writers
+/// corrupt the ledger (dup ids, last-writer-wins), so the second
+/// one gets a retry hint instead.
+///
+/// `dir` is any path inside the repo — the worktree or the repo
+/// root; the lock lands on the shared git dir either way.
+pub fn lock_worktree(dir: &Path) -> Result<WorktreeLock, String> {
+    lock_at(dir, true)
+}
+
+/// The shared read lock — concurrent readers don't block each
+/// other, but a reader contending with a writer fails fast
+/// rather than rendering a mid-verb ledger.
+pub fn lock_shared(dir: &Path) -> Result<WorktreeLock, String> {
+    lock_at(dir, false)
 }
 
 /// Default `index.md` — a human map of the ledger.
@@ -217,6 +291,48 @@ mod tests {
             .status()
             .unwrap();
         assert!(st.success(), "git {args:?}");
+    }
+
+    #[test]
+    fn lock_serializes_writers_and_reads() {
+        let d = tempfile::tempdir().unwrap();
+        // first writer takes it; a second writer and a reader
+        // both fail fast with the retry hint
+        let w = lock_worktree(d.path()).unwrap();
+        let err = lock_worktree(d.path()).unwrap_err();
+        assert!(err.contains("another myco process is writing"), "{err}");
+        let err = lock_shared(d.path()).unwrap_err();
+        assert!(err.contains("another myco process"), "{err}");
+        // drop releases — a new writer takes over, readers now
+        // share, and a third writer fails against the reader
+        drop(w);
+        let r = lock_shared(d.path()).unwrap();
+        let _r2 = lock_shared(d.path()).unwrap();
+        assert!(lock_worktree(d.path()).is_err());
+        drop((r, _r2));
+        assert!(lock_worktree(d.path()).is_ok());
+    }
+
+    #[test]
+    fn lock_lives_in_the_shared_git_dir() {
+        // a repo with a linked project worktree — the lock file
+        // must land in <root>/.git so `git add -A` can't sweep it
+        // into a ledger commit
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        myco_git::create_orphan_branch(d.path(), "project", "init").unwrap();
+        git(d.path(), &["worktree", "add", "project", "project"]);
+        // locking from the worktree and from the repo root
+        // contend — same lock file
+        let w = lock_worktree(d.path()).unwrap();
+        assert!(lock_worktree(&d.path().join("project")).is_err());
+        drop(w);
+        assert!(lock_worktree(&d.path().join("project")).is_ok());
+        assert!(d.path().join(".git/myco.lock").exists());
+        assert!(!d.path().join("project/myco.lock").exists());
+        git(d.path(), &["worktree", "remove", "--force", "project"]);
     }
 
     #[test]

@@ -404,7 +404,7 @@ pub fn run(
     milestone: Option<String>,
     json_out: bool,
 ) -> Result<i32, String> {
-    let (_proj, store) = items::open(dir.as_deref(), root.as_deref())?;
+    let (_proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
     let scan = digest::scan(&store)?;
     let live: Vec<&Item> = scan
         .live()
