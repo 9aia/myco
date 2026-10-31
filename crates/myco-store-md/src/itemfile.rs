@@ -88,30 +88,44 @@ pub fn parse_item_filename(kind: ItemKind, filename: &str) -> Option<ItemId> {
     Some(ItemId::new(kind, number))
 }
 
-/// `id = "…"` pulled out of a `+++` frontmatter block — the cheap
-/// probe for when the strict parse isn't needed (or already
-/// failed). `None` for files with no `+++` fence or no parseable
-/// `id` line — including frontmatter-less files that merely
-/// *borrow* an id number via their filename.
+/// Deepest line the `frontmatter_id` probe will read — real
+/// frontmatter is ~10 keys; past this the `+++` block is
+/// certainly unclosed (or the file is pathological).
+const FRONTMATTER_PROBE_MAX: usize = 128;
+
+/// `id = "…"` pulled out of a *closed* `+++` frontmatter block —
+/// the cheap probe for when the strict parse isn't needed (or
+/// already failed). `None` for files with no `+++` fence, no
+/// closing fence within [`FRONTMATTER_PROBE_MAX`] lines, or no
+/// parseable `id` line — including frontmatter-less files that
+/// merely *borrow* an id number via their filename. The close
+/// requirement is what keeps a body's `id = "…"` (a code block,
+/// a quoted example) from posing as frontmatter.
 pub fn frontmatter_id(src: &str) -> Option<ItemId> {
     let mut lines = src.lines();
     if lines.next()?.trim() != "+++" {
         return None;
     }
-    for l in lines {
+    let mut found = None;
+    for l in lines.take(FRONTMATTER_PROBE_MAX) {
         let t = l.trim();
+        // the close ends the block — an id only counts when the
+        // block actually closed (else a body's `id = "…"` would
+        // pose as frontmatter)
         if t == "+++" {
-            break;
+            return found;
         }
-        if let Some(rest) = t.strip_prefix("id") {
-            if let Some(v) = rest.trim_start().strip_prefix('=') {
-                if let Ok(id) = v.trim().trim_matches('"').parse::<ItemId>() {
-                    return Some(id);
+        if found.is_none() {
+            if let Some(rest) = t.strip_prefix("id") {
+                if let Some(v) = rest.trim_start().strip_prefix('=') {
+                    if let Ok(id) = v.trim().trim_matches('"').parse::<ItemId>() {
+                        found = Some(id);
+                    }
                 }
             }
         }
     }
-    None
+    None // window exhausted — never closed
 }
 
 /// Frontmatter DTO — stringly-typed so bad values point at the
@@ -408,6 +422,32 @@ mod tests {
                 "{bad}"
             );
         }
+    }
+
+    #[test]
+    fn frontmatter_id_needs_a_closed_block() {
+        let i1 = Some(ItemId::new(ItemKind::Issue, 1));
+        // the closed block yields its id
+        assert_eq!(frontmatter_id("+++\nid = \"I-1\"\n+++\n"), i1);
+        // id lines after the close are body, not frontmatter
+        assert_eq!(
+            frontmatter_id("+++\ntitle = \"x\"\n+++\nid = \"I-1\"\n"),
+            None
+        );
+        // an unclosed block never counts — a body/code `id = "…"`
+        // can't pose as frontmatter
+        assert_eq!(
+            frontmatter_id("+++\ntitle = \"x\"\n\nbody\nid = \"I-1\"\n"),
+            None
+        );
+        assert_eq!(frontmatter_id("+++\nid = \"I-1\"\n"), None);
+        // …and the scan is bounded even when the "block" is huge
+        let mut src = "+++\n".to_string();
+        for _ in 0..(FRONTMATTER_PROBE_MAX + 10) {
+            src.push_str("title = \"x\"\n");
+        }
+        src.push_str("id = \"I-1\"\n+++\n");
+        assert_eq!(frontmatter_id(&src), None);
     }
 
     #[test]

@@ -122,6 +122,12 @@ fn status_views() {
     assert!(s.contains("open:"), "{s}");
     assert!(s.contains("T-002 high hot task"), "{s}");
     assert!(!s.contains("someday idea"), "deferred stays out: {s}");
+    // --prompt --json is still json — {"prompt": "<block>"}
+    let v = json(&ok(d.path(), &["status", "--prompt", "--json"]));
+    let p = v["prompt"].as_str().unwrap();
+    assert!(p.starts_with("repo:"), "{p}");
+    assert!(p.contains("T-002 high hot task"), "{p}");
+    assert!(p.lines().count() <= 60, "{}", p.lines().count());
 }
 
 #[test]
@@ -181,6 +187,21 @@ fn board_views() {
     assert_eq!(v["in-progress"].as_array().unwrap()[0]["id"], "T-002");
     assert_eq!(v["blocked"].as_array().unwrap()[0]["id"], "I-001");
     assert!(v["claimed"].as_array().unwrap().is_empty());
+    // interrupted items carry the flag in --json
+    ok(d.path(), &["interrupt", "T-002"]);
+    let v = json(&ok(d.path(), &["board", "--json"]));
+    let open = v["open"].as_array().unwrap();
+    assert_eq!(
+        open.iter().find(|i| i["id"] == "T-002").unwrap()["interrupted"],
+        true
+    );
+    assert_eq!(
+        open.iter().find(|i| i["id"] == "T-001").unwrap()["interrupted"],
+        false
+    );
+    // status --json keeps the id-list shape alongside the flag
+    let v = json(&ok(d.path(), &["status", "--json"]));
+    assert_eq!(v["interrupted"], serde_json::json!(["T-002"]));
 }
 
 #[test]
@@ -386,4 +407,36 @@ fn org_empty_index() {
     let v = json(&out);
     assert_eq!(v["repos"].as_array().unwrap().len(), 0);
     assert_eq!(v["totals"]["tasks"]["open"], 0);
+}
+
+#[test]
+fn org_status_error_entry_identifies_the_repo() {
+    let home = tempfile::tempdir().unwrap();
+    let d = seeded();
+    let canon = d.path().canonicalize().unwrap();
+    let out = run(
+        d.path(),
+        &["index", "add", &canon.to_string_lossy()],
+        Some(home.path()),
+    );
+    assert_eq!(code(&out), 0, "{out:?}");
+    // no snapshot + a vanished worktree → an error entry, and it
+    // must still say *which* repo failed (name + path, not a
+    // bare {"error": …})
+    std::fs::remove_file(home.path().join("index.redb")).unwrap();
+    std::fs::remove_dir_all(d.path().join("project")).unwrap();
+    let out = run(d.path(), &["org", "status", "--json"], Some(home.path()));
+    assert_eq!(code(&out), 0, "{out:?}");
+    let v = json(&out);
+    let repo = &v["repos"].as_array().unwrap()[0];
+    assert_eq!(repo["name"], name_of(d.path()), "{repo}");
+    assert_eq!(
+        repo["path"].as_str().unwrap(),
+        canon.to_string_lossy(),
+        "{repo}"
+    );
+    assert!(
+        repo["error"].as_str().unwrap().contains("worktree"),
+        "{repo}"
+    );
 }

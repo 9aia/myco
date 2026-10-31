@@ -503,7 +503,13 @@ impl Server {
                                 .is_none_or(|m| i.milestone.as_deref() == Some(m))
                     })
                     .collect();
-                Ok(board::columns_json(live.into_iter(), None))
+                let interrupted = crate::continuity::interrupted_set(&store, live.iter().copied())
+                    .map_err(Fail::Verb)?;
+                Ok(board::columns_json(
+                    live.into_iter(),
+                    None,
+                    Some(&interrupted),
+                ))
             }
             "item.show" => {
                 let p: IdParams = parse_params(params)?;
@@ -527,7 +533,7 @@ impl Server {
                 };
                 let found = items::query_files(&store, kind, p.archived, &p.filter())
                     .map_err(Fail::Verb)?;
-                Ok(items_json(&found))
+                Ok(items::marked_json(&found))
             }
             "report" => {
                 let (proj, store) = self.open_read()?;

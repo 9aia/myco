@@ -44,11 +44,11 @@ pub enum Cmd {
         #[arg(long)]
         unlabel: Vec<String>,
         /// Add (`+T-1` or `T-1`) or remove (`-T-1`) a blocks dep —
-        /// repeatable.
-        #[arg(long, allow_hyphen_values = true)]
+        /// repeatable or comma-separated.
+        #[arg(long, allow_hyphen_values = true, value_delimiter = ',')]
         blocks: Vec<String>,
-        /// Remove a blocks dep — repeatable.
-        #[arg(long)]
+        /// Remove a blocks dep — repeatable or comma-separated.
+        #[arg(long, value_delimiter = ',')]
         unblock: Vec<ItemId>,
         /// Epic name — `""` clears the epic.
         #[arg(long)]
@@ -187,7 +187,7 @@ pub fn run(
         Cmd::Show { id } => match items::find_item(&store, id)? {
             Some((item, location, body)) => {
                 let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
-                let interrupted = crate::continuity::is_interrupted(&store, id);
+                let interrupted = crate::continuity::is_interrupted(&store, id)?;
                 if json_out {
                     crate::ops::print_json(
                         &json!({"item": item, "location": location, "handoffs": handoffs, "interrupted": interrupted, "body": body}),
@@ -261,12 +261,36 @@ pub(crate) fn show_json(
     match items::find_item(store, id)? {
         Some((item, location, body)) => {
             let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
-            let interrupted = crate::continuity::is_interrupted(store, id);
+            let interrupted = crate::continuity::is_interrupted(store, id)?;
             Ok(
                 json!({"item": item, "location": location, "handoffs": handoffs, "interrupted": interrupted, "body": body}),
             )
         }
         None => Err(format!("{id}: no such item")),
+    }
+}
+
+/// Re-land a `take`n top-level task in its origin section: the
+/// same-named section when it still exists (empty sections are
+/// dropped by `take`, so a `None` name re-matches the surviving
+/// unsectioned run at index 0), else re-created at its old index
+/// so the item can't drift into `sections[0]` under a heading it
+/// never lived under.
+fn put_back(
+    sections: &mut Vec<myco_core::Section>,
+    section: usize,
+    name: Option<String>,
+    item: Item,
+) {
+    match sections.iter_mut().find(|s| s.name == name) {
+        Some(s) => s.items.push(item),
+        None => sections.insert(
+            section.min(sections.len()),
+            myco_core::Section {
+                name,
+                items: vec![item],
+            },
+        ),
     }
 }
 
@@ -306,10 +330,18 @@ pub(crate) fn mutate_item(
                     ledger.put_todo(item, None);
                 }
                 _ if !loc.is_child() => {
-                    // top-level items re-land at the
-                    // section tail — same as before
+                    // top-level items re-land at the tail of
+                    // their *origin* section — carry its index +
+                    // name through the take (an emptied section
+                    // is dropped, so re-find/re-create by name)
+                    let section = loc.section;
+                    let name = ledger
+                        .todo
+                        .sections
+                        .get(section)
+                        .and_then(|s| s.name.clone());
                     let item = ledger.take(&loc);
-                    ledger.put_todo(item, None);
+                    put_back(&mut ledger.todo.sections, section, name, item);
                 }
                 _ => {} // a TODO child stays nested
             }

@@ -481,7 +481,13 @@ fn issue_new_list_resolve_archive_comment() {
         .collect();
     assert_eq!(ids, ["I-002"]);
     let out = run(d.path(), &["issue", "list", "--archived", "--json"]);
-    assert_eq!(json(&out).as_array().unwrap().len(), 2);
+    let v = json(&out);
+    let list = v.as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    // live + archived share one array — "archived" is the marker
+    let flag = |id: &str| list.iter().find(|i| i["id"] == id).unwrap()["archived"].as_bool();
+    assert_eq!(flag("I-001"), Some(true));
+    assert_eq!(flag("I-002"), Some(false));
     // re-archive → error
     let out = run(d.path(), &["issue", "archive", "I-001"]);
     assert_eq!(code(&out), 2);
@@ -754,6 +760,55 @@ fn item_set_semantics() {
     // unknown id
     let out = run(d.path(), &["item", "set", "PL-009", "--pri", "low"]);
     assert_eq!(code(&out), 2);
+}
+
+#[test]
+fn item_set_blocks_accepts_commas() {
+    let (d, _wt) = project();
+    run(d.path(), &["todo", "add", "a"]);
+    run(d.path(), &["todo", "add", "b"]);
+    run(d.path(), &["todo", "add", "c"]);
+    // comma-separated like `todo add --blocks`
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--blocks", "T-002,T-003", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(json(&out)["item"]["blocks"].as_array().unwrap().len(), 2);
+    // and --unblock takes commas too
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--unblock", "T-002,T-003", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(json(&out)["item"]["blocks"].is_null());
+}
+
+#[test]
+fn item_set_status_keeps_its_section() {
+    let (d, wt) = project();
+    // "## Now" holds T-001 alone; "## Later" follows — a status
+    // change must not drop T-001 into the unsectioned run (or
+    // append a new "Now" at the tail)
+    run(d.path(), &["todo", "add", "first", "--section", "Now"]);
+    run(d.path(), &["todo", "add", "later", "--section", "Later"]);
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "claimed", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let todo = read(&wt, "TODO.md");
+    let now = todo.find("## Now").unwrap();
+    let later = todo.find("## Later").unwrap();
+    let item = todo.find("T-001").unwrap();
+    assert!(now < item && item < later, "{todo}");
+    // the emptied-while-held section still exists and there's
+    // exactly one "Now" heading
+    assert_eq!(todo.matches("## Now").count(), 1, "{todo}");
+    assert!(todo.contains("status:claimed"), "{todo}");
+    // …and the ledger stays clean
+    let out = run(d.path(), &["check"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
 }
 
 #[test]

@@ -3,7 +3,7 @@
 //! blocked lists; `--prompt` is a token-sized block (repo, counts
 //! one-liner, then items grouped in-progress → blocked → claimed →
 //! open-by-priority, one per line, no prose); `--json` is the
-//! structured digest.
+//! structured digest — with `--prompt` it's `{"prompt": "<block>"}`.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -28,45 +28,67 @@ fn prompt_item(i: &Item, interrupted: bool) -> String {
     )
 }
 
-/// The `--prompt` block, capped at [`PROMPT_MAX_LINES`] — the open
-/// group (always last, always largest) is truncated with a
-/// `… +N more` marker when it would overflow.
+/// The `--prompt` block, hard-capped at [`PROMPT_MAX_LINES`].
+/// Sections render in spec order (in-progress → blocked →
+/// claimed → open); when the block overflows, items are cut from
+/// the *last* non-empty group first — open (always largest)
+/// absorbs the budget, then claimed/blocked, with in-progress
+/// dropped last. A truncated group keeps a `… +N more <name>`
+/// marker; a fully cut group disappears (the counts line still
+/// summarizes it).
 pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> String {
     let c = digest::counts(scan);
-    let mut out = vec![format!("repo:{} {}", scan.name, c.oneline())];
-    let section = |name: &str, items: &[&Item], room: usize| -> Vec<String> {
-        if items.is_empty() {
-            return Vec::new();
-        }
-        let mut v = vec![format!("{name}:")];
-        v.extend(
-            items
-                .iter()
-                .map(|i| prompt_item(i, interrupted.contains(&i.id)))
-                .take(room),
-        );
-        v
-    };
-    // sections in spec order; the open tail absorbs the budget
-    let fixed: Vec<(&str, Vec<&Item>)> = vec![
-        ("in-progress", scan.in_status(Status::InProgress)),
-        ("blocked", scan.in_status(Status::Blocked)),
-        ("claimed", scan.in_status(Status::Claimed)),
+    let mut groups: Vec<(&str, Vec<&Item>, usize)> = vec![
+        ("in-progress", scan.in_status(Status::InProgress), 0),
+        ("blocked", scan.in_status(Status::Blocked), 0),
+        ("claimed", scan.in_status(Status::Claimed), 0),
+        ("open", scan.in_status(Status::Open), 0),
     ];
-    let mut open: Vec<&Item> = scan.in_status(Status::Open);
+    let open = &mut groups[3].1;
     open.sort_by(|a, b| digest::pri_then_id(a, b));
 
-    let mut fixed_lines = Vec::new();
-    for (name, list) in &fixed {
-        fixed_lines.extend(section(name, list, usize::MAX));
+    // render cost: repo line + per non-empty group (header +
+    // shown items + marker when truncated)
+    let cost = |groups: &[(&str, Vec<&Item>, usize)]| {
+        1 + groups
+            .iter()
+            .map(|(_, shown, hidden)| {
+                if shown.is_empty() {
+                    0
+                } else {
+                    1 + shown.len() + usize::from(*hidden > 0)
+                }
+            })
+            .sum::<usize>()
+    };
+    // shrink tail-first until the whole block fits
+    while cost(&groups) > PROMPT_MAX_LINES {
+        match groups
+            .iter_mut()
+            .rev()
+            .find(|(_, shown, _)| !shown.is_empty())
+        {
+            Some((_, shown, hidden)) => {
+                shown.pop();
+                *hidden += 1;
+            }
+            None => break,
+        }
     }
-    // +2 = "open:" header + possible "… +N more" marker
-    let room = PROMPT_MAX_LINES.saturating_sub(out.len() + fixed_lines.len() + 2);
-    out.extend(fixed_lines);
-    if !open.is_empty() {
-        out.extend(section("open", &open, room));
-        if open.len() > room {
-            out.push(format!("… +{} more open", open.len() - room));
+
+    let mut out = vec![format!("repo:{} {}", scan.name, c.oneline())];
+    for (name, shown, hidden) in &groups {
+        if shown.is_empty() {
+            continue;
+        }
+        out.push(format!("{name}:"));
+        out.extend(
+            shown
+                .iter()
+                .map(|i| prompt_item(i, interrupted.contains(&i.id))),
+        );
+        if *hidden > 0 {
+            out.push(format!("… +{hidden} more {name}"));
         }
     }
     debug_assert!(out.len() <= PROMPT_MAX_LINES);
@@ -96,7 +118,7 @@ pub fn digest_json(scan: &digest::Scan) -> serde_json::Value {
 /// payload, shared with `myco serve`.
 pub fn status_json(store: &myco_store_md::MdStore) -> Result<serde_json::Value, String> {
     let scan = digest::scan(store)?;
-    let interrupted = crate::continuity::interrupted_set(store, scan.live());
+    let interrupted = crate::continuity::interrupted_set(store, scan.live())?;
     let mut v = digest_json(&scan);
     v["interrupted"] = json!(interrupted
         .iter()
@@ -109,7 +131,7 @@ pub fn status_json(store: &myco_store_md::MdStore) -> Result<serde_json::Value, 
 /// `myco serve`, where the digest isn't a useful shape.
 pub fn prompt_json(store: &myco_store_md::MdStore) -> Result<serde_json::Value, String> {
     let scan = digest::scan(store)?;
-    let interrupted = crate::continuity::interrupted_set(store, scan.live());
+    let interrupted = crate::continuity::interrupted_set(store, scan.live())?;
     Ok(json!({"prompt": prompt_block(&scan, &interrupted)}))
 }
 
@@ -122,9 +144,13 @@ pub fn run(
 ) -> Result<i32, String> {
     let (_proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
     let scan = digest::scan(&store)?;
-    let interrupted = crate::continuity::interrupted_set(&store, scan.live());
+    let interrupted = crate::continuity::interrupted_set(&store, scan.live())?;
     if prompt {
-        println!("{}", prompt_block(&scan, &interrupted));
+        if json_out {
+            ops::print_json(&json!({"prompt": prompt_block(&scan, &interrupted)}));
+        } else {
+            println!("{}", prompt_block(&scan, &interrupted));
+        }
         return Ok(0);
     }
     if json_out {
@@ -219,6 +245,50 @@ mod tests {
         let lines: Vec<&str> = block.lines().collect();
         assert!(lines.len() <= PROMPT_MAX_LINES, "{}", lines.len());
         assert!(block.contains("… +"), "{}", block);
+    }
+
+    #[test]
+    fn prompt_block_caps_the_whole_block() {
+        // 30 in-progress + 30 blocked + 20 claimed + 20 open —
+        // >60 non-open lines must not overflow the cap; open is
+        // cut first, claimed next, in-progress last
+        let mut v = Vec::new();
+        for n in 1..=30 {
+            v.push(
+                Item::new(ItemId::new(ItemKind::Task, n), format!("wip {n}"))
+                    .status(Status::InProgress),
+            );
+        }
+        for n in 31..=60 {
+            v.push(
+                Item::new(ItemId::new(ItemKind::Task, n), format!("stuck {n}"))
+                    .status(Status::Blocked),
+            );
+        }
+        for n in 61..=80 {
+            v.push(
+                Item::new(ItemId::new(ItemKind::Task, n), format!("owned {n}"))
+                    .status(Status::Claimed),
+            );
+        }
+        for n in 81..=100 {
+            v.push(Item::new(
+                ItemId::new(ItemKind::Task, n),
+                format!("open {n}"),
+            ));
+        }
+        let block = prompt_block(&scan_with(v), &BTreeSet::new());
+        let lines: Vec<&str> = block.lines().collect();
+        assert!(lines.len() <= PROMPT_MAX_LINES, "{}", lines.len());
+        // in-progress is the last section cut — survives whole
+        assert!(block.contains("in-progress:"), "{block}");
+        assert!(block.contains("T-030"), "{block}");
+        // open + claimed were cut entirely (tail-first)
+        assert!(!block.contains("open:"), "{block}");
+        assert!(!block.contains("claimed:"), "{block}");
+        assert!(!block.contains("T-081"), "{block}");
+        // blocked shows a truncated tail + marker
+        assert!(block.contains("… +"), "{block}");
     }
 
     #[test]

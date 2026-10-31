@@ -105,24 +105,28 @@ pub const STALE_CLAIM_DAYS: i64 = 3;
 
 /// `in-progress` items whose last activity (latest handoff, else
 /// `created`) is older than [`STALE_CLAIM_DAYS`] — interrupted in
-/// practice even if no hook fired.
+/// practice even if no hook fired. A handoff read failure
+/// propagates — an unreadable log isn't a fresh claim.
 fn stale_claims<'a>(
     store: &impl myco_store::Store,
     scan: &'a digest::Scan,
     today: time::Date,
-) -> Vec<(&'a myco_core::Item, i64)> {
-    scan.in_status(Status::InProgress)
-        .into_iter()
-        .filter_map(|i| {
-            let last = store
-                .read_handoffs(i.id)
-                .ok()
-                .and_then(|h| h.last().map(|e| e.date))
-                .or(i.created)?;
-            let idle = (today - last).whole_days();
-            (idle > STALE_CLAIM_DAYS).then_some((i, idle))
-        })
-        .collect()
+) -> Result<Vec<(&'a myco_core::Item, i64)>, String> {
+    let mut out = Vec::new();
+    for i in scan.in_status(Status::InProgress) {
+        let last = store
+            .read_handoffs(i.id)
+            .map_err(|e| e.to_string())?
+            .last()
+            .map(|e| e.date)
+            .or(i.created);
+        let Some(last) = last else { continue };
+        let idle = (today - last).whole_days();
+        if idle > STALE_CLAIM_DAYS {
+            out.push((i, idle));
+        }
+    }
+    Ok(out)
 }
 
 /// The report payload — aging + velocity + blocked + stale
@@ -139,7 +143,7 @@ pub fn report_json(
     let log = myco_git::log(worktree, None).map_err(|e| e.to_string())?;
     let velocity = velocity(&log);
     let blocked = scan.in_status(Status::Blocked);
-    let stale = stale_claims(store, &scan, today);
+    let stale = stale_claims(store, &scan, today)?;
     Ok(json!({
         "repo": scan.name,
         "as_of": date::render(today),
@@ -185,7 +189,7 @@ pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Resul
     let log = myco_git::log(&proj.worktree, None).map_err(|e| e.to_string())?;
     let velocity = velocity(&log);
     let blocked = scan.in_status(Status::Blocked);
-    let stale = stale_claims(&store, &scan, today);
+    let stale = stale_claims(&store, &scan, today)?;
     println!("{} — report as of {}", scan.name, date::render(today));
     println!(
         "aging:    <7d {} · 7-30d {} · >30d {} · undated {}",

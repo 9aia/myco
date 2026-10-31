@@ -415,3 +415,43 @@ fn item_show_surfaces_handoff_count() {
     let out = run(d.path(), &["item", "show", "T-001"]);
     assert!(stdout(&out).contains("handoffs: 2"));
 }
+
+#[test]
+fn interrupt_reverts_status_and_marks_the_handoff() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "wip", "--section", "Now"]);
+    run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "in-progress"],
+    );
+    let out = run(
+        d.path(),
+        &["interrupt", "T-001", "--note", "ctx died", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["status"], "open");
+    assert!(v["entry"]["note"]
+        .as_str()
+        .unwrap()
+        .starts_with("interrupted"));
+    // status reverted on disk — and the section survived
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("## Now"), "{todo}");
+    assert!(todo.contains("- [ ] T-001"), "{todo}");
+    assert!(!todo.contains("status:in-progress"), "{todo}");
+    // the marker handoff landed; item show flags it
+    let out = run(d.path(), &["item", "show", "T-001", "--json"]);
+    assert_eq!(json(&out)["interrupted"], true);
+    let h = read(&wt, "handoffs/T-001.md");
+    assert!(h.contains("interrupted — ctx died"), "{h}");
+    // one commit covers both writes
+    assert_eq!(
+        git(&wt, &["log", "-1", "--format=%s"]),
+        "chore: interrupt T-001"
+    );
+    // open items can't be interrupted
+    let out = run(d.path(), &["interrupt", "T-001"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("nothing to interrupt"));
+}

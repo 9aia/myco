@@ -34,23 +34,29 @@ const DEFAULT_LAST: usize = 10;
 /// append-only log; status/board/report surfaces derive the flag.
 pub const INTERRUPT_NOTE: &str = "interrupted";
 
-/// Did the item's latest handoff mark it interrupted?
-pub fn is_interrupted(store: &impl Store, id: ItemId) -> bool {
-    store
-        .read_handoffs(id)
-        .ok()
-        .and_then(|entries| entries.last().map(|e| e.note.clone()))
-        .is_some_and(|n| n.trim_start().starts_with(INTERRUPT_NOTE))
+/// Did the item's latest handoff mark it interrupted? A read
+/// failure propagates — a malformed handoff file is a finding,
+/// not a silent "not interrupted".
+pub fn is_interrupted(store: &impl Store, id: ItemId) -> Result<bool, String> {
+    let entries = store.read_handoffs(id).map_err(|e| e.to_string())?;
+    Ok(entries
+        .last()
+        .is_some_and(|e| e.note.trim_start().starts_with(INTERRUPT_NOTE)))
 }
 
 /// The interrupted subset of `items` — for status/board markers.
+/// The first unreadable handoff file fails the set.
 pub fn interrupted_set<'a>(
     store: &impl Store,
     items: impl Iterator<Item = &'a myco_core::Item>,
-) -> BTreeSet<ItemId> {
+) -> Result<BTreeSet<ItemId>, String> {
     items
-        .filter(|i| is_interrupted(store, i.id))
-        .map(|i| i.id)
+        .map(|i| is_interrupted(store, i.id).map(|hit| (i.id, hit)))
+        .filter_map(|r| match r {
+            Ok((id, true)) => Some(Ok(id)),
+            Ok(_) => None,
+            Err(e) => Some(Err(e)),
+        })
         .collect()
 }
 
@@ -177,9 +183,6 @@ pub fn interrupt_item(
             ));
         }
     }
-    // revert through the shared mutation path (relocation rules
-    // included), then the marker handoff — one commit covers both
-    crate::itemcmd::mutate_item(store, id, &crate::itemcmd::SetFlags::status(Status::Open))?;
     let note = match note.map(str::trim).filter(|n| !n.is_empty()) {
         Some(extra) => format!("{INTERRUPT_NOTE} — {extra}"),
         None => INTERRUPT_NOTE.to_string(),
@@ -193,9 +196,40 @@ pub fn interrupt_item(
         session,
         note,
     };
-    store
-        .append_handoff(id, &entry)
-        .map_err(|e| e.to_string())?;
+    // two writes share the caller's one commit — snapshot the
+    // pre-image so a failed handoff append can roll the status
+    // revert back instead of leaving it on disk for the *next*
+    // verb's autocommit to sweep up under its own message
+    let ledger_before = items::load_ledger(store)?;
+    let file_before = match store.item(id) {
+        Ok(f) => Some(f),
+        Err(myco_store::Error::NotFound { .. }) => None,
+        Err(e) => return Err(e.to_string()),
+    };
+    // revert through the shared mutation path (relocation rules
+    // included), then the marker handoff
+    crate::itemcmd::mutate_item(store, id, &crate::itemcmd::SetFlags::status(Status::Open))?;
+    if let Err(e) = store.append_handoff(id, &entry) {
+        // best-effort rollback of the first write
+        let mut stuck = Vec::new();
+        if let Err(r) = items::save_ledger(store, &ledger_before) {
+            stuck.push(format!("ledger: {r}"));
+        }
+        if let Some(f) = &file_before {
+            if let Err(r) = store.save_item(f) {
+                stuck.push(format!("item file: {r}"));
+            }
+        }
+        return Err(if stuck.is_empty() {
+            format!("{id}: handoff append failed ({e}) — status revert rolled back")
+        } else {
+            format!(
+                "{id}: handoff append failed ({e}) — status revert left on disk \
+                 (rollback: {})",
+                stuck.join("; ")
+            )
+        });
+    }
     Ok(entry)
 }
 

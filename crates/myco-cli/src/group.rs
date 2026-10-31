@@ -96,14 +96,20 @@ pub fn run(
                 .filter(|i| group.of(i) == Some(name.as_str()))
                 .collect();
             if json_out {
-                ops::print_json(&board::columns_json(members.into_iter(), None));
+                let interrupted =
+                    crate::continuity::interrupted_set(&store, members.iter().copied())?;
+                ops::print_json(&board::columns_json(
+                    members.into_iter(),
+                    None,
+                    Some(&interrupted),
+                ));
                 return Ok(0);
             }
             if members.is_empty() {
                 println!("{}: no items in {} {name:?}", scan.name, group.name());
             } else {
                 let interrupted =
-                    crate::continuity::interrupted_set(&store, members.iter().copied());
+                    crate::continuity::interrupted_set(&store, members.iter().copied())?;
                 ops::print_paged(&board::render(
                     members.into_iter(),
                     None,

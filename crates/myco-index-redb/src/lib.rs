@@ -43,18 +43,21 @@ const LOCK_RETRY_MAX: Duration = Duration::from_millis(320);
 
 /// The index dir: `$MYCO_HOME` → `$XDG_DATA_HOME/myco` →
 /// `~/.local/share/myco`. The `$MYCO_HOME` override is how tests
-/// (and unusual setups) relocate the whole cache.
-pub fn data_dir() -> PathBuf {
+/// (and unusual setups) relocate the whole cache. `Err` when no
+/// base resolves (HOME unset) — better than writing the cache
+/// into whatever directory `myco` happened to run from.
+pub fn data_dir() -> Result<PathBuf, Error> {
     if let Some(d) = std::env::var_os("MYCO_HOME") {
-        return PathBuf::from(d);
+        return Ok(PathBuf::from(d));
     }
     if let Some(d) = std::env::var_os("XDG_DATA_HOME") {
-        return PathBuf::from(d).join("myco");
+        return Ok(PathBuf::from(d).join("myco"));
     }
     std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(".local/share/myco")
+        .map(|h| PathBuf::from(h).join(".local/share/myco"))
+        .map_err(|_| {
+            Error::Backend("no index dir — HOME unset (set MYCO_HOME or XDG_DATA_HOME)".into())
+        })
 }
 
 /// `repos.toml` on disk.
@@ -102,7 +105,7 @@ pub struct RedbIndex {
 impl RedbIndex {
     /// Open the default index ([`data_dir`]), creating it.
     pub fn open() -> Result<Self, Error> {
-        let dir = Utf8PathBuf::from_path_buf(data_dir())
+        let dir = Utf8PathBuf::from_path_buf(data_dir()?)
             .map_err(|p| Error::Backend(format!("{}: non-utf8 index dir", p.display())))?;
         Self::open_at(dir)
     }
@@ -362,12 +365,12 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let ds = d.path().to_str().unwrap();
         temp_env::with_var("MYCO_HOME", Some(ds), || {
-            assert_eq!(data_dir(), d.path());
+            assert_eq!(data_dir().unwrap(), d.path());
         });
         temp_env::with_vars(
             [("MYCO_HOME", None::<&str>), ("XDG_DATA_HOME", Some(ds))],
             || {
-                assert_eq!(data_dir(), d.path().join("myco"));
+                assert_eq!(data_dir().unwrap(), d.path().join("myco"));
             },
         );
     }
@@ -381,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn data_dir_falls_back_to_home_then_dot() {
+    fn data_dir_falls_back_to_home_then_errors() {
         let d = tempfile::tempdir().unwrap();
         let home = d.path().to_str().unwrap();
         // no MYCO_HOME/XDG → ~/.local/share/myco
@@ -392,10 +395,10 @@ mod tests {
                 ("HOME", Some(home)),
             ],
             || {
-                assert_eq!(data_dir(), d.path().join(".local/share/myco"));
+                assert_eq!(data_dir().unwrap(), d.path().join(".local/share/myco"));
             },
         );
-        // HOME unset too → ./.local/share/myco
+        // HOME unset too → error, never a cwd-relative cache
         temp_env::with_vars(
             [
                 ("MYCO_HOME", None::<&str>),
@@ -403,7 +406,8 @@ mod tests {
                 ("HOME", None::<&str>),
             ],
             || {
-                assert_eq!(data_dir(), PathBuf::from("./.local/share/myco"));
+                let e = data_dir().unwrap_err();
+                assert!(e.to_string().contains("HOME unset"), "{e}");
             },
         );
     }

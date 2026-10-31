@@ -137,8 +137,12 @@ pub fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec
         for (i, r) in rx {
             out[i] = Some(r);
         }
+        // a hole means a worker died mid-map — `f` panicking also
+        // propagates out of `thread::scope`, so this only fires
+        // when the panic was already swallowed elsewhere
         out.into_iter()
-            .map(|o| o.unwrap_or_else(|| unreachable!("par_map hole")))
+            .enumerate()
+            .map(|(i, o)| o.unwrap_or_else(|| panic!("par_map: no result for item {i}")))
             .collect()
     })
 }

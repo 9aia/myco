@@ -43,6 +43,10 @@ pub enum Cmd {
 
 /// One repo's snapshot load outcome for org views.
 pub struct RepoView {
+    /// Registry name — identity even when `snap` is gone.
+    pub name: String,
+    /// Registered repo-root path — identity even when `snap` is gone.
+    pub path: camino::Utf8PathBuf,
     /// The snapshot (may be the last good one on rescan failure).
     pub snap: Option<RepoSnapshot>,
     /// Rescan/load error, when the fresh snapshot couldn't be had.
@@ -78,8 +82,11 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
         stale.iter().copied().zip(scans).collect();
     let mut out = Vec::with_capacity(repos.len());
     for (i, c) in cached.iter().enumerate() {
+        let (name, path) = (repos[i].name.clone(), repos[i].path.clone());
         if fresh(i) {
             out.push(RepoView {
+                name,
+                path,
                 snap: c.clone(),
                 error: None,
                 rebuilt: false,
@@ -93,12 +100,16 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
             Ok(snap) => {
                 index.save_snapshot(&snap).map_err(|e| e.to_string())?;
                 out.push(RepoView {
+                    name,
+                    path,
                     snap: Some(snap),
                     error: None,
                     rebuilt: true,
                 });
             }
             Err(e) => out.push(RepoView {
+                name,
+                path,
                 snap: cached[i].clone(),
                 error: Some(e),
                 rebuilt: false,
@@ -139,7 +150,12 @@ fn status(views: &[RepoView], all: bool, json_out: bool) -> Result<i32, String> 
     let mut snaps = Vec::new();
     for v in views {
         let Some(s) = &v.snap else {
-            repos_json.push(json!({"error": v.error}));
+            repos_json.push(json!({
+                "name": v.name,
+                "path": v.path,
+                "rebuilt": v.rebuilt,
+                "error": v.error,
+            }));
             continue;
         };
         snaps.push(s);
@@ -197,7 +213,7 @@ fn status(views: &[RepoView], all: bool, json_out: bool) -> Result<i32, String> 
             }
             None => out.push_str(&format!(
                 "{:<16} ⚠ {}\n",
-                "?",
+                v.name,
                 v.error.as_deref().unwrap_or("unavailable")
             )),
         }
@@ -249,7 +265,8 @@ fn board_view(
             if !wanted(s) {
                 continue;
             }
-            let cols = board::columns_json(s.live_items(), Some(&s.name));
+            // snapshots carry no handoffs — no interrupted flag
+            let cols = board::columns_json(s.live_items(), Some(&s.name), None);
             for (name, _) in board::COLUMNS {
                 let mut dst = merged[name].as_array().cloned().unwrap_or_default();
                 dst.extend(cols[name].as_array().cloned().unwrap_or_default());
@@ -340,13 +357,10 @@ fn init_all(index: &impl Index, json_out: bool, no_commit: bool) -> Result<i32, 
 /// The `org` verb group.
 pub fn run(cmd: Cmd, json_out: bool, no_commit: bool) -> Result<i32, String> {
     let index = indexcmd::open_index()?;
-    if let Cmd::Init = cmd {
-        return init_all(&index, json_out, no_commit);
-    }
-    let views = load_fresh(&index)?;
     match cmd {
-        Cmd::Status { all } => status(&views, all, json_out),
-        Cmd::Board { md, all, repo } => board_view(&views, md, all, repo, json_out),
-        Cmd::Init => unreachable!(),
+        // init rolls scaffold out — no snapshot reads
+        Cmd::Init => init_all(&index, json_out, no_commit),
+        Cmd::Status { all } => status(&load_fresh(&index)?, all, json_out),
+        Cmd::Board { md, all, repo } => board_view(&load_fresh(&index)?, md, all, repo, json_out),
     }
 }

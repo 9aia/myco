@@ -1367,25 +1367,21 @@ fn apply_fixes(wt: &Path, fixes: &[Fix]) -> Result<usize, String> {
 }
 
 /// The finding a non-Ok AGENTS.md state produces — shared by
-/// `run_on` and [`check_json`].
-fn agents_md_finding(state: crate::agentmd::State) -> Finding {
-    Finding::at(
-        "AGENTS.md",
-        "agents-md",
-        match state {
-            crate::agentmd::State::Missing => {
-                "AGENTS.md missing — `check --fix` creates it with the agent-awareness block"
-            }
-            crate::agentmd::State::Absent => {
-                "AGENTS.md lacks the managed agent-awareness block — `check --fix` appends it"
-            }
-            crate::agentmd::State::Drift => {
-                "AGENTS.md agent-awareness block isn't canonical — `check --fix` rewrites it"
-            }
-            crate::agentmd::State::Ok => unreachable!(),
-        },
-        true,
-    )
+/// `run_on` and [`check_json`]. `None` for `State::Ok`.
+fn agents_md_finding(state: crate::agentmd::State) -> Option<Finding> {
+    let msg = match state {
+        crate::agentmd::State::Missing => {
+            "AGENTS.md missing — `check --fix` creates it with the agent-awareness block"
+        }
+        crate::agentmd::State::Absent => {
+            "AGENTS.md lacks the managed agent-awareness block — `check --fix` appends it"
+        }
+        crate::agentmd::State::Drift => {
+            "AGENTS.md agent-awareness block isn't canonical — `check --fix` rewrites it"
+        }
+        crate::agentmd::State::Ok => return None,
+    };
+    Some(Finding::at("AGENTS.md", "agents-md", msg, true))
 }
 
 /// The read-only `check` payload — the `--json` report shape
@@ -1394,8 +1390,8 @@ fn agents_md_finding(state: crate::agentmd::State) -> Finding {
 pub fn check_json(proj: &Project) -> Result<serde_json::Value, String> {
     let mut analysis = analyze(&proj.worktree);
     let agents_md = crate::agentmd::block_state(&proj.root);
-    if agents_md != crate::agentmd::State::Ok {
-        analysis.findings.push(agents_md_finding(agents_md));
+    if let Some(f) = agents_md_finding(agents_md) {
+        analysis.findings.push(f);
     }
     let remaining = &analysis.findings;
     Ok(json!({
@@ -1465,7 +1461,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             )?;
             agents_md = crate::agentmd::block_state(&proj.root);
         } else {
-            analysis.findings.push(agents_md_finding(agents_md));
+            analysis.findings.extend(agents_md_finding(agents_md));
         }
     }
 

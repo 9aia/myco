@@ -368,10 +368,15 @@ pub fn cards_by_column<'a>(items: impl Iterator<Item = (String, &'a Item)>) -> [
     })
 }
 
-/// The `--json` columns map — column name → full items.
+/// The `--json` columns map — column name → full items. `prefix`
+/// tags each item `repo` (org boards). `interrupted` — the set
+/// whose latest handoff is an interrupt — marks each item
+/// `"interrupted": bool`; `None` omits the flag (org board, where
+/// snapshots carry no handoffs).
 pub fn columns_json<'a>(
     items: impl Iterator<Item = &'a Item>,
     prefix: Option<&str>,
+    interrupted: Option<&BTreeSet<myco_core::ItemId>>,
 ) -> serde_json::Value {
     let cols = columns(items);
     let mut map = serde_json::Map::new();
@@ -382,8 +387,13 @@ pub fn columns_json<'a>(
                 .iter()
                 .map(|it| {
                     let mut v = serde_json::to_value(it).unwrap_or(json!(null));
-                    if let (Some(p), Some(obj)) = (prefix, v.as_object_mut()) {
-                        obj.insert("repo".into(), json!(p));
+                    if let Some(obj) = v.as_object_mut() {
+                        if let Some(p) = prefix {
+                            obj.insert("repo".into(), json!(p));
+                        }
+                        if let Some(set) = interrupted {
+                            obj.insert("interrupted".into(), json!(set.contains(&it.id)));
+                        }
                     }
                     v
                 })
@@ -416,13 +426,14 @@ pub fn run(
         })
         .collect();
     if json_out {
-        ops::print_json(&columns_json(live.into_iter(), None));
+        let interrupted = crate::continuity::interrupted_set(&store, live.iter().copied())?;
+        ops::print_json(&columns_json(live.into_iter(), None, Some(&interrupted)));
         return Ok(0);
     }
     if live.is_empty() {
         println!("{}: empty board — `myco todo add` something", scan.name);
     } else {
-        let interrupted = crate::continuity::interrupted_set(&store, live.iter().copied());
+        let interrupted = crate::continuity::interrupted_set(&store, live.iter().copied())?;
         ops::print_paged(&render(
             live.into_iter(),
             None,
@@ -575,11 +586,18 @@ mod tests {
     #[test]
     fn columns_json_map() {
         let v = items();
-        let j = columns_json(v.iter(), Some("myco"));
+        let j = columns_json(v.iter(), Some("myco"), None);
         assert_eq!(j["open"].as_array().unwrap().len(), 2);
         assert_eq!(j["open"][0]["id"], "T-003");
         assert_eq!(j["open"][0]["repo"], "myco");
         assert!(j["blocked"].as_array().unwrap()[0]["id"] == "T-005");
         assert!(j["backlog"].as_array().unwrap().len() == 1);
+        // no interrupted set → no flag at all
+        assert!(j["open"][0].get("interrupted").is_none());
+        // with the set → per-item flag
+        let set = BTreeSet::from([ItemId::new(ItemKind::Task, 3)]);
+        let j = columns_json(v.iter(), None, Some(&set));
+        assert_eq!(j["open"][0]["interrupted"], true);
+        assert_eq!(j["open"][1]["interrupted"], false);
     }
 }

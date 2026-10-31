@@ -334,23 +334,46 @@ pub fn new_file(
 
 /// The read behind [`list_files`] — live item files (plus
 /// `archive/` entries when `include_archived`), filtered, as
-/// data. Non-CLI front-ends (`myco serve`) shape it themselves.
+/// `(item, archived)` pairs. Non-CLI front-ends (`myco serve`)
+/// shape it themselves — [`marked_json`] is the list shape.
 pub fn query_files(
     store: &MdStore,
     kind: ItemKind,
     include_archived: bool,
     filter: &Filter,
-) -> Result<Vec<Item>, String> {
-    let mut found = store.list_items(kind).map_err(|e| e.to_string())?;
+) -> Result<Vec<(Item, bool)>, String> {
+    let live = store.list_items(kind).map_err(|e| e.to_string())?;
+    let mut found: Vec<(Item, bool)> = live.into_iter().map(|f| (f.meta, false)).collect();
     if include_archived {
-        found.extend(store.list_archived(kind).map_err(|e| e.to_string())?);
+        found.extend(
+            store
+                .list_archived(kind)
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(|f| (f.meta, true)),
+        );
     }
     Ok(found
         .into_iter()
-        .map(|f| f.meta)
-        .filter(|i| filter.matches(i))
+        .filter(|(i, _)| filter.matches(i))
         .take(filter.take())
         .collect())
+}
+
+/// `(item, archived)` pairs → a bare array of item objects, each
+/// tagged `"archived": bool` — the `--json` list shape. Live and
+/// archived items share one array; the flag is the marker.
+pub fn marked_json(items: &[(Item, bool)]) -> serde_json::Value {
+    json!(items
+        .iter()
+        .map(|(i, archived)| {
+            let mut v = serde_json::to_value(i).unwrap_or(json!(null));
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert("archived".into(), json!(archived));
+            }
+            v
+        })
+        .collect::<Vec<_>>())
 }
 
 /// The shared `<kind> list` — live item files, plus `archive/`
@@ -363,7 +386,12 @@ pub fn list_files(
     json_out: bool,
 ) -> Result<i32, String> {
     let found = query_files(store, kind, include_archived, filter)?;
-    print_list(&found, json_out)
+    if json_out {
+        ops::print_json(&marked_json(&found));
+        return Ok(0);
+    }
+    let items: Vec<Item> = found.into_iter().map(|(i, _)| i).collect();
+    print_list(&items, false)
 }
 
 /// `<dir>/<filename>` for a file-backed item.
