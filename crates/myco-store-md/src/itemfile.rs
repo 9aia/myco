@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use crate::error::{EmitError, ParseError};
-use crate::mdx;
+use crate::{line, mdx};
 
 /// The `project/` subdirectory a file-backed kind lives in.
 /// [`ItemKind::Task`] has no files (`None`).
@@ -226,6 +226,23 @@ pub fn parse_item_file(
             expected_kind.prefix()
         )));
     }
+    // filename ↔ frontmatter: a canonical filename's number must
+    // agree with the id the file claims — `issue-0003-x.md`
+    // holding `I-009` reserves 3 in the id scan while claiming 9,
+    // which would let the allocator reissue a live id. A name
+    // that doesn't fit the kind's pattern carries no number to
+    // check against (that's a filename finding, not this error).
+    let basename = std::path::Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path);
+    if let Some(fname_id) = parse_item_filename(expected_kind, basename) {
+        if fname_id != id {
+            return Err(fm_err(format!(
+                "filename says {fname_id} but frontmatter id is {id}"
+            )));
+        }
+    }
     let owner = fm
         .owner
         .map(|o| Actor::new(&o).map_err(|e| fm_err(e.to_string())))
@@ -293,8 +310,21 @@ pub fn parse_item_file(
     Ok(file)
 }
 
-/// Canonical item file — `+++\n<toml>+++\n\n<body>\n`.
+/// Canonical item file — `+++\n<toml>+++\n\n<body>\n`. The model
+/// is validated first ([`line::check_item`] — the same validity
+/// source as the line grammar) so emit can't write a file parse
+/// would reject; children are an error, never silently dropped.
 pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
+    line::check_item(&file.meta, "item file")?;
+    if !file.meta.children.is_empty() {
+        return Err(EmitError::new(
+            "item file",
+            format!(
+                "{} carries children — sub-items only exist in TODO.md/BACKLOG.md",
+                file.meta.id
+            ),
+        ));
+    }
     let fm = FrontmatterOut {
         id: file.meta.id.to_string(),
         title: &file.meta.title,
@@ -507,6 +537,53 @@ mod tests {
             let r = parse_item_file(src, ItemKind::Issue, "issues/x.md");
             assert!(r.is_err() == (why != "unknown key ok?"), "{why}: {src:?}");
         }
+    }
+
+    #[test]
+    fn filename_id_must_match_frontmatter() {
+        // `issue-0003-x.md` claiming `I-009` — the scan would
+        // reserve 3 while the file holds 9; that's corruption, not
+        // a rename waiting to happen
+        let src = "+++\nid = \"I-009\"\ntitle = \"x\"\nstatus = \"open\"\n+++\n";
+        assert!(parse_item_file(src, ItemKind::Issue, "issues/issue-0003-x.md").is_err());
+        // agreement parses; a name carrying no number isn't checked
+        let src = "+++\nid = \"I-003\"\ntitle = \"x\"\nstatus = \"open\"\n+++\n";
+        assert!(parse_item_file(src, ItemKind::Issue, "issues/issue-0003-x.md").is_ok());
+        assert!(parse_item_file(src, ItemKind::Issue, "issues/x.md").is_ok());
+        // kind mismatch stays a kind error (checked first)
+        let src = "+++\nid = \"P-002\"\ntitle = \"x\"\nstatus = \"open\"\n+++\n";
+        assert!(parse_item_file(src, ItemKind::Issue, "issues/issue-0002-x.md").is_err());
+        // but parses under its own kind even inside issues/ — the
+        // filename's `issue` prefix claims no proposal number
+        assert!(parse_item_file(src, ItemKind::Proposal, "issues/issue-0002-x.md").is_ok());
+    }
+
+    #[test]
+    fn emit_validates_the_model() {
+        let good = ItemFile::new(Item::new(ItemId::new(ItemKind::Issue, 1), "x"));
+        assert!(emit_item_file(&good).is_ok());
+        // an invalid label — parse would reject the emitted file
+        let mut bad = good.clone();
+        bad.meta.labels.insert("bad label".into());
+        assert!(emit_item_file(&bad).is_err());
+        // invalid group names too
+        let mut bad = good.clone();
+        bad.meta.epic = Some("bad epic".into());
+        assert!(emit_item_file(&bad).is_err());
+        bad.meta.epic = None;
+        bad.meta.milestone = Some("bad/ms".into());
+        assert!(emit_item_file(&bad).is_err());
+        // an empty/unemittable note
+        let mut bad = good.clone();
+        bad.meta.note = Some(String::new());
+        assert!(emit_item_file(&bad).is_err());
+        // children are an error, never silently dropped
+        let mut bad = good;
+        bad.meta
+            .children
+            .push(Item::new(ItemId::new(ItemKind::Task, 1), "sub"));
+        let e = emit_item_file(&bad).unwrap_err();
+        assert!(e.to_string().contains("children"), "{e}");
     }
 
     #[test]

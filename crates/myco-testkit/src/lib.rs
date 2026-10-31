@@ -232,11 +232,15 @@ pub mod strat {
         })
     }
 
-    /// A `TodoDoc` — statuses exclude `Done`, task ids only. The
-    /// repo name shares the section-name charset — it fills
+    /// A `TodoDoc` — statuses exclude `Done` (removed) and
+    /// `Deferred` (BACKLOG.md's status), task ids only. The repo
+    /// name shares the section-name charset — it fills
     /// `# TODO — <repo>` and must survive the heading too.
     pub fn todo_doc() -> impl Strategy<Value = TodoDoc> {
-        (section_name(), sections(line_item(&[Status::Done])))
+        (
+            section_name(),
+            sections(line_item(&[Status::Done, Status::Deferred])),
+        )
             .prop_map(|(repo, sections)| TodoDoc { repo, sections })
     }
 
@@ -285,8 +289,8 @@ pub mod strat {
             })
     }
 
-    /// An `ItemFile` — any status, note allowed, trimmed body of
-    /// simple markdown lines.
+    /// An `ItemFile` — any status, a non-empty line-safe note,
+    /// trimmed body of simple markdown lines.
     pub fn item_file() -> impl Strategy<Value = ItemFile> {
         (
             file_kind().prop_flat_map(item_id),
@@ -297,7 +301,7 @@ pub mod strat {
             prop::collection::btree_set(label(), 0..3),
             prop::collection::btree_set(item_id(ItemKind::Task), 0..2),
             prop::option::of(date()),
-            prop::option::of("[a-z0-9 .-]{0,40}"),
+            prop::option::of(line_note()).prop_map(|o| o.filter(|n| !n.is_empty())),
             prop::option::of(group_name()),
             prop::option::of(group_name()),
             prop::collection::vec("(#+ |[a-z0-9 .-]+|- \\[[ x]\\] )[a-z0-9 .-]{0,30}", 0..6),

@@ -62,8 +62,9 @@ pub fn parse_todo(src: &str) -> Result<TodoDoc, ParseError> {
                 if doc.sections.is_empty() {
                     doc.sections.push(Section::unsectioned());
                 }
-                let section = doc.sections.last_mut().expect("non-empty");
-                parse_list(&src, list, section)?;
+                if let Some(section) = doc.sections.last_mut() {
+                    parse_list(&src, list, section)?;
+                }
             }
             other => {
                 return Err(err(
@@ -119,12 +120,22 @@ fn parse_li(src: &str, node: &Node, li: &markdown::mdast::ListItem) -> Result<It
     let text =
         mdx::single_text(head).ok_or_else(|| err(src, node, "item line must be plain text"))?;
     let mut parsed = line::parse_text(text, &SPEC).map_err(|m| err(src, node, m))?;
-    if parsed.status == Status::Done {
-        return Err(err(
-            src,
-            node,
-            "status:done — done tasks are removed from TODO.md",
-        ));
+    match parsed.status {
+        Status::Done => {
+            return Err(err(
+                src,
+                node,
+                "status:done — done tasks are removed from TODO.md",
+            ));
+        }
+        Status::Deferred => {
+            return Err(err(
+                src,
+                node,
+                "status:deferred — deferred tasks live in BACKLOG.md",
+            ));
+        }
+        _ => {}
     }
     if let Some(list) = nested {
         for child in &list.children {
@@ -188,15 +199,25 @@ pub fn emit_todo(doc: &TodoDoc) -> Result<String, EmitError> {
     Ok(out)
 }
 
-/// [`line::check_item`] + the no-done rule, applied to a whole
-/// subtree — children follow the same grammar as their parents.
+/// [`line::check_item`] + the no-done/no-deferred rules, applied
+/// to a whole subtree — children follow the same grammar as
+/// their parents.
 fn check_subtree(item: &Item) -> Result<(), EmitError> {
     line::check_item(item, FILE)?;
-    if item.status == Status::Done {
-        return Err(EmitError::new(
-            FILE,
-            format!("done item {} — remove it from TODO.md", item.id),
-        ));
+    match item.status {
+        Status::Done => {
+            return Err(EmitError::new(
+                FILE,
+                format!("done item {} — remove it from TODO.md", item.id),
+            ));
+        }
+        Status::Deferred => {
+            return Err(EmitError::new(
+                FILE,
+                format!("deferred item {} — park it in BACKLOG.md", item.id),
+            ));
+        }
+        _ => {}
     }
     for c in &item.children {
         check_subtree(c)?;
@@ -282,6 +303,10 @@ mod tests {
             ("# TODO — x\n\n- [x] T-001 done\n", "checked"),
             ("# TODO — x\n\n- [ ] I-001 wrong\n", "wrong kind"),
             ("# TODO — x\n\n- [ ] T-001 t · status:done\n", "done status"),
+            (
+                "# TODO — x\n\n- [ ] T-001 t · status:deferred\n",
+                "deferred belongs in BACKLOG.md",
+            ),
             ("# TODO — x\n\n- [ ] T-001\n  continued\n", "multi-line"),
             ("# TODO — x\n\n1. [ ] T-001 o\n", "ordered list"),
             ("# TODO — x\n\n- [ ] T-001 a *b*\n", "rich line"),
@@ -309,6 +334,13 @@ mod tests {
             items: vec![Item::new(ItemId::new(ItemKind::Task, 1), "x").status(Status::Done)],
         });
         assert!(emit_todo(&doc).is_err(), "done item");
+
+        let mut doc = TodoDoc::new("myco");
+        doc.sections.push(Section {
+            name: Some("s".into()),
+            items: vec![Item::new(ItemId::new(ItemKind::Task, 1), "x").status(Status::Deferred)],
+        });
+        assert!(emit_todo(&doc).is_err(), "deferred item");
 
         assert!(emit_todo(&TodoDoc::new("")).is_err(), "empty repo");
         assert!(emit_todo(&TodoDoc::new(" x ")).is_err(), "untrimmed repo");

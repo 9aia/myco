@@ -70,14 +70,35 @@ pub fn walk_to(item: &mut Item, to: Status) -> Result<(), String> {
 /// consistent: a deferred parent's children can't stay open in
 /// BACKLOG.md, and children park/unpark with their parent. Nodes
 /// already at `to` are left alone (identity isn't a transition).
+/// All-or-nothing: the whole subtree is validated before any
+/// status moves, so an unreachable target can't leave earlier
+/// siblings half-transitioned.
 pub fn walk_descendants_to(item: &mut Item, to: Status) -> Result<(), String> {
-    for c in &mut item.children {
+    check_descendants(item, to)?;
+    apply_descendants(item, to);
+    Ok(())
+}
+
+/// Pass 1 — every descendant must reach `to` before any move.
+fn check_descendants(item: &Item, to: Status) -> Result<(), String> {
+    for c in &item.children {
         if c.status != to {
-            walk_to(c, to)?;
+            status_path(c.id, c.status, to)?;
         }
-        walk_descendants_to(c, to)?;
+        check_descendants(c, to)?;
     }
     Ok(())
+}
+
+/// Pass 2 — apply; `check_descendants` already proved each walk.
+fn apply_descendants(item: &mut Item, to: Status) {
+    for c in &mut item.children {
+        if c.status != to {
+            // prevalidated — walk_to can only fail via status_path
+            let _ = walk_to(c, to);
+        }
+        apply_descendants(c, to);
+    }
 }
 
 #[cfg(test)]
@@ -130,5 +151,26 @@ mod tests {
         // unpark: deferred children come back to open
         walk_descendants_to(&mut parked, Status::Open).unwrap();
         assert_eq!(parked.children[0].status, Status::Open);
+    }
+
+    #[test]
+    fn walk_descendants_is_all_or_nothing() {
+        // an unreachable target mid-subtree must not leave the
+        // earlier siblings transitioned
+        let mut parent = t(1, Status::Open)
+            .child(t(2, Status::Open))
+            .child(t(3, Status::Done));
+        assert!(walk_descendants_to(&mut parent, Status::Deferred).is_err());
+        assert_eq!(parent.children[0].status, Status::Open);
+        assert_eq!(parent.children[1].status, Status::Done);
+        // same at depth: a done grandchild blocks the walk before
+        // the sibling subtree moves
+        let mut parent = t(1, Status::Open)
+            .child(t(2, Status::Open))
+            .child(t(3, Status::Open).child(t(4, Status::Done)));
+        assert!(walk_descendants_to(&mut parent, Status::Deferred).is_err());
+        assert_eq!(parent.children[0].status, Status::Open);
+        assert_eq!(parent.children[1].status, Status::Open);
+        assert_eq!(parent.children[1].children[0].status, Status::Done);
     }
 }

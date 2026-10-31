@@ -2,7 +2,7 @@
 //! repo name + persistent per-kind `[next]` counters (done tasks
 //! leave `TODO.md`; ids are never reused).
 
-use myco_core::ProjectMeta;
+use myco_core::{ItemKind, ProjectMeta};
 
 use crate::error::{EmitError, ParseError};
 
@@ -42,6 +42,16 @@ pub fn emit_meta(meta: &ProjectMeta) -> Result<String, EmitError> {
             FILE,
             "untrimmed repo name or newline — it fills `# TODO — <name>`",
         ));
+    }
+    // a 0 counter would write `t = 0` — a file parse_meta then
+    // refuses (ids are 1-based; T-000 can't be named)
+    for kind in ItemKind::ALL {
+        if meta.next.get(kind) == 0 {
+            return Err(EmitError::new(
+                FILE,
+                format!("{} counter is 0 — id counters start at 1", kind.prefix()),
+            ));
+        }
     }
     toml::to_string(meta).map_err(|e| EmitError::new(FILE, e.to_string()))
 }
@@ -86,5 +96,26 @@ mod tests {
     fn emit_rejects_empty_name() {
         assert!(emit_meta(&ProjectMeta::new(" ")).is_err());
         assert!(emit_meta(&ProjectMeta::new("myco")).is_ok());
+    }
+
+    #[test]
+    fn typo_keys_error_instead_of_resetting() {
+        // `[netx]` — a typo'd table must not silently drop the
+        // counters (they'd restart at 1 and reissue done ids)
+        for src in [
+            "name = \"x\"\n\n[netx]\nt = 9\n",
+            "name = \"x\"\n\n[next]\ntx = 9\n",
+            "name = \"x\"\nnamme = \"y\"\n",
+        ] {
+            assert!(parse_meta(src).is_err(), "{src:?}");
+        }
+    }
+
+    #[test]
+    fn zero_counter_rejected_at_both_ends() {
+        assert!(parse_meta("name = \"x\"\n\n[next]\nt = 0\n").is_err());
+        let mut meta = ProjectMeta::new("x");
+        meta.next.t = 0;
+        assert!(emit_meta(&meta).is_err());
     }
 }

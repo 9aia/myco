@@ -412,10 +412,9 @@ pub fn find_item(
     let ledger = load_ledger(store)?;
     if let Some(loc) = ledger.locate(id) {
         let file = if loc.backlog { "BACKLOG.md" } else { "TODO.md" };
-        let item = ledger
-            .item(&loc)
-            .ok_or_else(|| format!("{id}: stale task location"))?;
-        return Ok(Some((item.clone(), file.to_string(), None)));
+        if let Some(item) = ledger.item(&loc) {
+            return Ok(Some((item.clone(), file.to_string(), None)));
+        }
     }
     match store.item(id) {
         Ok(f) => {

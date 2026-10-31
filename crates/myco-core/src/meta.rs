@@ -12,27 +12,46 @@ const fn one() -> u32 {
     1
 }
 
+/// A `[next]` counter — ids are 1-based, so `0` mints a `*-000`
+/// id no file can be named for. A hand-edited `t = 0` is a parse
+/// error, not a counter reset.
+fn nonzero<'de, D>(d: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let n = <u32 as serde::Deserialize>::deserialize(d)?;
+    if n == 0 {
+        return Err(serde::de::Error::custom(
+            "counter must be ≥ 1 — 0 mints an unrepresentable `*-000` id",
+        ));
+    }
+    Ok(n)
+}
+
 /// Per-kind next-counters — `meta.toml`'s `[next]` table.
 /// Missing keys default to 1 so a partial `[next]` survives a
-/// hand-edit.
+/// hand-edit; *unknown* keys are rejected — a typo (`tx = 9`)
+/// must surface, not silently reset the counter to 1 and reissue
+/// ids.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NextCounters {
     /// Next `T-NNN`.
-    #[serde(default = "one")]
+    #[serde(default = "one", deserialize_with = "nonzero")]
     pub t: u32,
     /// Next `I-NNN`.
-    #[serde(default = "one")]
+    #[serde(default = "one", deserialize_with = "nonzero")]
     pub i: u32,
     /// Next `P-NNN`.
-    #[serde(default = "one")]
+    #[serde(default = "one", deserialize_with = "nonzero")]
     pub p: u32,
     /// Next `ADR-NNNN`.
-    #[serde(default = "one")]
+    #[serde(default = "one", deserialize_with = "nonzero")]
     pub adr: u32,
     /// Next `PL-NNN`.
-    #[serde(default = "one")]
+    #[serde(default = "one", deserialize_with = "nonzero")]
     pub pl: u32,
 }
 
@@ -74,10 +93,14 @@ impl Default for NextCounters {
 }
 
 /// `meta.toml` — the one piece of project state that isn't
-/// derivable from the item files.
+/// derivable from the item files. Unknown keys are rejected:
+/// a typo'd table (`[netx]`) would otherwise silently drop the
+/// real counters and restart id allocation at 1 — done ids get
+/// reissued, colliding with their handoffs and history.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProjectMeta {
     /// Repo/project name — used in `# TODO — <name>` and views.
     pub name: String,
@@ -114,8 +137,9 @@ pub struct Registry {
 
 impl Registry {
     /// The id `alloc` would return for `kind` without bumping.
+    /// A zeroed counter floors at 1 — `T-000` is not a valid id.
     pub fn peek(&self, kind: ItemKind) -> ItemId {
-        ItemId::new(kind, self.counters.get(kind))
+        ItemId::new(kind, self.counters.get(kind).max(1))
     }
 
     /// Record an existing id — bumps its kind's counter past it.
@@ -211,6 +235,36 @@ mod tests {
         for (i, k) in ItemKind::ALL.into_iter().enumerate() {
             assert_eq!(n.get(k), (i as u32) + 10);
         }
+    }
+
+    #[test]
+    fn unknown_keys_are_rejected() {
+        // a typo'd key must surface — silently defaulting a
+        // misspelled counter resets ids to 1 and reissues done ids
+        assert!(serde_json::from_value::<NextCounters>(serde_json::json!({"tx": 9})).is_err());
+        assert!(serde_json::from_value::<ProjectMeta>(serde_json::json!({
+            "name": "x",
+            "netx": {"t": 9}
+        }))
+        .is_err());
+        assert!(serde_json::from_value::<ProjectMeta>(serde_json::json!({
+            "name": "x",
+            "next": {"t": 9, "tx": 1}
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn zero_counter_is_rejected_and_floored() {
+        // `0` mints `T-000` — an id whose file name can't
+        // round-trip; reject it at the boundary…
+        assert!(serde_json::from_value::<NextCounters>(serde_json::json!({"t": 0})).is_err());
+        // …and floor it if a zeroed counter arrives anyway
+        let mut meta = ProjectMeta::new("x");
+        meta.next.t = 0;
+        let mut r = meta.registry();
+        assert_eq!(r.alloc(ItemKind::Task), ItemId::new(ItemKind::Task, 1));
+        assert_eq!(r.peek(ItemKind::Task), ItemId::new(ItemKind::Task, 2));
     }
 
     #[cfg(feature = "schema")]

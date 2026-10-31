@@ -250,22 +250,13 @@ pub struct NewItemMeta {
 impl NewItemMeta {
     /// Apply the metadata to `item` — labels and group names are
     /// validated (invalid tokens can't be emitted by the file
-    /// grammar).
+    /// grammar). All-or-nothing: everything validates before any
+    /// field moves, so a bad `--epic` can't leave labels applied.
     pub fn apply(&self, item: &mut Item) -> Result<(), String> {
-        if let Some(p) = self.priority {
-            item.priority = p;
-        }
-        if let Some(o) = &self.owner {
-            item.owner = Some(o.clone());
-        }
         for l in &self.labels {
             if !is_valid_label(l) {
                 return Err(format!("invalid label {l:?}"));
             }
-            item.labels.insert(l.clone());
-        }
-        for b in &self.blocks {
-            item.blocks.insert(*b);
         }
         for (what, name) in [("epic", &self.epic), ("milestone", &self.milestone)] {
             if let Some(name) = name {
@@ -273,6 +264,18 @@ impl NewItemMeta {
                     return Err(format!("invalid {what} name {name:?}"));
                 }
             }
+        }
+        if let Some(p) = self.priority {
+            item.priority = p;
+        }
+        if let Some(o) = &self.owner {
+            item.owner = Some(o.clone());
+        }
+        for l in &self.labels {
+            item.labels.insert(l.clone());
+        }
+        for b in &self.blocks {
+            item.blocks.insert(*b);
         }
         item.epic = self.epic.clone();
         item.milestone = self.milestone.clone();
@@ -358,6 +361,24 @@ mod tests {
         }
         .apply(&mut item)
         .is_err());
+    }
+
+    #[test]
+    fn new_item_meta_apply_is_atomic() {
+        // a failing apply must not leave earlier fields applied —
+        // labels are inserted before epic validates in field order
+        let mut item = Item::new(ItemId::new(ItemKind::Task, 1), "x").priority(Priority::Low);
+        let r = NewItemMeta {
+            priority: Some(Priority::High),
+            labels: vec!["ok".into()],
+            epic: Some("bad epic".into()),
+            ..Default::default()
+        }
+        .apply(&mut item);
+        assert!(r.is_err());
+        assert!(item.labels.is_empty());
+        assert_eq!(item.priority, Priority::Low);
+        assert!(item.epic.is_none());
     }
 
     #[test]

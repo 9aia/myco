@@ -169,11 +169,9 @@ fn convert_item(doc: &mut LegacyDoc, li: &markdown::mdast::ListItem) {
     if doc.sections.is_empty() {
         doc.sections.push(LegacySection::default());
     }
-    doc.sections
-        .last_mut()
-        .expect("non-empty")
-        .items
-        .push(parsed);
+    if let Some(section) = doc.sections.last_mut() {
+        section.items.push(parsed);
+    }
 }
 
 /// Flatten an inline/block node to plain text — `Text`/`InlineCode`

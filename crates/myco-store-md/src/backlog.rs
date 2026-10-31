@@ -53,8 +53,9 @@ pub fn parse_backlog(src: &str) -> Result<BacklogDoc, ParseError> {
                 if doc.sections.is_empty() {
                     doc.sections.push(Section::unsectioned());
                 }
-                let section = doc.sections.last_mut().expect("non-empty");
-                parse_list(&src, list, section)?;
+                if let Some(section) = doc.sections.last_mut() {
+                    parse_list(&src, list, section)?;
+                }
             }
             other => {
                 return Err(err(

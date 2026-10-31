@@ -64,7 +64,9 @@ impl Ledger {
             })
     }
 
-    /// The item at `loc` — `None` on a stale loc.
+    /// The item at `loc` — `None` when `loc` is stale (the ledger
+    /// changed since [`locate`][Ledger::locate] produced it) or
+    /// hand-rolled out of bounds.
     pub fn item(&self, loc: &TaskLoc) -> Option<&Item> {
         let sections = if loc.backlog {
             &self.backlog.sections
@@ -105,7 +107,7 @@ impl Ledger {
             return None;
         }
         let item = level.remove(*last_idx);
-        if parents.is_empty() && section.items.is_empty() {
+        if loc.path.len() == 1 && section.items.is_empty() {
             sections.remove(loc.section);
         }
         Some(item)
@@ -114,16 +116,15 @@ impl Ledger {
     /// Swap the item at `loc` with a sibling — `delta` -1 moves up,
     /// +1 down. Works on nested children (siblings share the
     /// parent). Returns false at the list edges and on a stale
-    /// `loc`. `loc` follows the item to its new index.
+    /// loc. `loc` follows the item to its new index.
     pub fn move_within(&mut self, loc: &mut TaskLoc, delta: isize) -> bool {
         let sections = if loc.backlog {
             &mut self.backlog.sections
         } else {
             &mut self.todo.sections
         };
-        let (last_idx, parents) = match loc.path.split_last() {
-            Some(p) => p,
-            None => return false,
+        let Some((last_idx, parents)) = loc.path.split_last() else {
+            return false;
         };
         let Some(section) = sections.get_mut(loc.section) else {
             return false;
@@ -131,7 +132,7 @@ impl Ledger {
         let mut level = &mut section.items;
         for &idx in parents {
             match level.get_mut(idx) {
-                Some(it) => level = &mut it.children,
+                Some(item) => level = &mut item.children,
                 None => return false,
             }
         }
@@ -179,19 +180,19 @@ fn find_path(items: &[Item], id: ItemId, path: &mut Vec<usize>) -> bool {
 }
 
 fn item_at<'a>(mut items: &'a [Item], path: &[usize]) -> Option<&'a Item> {
-    let (last, parents) = path.split_last()?;
+    let (last_idx, parents) = path.split_last()?;
     for &idx in parents {
         items = &items.get(idx)?.children;
     }
-    items.get(*last)
+    items.get(*last_idx)
 }
 
 fn item_at_mut<'a>(mut items: &'a mut [Item], path: &[usize]) -> Option<&'a mut Item> {
-    let (last, parents) = path.split_last()?;
+    let (last_idx, parents) = path.split_last()?;
     for &idx in parents {
         items = &mut items.get_mut(idx)?.children;
     }
-    items.get_mut(*last)
+    items.get_mut(*last_idx)
 }
 
 fn push_item(sections: &mut Vec<Section>, item: Item, section: Option<&str>) {
@@ -260,7 +261,7 @@ mod tests {
         assert!(loc.is_child());
         assert_eq!(ledger.item(&loc).unwrap().id.number(), 4);
         // take on a child removes just that node
-        ledger.take(&loc).unwrap();
+        ledger.take(&loc);
         let parent = &ledger.todo.sections[0].items[0];
         assert_eq!(parent.children[0].children.len(), 0);
         // take on a parent removes the whole subtree; sections
@@ -292,5 +293,50 @@ mod tests {
         // nested children reorder among themselves
         let mut loc = ledger.locate(tid(4)).unwrap();
         assert!(!ledger.move_within(&mut loc, -1));
+    }
+
+    #[test]
+    fn stale_loc_is_none_not_a_panic() {
+        let mut ledger = Ledger::default();
+        ledger.put_todo(t(1), None);
+        // a loc pointing past every bound — section, path
+        // segment, and final index — must not panic
+        for loc in [
+            TaskLoc {
+                backlog: false,
+                section: 9,
+                path: vec![0],
+            },
+            TaskLoc {
+                backlog: false,
+                section: 0,
+                path: vec![9],
+            },
+            TaskLoc {
+                backlog: false,
+                section: 0,
+                path: vec![0, 3],
+            },
+            // a loc can even carry an empty path — pub field
+            TaskLoc {
+                backlog: false,
+                section: 0,
+                path: vec![],
+            },
+            // wrong doc entirely
+            TaskLoc {
+                backlog: true,
+                section: 0,
+                path: vec![0],
+            },
+        ] {
+            assert!(ledger.item(&loc).is_none(), "{loc:?}");
+            assert!(ledger.item_mut(&loc).is_none(), "{loc:?}");
+            assert!(ledger.take(&loc).is_none(), "{loc:?}");
+            let mut owned = loc.clone();
+            assert!(!ledger.move_within(&mut owned, 1), "{loc:?}");
+        }
+        // the ledger is untouched
+        assert_eq!(ledger.todo.sections[0].items.len(), 1);
     }
 }

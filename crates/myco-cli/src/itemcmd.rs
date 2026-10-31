@@ -313,30 +313,29 @@ pub(crate) fn mutate_item(
         // backlog nodes into TODO.md (children unpark).
         // Nested children that keep their doc stay nested.
         let status_change = flags.status.is_some();
-        let item = ledger
-            .item_mut(&loc)
-            .ok_or_else(|| format!("{id}: stale task location"))?;
-        apply_set(item, flags)?;
+        let Some(target) = ledger.item_mut(&loc) else {
+            return Err(format!("{id}: no such task"));
+        };
+        apply_set(target, flags)?;
         if status_change {
-            let cur = ledger
-                .item(&loc)
-                .ok_or_else(|| format!("{id}: stale task location"))?
-                .status;
-            match cur {
+            let Some(current) = ledger.item(&loc) else {
+                return Err(format!("{id}: no such task"));
+            };
+            match current.status {
                 Status::Done => {
-                    let _ = ledger.take(&loc);
+                    ledger.take(&loc);
                 }
                 Status::Deferred => {
                     let mut item = ledger
                         .take(&loc)
-                        .ok_or_else(|| format!("{id}: stale task location"))?;
+                        .ok_or_else(|| format!("{id}: no such task"))?;
                     items::walk_descendants_to(&mut item, Status::Deferred)?;
                     ledger.put_backlog(item, None);
                 }
                 _ if loc.backlog => {
                     let mut item = ledger
                         .take(&loc)
-                        .ok_or_else(|| format!("{id}: stale task location"))?;
+                        .ok_or_else(|| format!("{id}: no such task"))?;
                     items::walk_descendants_to(&mut item, Status::Open)?;
                     ledger.put_todo(item, None);
                 }
@@ -351,9 +350,9 @@ pub(crate) fn mutate_item(
                         .sections
                         .get(section)
                         .and_then(|s| s.name.clone());
-                    let item = ledger
-                        .take(&loc)
-                        .ok_or_else(|| format!("{id}: stale task location"))?;
+                    let Some(item) = ledger.take(&loc) else {
+                        return Err(format!("{id}: no such task"));
+                    };
                     put_back(&mut ledger.todo.sections, section, name, item);
                 }
                 _ => {} // a TODO child stays nested

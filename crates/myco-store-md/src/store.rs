@@ -100,6 +100,27 @@ impl MdStore {
         }
         Ok(out)
     }
+
+    /// The id a filename claims, cross-checked against the file's
+    /// frontmatter: `issue-0003-x.md` holding `id = "I-009"` is
+    /// corruption (the scan would reserve 3 while the file holds
+    /// 9, letting `alloc_id` reissue a live id) — refuse it.
+    /// No `id` line at all is an adoptee borrowing its filename
+    /// number — tolerated; strict parse rejects the file at
+    /// list/read time.
+    fn check_filename_id(&self, fname_id: ItemId, path: &Utf8Path) -> Result<ItemId, Error> {
+        let rel = path
+            .strip_prefix(&self.root)
+            .map_or_else(|_| path.as_str(), |r| r.as_str());
+        let src = self.read(rel)?;
+        match itemfile::frontmatter_id(&src) {
+            Some(id) if id != fname_id => Err(Error::Invalid(format!(
+                "{rel}: filename says {fname_id} but frontmatter id is {id}"
+            ))),
+            Some(id) => Ok(id),
+            None => Ok(fname_id),
+        }
+    }
 }
 
 impl Store for MdStore {
@@ -127,12 +148,12 @@ impl Store for MdStore {
 
     fn all_ids(&self) -> Result<BTreeSet<ItemId>, Error> {
         let mut ids = BTreeSet::new();
-        if let Ok(doc) = self.todo() {
-            ids.extend(doc.items().flat_map(|i| i.subtree()).map(|i| i.id));
-        }
-        if let Ok(doc) = self.backlog() {
-            ids.extend(doc.items().flat_map(|i| i.subtree()).map(|i| i.id));
-        }
+        // a malformed ledger doc fails the scan — swallowing the
+        // error would hide live ids and let alloc reissue them
+        let todo = self.todo()?;
+        ids.extend(todo.items().flat_map(|i| i.subtree()).map(|i| i.id));
+        let backlog = self.backlog()?;
+        ids.extend(backlog.items().flat_map(|i| i.subtree()).map(|i| i.id));
         for kind in [
             ItemKind::Issue,
             ItemKind::Proposal,
@@ -141,8 +162,8 @@ impl Store for MdStore {
         ] {
             // archived ids stay reserved — ids are never reused
             for archived in [false, true] {
-                for (id, _) in self.item_paths(kind, archived)? {
-                    ids.insert(id);
+                for (id, path) in self.item_paths(kind, archived)? {
+                    ids.insert(self.check_filename_id(id, &path)?);
                 }
             }
         }
@@ -650,14 +671,66 @@ mod tests {
         assert!(matches!(s.todo(), Err(Error::Parse { .. })));
         assert!(matches!(s.backlog(), Err(Error::Parse { .. })));
         assert!(matches!(s.meta(), Err(Error::Parse { .. })));
-        // all_ids skips the broken docs, keeps file-backed ids
+        // all_ids propagates instead of hiding live ids — and so
+        // does alloc, which would reissue them otherwise
         s.save_item(&ItemFile::new(Item::new(
             ItemId::new(ItemKind::Issue, 1),
             "ok",
         )))
         .unwrap();
-        let ids = s.all_ids().unwrap();
-        assert_eq!(ids.len(), 1);
+        assert!(s.all_ids().is_err());
+        assert!(s.alloc_id(ItemKind::Task).is_err());
+    }
+
+    #[test]
+    fn typo_meta_counters_error_instead_of_resetting() {
+        let (_d, s) = store();
+        s.save_meta(&ProjectMeta::new("proj")).unwrap();
+        // a typo'd `[netx]` table used to silently reset counters
+        // to 1 — now the parse error surfaces at every read
+        std::fs::write(
+            s.root().join("meta.toml"),
+            "name = \"proj\"\n\n[netx]\nt = 9\n",
+        )
+        .unwrap();
+        assert!(matches!(s.meta(), Err(Error::Parse { .. })));
+        assert!(s.alloc_id(ItemKind::Task).is_err());
+        // and a zeroed counter is rejected (T-000 can't be named)
+        std::fs::write(
+            s.root().join("meta.toml"),
+            "name = \"proj\"\n\n[next]\nt = 0\n",
+        )
+        .unwrap();
+        assert!(matches!(s.meta(), Err(Error::Parse { .. })));
+    }
+
+    #[test]
+    fn filename_frontmatter_id_mismatch_refused() {
+        let (_d, s) = store();
+        std::fs::create_dir_all(s.root().join("issues")).unwrap();
+        // `issue-0003-x.md` claiming `I-009` — reserves one id in
+        // the scan while the file holds another
+        std::fs::write(
+            s.root().join("issues/issue-0003-x.md"),
+            "+++\nid = \"I-009\"\ntitle = \"x\"\nstatus = \"open\"\n+++\n",
+        )
+        .unwrap();
+        let i3 = ItemId::new(ItemKind::Issue, 3);
+        let i9 = ItemId::new(ItemKind::Issue, 9);
+        // reads refuse the file, the scan refuses it, and the
+        // allocator can't mint a duplicate I-009 behind its back
+        assert!(matches!(s.item(i3), Err(Error::Parse { .. })));
+        assert!(matches!(s.item(i9), Err(Error::NotFound { .. })));
+        assert!(s.list_items(ItemKind::Issue).is_err());
+        assert!(matches!(s.all_ids(), Err(Error::Invalid(_))));
+        assert!(s.alloc_id(ItemKind::Issue).is_err());
+        // a consistent file still loads fine
+        std::fs::write(
+            s.root().join("issues/issue-0004-y.md"),
+            "+++\nid = \"I-004\"\ntitle = \"y\"\nstatus = \"open\"\n+++\n",
+        )
+        .unwrap();
+        assert!(s.item(ItemId::new(ItemKind::Issue, 4)).is_ok());
     }
 
     #[test]
