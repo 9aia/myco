@@ -41,6 +41,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco item show`↴](#myco-item-show)
 * [`myco item set`↴](#myco-item-set)
 * [`myco handoff`↴](#myco-handoff)
+* [`myco interrupt`↴](#myco-interrupt)
 * [`myco resume`↴](#myco-resume)
 * [`myco status`↴](#myco-status)
 * [`myco board`↴](#myco-board)
@@ -84,6 +85,7 @@ myco — project management, grown not built: agent-first PM CLI
 * `adr` — Architecture decision records under `adrs/` (`ADR-NNNN`)
 * `item` — Kind-agnostic item verbs — show / set
 * `handoff` — Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only)
+* `interrupt` — A session ended with work still claimed/in-progress/ blocked — revert the item to `open` + `interrupted` handoff, one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself
 * `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized
 * `board` — Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
@@ -643,6 +645,24 @@ Attach resumable state at session end — appends a dated entry to `handoffs/<ID
 
 * `--note <TEXT|->` — Handoff note — done/next/open. `-` reads stdin
 * `--actor <ACTOR>` — Who wrote it (`devin`, `human:luis`, …; default `cli`)
+* `--session <SESSION>` — Session provenance — a sepia session id, `cli:<pid>`, any id string
+
+
+
+## `myco interrupt`
+
+A session ended with work still claimed/in-progress/ blocked — revert the item to `open` + `interrupted` handoff, one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself
+
+**Usage:** `myco interrupt [OPTIONS] <ID>`
+
+###### **Arguments:**
+
+* `<ID>` — Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`, `PL-NNN`)
+
+###### **Options:**
+
+* `--note <TEXT>` — Extra context appended to the `interrupted` note
+* `--actor <ACTOR>` — Who interrupted it (default `cli`)
 * `--session <SESSION>` — Session provenance — a sepia session id, `cli:<pid>`, any id string
 
 
