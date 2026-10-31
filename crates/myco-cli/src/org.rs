@@ -149,7 +149,7 @@ fn status(views: &[RepoView], all: bool, json_out: bool) -> Result<i32, String> 
         }));
         return Ok(0);
     }
-    println!("org status — {} repo(s)", views.len());
+    let mut out = format!("org status — {} repo(s)\n", views.len());
     let mut idle = 0usize;
     for v in views {
         // a repo with a clean snapshot but no live items is idle —
@@ -178,21 +178,22 @@ fn status(views: &[RepoView], all: bool, json_out: bool) -> Result<i32, String> 
                 if let Some(e) = &v.error {
                     line.push_str(&format!("  ⚠ {e}"));
                 }
-                println!("{line}");
+                out.push_str(&line);
+                out.push('\n');
             }
-            None => println!(
-                "{:<16} ⚠ {}",
+            None => out.push_str(&format!(
+                "{:<16} ⚠ {}\n",
                 "?",
                 v.error.as_deref().unwrap_or("unavailable")
-            ),
+            )),
         }
     }
     if idle > 0 {
-        println!("… +{idle} idle repos (`--all` to show)");
+        out.push_str(&format!("… +{idle} idle repos (`--all` to show)\n"));
     }
-    println!("totals: {}", total.oneline());
+    out.push_str(&format!("totals: {}\n", total.oneline()));
     if !owners.is_empty() {
-        println!("by owner:");
+        out.push_str("by owner:\n");
         for (o, items) in &owners {
             let more = items.len().saturating_sub(OWNER_CAP);
             let shown: Vec<&str> = items.iter().take(OWNER_CAP).map(String::as_str).collect();
@@ -201,9 +202,10 @@ fn status(views: &[RepoView], all: bool, json_out: bool) -> Result<i32, String> 
             } else {
                 String::new()
             };
-            println!("  {o}: {}{}", shown.join(", "), suffix);
+            out.push_str(&format!("  {o}: {}{}\n", shown.join(", "), suffix));
         }
     }
+    ops::print_paged(out.trim_end());
     Ok(0)
 }
 
@@ -261,10 +263,7 @@ fn board_view(
     if cards.iter().all(Vec::is_empty) {
         println!("org board — nothing live across {} repo(s)", views.len());
     } else {
-        println!(
-            "{}",
-            board::render_cards(&cards, md, board::Fit::terminal(all))
-        );
+        ops::print_paged(&board::render_cards(&cards, md, board::Fit::terminal(all)));
     }
     Ok(0)
 }

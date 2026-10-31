@@ -8,10 +8,12 @@ members = [
     "crates/myco-git",
     "crates/myco-index",
     "crates/myco-index-redb",
+    "crates/myco-ops",
     "crates/myco-shell",
     "crates/myco-store",
     "crates/myco-store-md",
     "crates/myco-testkit",
+    "crates/myco-tui",
     "xtask",
 ]
 
@@ -35,10 +37,12 @@ myco-core = { path = "crates/myco-core", version = "0.1.0" }
 myco-git = { path = "crates/myco-git", version = "0.1.0" }
 myco-index = { path = "crates/myco-index", version = "0.1.0" }
 myco-index-redb = { path = "crates/myco-index-redb", version = "0.1.0" }
+myco-ops = { path = "crates/myco-ops", version = "0.1.0" }
 myco-shell = { path = "crates/myco-shell", version = "0.1.0" }
 myco-store = { path = "crates/myco-store", version = "0.1.0" }
 myco-store-md = { path = "crates/myco-store-md", version = "0.1.0" }
 myco-testkit = { path = "crates/myco-testkit", version = "0.1.0" }
+myco-tui = { path = "crates/myco-tui", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
@@ -58,6 +62,8 @@ tempfile = "3"
 temp-env = "0.3"
 redb = "3"
 tabled = "0.20"
+ratatui = "0.30"
+crossterm = "0.29"
 terminal_size = "0.4"
 unicode-width = "0.2"
 csv = "1"

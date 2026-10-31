@@ -414,7 +414,7 @@ pub fn run(
     if live.is_empty() {
         println!("{}: empty board — `myco todo add` something", scan.name);
     } else {
-        println!("{}", render(live.into_iter(), None, md, Fit::terminal(all)));
+        ops::print_paged(&render(live.into_iter(), None, md, Fit::terminal(all)));
     }
     Ok(0)
 }

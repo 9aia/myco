@@ -102,10 +102,12 @@ pub fn run(
             if members.is_empty() {
                 println!("{}: no items in {} {name:?}", scan.name, group.name());
             } else {
-                println!(
-                    "{}",
-                    board::render(members.into_iter(), None, md, board::Fit::terminal(all))
-                );
+                ops::print_paged(&board::render(
+                    members.into_iter(),
+                    None,
+                    md,
+                    board::Fit::terminal(all),
+                ));
             }
             Ok(0)
         }

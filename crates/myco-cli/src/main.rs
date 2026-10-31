@@ -227,6 +227,10 @@ enum Cmd {
         #[command(subcommand)]
         cmd: org::Cmd,
     },
+    /// Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item
+    /// preview, writes through the same ops the verbs use.
+    #[cfg(feature = "tui")]
+    Ui,
     /// Print the CLI reference as markdown (docs pipeline).
     #[command(hide = true, name = "gen-cli-docs")]
     GenCliDocs,
@@ -265,6 +269,7 @@ fn manifest() -> serde_json::Value {
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board",
             "handoff", "resume",
+            "ui",
         ],
         "notes": "markdown in project/ is canonical; every verb is one \
                   atomic commit on the `project` branch; the redb index \
@@ -328,6 +333,8 @@ fn main() {
         Cmd::Report => report::run(dir, root, json),
         Cmd::Index { cmd } => indexcmd::run(cmd, json),
         Cmd::Org { cmd } => org::run(cmd, json, no_commit),
+        #[cfg(feature = "tui")]
+        Cmd::Ui => myco_tui::run(dir.as_deref(), root.as_deref(), no_commit).map(|_| 0),
     };
     match result {
         Ok(code) => std::process::exit(code),

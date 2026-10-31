@@ -19,9 +19,11 @@ myco-config-toml.workspace = true
 myco-git.workspace = true
 myco-index.workspace = true
 myco-index-redb.workspace = true
+myco-ops.workspace = true
 myco-shell.workspace = true
 myco-store.workspace = true
 myco-store-md.workspace = true
+myco-tui = { workspace = true, optional = true }
 clap.workspace = true
 clap-markdown.workspace = true
 serde_json.workspace = true
@@ -34,6 +36,12 @@ miette.workspace = true
 time.workspace = true
 csv.workspace = true
 sigpipe.workspace = true
+
+[features]
+default = ["tui"]
+## `myco ui` — interactive board TUI (ratatui/crossterm).
+## `--no-default-features` keeps the lean agent binary.
+tui = ["dep:myco-tui"]
 
 [dev-dependencies]
 tempfile.workspace = true

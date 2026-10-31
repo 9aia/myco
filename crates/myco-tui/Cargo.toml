@@ -1,0 +1,22 @@
+[package]
+name = "myco-tui"
+description = "myco — interactive board TUI (ratatui); a thin front-end over myco-ops"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+myco-core.workspace = true
+myco-ops.workspace = true
+myco-store.workspace = true
+myco-store-md.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+camino.workspace = true
+
+[lints]
+workspace = true

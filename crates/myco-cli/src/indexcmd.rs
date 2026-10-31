@@ -215,9 +215,7 @@ pub fn run(cmd: Cmd, json_out: bool) -> Result<i32, String> {
             } else if rows.is_empty() {
                 println!("no repos registered — `myco index add <path>`");
             } else {
-                for r in rows {
-                    println!("{r}");
-                }
+                ops::print_paged(&rows.join("\n"));
             }
             Ok(0)
         }
