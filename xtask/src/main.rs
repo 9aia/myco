@@ -117,7 +117,10 @@ fn site() -> i32 {
     // run inside docs/ — works for bun and npm alike (`bun --cwd`
     // isn't a `bun run` flag, so flag plumbing gets fragile)
     let pkg = if have("bun") { "bun" } else { "npm" };
-    let _ = run_in("docs", &[pkg, "install"]).success();
+    if !run_in("docs", &[pkg, "install"]).success() {
+        eprintln!("{pkg} install failed in docs/ — fix deps before building");
+        return 1;
+    }
     run_in("docs", &[pkg, "run", "docs:build"])
         .code()
         .unwrap_or(1)

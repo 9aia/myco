@@ -12,19 +12,32 @@ pub struct TomlSource {
 
 impl ConfigSource for TomlSource {
     fn load(&self) -> Result<myco_core::Config, String> {
-        let candidates: Vec<PathBuf> = match self
+        // an explicit path (--config or $MYCO_CONFIG) that doesn't
+        // exist is an error naming it — not a silent skip
+        let explicit = self
             .path
             .clone()
-            .or_else(|| std::env::var("MYCO_CONFIG").ok())
-        {
-            Some(p) => vec![PathBuf::from(p)],
-            None => vec![
-                PathBuf::from("myco.toml"),
-                std::env::var("HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or(".".into())
-                    .join(".config/myco/myco.toml"),
-            ],
+            .or_else(|| std::env::var("MYCO_CONFIG").ok());
+        let candidates: Vec<PathBuf> = match explicit {
+            Some(p) => {
+                let p = PathBuf::from(p);
+                if !p.exists() {
+                    return Err(format!("config {} not found", p.display()));
+                }
+                vec![p]
+            }
+            None => {
+                let mut c = vec![PathBuf::from("myco.toml")];
+                // XDG first, then ~/.config — a bare `./.config`
+                // under an unrelated cwd must never load as config
+                if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+                    c.push(PathBuf::from(xdg).join("myco/myco.toml"));
+                }
+                if let Ok(home) = std::env::var("HOME") {
+                    c.push(PathBuf::from(home).join(".config/myco/myco.toml"));
+                }
+                c
+            }
         };
         for p in candidates {
             if p.exists() {
@@ -33,7 +46,10 @@ impl ConfigSource for TomlSource {
                 return toml::from_str(&text).map_err(|e| format!("parse {}: {e}", p.display()));
             }
         }
-        Err("no myco.toml found (search: $MYCO_CONFIG, ., ~/.config/myco/)".into())
+        Err(
+            "no myco.toml found (search: $MYCO_CONFIG, ., $XDG_CONFIG_HOME/myco/, ~/.config/myco/)"
+                .into(),
+        )
     }
 }
 

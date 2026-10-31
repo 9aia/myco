@@ -224,6 +224,8 @@ fn pager_program() -> Option<String> {
 
 /// `sh -c <pager>` with `text` on its stdin — the pager inherits
 /// our stdout/stderr, so scrolling and colors work as usual.
+/// `$MYCO_PAGER`/`$PAGER` are executed verbatim (git-parity
+/// behavior) — an env var is a trusted setting, never user data.
 fn spawn_pager(pager: &str, text: &str) -> std::io::Result<()> {
     use std::io::Write;
     let mut child = std::process::Command::new("sh")

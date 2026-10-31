@@ -87,7 +87,7 @@ fn owns_project(a: &Path, candidate: &Path) -> bool {
         // main worktree IS `a` (the ledger's repo rooted there);
         // a worktree whose main worktree lives elsewhere is
         // foreign
-        _ => myco_git::main_worktree(candidate).is_some_and(|m| canon(&m) == canon(a)),
+        _ => myco_git::main_worktree_compat(candidate).is_some_and(|m| canon(&m) == canon(a)),
     }
 }
 
@@ -166,7 +166,7 @@ fn discover_in(cwd: &Path, dir: Option<&Path>, root: Option<&Path>) -> Result<Pr
         }
         let root = match root {
             Some(r) => canonicalize(r)?,
-            None => myco_git::main_worktree(&worktree)
+            None => myco_git::main_worktree_compat(&worktree)
                 .or_else(|| worktree.parent().map(Path::to_path_buf))
                 .unwrap_or_else(|| worktree.clone()),
         };
@@ -192,7 +192,7 @@ fn discover_in(cwd: &Path, dir: Option<&Path>, root: Option<&Path>) -> Result<Pr
     // `project/` found by config or walking: an ancestor's ledger
     // may be a different repo's
     if let Some(wt) = enclosing_project_worktree(&cwd) {
-        let root = myco_git::main_worktree(&wt)
+        let root = myco_git::main_worktree_compat(&wt)
             .or_else(|| wt.parent().map(Path::to_path_buf))
             .unwrap_or_else(|| wt.clone());
         return Ok(Project { root, worktree: wt });
@@ -262,7 +262,7 @@ pub fn repo_root_for(dir: Option<&Path>, root: Option<&Path>) -> Result<PathBuf,
         let parent = d.parent().unwrap_or(d.as_path());
         let container = myco_git::repo_root(parent)
             .map_err(|_| format!("{}: not inside a git repository", parent.display()))?;
-        return Ok(myco_git::main_worktree(&container).unwrap_or(container));
+        return Ok(myco_git::main_worktree_compat(&container).unwrap_or(container));
     }
     let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
     myco_git::repo_root(&cwd).map_err(|_| {

@@ -342,10 +342,13 @@ struct Finding {
     note: String,
 }
 
-/// `path:line:text` → `(path, line, text)`; `None` when the shape
-/// doesn't fit (rg context lines, binary hits).
+/// `path\0line:text` → `(path, line, text)` — rg runs with
+/// `--null` so a filename containing `:` can't forge a finding.
+/// `None` when the shape doesn't fit (rg context lines, binary
+/// hits); callers re-check the file exists — a `\n` in a filename
+/// can still split a line into a forgery-shaped fragment.
 fn parse_rg_line(line: &str) -> Option<(&str, u32, &str)> {
-    let (file, rest) = line.split_once(':')?;
+    let (file, rest) = line.split_once('\0').or_else(|| line.split_once(':'))?;
     let (num, text) = rest.split_once(':')?;
     let num: u32 = num.trim().parse().ok()?;
     Some((file, num, text))
@@ -425,7 +428,7 @@ fn comments(
     }
     let pattern = format!("({})", kinds.join("|"));
     let cmd = format!(
-        "rg -n --no-heading --glob '!project/' --glob '!docs/' --glob '!target/' '{pattern}'"
+        "rg -n --no-heading --null --glob '!project/' --glob '!docs/' --glob '!target/' '{pattern}'"
     );
     let out = myco_shell::output(&scan_dir, &cmd)
         .map_err(|e| format!("rg failed to run in {}: {e}", scan_dir.display()))?;
@@ -446,6 +449,9 @@ fn comments(
             continue;
         };
         let file = file.strip_prefix("./").unwrap_or(file);
+        if !scan_dir.join(file).is_file() {
+            continue; // forged fragment (e.g. \n inside a filename)
+        }
         let title = comment_title(text, &kinds);
         let kind = kinds
             .iter()

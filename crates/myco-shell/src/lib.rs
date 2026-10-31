@@ -1,6 +1,11 @@
 //! myco-shell — run an arbitrary command in a working directory via
 //! `bash -c`. Git plumbing lives in `myco-git`; this crate is for the
 //! other shell-outs a PM tool needs (hooks, importers, user scripts).
+//!
+//! `cmd` goes through a shell — interpolate ONLY validated inputs
+//! (charset-checked tokens, never item titles or paths). For
+//! user-shaped data, build argv and spawn `Command` directly
+//! instead.
 
 use std::io;
 use std::path::Path;

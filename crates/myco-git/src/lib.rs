@@ -156,11 +156,21 @@ pub fn common_dir(dir: &Path) -> Result<PathBuf, Error> {
 pub fn main_worktree(dir: &Path) -> Option<PathBuf> {
     let common = common_dir(dir).ok()?;
     if common.file_name().is_some_and(|n| n == ".git") {
-        common.parent().map(Path::to_path_buf)
-    } else {
-        // bare repo or worktree-of-worktree — no checkout root
-        None
+        return common.parent().map(Path::to_path_buf);
     }
+    // bare repo or worktree-of-worktree — no checkout root
+    None
+}
+
+/// Like [`main_worktree`] but tolerant of old git: `worktree list`'s
+/// first entry is always the main worktree (no `--path-format`,
+/// which needs git ≥ 2.31).
+pub fn main_worktree_compat(dir: &Path) -> Option<PathBuf> {
+    main_worktree(dir).or_else(|| {
+        let out = git_out(dir, &["worktree", "list"]).ok()?;
+        let path = out.lines().next()?.split_whitespace().next()?;
+        Some(PathBuf::from(path))
+    })
 }
 
 /// Uncommitted/untracked changes under `dir` (`status --porcelain

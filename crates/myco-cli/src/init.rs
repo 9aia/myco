@@ -63,20 +63,34 @@ pub fn ensure(
     }
 
     // branch: reuse or create as an orphan root via plumbing
-    if !myco_git::branch_exists(&root, discover::BRANCH) {
+    let created_branch = !myco_git::branch_exists(&root, discover::BRANCH);
+    if created_branch {
         myco_git::create_orphan_branch(&root, discover::BRANCH, "chore: init project branch")
             .map_err(|e| format!("create project branch: {e}"))?;
     }
 
     // worktree: reuse a valid one, or `worktree add`
     if !worktree.exists() {
-        myco_git::worktree_add_branch(&root, &worktree, discover::BRANCH).map_err(|e| {
-            format!(
+        if let Err(e) = myco_git::worktree_add_branch(&root, &worktree, discover::BRANCH) {
+            // roll back the branch we just created — a failed
+            // init shouldn't leave a `project` ref pointing at
+            // an empty root
+            if created_branch {
+                let _ = myco_git::git_out(
+                    &root,
+                    &[
+                        "update-ref",
+                        "-d",
+                        &format!("refs/heads/{}", discover::BRANCH),
+                    ],
+                );
+            }
+            return Err(format!(
                 "git worktree add {} {} failed: {e} — is the branch checked out elsewhere?",
                 worktree.display(),
                 discover::BRANCH
-            )
-        })?;
+            ));
+        }
     }
 
     // scaffold via canonical emit — never overwrites

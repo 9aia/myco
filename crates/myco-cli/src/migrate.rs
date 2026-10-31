@@ -277,8 +277,21 @@ fn migrate_pm(
         "chore: migrate pm/ → project/ ({} items)",
         stats.converted_items
     );
-    let c1 = ops::autocommit(&wt, &msg, enabled)?;
-    let c2 = commit_pm_removal(&root, enabled)?;
+    // pm/ files are already deleted — a failed commit must not
+    // leave them gone-but-uncommitted; restore them on the way out
+    let commits = (|| -> Result<(bool, bool), String> {
+        Ok((
+            ops::autocommit(&wt, &msg, enabled)?,
+            commit_pm_removal(&root, enabled)?,
+        ))
+    })();
+    let (c1, c2) = match commits {
+        Ok(pair) => pair,
+        Err(e) => {
+            let _ = myco_git::git_out(&root, &["restore", "--source=HEAD", "--", "pm"]);
+            return Err(e);
+        }
+    };
     let committed = c1 || c2;
 
     let out = json!({
