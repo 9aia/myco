@@ -12,6 +12,12 @@ DOCS="$(pwd)"
 REPO="${MYCO_REPO:-$HOME/GitHub/9aia/myco}"
 export MYCO_ROOT="$REPO"
 
+# The bupha watcher unit runs with the minimal systemd PATH
+# (/usr/local/bin:/usr/bin) whenever it starts before the session env is
+# imported — pull the user tool dirs in ourselves so bun/cargo resolve
+# like they do in a login shell.
+export PATH="$HOME/.bun/bin:$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+
 echo "==> bun install"
 bun install
 
