@@ -61,6 +61,73 @@ pub(crate) fn inline(text: &str) -> String {
     }
 }
 
+/// Serialize inline text for an ATX heading (`# TODO — <repo>`,
+/// `## <section>`, `## <date> · <actor>`). [`inline`]'s output is
+/// verified in *paragraph* context, which can't see the
+/// heading-only hazard: a trailing ` #`+ run is the ATX closing
+/// sequence — `## x ###` reads back as `x`, not `x ###`. Verify
+/// against a real heading; on divergence each `#` of the closing
+/// run is `\`-escaped (an escaped hash is content, never a
+/// closer).
+pub(crate) fn heading(text: &str) -> String {
+    let via_lib = inline(text);
+    if reads_back_in_heading(&via_lib, text) {
+        return via_lib;
+    }
+    let escaped = escape_trailing_closing(&via_lib);
+    if reads_back_in_heading(&escaped, text) {
+        return escaped;
+    }
+    escape_all(text)
+}
+
+/// `## {out}` re-parses to a heading whose single text child is
+/// `text` — [`inline`]'s verification run in the context callers
+/// actually emit into.
+fn reads_back_in_heading(out: &str, text: &str) -> bool {
+    parse(&format!("## {out}\n"))
+        .ok()
+        .as_ref()
+        .and_then(Node::children)
+        .and_then(|c| c.first())
+        .and_then(single_text)
+        == Some(text)
+}
+
+/// `\`-escape each `#` of a trailing hash run that's whitespace-
+/// separated (or is the whole string — the `## ` prefix supplies
+/// the separating space either way).
+fn escape_trailing_closing(s: &str) -> String {
+    let body = s.trim_end_matches('#');
+    let run = s.len() - body.len();
+    if run == 0 || (!body.is_empty() && !body.chars().last().is_some_and(|c| c == ' ' || c == '\t'))
+    {
+        // `x#`, `x\##` — no whitespace before the run, so it's
+        // content, not a closing sequence
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len() + run);
+    out.push_str(body);
+    for _ in 0..run {
+        out.push_str("\\#");
+    }
+    out
+}
+
+/// Last-resort escaper — `\` before every ASCII punctuation
+/// (a backslash escape re-parses as the literal char anywhere,
+/// including inside a heading).
+fn escape_all(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 8);
+    for c in text.chars() {
+        if c.is_ascii_punctuation() {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// Minimal CommonMark escaper — `\` before every ASCII punctuation
 /// that can open an inline construct anywhere (always-safe: `\x`
 /// for ASCII punctuation re-parses to literal `x`), plus the
@@ -159,6 +226,26 @@ mod tests {
         assert!(matches!(li, Node::ListItem(_)));
         let para = &li.children().unwrap()[0];
         assert_eq!(single_text(para), Some("T-001 · #_a-a"));
+    }
+
+    #[test]
+    fn heading_round_trips_atx_closing_shapes() {
+        // `## x ###` is the audit case: a trailing ` #`+ run reads
+        // back as the ATX closing sequence, silently truncating
+        // the name — the paragraph-context check in `inline`
+        // can't see it
+        for s in [
+            "plain", "#hash", "a *b* c", "###", "x #", "x ###", "##", "x \t##",
+        ] {
+            let out = heading(s);
+            assert!(reads_back_in_heading(&out, s), "{s:?} emitted as {out:?}");
+        }
+        // the fix is surgical — escape the run, keep the rest
+        assert_eq!(heading("x ###"), "x \\#\\#\\#");
+        assert_eq!(heading("x #"), "x \\#");
+        // mid-line and non-whitespace-separated hashes stay put
+        assert_eq!(heading("a #b"), "a #b");
+        assert_eq!(heading("x#"), "x#");
     }
 
     #[test]

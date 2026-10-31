@@ -129,8 +129,11 @@ pub fn emit_backlog(doc: &BacklogDoc) -> Result<String, EmitError> {
                 if name.trim() != *name || name.is_empty() {
                     return Err(err("empty or untrimmed section name"));
                 }
+                if name.contains('\n') || name.contains('\r') {
+                    return Err(err("section name contains a newline"));
+                }
                 out.push_str("## ");
-                out.push_str(&mdx::inline(name));
+                out.push_str(&mdx::heading(name));
                 out.push('\n');
                 if !section.items.is_empty() {
                     out.push('\n');

@@ -214,7 +214,7 @@ pub fn emit_entry(entry: &HandoffEntry) -> Result<String, EmitError> {
     let err = |m: &str| EmitError::new("handoff entry", m);
     if let Some(s) = &entry.session {
         if !is_valid_session(s) {
-            return Err(err("session id can't be empty or contain `·`/newline"));
+            return Err(err("session id must match `[A-Za-z0-9._:-]+`"));
         }
     }
     // markdown-rs is effectively infallible for CommonMark — an
@@ -235,9 +235,10 @@ pub fn emit_entry(entry: &HandoffEntry) -> Result<String, EmitError> {
     if let Some(s) = &entry.session {
         head.push_str(&format!(" · session:{s}"));
     }
-    // `_`/`*` are legal actor/session chars — escape inline markup
-    // or the heading wouldn't read back as a single text run
-    let head = mdx::inline(&head);
+    // `_`/`*` are legal actor chars — escape inline markup or the
+    // heading wouldn't read back as a single text run (heading
+    // context: a trailing ` #`-run would be an ATX closer)
+    let head = mdx::heading(&head);
     let note = entry.note.trim();
     if note.is_empty() {
         return Ok(format!("## {head}\n"));
@@ -342,13 +343,15 @@ mod tests {
         bare.session = None;
         bare.note = String::new();
         assert_eq!(emit_entry(&bare).unwrap(), "## 2026-10-29 · devin\n");
-        // bad session + h2 in the note are emit errors
-        let mut e = entry();
-        e.session = Some("a·b".into());
-        assert!(emit_entry(&e).is_err());
-        let mut e = entry();
-        e.session = Some("two\nlines".into());
-        assert!(emit_entry(&e).is_err());
+        // bad session + h2 in the note are emit errors — the
+        // charset is whatever survives the `##` heading byte-for-
+        // byte: no `·` (field sep), no whitespace, no `#` (ATX
+        // closing run), no `\r` (normalize → `\n` splits the line)
+        for bad in ["a·b", "two\nlines", "a b", "x #", "a\rb"] {
+            let mut e = entry();
+            e.session = Some(bad.into());
+            assert!(emit_entry(&e).is_err(), "session {bad:?}");
+        }
         let mut e = entry();
         e.note = "text\n\n## sneaky\n".into();
         assert!(emit_entry(&e).is_err());

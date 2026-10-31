@@ -34,6 +34,15 @@ pub fn emit_meta(meta: &ProjectMeta) -> Result<String, EmitError> {
     if meta.name.trim().is_empty() {
         return Err(EmitError::new(FILE, "empty repo name"));
     }
+    // the name fills `# TODO — <name>` — it must be a single
+    // trimmed line; an interior newline would smuggle extra
+    // content into TODO.md as a paragraph
+    if meta.name.trim() != meta.name || meta.name.contains('\n') || meta.name.contains('\r') {
+        return Err(EmitError::new(
+            FILE,
+            "untrimmed repo name or newline — it fills `# TODO — <name>`",
+        ));
+    }
     toml::to_string(meta).map_err(|e| EmitError::new(FILE, e.to_string()))
 }
 

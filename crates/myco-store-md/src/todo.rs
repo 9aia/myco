@@ -144,8 +144,13 @@ pub fn emit_todo(doc: &TodoDoc) -> Result<String, EmitError> {
     if doc.repo.is_empty() || doc.repo.trim() != doc.repo {
         return Err(err("empty or untrimmed repo name"));
     }
+    if doc.repo.contains('\n') || doc.repo.contains('\r') {
+        // the name fills `# TODO — <repo>` — a newline would
+        // smuggle extra content into the file as a paragraph
+        return Err(err("repo name contains a newline"));
+    }
     let mut out = String::from("# TODO — ");
-    out.push_str(&mdx::inline(&doc.repo));
+    out.push_str(&mdx::heading(&doc.repo));
     out.push('\n');
     for (i, section) in doc.sections.iter().enumerate() {
         for item in &section.items {
@@ -157,8 +162,11 @@ pub fn emit_todo(doc: &TodoDoc) -> Result<String, EmitError> {
                 if name.trim() != *name || name.is_empty() {
                     return Err(err("empty or untrimmed section name"));
                 }
+                if name.contains('\n') || name.contains('\r') {
+                    return Err(err("section name contains a newline"));
+                }
                 out.push_str("## ");
-                out.push_str(&mdx::inline(name));
+                out.push_str(&mdx::heading(name));
                 out.push('\n');
                 if !section.items.is_empty() {
                     out.push('\n');
@@ -304,6 +312,10 @@ mod tests {
 
         assert!(emit_todo(&TodoDoc::new("")).is_err(), "empty repo");
         assert!(emit_todo(&TodoDoc::new(" x ")).is_err(), "untrimmed repo");
+        // a newline in the name would smuggle content past the
+        // `# TODO — <repo>` heading line
+        assert!(emit_todo(&TodoDoc::new("a\nb")).is_err(), "newline in repo");
+        assert!(emit_todo(&TodoDoc::new("a\rb")).is_err(), "cr in repo");
 
         let mut doc = TodoDoc::new("myco");
         doc.sections.push(Section {
@@ -315,6 +327,31 @@ mod tests {
         let mut doc = TodoDoc::new("myco");
         doc.sections.push(Section::unsectioned());
         assert!(emit_todo(&doc).is_err(), "empty unsectioned");
+    }
+
+    #[test]
+    fn emit_round_trips_atx_closing_names() {
+        // a name ending ` #`+ is the ATX closing sequence —
+        // `## x ###` used to read back as `x`; it must now
+        // survive emit→parse byte-for-byte (I-011)
+        for name in ["x ###", "x #", "###", "hash # tag"] {
+            let mut doc = TodoDoc::new("myco");
+            doc.sections.push(Section {
+                name: Some(name.into()),
+                items: vec![Item::new(ItemId::new(ItemKind::Task, 1), "x")],
+            });
+            let out = emit_todo(&doc).unwrap();
+            let back = parse_todo(&out).unwrap();
+            assert_eq!(
+                back.sections[0].name.as_deref(),
+                Some(name),
+                "{name:?} in {out:?}"
+            );
+        }
+        // the same hazard applies to the `# TODO — <repo>` title
+        let doc = TodoDoc::new("myco ###");
+        let back = parse_todo(&emit_todo(&doc).unwrap()).unwrap();
+        assert_eq!(back.repo, "myco ###");
     }
 
     #[test]

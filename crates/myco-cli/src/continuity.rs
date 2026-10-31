@@ -96,7 +96,7 @@ pub fn record_handoff(
     if let Some(s) = &session {
         if !is_valid_session(s) {
             return Err(format!(
-                "invalid --session {s:?} — no empty, no `·`, no newlines"
+                "invalid --session {s:?} — sessions match `[A-Za-z0-9._:-]+`"
             ));
         }
     }
@@ -173,7 +173,7 @@ pub fn interrupt_item(
     if let Some(s) = &session {
         if !is_valid_session(s) {
             return Err(format!(
-                "invalid --session {s:?} — no empty, no `·`, no newlines"
+                "invalid --session {s:?} — sessions match `[A-Za-z0-9._:-]+`"
             ));
         }
     }

@@ -31,10 +31,16 @@ pub struct HandoffEntry {
     pub note: String,
 }
 
-/// Can `s` be a `session:<id>` heading token? Non-empty, no `·`
-/// (the heading's field separator), no newline.
+/// Can `s` be a `session:<id>` heading token? A non-empty run of
+/// `[A-Za-z0-9._:-]` — the same charset actor ids use, and the one
+/// that survives the `## <date> · <actor> · session:<id>` heading
+/// byte-for-byte: `·` is the field separator, `\r`/`\n` normalizes
+/// or splits the heading line, a trailing ` #`+ run is the ATX
+/// closing sequence, and surrounding whitespace trims away.
 pub fn is_valid_session(s: &str) -> bool {
-    !s.is_empty() && !s.contains('·') && !s.contains('\n')
+    !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b':'))
 }
 
 #[cfg(test)]
@@ -45,10 +51,13 @@ mod tests {
 
     #[test]
     fn session_validation() {
-        for ok in ["cli:abc123", "sepia-01J", "pid-1234", "a b c"] {
+        for ok in ["cli:abc123", "sepia-01J", "pid-1234", "a.b_c:d"] {
             assert!(is_valid_session(ok), "{ok}");
         }
-        for bad in ["", "a·b", "two\nlines"] {
+        // anything that could break or silently fold inside the
+        // `##` heading is out — space, `#` (ATX closer), `\r`
+        // (normalize → `\n` splits the line), `·` (field sep)
+        for bad in ["", "a·b", "two\nlines", "a b", "x #", "with#hash", "a\rb"] {
             assert!(!is_valid_session(bad), "{bad}");
         }
     }

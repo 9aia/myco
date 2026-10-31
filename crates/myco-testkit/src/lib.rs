@@ -121,9 +121,11 @@ pub mod strat {
         "[a-zA-Z0-9*#_\\[\\](),.:' -]{1,60}".prop_map(|s| s.trim().to_string())
     }
 
-    /// Optional trimmed section name (same rules as titles).
+    /// Optional trimmed section name — same charset as titles,
+    /// including `#` so emit's ATX-heading escaping is exercised
+    /// (`x ###` must survive a `## ` line byte-for-byte).
     pub fn section_name() -> impl Strategy<Value = String> {
-        "[a-zA-Z0-9 _.-]{1,20}"
+        "[a-zA-Z0-9*#_\\[\\](),.:' -]{1,20}"
             .prop_map(|s| s.trim().to_string())
             .prop_filter("nonempty after trim", |s| !s.is_empty())
     }
@@ -230,9 +232,14 @@ pub mod strat {
         })
     }
 
-    /// A `TodoDoc` — statuses exclude `Done`, task ids only.
+    /// A `TodoDoc` — statuses exclude `Done`, task ids only. The
+    /// repo name shares the section-name charset — it fills
+    /// `# TODO — <repo>` and must survive the heading too.
     pub fn todo_doc() -> impl Strategy<Value = TodoDoc> {
-        ("[a-z0-9-]{1,16}", sections(line_item(&[Status::Done])))
+        (
+            section_name(),
+            sections(line_item(&[Status::Done])),
+        )
             .prop_map(|(repo, sections)| TodoDoc { repo, sections })
     }
 
@@ -257,9 +264,11 @@ pub mod strat {
             })
     }
 
-    /// A session id — `[a-z0-9:-]{1,12}` (no `·`, no newline).
+    /// A session id — `[A-Za-z0-9._:-]{1,12}`, the full charset
+    /// `is_valid_session` allows (anything else — space, `#`, `\r`,
+    /// `·` — can't survive the `##` heading).
     pub fn session() -> impl Strategy<Value = String> {
-        "[a-z0-9:-]{1,12}"
+        "[a-zA-Z0-9._:-]{1,12}"
     }
 
     /// A `HandoffEntry` — notes are plain text lines (never a `##`
