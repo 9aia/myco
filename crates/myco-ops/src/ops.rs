@@ -86,19 +86,24 @@ pub fn commits_enabled(no_commit: bool) -> bool {
 /// auto-commit-per-verb path. No commit when disabled or when the
 /// tree is clean. Returns whether a commit was made.
 pub fn autocommit(dir: &Path, msg: &str, enabled: bool) -> Result<bool, String> {
-    if !enabled || !myco_git::has_changes(dir) {
+    if !enabled || !myco_git::has_changes(dir).map_err(|e| e.to_string())? {
         return Ok(false);
     }
-    if myco_git::commit_all(dir, msg) {
-        Ok(true)
-    } else {
-        Err(format!("git commit failed in {}", dir.display()))
-    }
+    myco_git::commit_all(dir, msg)
+        .map_err(|e| format!("git commit failed in {}: {e}", dir.display()))?;
+    Ok(true)
 }
 
 /// Commit only `paths` inside `dir` — used for repo-root edits
 /// (`.gitignore`, `pm/` removal) so an unrelated dirty tree isn't
 /// swept into the verb's commit. Returns whether a commit was made.
+///
+/// Scoping is per *file*, not per hunk: callers must pass only
+/// paths myco itself wrote this invocation. If the user had
+/// pre-existing uncommitted edits inside one of those files, they
+/// land in the commit under myco's message — an accepted
+/// limitation (hunk-level staging via `git apply --cached` was
+/// judged disproportionate for the managed-file call sites).
 pub fn commit_paths(dir: &Path, msg: &str, paths: &[&str], enabled: bool) -> Result<bool, String> {
     if !enabled {
         return Ok(false);
@@ -114,7 +119,7 @@ pub fn commit_paths(dir: &Path, msg: &str, paths: &[&str], enabled: bool) -> Res
     myco_git::git_out(dir, &add).map_err(|e| e.to_string())?;
     let mut commit = vec!["commit", "-m", msg, "--"];
     commit.extend_from_slice(paths);
-    myco_git::git_out(dir, &commit)
+    myco_git::git_ident(dir, &commit)
         .map_err(|e| e.to_string())
         .map(|_| true)
 }

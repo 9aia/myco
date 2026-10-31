@@ -66,12 +66,14 @@ pub fn ensure(
     }
 
     // worktree: reuse a valid one, or `worktree add`
-    if !worktree.exists() && !myco_git::worktree_add_branch(&root, &worktree, discover::BRANCH) {
-        return Err(format!(
-            "git worktree add {} {} failed — is the branch checked out elsewhere?",
-            worktree.display(),
-            discover::BRANCH
-        ));
+    if !worktree.exists() {
+        myco_git::worktree_add_branch(&root, &worktree, discover::BRANCH).map_err(|e| {
+            format!(
+                "git worktree add {} {} failed: {e} — is the branch checked out elsewhere?",
+                worktree.display(),
+                discover::BRANCH
+            )
+        })?;
     }
 
     // scaffold via canonical emit — never overwrites

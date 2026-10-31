@@ -53,11 +53,22 @@ fn canonicalize(p: &Path) -> Result<PathBuf, String> {
 /// Resolve the project for verbs that need one. `dir`/`root` are
 /// the global flags; everything else is discovery.
 pub fn discover(dir: Option<&Path>, root: Option<&Path>) -> Result<Project, String> {
-    // --dir: an explicit worktree path
+    // --dir: an explicit worktree path — still must qualify,
+    // otherwise verbs would stage/commit inside whatever repo
+    // happens to contain an arbitrary dir
     if let Some(d) = dir {
         let worktree = canonicalize(d)?;
         if !worktree.is_dir() {
             return Err(format!("--dir {} is not a directory", worktree.display()));
+        }
+        if !qualifies(&worktree) {
+            return Err(format!(
+                "--dir {} is not a myco project worktree — \
+                 run `myco init --dir {}` inside its repo, \
+                 or pass --root for the repo's conventional project/",
+                worktree.display(),
+                d.display()
+            ));
         }
         let root = match root {
             Some(r) => canonicalize(r)?,
@@ -210,6 +221,18 @@ mod tests {
     #[test]
     fn dir_flag_missing_is_error() {
         assert!(discover(Some(Path::new("/definitely/not/here")), None).is_err());
+    }
+
+    #[test]
+    fn dir_flag_rejects_non_project_dir() {
+        // an arbitrary dir isn't a project worktree just because
+        // it exists — the error must name the fix
+        let d = tempfile::tempdir().unwrap();
+        let e = discover(Some(d.path()), None).unwrap_err();
+        assert!(e.contains("myco init"), "{e}");
+        // a dir holding ledger files still qualifies
+        std::fs::write(d.path().join("TODO.md"), "# TODO\n").unwrap();
+        assert!(discover(Some(d.path()), None).is_ok());
     }
 
     #[test]

@@ -314,7 +314,7 @@ fn commit_pm_removal(root: &Path, enabled: bool) -> Result<bool, String> {
     if dirty.is_empty() {
         return Ok(false);
     }
-    myco_git::git_out(
+    myco_git::git_ident(
         root,
         &["commit", "-m", "chore: migrate pm/ → project/", "--", "pm"],
     )

@@ -23,11 +23,10 @@ pub fn run(
     let proj = discover::discover(dir.as_deref(), root.as_deref())?;
     let msg = message.unwrap_or_else(|| DEFAULT_MSG.to_string());
     let enabled = ops::commits_enabled(no_commit);
-    let dirty = myco_git::has_changes(&proj.worktree);
+    let dirty = myco_git::has_changes(&proj.worktree).map_err(|e| e.to_string())?;
     let committed = if dirty && enabled {
-        if !myco_git::commit_all(&proj.worktree, &msg) {
-            return Err(format!("git commit failed in {}", proj.worktree.display()));
-        }
+        myco_git::commit_all(&proj.worktree, &msg)
+            .map_err(|e| format!("git commit failed in {}: {e}", proj.worktree.display()))?;
         true
     } else {
         false
