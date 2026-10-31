@@ -226,6 +226,9 @@ in progress, what's open — enough to pick work without reading
 the files. `myco status` (no flag) is the human-readable version;
 `myco board` and `myco report` give the kanban and the trend.
 Boards cap at a screenful of rows — `--all` shows every card.
+For a human at the wheel, `myco ui` is the same board as a
+full-screen TUI — see
+[the interactive board](../getting-started.md#the-interactive-board).
 
 ## Claim
 
@@ -609,6 +612,16 @@ capped at a screenful of rows (~25) with a `… +N more` footer —
 `--all` lifts the cap. `--md` and `--json` are unbounded. Output
 is ANSI-colored on a tty: `NO_COLOR` disables color,
 `CLICOLOR_FORCE`/`FORCE_COLOR` force it on.
+
+On a tty the long views — boards, `org status`, `index list` —
+page through `$MYCO_PAGER`, else `$PAGER`, else `less -FRSX`
+(the `-F` means a single screenful still exits instantly). An
+empty `MYCO_PAGER`/`PAGER` disables paging; piped output always
+prints directly.
+
+For a fully interactive single-repo board — TODO/BACKLOG tabs,
+item preview, done/defer/promote by key — see
+[`myco ui`](../getting-started.md#the-interactive-board).
 
 ---
 
@@ -1687,7 +1700,7 @@ Design rules:
 | `myco-config` | port | Config port: where myco.toml-shaped config comes from |
 | `myco-index` | port | Index port: the derived, disposable cache powering status/board/report/org views |
 | `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
-| `myco-ops` | ops | myco — shared ops layer: discovery, the TODO↔BACKLOG ledger, verb mutations |
+| `myco-ops` | ops | myco — ops I/O shell: project discovery, store open/save, commit-per-mutation, verb plumbing |
 | `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
 | `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
 | `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
@@ -1821,6 +1834,33 @@ myco todo done T-001   # the line leaves TODO.md — git history keeps it
 Every mutating verb is one atomic commit on the `project` branch —
 the branch history is the audit trail. `--no-commit` (or the
 `MYCO_NO_COMMIT` env var) opts out.
+
+## The interactive board
+
+`myco ui` opens a full-screen board over `TODO.md` and
+`BACKLOG.md` — the human cockpit while agents drive the verbs.
+Every mutation runs through the same ops the CLI uses, so a
+keypress that changes the ledger lands as the same atomic commit
+(`--no-commit` opts out here too).
+
+| Key | Action |
+| --- | --- |
+| `1` / `2`, `h` / `l` | switch TODO / BACKLOG tab |
+| `j` / `k`, `gg` / `G` | move, jump to first / last |
+| `Enter` | full-pane item preview (`esc` back) |
+| `a` | add an item to the active board |
+| `dd` / `Space` | mark done |
+| `D` / `p` | defer to BACKLOG / promote back to TODO |
+| `Alt+j` / `Alt+k` | reorder among siblings |
+| `E` / `R` | open the board file in `$EDITOR` / reload |
+| `q` | quit |
+
+The TUI is a default cargo feature — for a lean binary without
+it, install with `--no-default-features`:
+
+```sh
+cargo install --git https://github.com/9aia/myco --no-default-features
+```
 
 ## Agent self-discovery
 

@@ -56,40 +56,42 @@
 <a href=#56 id=56 data-nosnippet>56</a>            <span class="kw-2">&amp;</span>items::NewItem {
 <a href=#57 id=57 data-nosnippet>57</a>                kind: ItemKind::Adr,
 <a href=#58 id=58 data-nosnippet>58</a>                title,
-<a href=#59 id=59 data-nosnippet>59</a>                body: <span class="kw-2">&amp;</span>body,
-<a href=#60 id=60 data-nosnippet>60</a>                meta: <span class="kw-2">&amp;</span>meta,
+<a href=#59 id=59 data-nosnippet>59</a>                body: body.read()<span class="question-mark">?</span>.as_deref(),
+<a href=#60 id=60 data-nosnippet>60</a>                meta: <span class="kw-2">&amp;</span>meta.to_meta(),
 <a href=#61 id=61 data-nosnippet>61</a>                template: templates::adr,
 <a href=#62 id=62 data-nosnippet>62</a>                word: <span class="string">"adr"</span>,
 <a href=#63 id=63 data-nosnippet>63</a>                json_out,
 <a href=#64 id=64 data-nosnippet>64</a>                no_commit,
 <a href=#65 id=65 data-nosnippet>65</a>            },
 <a href=#66 id=66 data-nosnippet>66</a>        ),
-<a href=#67 id=67 data-nosnippet>67</a>        Cmd::List { list } =&gt; items::list_files(<span class="kw-2">&amp;</span>store, ItemKind::Adr, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>list, json_out),
-<a href=#68 id=68 data-nosnippet>68</a>        Cmd::Supersede { id, by } =&gt; {
-<a href=#69 id=69 data-nosnippet>69</a>            items::require_kind(id, ItemKind::Adr, <span class="string">"adr supersede"</span>)<span class="question-mark">?</span>;
-<a href=#70 id=70 data-nosnippet>70</a>            items::require_kind(by, ItemKind::Adr, <span class="string">"adr supersede --by"</span>)<span class="question-mark">?</span>;
-<a href=#71 id=71 data-nosnippet>71</a>            <span class="kw">if </span>id == by {
-<a href=#72 id=72 data-nosnippet>72</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"{id} can't supersede itself"</span>));
-<a href=#73 id=73 data-nosnippet>73</a>            }
-<a href=#74 id=74 data-nosnippet>74</a>            <span class="kw">let </span><span class="kw-2">mut </span>old = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
-<a href=#75 id=75 data-nosnippet>75</a>            <span class="kw">let </span><span class="kw-2">mut </span>new = items::item_for_edit(<span class="kw-2">&amp;</span>store, by)<span class="question-mark">?</span>;
-<a href=#76 id=76 data-nosnippet>76</a>            items::walk_to(<span class="kw-2">&amp;mut </span>old.meta, Status::Done)<span class="question-mark">?</span>;
-<a href=#77 id=77 data-nosnippet>77</a>            old.meta.superseded_by = <span class="prelude-val">Some</span>(by);
-<a href=#78 id=78 data-nosnippet>78</a>            new.meta.supersedes = <span class="prelude-val">Some</span>(id);
-<a href=#79 id=79 data-nosnippet>79</a>            store.save_item(<span class="kw-2">&amp;</span>old).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#80 id=80 data-nosnippet>80</a>            store.save_item(<span class="kw-2">&amp;</span>new).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#81 id=81 data-nosnippet>81</a>            <span class="kw">let </span>committed = items::commit(
-<a href=#82 id=82 data-nosnippet>82</a>                <span class="kw-2">&amp;</span>proj.worktree,
-<a href=#83 id=83 data-nosnippet>83</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: supersede {id} by {by}"</span>),
-<a href=#84 id=84 data-nosnippet>84</a>                no_commit,
-<a href=#85 id=85 data-nosnippet>85</a>            )<span class="question-mark">?</span>;
-<a href=#86 id=86 data-nosnippet>86</a>            items::report(
-<a href=#87 id=87 data-nosnippet>87</a>                <span class="macro">json!</span>({<span class="string">"superseded"</span>: old.meta, <span class="string">"by"</span>: new.meta}),
-<a href=#88 id=88 data-nosnippet>88</a>                committed,
-<a href=#89 id=89 data-nosnippet>89</a>                json_out,
-<a href=#90 id=90 data-nosnippet>90</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{id} superseded by {by}"</span>),
-<a href=#91 id=91 data-nosnippet>91</a>            )
-<a href=#92 id=92 data-nosnippet>92</a>        }
-<a href=#93 id=93 data-nosnippet>93</a>    }
-<a href=#94 id=94 data-nosnippet>94</a>}
+<a href=#67 id=67 data-nosnippet>67</a>        Cmd::List { list } =&gt; {
+<a href=#68 id=68 data-nosnippet>68</a>            items::list_files(<span class="kw-2">&amp;</span>store, ItemKind::Adr, <span class="bool-val">false</span>, <span class="kw-2">&amp;</span>list.filter(), json_out)
+<a href=#69 id=69 data-nosnippet>69</a>        }
+<a href=#70 id=70 data-nosnippet>70</a>        Cmd::Supersede { id, by } =&gt; {
+<a href=#71 id=71 data-nosnippet>71</a>            items::require_kind(id, ItemKind::Adr, <span class="string">"adr supersede"</span>)<span class="question-mark">?</span>;
+<a href=#72 id=72 data-nosnippet>72</a>            items::require_kind(by, ItemKind::Adr, <span class="string">"adr supersede --by"</span>)<span class="question-mark">?</span>;
+<a href=#73 id=73 data-nosnippet>73</a>            <span class="kw">if </span>id == by {
+<a href=#74 id=74 data-nosnippet>74</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"{id} can't supersede itself"</span>));
+<a href=#75 id=75 data-nosnippet>75</a>            }
+<a href=#76 id=76 data-nosnippet>76</a>            <span class="kw">let </span><span class="kw-2">mut </span>old = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
+<a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">let </span><span class="kw-2">mut </span>new = items::item_for_edit(<span class="kw-2">&amp;</span>store, by)<span class="question-mark">?</span>;
+<a href=#78 id=78 data-nosnippet>78</a>            items::walk_to(<span class="kw-2">&amp;mut </span>old.meta, Status::Done)<span class="question-mark">?</span>;
+<a href=#79 id=79 data-nosnippet>79</a>            old.meta.superseded_by = <span class="prelude-val">Some</span>(by);
+<a href=#80 id=80 data-nosnippet>80</a>            new.meta.supersedes = <span class="prelude-val">Some</span>(id);
+<a href=#81 id=81 data-nosnippet>81</a>            store.save_item(<span class="kw-2">&amp;</span>old).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#82 id=82 data-nosnippet>82</a>            store.save_item(<span class="kw-2">&amp;</span>new).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#83 id=83 data-nosnippet>83</a>            <span class="kw">let </span>committed = items::commit(
+<a href=#84 id=84 data-nosnippet>84</a>                <span class="kw-2">&amp;</span>proj.worktree,
+<a href=#85 id=85 data-nosnippet>85</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: supersede {id} by {by}"</span>),
+<a href=#86 id=86 data-nosnippet>86</a>                no_commit,
+<a href=#87 id=87 data-nosnippet>87</a>            )<span class="question-mark">?</span>;
+<a href=#88 id=88 data-nosnippet>88</a>            items::report(
+<a href=#89 id=89 data-nosnippet>89</a>                <span class="macro">json!</span>({<span class="string">"superseded"</span>: old.meta, <span class="string">"by"</span>: new.meta}),
+<a href=#90 id=90 data-nosnippet>90</a>                committed,
+<a href=#91 id=91 data-nosnippet>91</a>                json_out,
+<a href=#92 id=92 data-nosnippet>92</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{id} superseded by {by}"</span>),
+<a href=#93 id=93 data-nosnippet>93</a>            )
+<a href=#94 id=94 data-nosnippet>94</a>        }
+<a href=#95 id=95 data-nosnippet>95</a>    }
+<a href=#96 id=96 data-nosnippet>96</a>}
 </code></pre></div></section></main></body></html>

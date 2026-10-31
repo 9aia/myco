@@ -523,7 +523,7 @@
 <a href=#523 id=523 data-nosnippet>523</a>        created_ids = ids;
 <a href=#524 id=524 data-nosnippet>524</a>        <span class="macro">debug_assert_eq!</span>(created, fresh.len());
 <a href=#525 id=525 data-nosnippet>525</a>    } <span class="kw">else </span>{
-<a href=#526 id=526 data-nosnippet>526</a>        <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::Ledger::load(store)<span class="question-mark">?</span>;
+<a href=#526 id=526 data-nosnippet>526</a>        <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(store)<span class="question-mark">?</span>;
 <a href=#527 id=527 data-nosnippet>527</a>        <span class="kw">for </span>f <span class="kw">in </span><span class="kw-2">&amp;</span>fresh {
 <a href=#528 id=528 data-nosnippet>528</a>            <span class="kw">let </span>id = store.alloc_id(ItemKind::Task).map_err(|e| e.to_string())<span class="question-mark">?</span>;
 <a href=#529 id=529 data-nosnippet>529</a>            <span class="kw">let </span>item = Item::new(id, <span class="kw-2">&amp;</span>f.title)
@@ -534,7 +534,7 @@
 <a href=#534 id=534 data-nosnippet>534</a>            created_ids.push(id);
 <a href=#535 id=535 data-nosnippet>535</a>        }
 <a href=#536 id=536 data-nosnippet>536</a>        <span class="kw">if </span>!created_ids.is_empty() {
-<a href=#537 id=537 data-nosnippet>537</a>            ledger.save(store)<span class="question-mark">?</span>;
+<a href=#537 id=537 data-nosnippet>537</a>            items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
 <a href=#538 id=538 data-nosnippet>538</a>        }
 <a href=#539 id=539 data-nosnippet>539</a>    }
 <a href=#540 id=540 data-nosnippet>540</a>    finish(

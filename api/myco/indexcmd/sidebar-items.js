@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Cmd"],"fn":["current_head","now","open_index","rebuild_one","registered_root","repo_at","run","scan_repo","snap_json"]};
+window.SIDEBAR_ITEMS = {"enum":["Cmd"],"fn":["current_head","now","open_index","par_map","registered_root","repo_at","run","scan_one","scan_repo","snap_json"]};

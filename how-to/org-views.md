@@ -77,3 +77,13 @@ capped at a screenful of rows (~25) with a `… +N more` footer —
 `--all` lifts the cap. `--md` and `--json` are unbounded. Output
 is ANSI-colored on a tty: `NO_COLOR` disables color,
 `CLICOLOR_FORCE`/`FORCE_COLOR` force it on.
+
+On a tty the long views — boards, `org status`, `index list` —
+page through `$MYCO_PAGER`, else `$PAGER`, else `less -FRSX`
+(the `-F` means a single screenful still exits instantly). An
+empty `MYCO_PAGER`/`PAGER` disables paging; piped output always
+prints directly.
+
+For a fully interactive single-repo board — TODO/BACKLOG tabs,
+item preview, done/defer/promote by key — see
+[`myco ui`](../getting-started.md#the-interactive-board).

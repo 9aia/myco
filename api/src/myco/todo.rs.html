@@ -63,7 +63,7 @@
 <a href=#63 id=63 data-nosnippet>63</a>            parent,
 <a href=#64 id=64 data-nosnippet>64</a>            meta,
 <a href=#65 id=65 data-nosnippet>65</a>        } =&gt; {
-<a href=#66 id=66 data-nosnippet>66</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::Ledger::load(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#66 id=66 data-nosnippet>66</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
 <a href=#67 id=67 data-nosnippet>67</a>            <span class="comment">// validate the parent before allocating — failed adds
 <a href=#68 id=68 data-nosnippet>68</a>            // must not burn ids
 <a href=#69 id=69 data-nosnippet>69</a>            </span><span class="kw">let </span>ploc = <span class="kw">match </span>parent {
@@ -98,7 +98,7 @@
 <a href=#98 id=98 data-nosnippet>98</a>                    <span class="string">"TODO.md"
 <a href=#99 id=99 data-nosnippet>99</a>                </span>}
 <a href=#100 id=100 data-nosnippet>100</a>            };
-<a href=#101 id=101 data-nosnippet>101</a>            ledger.save(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#101 id=101 data-nosnippet>101</a>            items::save_ledger(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
 <a href=#102 id=102 data-nosnippet>102</a>            <span class="kw">let </span>committed = items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: add {id}"</span>), no_commit)<span class="question-mark">?</span>;
 <a href=#103 id=103 data-nosnippet>103</a>            items::report(
 <a href=#104 id=104 data-nosnippet>104</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"file"</span>: file, <span class="string">"parent"</span>: parent.map(|p| p.to_string())}),
@@ -109,7 +109,7 @@
 <a href=#109 id=109 data-nosnippet>109</a>        }
 <a href=#110 id=110 data-nosnippet>110</a>        Cmd::Done { id } =&gt; {
 <a href=#111 id=111 data-nosnippet>111</a>            items::require_kind(id, ItemKind::Task, <span class="string">"todo done"</span>)<span class="question-mark">?</span>;
-<a href=#112 id=112 data-nosnippet>112</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::Ledger::load(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#112 id=112 data-nosnippet>112</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
 <a href=#113 id=113 data-nosnippet>113</a>            <span class="kw">let </span>loc = ledger
 <a href=#114 id=114 data-nosnippet>114</a>                .locate(id)
 <a href=#115 id=115 data-nosnippet>115</a>                .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
@@ -122,7 +122,7 @@
 <a href=#122 id=122 data-nosnippet>122</a>            // their parent; done on a child removes just the child
 <a href=#123 id=123 data-nosnippet>123</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
 <a href=#124 id=124 data-nosnippet>124</a>            items::walk_to(<span class="kw-2">&amp;mut </span>item, Status::Done)<span class="question-mark">?</span>;
-<a href=#125 id=125 data-nosnippet>125</a>            ledger.save(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#125 id=125 data-nosnippet>125</a>            items::save_ledger(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
 <a href=#126 id=126 data-nosnippet>126</a>            <span class="kw">let </span>committed = items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: done {id}"</span>), no_commit)<span class="question-mark">?</span>;
 <a href=#127 id=127 data-nosnippet>127</a>            items::report(
 <a href=#128 id=128 data-nosnippet>128</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item}),
@@ -133,7 +133,7 @@
 <a href=#133 id=133 data-nosnippet>133</a>        }
 <a href=#134 id=134 data-nosnippet>134</a>        Cmd::Defer { id } =&gt; {
 <a href=#135 id=135 data-nosnippet>135</a>            items::require_kind(id, ItemKind::Task, <span class="string">"todo defer"</span>)<span class="question-mark">?</span>;
-<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::Ledger::load(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
 <a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">let </span>loc = ledger
 <a href=#138 id=138 data-nosnippet>138</a>                .locate(id)
 <a href=#139 id=139 data-nosnippet>139</a>                .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
@@ -146,7 +146,7 @@
 <a href=#146 id=146 data-nosnippet>146</a>            // deferred-only
 <a href=#147 id=147 data-nosnippet>147</a>            </span>items::walk_descendants_to(<span class="kw-2">&amp;mut </span>item, Status::Deferred)<span class="question-mark">?</span>;
 <a href=#148 id=148 data-nosnippet>148</a>            ledger.put_backlog(item.clone(), <span class="prelude-val">None</span>);
-<a href=#149 id=149 data-nosnippet>149</a>            ledger.save(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#149 id=149 data-nosnippet>149</a>            items::save_ledger(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
 <a href=#150 id=150 data-nosnippet>150</a>            <span class="kw">let </span>committed =
 <a href=#151 id=151 data-nosnippet>151</a>                items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: defer {id}"</span>), no_commit)<span class="question-mark">?</span>;
 <a href=#152 id=152 data-nosnippet>152</a>            items::report(

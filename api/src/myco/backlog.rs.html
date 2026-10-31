@@ -56,9 +56,9 @@
 <a href=#56 id=56 data-nosnippet>56</a>                .status(Status::Deferred)
 <a href=#57 id=57 data-nosnippet>57</a>                .created(items::today());
 <a href=#58 id=58 data-nosnippet>58</a>            meta.apply(<span class="kw-2">&amp;mut </span>item)<span class="question-mark">?</span>;
-<a href=#59 id=59 data-nosnippet>59</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::Ledger::load(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#59 id=59 data-nosnippet>59</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
 <a href=#60 id=60 data-nosnippet>60</a>            ledger.put_backlog(item.clone(), section.as_deref());
-<a href=#61 id=61 data-nosnippet>61</a>            ledger.save(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#61 id=61 data-nosnippet>61</a>            items::save_ledger(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
 <a href=#62 id=62 data-nosnippet>62</a>            <span class="kw">let </span>committed = items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: add {id}"</span>), no_commit)<span class="question-mark">?</span>;
 <a href=#63 id=63 data-nosnippet>63</a>            items::report(
 <a href=#64 id=64 data-nosnippet>64</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"file"</span>: <span class="string">"BACKLOG.md"</span>}),
@@ -69,7 +69,7 @@
 <a href=#69 id=69 data-nosnippet>69</a>        }
 <a href=#70 id=70 data-nosnippet>70</a>        Cmd::Promote { id } =&gt; {
 <a href=#71 id=71 data-nosnippet>71</a>            items::require_kind(id, ItemKind::Task, <span class="string">"backlog promote"</span>)<span class="question-mark">?</span>;
-<a href=#72 id=72 data-nosnippet>72</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::Ledger::load(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#72 id=72 data-nosnippet>72</a>            <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
 <a href=#73 id=73 data-nosnippet>73</a>            <span class="kw">let </span>loc = ledger
 <a href=#74 id=74 data-nosnippet>74</a>                .locate(id)
 <a href=#75 id=75 data-nosnippet>75</a>                .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
@@ -83,7 +83,7 @@
 <a href=#83 id=83 data-nosnippet>83</a>            // deferred items)
 <a href=#84 id=84 data-nosnippet>84</a>            </span>items::walk_descendants_to(<span class="kw-2">&amp;mut </span>item, Status::Open)<span class="question-mark">?</span>;
 <a href=#85 id=85 data-nosnippet>85</a>            ledger.put_todo(item.clone(), <span class="prelude-val">None</span>);
-<a href=#86 id=86 data-nosnippet>86</a>            ledger.save(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#86 id=86 data-nosnippet>86</a>            items::save_ledger(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
 <a href=#87 id=87 data-nosnippet>87</a>            <span class="kw">let </span>committed =
 <a href=#88 id=88 data-nosnippet>88</a>                items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: promote {id}"</span>), no_commit)<span class="question-mark">?</span>;
 <a href=#89 id=89 data-nosnippet>89</a>            items::report(
