@@ -1,7 +1,7 @@
 +++
 id = "I-013"
 title = "TUI hardening: raw-mode leak, stale ITEMS, no force-quit"
-status = "open"
+status = "done"
 created = "2026-10-31"
 priority = "medium"
 labels = ["audit"]
@@ -11,3 +11,7 @@ enable_raw_mode before EnterAlternateScreen → raw-mode leak if latter fails (l
 
 Related: I-019 — the ITEMS→FILES rename + related-files view
 lands on this board; P-005's mention-scan derives this link.
+
+## Resolution
+
+fixed 6574832 — guard ordering, panic hook, reload files, global Ctrl-C, EDITOR split, preview scroll, help 3

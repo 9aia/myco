@@ -1,7 +1,7 @@
 +++
 id = "P-003"
 title = "audit remediation — boundary hardening + serialization"
-status = "open"
+status = "done"
 created = "2026-10-31"
 priority = "high"
 labels = ["audit"]
