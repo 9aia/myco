@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Cmd"],"fn":["as_scan","board_view","by_owner","load_fresh","run","status"],"struct":["RepoView"]};
+window.SIDEBAR_ITEMS = {"constant":["OWNER_CAP"],"enum":["Cmd"],"fn":["as_scan","board_view","by_owner","init_all","load_fresh","run","status"],"struct":["RepoView"]};

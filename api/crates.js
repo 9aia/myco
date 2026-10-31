@@ -1,2 +1,2 @@
-window.ALL_CRATES = ["myco","myco_config","myco_config_toml","myco_core","myco_git","myco_index","myco_index_redb","myco_shell","myco_store","myco_store_md","myco_testkit","xtask"];
-//{"start":21,"fragment_lengths":[6,14,19,12,11,13,18,13,13,16,15,8]}
+window.ALL_CRATES = ["myco","myco_config","myco_config_toml","myco_core","myco_git","myco_index","myco_index_redb","myco_ops","myco_shell","myco_store","myco_store_md","myco_testkit","myco_tui","xtask"];
+//{"start":21,"fragment_lengths":[6,14,19,12,11,13,18,11,13,13,16,15,11,8]}

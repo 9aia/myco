@@ -157,15 +157,23 @@ myco init
 | `project/index.md` | human-readable ledger index |
 | `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs |
 | `.gitignore` += `project/` | keeps the worktree out of code commits |
+| `AGENTS.md` | gains a marker-delimited, myco-managed *Agent awareness* block |
 
 `init` commits the scaffold on the `project` branch — your code
-branch only gains the `.gitignore` line.
+branch only gains the `.gitignore` line and the `AGENTS.md`
+block. The block teaches agents the myco workflow; it's delimited
+by `<!-- myco:agent-awareness -->` markers so prose elsewhere in
+the file is preserved — a hand-written *Agent awareness* section
+is upgraded in place. `check` validates it as an
+`agents-md` finding and `check --fix` repairs it.
 
 ## Re-running init
 
 `init` is idempotent: a valid existing worktree gets its scaffold
 verified/repaired instead of re-created. It is the safe "is this
-repo set up?" probe.
+repo set up?" probe. `myco org init` re-runs it on every
+registered repo — the rollout path when scaffolding (like the
+`AGENTS.md` block) is introduced or updated.
 
 ## Overrides and discovery
 
@@ -217,6 +225,7 @@ myco status --prompt    # token-sized digest, sized for a context window
 in progress, what's open — enough to pick work without reading
 the files. `myco status` (no flag) is the human-readable version;
 `myco board` and `myco report` give the kanban and the trend.
+Boards cap at a screenful of rows — `--all` shows every card.
 
 ## Claim
 
@@ -576,15 +585,30 @@ totals: tasks 167o/0c/1ip/0b backlog 326 issues 1o p 5o pl 7o/1r adr 59o
 
 Per-repo counts (`o`pen / `c`laimed / `i`n-`p`rogress /
 `b`locked), the snapshot commit, org totals, then items grouped
-by owner. A rebuilt repo is marked `(rebuilt)`.
+by owner. A rebuilt repo is marked `(rebuilt)`. Repos with no
+live items are folded into a `… +N idle repos` footer —
+`myco org status --all` lists them too; repos whose snapshot
+failed always surface.
 
 ```sh
-myco org board          # org kanban — repo-prefixed cards over every live item
-myco org board --md     # markdown table for docs/READMEs
+myco org board                # org kanban — repo-prefixed cards over every live item
+myco org board --repo sepia   # one repo only (name or registered path)
+myco org board --all          # every card — no row cap
+myco org board --md           # markdown table for docs/READMEs
 ```
 
 Cards are prefixed with the repo name (`thal:T-118 …`) so one
 board spans the whole org.
+
+## Board output
+
+Human boards — `org board`, `board`, `epic <name>`,
+`milestone <name>` — are fitted to the terminal: sized to its
+width (`$MYCO_WIDTH` overrides; 100 columns when piped) and
+capped at a screenful of rows (~25) with a `… +N more` footer —
+`--all` lifts the cap. `--md` and `--json` are unbounded. Output
+is ANSI-colored on a tty: `NO_COLOR` disables color,
+`CLICOLOR_FORCE`/`FORCE_COLOR` force it on.
 
 ---
 
@@ -652,6 +676,8 @@ This document contains the help content for the `myco` command-line program.
 * [`myco org`↴](#myco-org)
 * [`myco org status`↴](#myco-org-status)
 * [`myco org board`↴](#myco-org-board)
+* [`myco org init`↴](#myco-org-init)
+* [`myco ui`↴](#myco-ui)
 
 ## `myco`
 
@@ -663,8 +689,8 @@ myco — project management, grown not built: agent-first PM CLI
 
 * `manifest` — Capabilities + protocol version — agent self-discovery
 * `schema` — The file/state spec, machine-readable JSON Schema
-* `init` — Scaffold `project/`: orphan branch + worktree + .gitignore + seed files. Idempotent — a valid existing worktree gets its scaffold verified/repaired
-* `check` — Validate schemas + state machine, repair file/index drift. Exit 1 with findings; `--fix` applies safe repairs + commits
+* `init` — Scaffold `project/`: orphan branch + worktree + .gitignore + seed files + the managed AGENTS.md agent-awareness block. Idempotent — existing worktree and AGENTS.md prose are preserved, only the marked block is (re)written
+* `check` — Validate schemas + state machine, repair file/index drift; also validates the managed AGENTS.md block on the repo root. Exit 1 with findings; `--fix` applies safe repairs + commits
 * `migrate` — Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch
 * `commit` — Stage + commit worktree changes (conventional message)
 * `todo` — TODO.md tasks — add / done / defer / list
@@ -684,6 +710,7 @@ myco — project management, grown not built: agent-first PM CLI
 * `report` — Aging + velocity + blocked — how the ledger is trending
 * `index` — The derived index: register repos, query/rebuild snapshots
 * `org` — Cross-repo views over the index (auto-rebuilds stale repos)
+* `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
 
 ###### **Options:**
 
@@ -706,13 +733,13 @@ The file/state spec, machine-readable JSON Schema
 
 ## `myco init`
 
-Scaffold `project/`: orphan branch + worktree + .gitignore + seed files. Idempotent — a valid existing worktree gets its scaffold verified/repaired
+Scaffold `project/`: orphan branch + worktree + .gitignore + seed files + the managed AGENTS.md agent-awareness block. Idempotent — existing worktree and AGENTS.md prose are preserved, only the marked block is (re)written
 
 **Usage:** `myco init`
 
 ## `myco check`
 
-Validate schemas + state machine, repair file/index drift. Exit 1 with findings; `--fix` applies safe repairs + commits
+Validate schemas + state machine, repair file/index drift; also validates the managed AGENTS.md block on the repo root. Exit 1 with findings; `--fix` applies safe repairs + commits
 
 **Usage:** `myco check [OPTIONS]`
 
@@ -801,6 +828,7 @@ List tasks
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 ## `myco backlog`
 
@@ -855,6 +883,7 @@ List backlog items
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 ## `myco issue`
 
@@ -903,6 +932,7 @@ List issues (live files; `--archived` includes `issues/archive/`)
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 ## `myco issue resolve`
 
@@ -983,6 +1013,7 @@ List proposals
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 ## `myco proposal status`
 
@@ -1038,6 +1069,7 @@ List plans
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 ## `myco adr`
 
@@ -1083,6 +1115,7 @@ List ADRs
 * `--status <STATUS>` — Keep only items with this status
 * `--owner <OWNER>` — Keep only items owned by this actor
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable)
+* `--limit <N>` — Keep only the first N items after filtering
 
 ## `myco adr supersede`
 
@@ -1190,6 +1223,7 @@ Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md
 ###### **Options:**
 
 * `--md` — Emit a markdown table (for docs/READMEs)
+* `--all` — Show every card — no row cap
 * `--epic <EPIC>` — Only items in this epic
 * `--milestone <MILESTONE>` — Only items in this milestone
 
@@ -1206,6 +1240,7 @@ Items grouped by epic — bare lists epics with counts, a name renders that epic
 ###### **Options:**
 
 * `--md` — Emit a markdown table (with a name)
+* `--all` — Show every card — no row cap (with a name)
 
 ## `myco milestone`
 
@@ -1220,6 +1255,7 @@ Items grouped by milestone — bare lists milestones with counts, a name renders
 ###### **Options:**
 
 * `--md` — Emit a markdown table (with a name)
+* `--all` — Show every card — no row cap (with a name)
 
 ## `myco absorb`
 
@@ -1341,12 +1377,17 @@ Cross-repo views over the index (auto-rebuilds stale repos)
 
 * `status` — Per-repo counts + org totals + items grouped by owner
 * `board` — Org kanban — repo-prefixed cards over every live item
+* `init` — Re-run `init` on every registered repo — refreshes the worktree scaffold and root files (.gitignore, the AGENTS.md agent-awareness block). The rollout path for new scaffolding
 
 ## `myco org status`
 
 Per-repo counts + org totals + items grouped by owner
 
-**Usage:** `myco org status`
+**Usage:** `myco org status [OPTIONS]`
+
+###### **Options:**
+
+* `--all` — Show repos with no live items too
 
 ## `myco org board`
 
@@ -1357,6 +1398,20 @@ Org kanban — repo-prefixed cards over every live item
 ###### **Options:**
 
 * `--md` — Emit a markdown table (for docs/READMEs)
+* `--all` — Show every card — no row cap
+* `--repo <REPO>` — Only this repo's items (name or registered path)
+
+## `myco org init`
+
+Re-run `init` on every registered repo — refreshes the worktree scaffold and root files (.gitignore, the AGENTS.md agent-awareness block). The rollout path for new scaffolding
+
+**Usage:** `myco org init`
+
+## `myco ui`
+
+Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
+
+**Usage:** `myco ui`
 
 &#xA;This document was generated automatically by
 clap-markdown.&#xA;
@@ -1395,12 +1450,14 @@ documented at source (doc comments).
 * [myco-config](/myco/api/myco_config/index.html) — port
 * [myco-index](/myco/api/myco_index/index.html) — port
 * [myco-store](/myco/api/myco_store/index.html) — port
+* [myco-ops](/myco/api/myco_ops/index.html) — ops
 * [myco-config-toml](/myco/api/myco_config_toml/index.html) — adapter
 * [myco-git](/myco/api/myco_git/index.html) — adapter
 * [myco-index-redb](/myco/api/myco_index_redb/index.html) — adapter
 * [myco-shell](/myco/api/myco_shell/index.html) — adapter
 * [myco-store-md](/myco/api/myco_store_md/index.html) — adapter
 * [myco-testkit](/myco/api/myco_testkit/index.html) — adapter
+* [myco-tui](/myco/api/myco_tui/index.html) — adapter
 * [myco](/myco/api/myco/index.html) — binary
 
 ---
@@ -1630,12 +1687,14 @@ Design rules:
 | `myco-config` | port | Config port: where myco.toml-shaped config comes from |
 | `myco-index` | port | Index port: the derived, disposable cache powering status/board/report/org views |
 | `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
+| `myco-ops` | ops | myco — shared ops layer: discovery, the TODO↔BACKLOG ledger, verb mutations |
 | `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
 | `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
 | `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
 | `myco-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `myco-store-md` | adapter | Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec |
 | `myco-testkit` | adapter | Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec |
+| `myco-tui` | adapter | myco — interactive board TUI (ratatui); a thin front-end over myco-ops |
 | `myco` | binary | myco — project management, grown not built: agent-first PM CLI |
 
 ## Boundary — work memory only
@@ -1745,8 +1804,9 @@ myco init
 `init` creates the orphan `project` branch, mounts it as a
 `project/` worktree, seeds `meta.toml`, `TODO.md`, `BACKLOG.md`,
 `index.md` and the item dirs (`issues/`, `proposals/`, `plans/`,
-`adrs/`, `handoffs/`), and adds `project/` to `.gitignore` on your
-code branch. It is idempotent — run it again and a healthy
+`adrs/`, `handoffs/`), adds `project/` to `.gitignore` on your
+code branch, and writes a managed *Agent awareness* block into
+`AGENTS.md`. It is idempotent — run it again and a healthy
 worktree is verified, a damaged one repaired.
 
 ## First items

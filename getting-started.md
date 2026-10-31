@@ -29,8 +29,9 @@ myco init
 `init` creates the orphan `project` branch, mounts it as a
 `project/` worktree, seeds `meta.toml`, `TODO.md`, `BACKLOG.md`,
 `index.md` and the item dirs (`issues/`, `proposals/`, `plans/`,
-`adrs/`, `handoffs/`), and adds `project/` to `.gitignore` on your
-code branch. It is idempotent — run it again and a healthy
+`adrs/`, `handoffs/`), adds `project/` to `.gitignore` on your
+code branch, and writes a managed *Agent awareness* block into
+`AGENTS.md`. It is idempotent — run it again and a healthy
 worktree is verified, a damaged one repaired.
 
 ## First items

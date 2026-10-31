@@ -161,19 +161,20 @@
 <a href=#161 id=161 data-nosnippet>161</a>            <span class="kw">let </span>found: Vec&lt;(usize, <span class="kw-2">&amp;</span>Item)&gt; = items::tree_view(<span class="kw-2">&amp;</span>all)
 <a href=#162 id=162 data-nosnippet>162</a>                .into_iter()
 <a href=#163 id=163 data-nosnippet>163</a>                .filter(|(<span class="kw">_</span>, i)| list.matches(i))
-<a href=#164 id=164 data-nosnippet>164</a>                .collect();
-<a href=#165 id=165 data-nosnippet>165</a>            items::print_tree(<span class="kw-2">&amp;</span>found, json_out)
-<a href=#166 id=166 data-nosnippet>166</a>        }
-<a href=#167 id=167 data-nosnippet>167</a>    }
-<a href=#168 id=168 data-nosnippet>168</a>}
-<a href=#169 id=169 data-nosnippet>169</a>
-<a href=#170 id=170 data-nosnippet>170</a><span class="doccomment">/// All items in one doc, cloned out (shared by the list verbs).
-<a href=#171 id=171 data-nosnippet>171</a></span><span class="kw">pub fn </span>doc_items(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, backlog: bool) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Item&gt;, String&gt; {
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">let </span>doc_items = <span class="kw">if </span>backlog {
-<a href=#173 id=173 data-nosnippet>173</a>        store.backlog().map(|d| d.items().cloned().collect())
-<a href=#174 id=174 data-nosnippet>174</a>    } <span class="kw">else </span>{
-<a href=#175 id=175 data-nosnippet>175</a>        store.todo().map(|d| d.items().cloned().collect())
-<a href=#176 id=176 data-nosnippet>176</a>    };
-<a href=#177 id=177 data-nosnippet>177</a>    doc_items.map_err(|e| e.to_string())
-<a href=#178 id=178 data-nosnippet>178</a>}
+<a href=#164 id=164 data-nosnippet>164</a>                .take(list.take())
+<a href=#165 id=165 data-nosnippet>165</a>                .collect();
+<a href=#166 id=166 data-nosnippet>166</a>            items::print_tree(<span class="kw-2">&amp;</span>found, json_out)
+<a href=#167 id=167 data-nosnippet>167</a>        }
+<a href=#168 id=168 data-nosnippet>168</a>    }
+<a href=#169 id=169 data-nosnippet>169</a>}
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a><span class="doccomment">/// All items in one doc, cloned out (shared by the list verbs).
+<a href=#172 id=172 data-nosnippet>172</a></span><span class="kw">pub fn </span>doc_items(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, backlog: bool) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Item&gt;, String&gt; {
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>doc_items = <span class="kw">if </span>backlog {
+<a href=#174 id=174 data-nosnippet>174</a>        store.backlog().map(|d| d.items().cloned().collect())
+<a href=#175 id=175 data-nosnippet>175</a>    } <span class="kw">else </span>{
+<a href=#176 id=176 data-nosnippet>176</a>        store.todo().map(|d| d.items().cloned().collect())
+<a href=#177 id=177 data-nosnippet>177</a>    };
+<a href=#178 id=178 data-nosnippet>178</a>    doc_items.map_err(|e| e.to_string())
+<a href=#179 id=179 data-nosnippet>179</a>}
 </code></pre></div></section></main></body></html>

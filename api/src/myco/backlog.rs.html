@@ -98,9 +98,10 @@
 <a href=#98 id=98 data-nosnippet>98</a>            <span class="kw">let </span>found: Vec&lt;(usize, <span class="kw-2">&amp;</span>Item)&gt; = items::tree_view(<span class="kw-2">&amp;</span>all)
 <a href=#99 id=99 data-nosnippet>99</a>                .into_iter()
 <a href=#100 id=100 data-nosnippet>100</a>                .filter(|(<span class="kw">_</span>, i)| list.matches(i))
-<a href=#101 id=101 data-nosnippet>101</a>                .collect();
-<a href=#102 id=102 data-nosnippet>102</a>            items::print_tree(<span class="kw-2">&amp;</span>found, json_out)
-<a href=#103 id=103 data-nosnippet>103</a>        }
-<a href=#104 id=104 data-nosnippet>104</a>    }
-<a href=#105 id=105 data-nosnippet>105</a>}
+<a href=#101 id=101 data-nosnippet>101</a>                .take(list.take())
+<a href=#102 id=102 data-nosnippet>102</a>                .collect();
+<a href=#103 id=103 data-nosnippet>103</a>            items::print_tree(<span class="kw-2">&amp;</span>found, json_out)
+<a href=#104 id=104 data-nosnippet>104</a>        }
+<a href=#105 id=105 data-nosnippet>105</a>    }
+<a href=#106 id=106 data-nosnippet>106</a>}
 </code></pre></div></section></main></body></html>

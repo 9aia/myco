@@ -17,6 +17,7 @@ myco status --prompt    # token-sized digest, sized for a context window
 in progress, what's open — enough to pick work without reading
 the files. `myco status` (no flag) is the human-readable version;
 `myco board` and `myco report` give the kanban and the trend.
+Boards cap at a screenful of rows — `--all` shows every card.
 
 ## Claim
 

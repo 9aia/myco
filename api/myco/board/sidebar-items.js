@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["COLUMNS"],"fn":["card","cards_by_column","columns","columns_json","render","render_cards","run"],"struct":["Row"]};
+window.SIDEBAR_ITEMS = {"constant":["COLUMNS","DEFAULT_MAX_ROWS","HEADER_STYLE","TABLE_OVERHEAD"],"fn":["card","cards_by_column","color_enabled","colorize","columns","columns_json","dim","fit_widths","looks_like_id","render","render_cards","run","sgr","style_card_cell","style_header_cell","term_width","truncate"],"struct":["Fit","Row"]};

@@ -215,68 +215,66 @@
 <a href=#215 id=215 data-nosnippet>215</a>            } <span class="kw">else if </span>rows.is_empty() {
 <a href=#216 id=216 data-nosnippet>216</a>                <span class="macro">println!</span>(<span class="string">"no repos registered — `myco index add &lt;path&gt;`"</span>);
 <a href=#217 id=217 data-nosnippet>217</a>            } <span class="kw">else </span>{
-<a href=#218 id=218 data-nosnippet>218</a>                <span class="kw">for </span>r <span class="kw">in </span>rows {
-<a href=#219 id=219 data-nosnippet>219</a>                    <span class="macro">println!</span>(<span class="string">"{r}"</span>);
-<a href=#220 id=220 data-nosnippet>220</a>                }
-<a href=#221 id=221 data-nosnippet>221</a>            }
-<a href=#222 id=222 data-nosnippet>222</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
-<a href=#223 id=223 data-nosnippet>223</a>        }
-<a href=#224 id=224 data-nosnippet>224</a>        Cmd::Rebuild { path } =&gt; {
-<a href=#225 id=225 data-nosnippet>225</a>            <span class="kw">let </span>roots: Vec&lt;PathBuf&gt; = <span class="kw">match </span>path {
-<a href=#226 id=226 data-nosnippet>226</a>                <span class="prelude-val">Some</span>(p) =&gt; <span class="macro">vec!</span>[registered_root(<span class="kw-2">&amp;</span>index, <span class="kw-2">&amp;</span>p)<span class="question-mark">?</span>],
-<a href=#227 id=227 data-nosnippet>227</a>                <span class="prelude-val">None </span>=&gt; index
-<a href=#228 id=228 data-nosnippet>228</a>                    .repos()
-<a href=#229 id=229 data-nosnippet>229</a>                    .map_err(|e| e.to_string())<span class="question-mark">?
-<a href=#230 id=230 data-nosnippet>230</a>                    </span>.into_iter()
-<a href=#231 id=231 data-nosnippet>231</a>                    .map(|r| r.path.into_std_path_buf())
-<a href=#232 id=232 data-nosnippet>232</a>                    .collect(),
-<a href=#233 id=233 data-nosnippet>233</a>            };
-<a href=#234 id=234 data-nosnippet>234</a>            <span class="kw">if </span>roots.is_empty() {
-<a href=#235 id=235 data-nosnippet>235</a>                <span class="kw">if </span>json_out {
-<a href=#236 id=236 data-nosnippet>236</a>                    ops::print_json(<span class="kw-2">&amp;</span><span class="macro">json!</span>([]));
-<a href=#237 id=237 data-nosnippet>237</a>                } <span class="kw">else </span>{
-<a href=#238 id=238 data-nosnippet>238</a>                    <span class="macro">println!</span>(<span class="string">"no repos registered — `myco index add &lt;path&gt;`"</span>);
-<a href=#239 id=239 data-nosnippet>239</a>                }
-<a href=#240 id=240 data-nosnippet>240</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
-<a href=#241 id=241 data-nosnippet>241</a>            }
-<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">let </span><span class="kw-2">mut </span>results = Vec::new();
-<a href=#243 id=243 data-nosnippet>243</a>            <span class="kw">let </span><span class="kw-2">mut </span>failures = Vec::new();
-<a href=#244 id=244 data-nosnippet>244</a>            <span class="kw">for </span>root <span class="kw">in </span><span class="kw-2">&amp;</span>roots {
-<a href=#245 id=245 data-nosnippet>245</a>                <span class="kw">match </span>rebuild_one(<span class="kw-2">&amp;</span>index, root) {
-<a href=#246 id=246 data-nosnippet>246</a>                    <span class="prelude-val">Ok</span>(s) =&gt; {
-<a href=#247 id=247 data-nosnippet>247</a>                        <span class="kw">if </span>!json_out {
-<a href=#248 id=248 data-nosnippet>248</a>                            <span class="macro">println!</span>(
-<a href=#249 id=249 data-nosnippet>249</a>                                <span class="string">"rebuilt {} — {} items @ {}"</span>,
-<a href=#250 id=250 data-nosnippet>250</a>                                s.name,
-<a href=#251 id=251 data-nosnippet>251</a>                                s.items.len(),
-<a href=#252 id=252 data-nosnippet>252</a>                                <span class="kw-2">&amp;</span>s.head_commit[..s.head_commit.len().min(<span class="number">7</span>)],
-<a href=#253 id=253 data-nosnippet>253</a>                            );
-<a href=#254 id=254 data-nosnippet>254</a>                        }
-<a href=#255 id=255 data-nosnippet>255</a>                        results.push(
-<a href=#256 id=256 data-nosnippet>256</a>                            <span class="macro">json!</span>({<span class="string">"path"</span>: s.path, <span class="string">"status"</span>: <span class="string">"rebuilt"</span>, <span class="string">"snapshot"</span>: snap_json(<span class="kw-2">&amp;</span>s)}),
-<a href=#257 id=257 data-nosnippet>257</a>                        );
-<a href=#258 id=258 data-nosnippet>258</a>                    }
-<a href=#259 id=259 data-nosnippet>259</a>                    <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#260 id=260 data-nosnippet>260</a>                        failures.push(<span class="macro">format!</span>(<span class="string">"{}: {e}"</span>, root.display()));
-<a href=#261 id=261 data-nosnippet>261</a>                        results.push(
-<a href=#262 id=262 data-nosnippet>262</a>                            <span class="macro">json!</span>({<span class="string">"path"</span>: root.to_string_lossy(), <span class="string">"status"</span>: <span class="string">"error"</span>, <span class="string">"error"</span>: e}),
-<a href=#263 id=263 data-nosnippet>263</a>                        );
-<a href=#264 id=264 data-nosnippet>264</a>                    }
-<a href=#265 id=265 data-nosnippet>265</a>                }
-<a href=#266 id=266 data-nosnippet>266</a>            }
-<a href=#267 id=267 data-nosnippet>267</a>            <span class="kw">if </span>json_out {
-<a href=#268 id=268 data-nosnippet>268</a>                ops::print_json(<span class="kw-2">&amp;</span><span class="macro">json!</span>(results));
-<a href=#269 id=269 data-nosnippet>269</a>            }
-<a href=#270 id=270 data-nosnippet>270</a>            <span class="kw">if </span>failures.is_empty() {
-<a href=#271 id=271 data-nosnippet>271</a>                <span class="prelude-val">Ok</span>(<span class="number">0</span>)
-<a href=#272 id=272 data-nosnippet>272</a>            } <span class="kw">else </span>{
-<a href=#273 id=273 data-nosnippet>273</a>                <span class="prelude-val">Err</span>(<span class="macro">format!</span>(
-<a href=#274 id=274 data-nosnippet>274</a>                    <span class="string">"{} rebuild(s) failed: {}"</span>,
-<a href=#275 id=275 data-nosnippet>275</a>                    failures.len(),
-<a href=#276 id=276 data-nosnippet>276</a>                    failures.join(<span class="string">"; "</span>)
-<a href=#277 id=277 data-nosnippet>277</a>                ))
-<a href=#278 id=278 data-nosnippet>278</a>            }
-<a href=#279 id=279 data-nosnippet>279</a>        }
-<a href=#280 id=280 data-nosnippet>280</a>    }
-<a href=#281 id=281 data-nosnippet>281</a>}
+<a href=#218 id=218 data-nosnippet>218</a>                ops::print_paged(<span class="kw-2">&amp;</span>rows.join(<span class="string">"\n"</span>));
+<a href=#219 id=219 data-nosnippet>219</a>            }
+<a href=#220 id=220 data-nosnippet>220</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
+<a href=#221 id=221 data-nosnippet>221</a>        }
+<a href=#222 id=222 data-nosnippet>222</a>        Cmd::Rebuild { path } =&gt; {
+<a href=#223 id=223 data-nosnippet>223</a>            <span class="kw">let </span>roots: Vec&lt;PathBuf&gt; = <span class="kw">match </span>path {
+<a href=#224 id=224 data-nosnippet>224</a>                <span class="prelude-val">Some</span>(p) =&gt; <span class="macro">vec!</span>[registered_root(<span class="kw-2">&amp;</span>index, <span class="kw-2">&amp;</span>p)<span class="question-mark">?</span>],
+<a href=#225 id=225 data-nosnippet>225</a>                <span class="prelude-val">None </span>=&gt; index
+<a href=#226 id=226 data-nosnippet>226</a>                    .repos()
+<a href=#227 id=227 data-nosnippet>227</a>                    .map_err(|e| e.to_string())<span class="question-mark">?
+<a href=#228 id=228 data-nosnippet>228</a>                    </span>.into_iter()
+<a href=#229 id=229 data-nosnippet>229</a>                    .map(|r| r.path.into_std_path_buf())
+<a href=#230 id=230 data-nosnippet>230</a>                    .collect(),
+<a href=#231 id=231 data-nosnippet>231</a>            };
+<a href=#232 id=232 data-nosnippet>232</a>            <span class="kw">if </span>roots.is_empty() {
+<a href=#233 id=233 data-nosnippet>233</a>                <span class="kw">if </span>json_out {
+<a href=#234 id=234 data-nosnippet>234</a>                    ops::print_json(<span class="kw-2">&amp;</span><span class="macro">json!</span>([]));
+<a href=#235 id=235 data-nosnippet>235</a>                } <span class="kw">else </span>{
+<a href=#236 id=236 data-nosnippet>236</a>                    <span class="macro">println!</span>(<span class="string">"no repos registered — `myco index add &lt;path&gt;`"</span>);
+<a href=#237 id=237 data-nosnippet>237</a>                }
+<a href=#238 id=238 data-nosnippet>238</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
+<a href=#239 id=239 data-nosnippet>239</a>            }
+<a href=#240 id=240 data-nosnippet>240</a>            <span class="kw">let </span><span class="kw-2">mut </span>results = Vec::new();
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">let </span><span class="kw-2">mut </span>failures = Vec::new();
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">for </span>root <span class="kw">in </span><span class="kw-2">&amp;</span>roots {
+<a href=#243 id=243 data-nosnippet>243</a>                <span class="kw">match </span>rebuild_one(<span class="kw-2">&amp;</span>index, root) {
+<a href=#244 id=244 data-nosnippet>244</a>                    <span class="prelude-val">Ok</span>(s) =&gt; {
+<a href=#245 id=245 data-nosnippet>245</a>                        <span class="kw">if </span>!json_out {
+<a href=#246 id=246 data-nosnippet>246</a>                            <span class="macro">println!</span>(
+<a href=#247 id=247 data-nosnippet>247</a>                                <span class="string">"rebuilt {} — {} items @ {}"</span>,
+<a href=#248 id=248 data-nosnippet>248</a>                                s.name,
+<a href=#249 id=249 data-nosnippet>249</a>                                s.items.len(),
+<a href=#250 id=250 data-nosnippet>250</a>                                <span class="kw-2">&amp;</span>s.head_commit[..s.head_commit.len().min(<span class="number">7</span>)],
+<a href=#251 id=251 data-nosnippet>251</a>                            );
+<a href=#252 id=252 data-nosnippet>252</a>                        }
+<a href=#253 id=253 data-nosnippet>253</a>                        results.push(
+<a href=#254 id=254 data-nosnippet>254</a>                            <span class="macro">json!</span>({<span class="string">"path"</span>: s.path, <span class="string">"status"</span>: <span class="string">"rebuilt"</span>, <span class="string">"snapshot"</span>: snap_json(<span class="kw-2">&amp;</span>s)}),
+<a href=#255 id=255 data-nosnippet>255</a>                        );
+<a href=#256 id=256 data-nosnippet>256</a>                    }
+<a href=#257 id=257 data-nosnippet>257</a>                    <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#258 id=258 data-nosnippet>258</a>                        failures.push(<span class="macro">format!</span>(<span class="string">"{}: {e}"</span>, root.display()));
+<a href=#259 id=259 data-nosnippet>259</a>                        results.push(
+<a href=#260 id=260 data-nosnippet>260</a>                            <span class="macro">json!</span>({<span class="string">"path"</span>: root.to_string_lossy(), <span class="string">"status"</span>: <span class="string">"error"</span>, <span class="string">"error"</span>: e}),
+<a href=#261 id=261 data-nosnippet>261</a>                        );
+<a href=#262 id=262 data-nosnippet>262</a>                    }
+<a href=#263 id=263 data-nosnippet>263</a>                }
+<a href=#264 id=264 data-nosnippet>264</a>            }
+<a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">if </span>json_out {
+<a href=#266 id=266 data-nosnippet>266</a>                ops::print_json(<span class="kw-2">&amp;</span><span class="macro">json!</span>(results));
+<a href=#267 id=267 data-nosnippet>267</a>            }
+<a href=#268 id=268 data-nosnippet>268</a>            <span class="kw">if </span>failures.is_empty() {
+<a href=#269 id=269 data-nosnippet>269</a>                <span class="prelude-val">Ok</span>(<span class="number">0</span>)
+<a href=#270 id=270 data-nosnippet>270</a>            } <span class="kw">else </span>{
+<a href=#271 id=271 data-nosnippet>271</a>                <span class="prelude-val">Err</span>(<span class="macro">format!</span>(
+<a href=#272 id=272 data-nosnippet>272</a>                    <span class="string">"{} rebuild(s) failed: {}"</span>,
+<a href=#273 id=273 data-nosnippet>273</a>                    failures.len(),
+<a href=#274 id=274 data-nosnippet>274</a>                    failures.join(<span class="string">"; "</span>)
+<a href=#275 id=275 data-nosnippet>275</a>                ))
+<a href=#276 id=276 data-nosnippet>276</a>            }
+<a href=#277 id=277 data-nosnippet>277</a>        }
+<a href=#278 id=278 data-nosnippet>278</a>    }
+<a href=#279 id=279 data-nosnippet>279</a>}
 </code></pre></div></section></main></body></html>
