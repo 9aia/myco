@@ -10,6 +10,17 @@ DOCS = pathlib.Path(__file__).resolve().parent
 # MYCO_ROOT points at the real repo.
 ROOT = pathlib.Path(os.environ.get("MYCO_ROOT") or DOCS.parent)
 
+# Isolate the doc build in a repo-local target dir. The user-level
+# `target-dir` (e.g. ~/.cargo/shared-target) is shared across repos
+# and shas and has served stale rmeta — a poisoned `myco-core` unit
+# made `cargo doc --workspace` fail with a phantom type error until
+# `cargo clean -p` cleared it. A dedicated dir under the repo's own
+# (gitignored) target/ stays warm across bupha runs and can't be
+# poisoned by artifacts from other checkouts. An explicit
+# CARGO_TARGET_DIR still wins.
+os.environ.setdefault(
+    "CARGO_TARGET_DIR", str(ROOT / "target" / "docs-api"))
+
 
 def run(*args, capture=False):
     return subprocess.run(
