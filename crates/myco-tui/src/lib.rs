@@ -6,7 +6,8 @@
 //! identical to `myco todo done` et al. Ported from pm's Bubble Tea
 //! reference (`9aia/pm`, `docs/tui.md` there) — the keymap is
 //! vim-style: `j/k` move, `h/l`/`1`/`2`/`3` boards, `Space`/`dd` done,
-//! `D` defer, `p` promote, `Alt+↑/↓` reorder, `a` add, `Enter`/`esc`
+//! `D` defer, `p` promote, `Alt+↑/↓` reorder, `a` add, `/` filter,
+//! `:` command line (`:q` `:w` `:e` `:<id>` `:set id`), `Enter`/`esc`
 //! preview, `E` $EDITOR, `R` reload, `?` help, `q` quit — plus mouse:
 //! the wheel scrolls, a click selects an item row or a board tab.
 

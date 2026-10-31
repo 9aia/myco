@@ -154,12 +154,15 @@ fn draw_board(f: &mut Frame, m: &mut Model, area: Rect) {
             ))),
             Row::Item { item, depth } => {
                 let indent = "  ".repeat(*depth);
-                let mut spans = vec![
-                    Span::raw(indent),
-                    Span::styled(item.id.to_string(), Style::default().fg(ACCENT)),
-                    Span::raw(" "),
-                    Span::raw(item.title.clone()),
-                ];
+                let mut spans = vec![Span::raw(indent)];
+                if m.show_ids {
+                    spans.push(Span::styled(
+                        item.id.to_string(),
+                        Style::default().fg(ACCENT),
+                    ));
+                    spans.push(Span::raw(" "));
+                }
+                spans.push(Span::raw(item.title.clone()));
                 let mut meta = format!(" {}", item.status);
                 if !matches!(item.priority, myco_core::Priority::Medium) {
                     meta += &format!(" pri:{}", item.priority.token());
@@ -275,8 +278,8 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
 /// Normal-mode hint sets, widest first — `pick_hints` takes the
 /// first that fits so narrow terminals degrade instead of cropping.
 const HINTS: [&str; 3] = [
-    "j/k move · 1/2/3 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · / filter · enter preview · E edit · R reload · ? help · q quit",
-    "j/k move · space done · a add · / filter · enter · E edit · ? help · q quit",
+    "j/k move · 1/2/3 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · / filter · : cmd · enter preview · E edit · R reload · ? help · q quit",
+    "j/k move · space done · a add · / filter · : cmd · enter · E edit · ? help · q quit",
     "? help · q quit",
 ];
 
@@ -286,6 +289,7 @@ fn pick_hints(mode: Mode, width: usize) -> &'static str {
     match mode {
         Mode::Add => "enter add · esc cancel",
         Mode::Filter => "enter keep · esc clear",
+        Mode::Command => "enter run · esc cancel",
         Mode::Preview => "esc back",
         Mode::Help => "esc/?/q close",
         Mode::Normal => HINTS
@@ -297,10 +301,11 @@ fn pick_hints(mode: Mode, width: usize) -> &'static str {
 }
 
 fn draw_status(f: &mut Frame, m: &Model, area: Rect) {
-    if m.mode == Mode::Add || m.mode == Mode::Filter {
+    if matches!(m.mode, Mode::Add | Mode::Filter | Mode::Command) {
         let (prompt, buf) = match m.mode {
             Mode::Add => ("add> ", &m.input),
-            _ => ("/ ", &m.filter),
+            Mode::Filter => ("/ ", &m.filter),
+            _ => (":", &m.cmdline),
         };
         let line = Line::from(vec![
             Span::styled(prompt, Style::default().fg(ACCENT)),
@@ -379,7 +384,7 @@ fn help_lines() -> Vec<Line<'static>> {
         group("mouse"),
         bind("click, wheel", "select, scroll"),
         group("misc"),
-        bind("?", "this help"),
+        bind(": / ?", "command line / help"),
         bind("q, ctrl+c", "quit"),
         Line::from(Span::styled(
             "esc / ? / q to close",

@@ -1028,6 +1028,7 @@ mod tests {
         let mut m = model(|l| l.put_todo(t(1), None));
         // another writer lands a task while the board is open
         let mut other = items::load_ledger(&m.store).unwrap();
+        other.put_todo(t(1), None);
         other.put_todo(t(2), None);
         items::save_ledger(&m.store, &other).unwrap();
         assert_eq!(m.rows.len(), 1);
