@@ -271,251 +271,259 @@
 <a href=#271 id=271 data-nosnippet>271</a>            lines.push(Line::from(Span::styled(l.to_string(), style)));
 <a href=#272 id=272 data-nosnippet>272</a>        }
 <a href=#273 id=273 data-nosnippet>273</a>    }
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="comment">// wrap rather than clip long titles/notes on narrow screens
-<a href=#275 id=275 data-nosnippet>275</a>    </span>f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: <span class="bool-val">false </span>}), area);
-<a href=#276 id=276 data-nosnippet>276</a>}
-<a href=#277 id=277 data-nosnippet>277</a>
-<a href=#278 id=278 data-nosnippet>278</a><span class="doccomment">/// Normal-mode hint sets, widest first — `pick_hints` takes the
-<a href=#279 id=279 data-nosnippet>279</a>/// first that fits so narrow terminals degrade instead of cropping.
-<a href=#280 id=280 data-nosnippet>280</a></span><span class="kw">const </span>HINTS: [<span class="kw-2">&amp;</span>str; <span class="number">3</span>] = [
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="string">"j/k move · 1/2/3 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · / filter · : cmd · enter preview · E edit · R reload · ? help · q quit"</span>,
-<a href=#282 id=282 data-nosnippet>282</a>    <span class="string">"j/k move · space done · a add · / filter · : cmd · enter · E edit · ? help · q quit"</span>,
-<a href=#283 id=283 data-nosnippet>283</a>    <span class="string">"? help · q quit"</span>,
-<a href=#284 id=284 data-nosnippet>284</a>];
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="comment">// wrap rather than clip long titles/notes on narrow screens;
+<a href=#275 id=275 data-nosnippet>275</a>    // the pane scrolls (`j`/`k`/… in Preview mode), clamped to the
+<a href=#276 id=276 data-nosnippet>276</a>    // content so `G` lands on the last line
+<a href=#277 id=277 data-nosnippet>277</a>    </span><span class="kw">let </span>scroll = (m.preview_scroll <span class="kw">as </span>usize).min(lines.len().saturating_sub(<span class="number">1</span>)) <span class="kw">as </span>u16;
+<a href=#278 id=278 data-nosnippet>278</a>    f.render_widget(
+<a href=#279 id=279 data-nosnippet>279</a>        Paragraph::new(lines)
+<a href=#280 id=280 data-nosnippet>280</a>            .wrap(Wrap { trim: <span class="bool-val">false </span>})
+<a href=#281 id=281 data-nosnippet>281</a>            .scroll((scroll, <span class="number">0</span>)),
+<a href=#282 id=282 data-nosnippet>282</a>        area,
+<a href=#283 id=283 data-nosnippet>283</a>    );
+<a href=#284 id=284 data-nosnippet>284</a>}
 <a href=#285 id=285 data-nosnippet>285</a>
-<a href=#286 id=286 data-nosnippet>286</a><span class="doccomment">/// The hint line for `mode` that fits `width` columns (including the
-<a href=#287 id=287 data-nosnippet>287</a>/// leading space). The minimal set always wins as the fallback.
-<a href=#288 id=288 data-nosnippet>288</a></span><span class="kw">fn </span>pick_hints(mode: Mode, width: usize) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">match </span>mode {
-<a href=#290 id=290 data-nosnippet>290</a>        Mode::Add =&gt; <span class="string">"enter add · esc cancel"</span>,
-<a href=#291 id=291 data-nosnippet>291</a>        Mode::Filter =&gt; <span class="string">"enter keep · esc clear"</span>,
-<a href=#292 id=292 data-nosnippet>292</a>        Mode::Command =&gt; <span class="string">"enter run · esc cancel"</span>,
-<a href=#293 id=293 data-nosnippet>293</a>        Mode::Preview =&gt; <span class="string">"esc back"</span>,
-<a href=#294 id=294 data-nosnippet>294</a>        Mode::Help =&gt; <span class="string">"esc/?/q close"</span>,
-<a href=#295 id=295 data-nosnippet>295</a>        Mode::Normal =&gt; HINTS
-<a href=#296 id=296 data-nosnippet>296</a>            .iter()
-<a href=#297 id=297 data-nosnippet>297</a>            .copied()
-<a href=#298 id=298 data-nosnippet>298</a>            .find(|h| h.chars().count() &lt; width)
-<a href=#299 id=299 data-nosnippet>299</a>            .unwrap_or(HINTS[HINTS.len() - <span class="number">1</span>]),
-<a href=#300 id=300 data-nosnippet>300</a>    }
-<a href=#301 id=301 data-nosnippet>301</a>}
-<a href=#302 id=302 data-nosnippet>302</a>
-<a href=#303 id=303 data-nosnippet>303</a><span class="kw">fn </span>draw_status(f: <span class="kw-2">&amp;mut </span>Frame, m: <span class="kw-2">&amp;</span>Model, area: Rect) {
-<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">if </span><span class="macro">matches!</span>(m.mode, Mode::Add | Mode::Filter | Mode::Command) {
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">let </span>(prompt, buf) = <span class="kw">match </span>m.mode {
-<a href=#306 id=306 data-nosnippet>306</a>            Mode::Add =&gt; (<span class="string">"add&gt; "</span>, <span class="kw-2">&amp;</span>m.input),
-<a href=#307 id=307 data-nosnippet>307</a>            Mode::Filter =&gt; (<span class="string">"/ "</span>, <span class="kw-2">&amp;</span>m.filter),
-<a href=#308 id=308 data-nosnippet>308</a>            <span class="kw">_ </span>=&gt; (<span class="string">":"</span>, <span class="kw-2">&amp;</span>m.cmdline),
-<a href=#309 id=309 data-nosnippet>309</a>        };
-<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">let </span>line = Line::from(<span class="macro">vec!</span>[
-<a href=#311 id=311 data-nosnippet>311</a>            Span::styled(prompt, Style::default().fg(ACCENT)),
-<a href=#312 id=312 data-nosnippet>312</a>            Span::raw(buf.clone()),
-<a href=#313 id=313 data-nosnippet>313</a>            Span::styled(<span class="string">"█"</span>, Style::default().fg(ACCENT)),
-<a href=#314 id=314 data-nosnippet>314</a>        ]);
-<a href=#315 id=315 data-nosnippet>315</a>        f.render_widget(Paragraph::new(line), area);
-<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">return</span>;
-<a href=#317 id=317 data-nosnippet>317</a>    }
-<a href=#318 id=318 data-nosnippet>318</a>    <span class="comment">// The status message eats columns first; hints get what remains.
-<a href=#319 id=319 data-nosnippet>319</a>    </span><span class="kw">let </span>status_w = <span class="kw">if </span>m.status.is_empty() {
-<a href=#320 id=320 data-nosnippet>320</a>        <span class="number">0
-<a href=#321 id=321 data-nosnippet>321</a>    </span>} <span class="kw">else </span>{
-<a href=#322 id=322 data-nosnippet>322</a>        m.status.chars().count() + <span class="number">2
-<a href=#323 id=323 data-nosnippet>323</a>    </span>};
-<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">let </span>hints = pick_hints(m.mode, (area.width <span class="kw">as </span>usize).saturating_sub(status_w));
-<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">let </span>line = <span class="kw">if </span>m.status.is_empty() {
-<a href=#326 id=326 data-nosnippet>326</a>        Line::from(Span::styled(
-<a href=#327 id=327 data-nosnippet>327</a>            <span class="macro">format!</span>(<span class="string">" {hints}"</span>),
-<a href=#328 id=328 data-nosnippet>328</a>            Style::default().fg(MUTED),
-<a href=#329 id=329 data-nosnippet>329</a>        ))
-<a href=#330 id=330 data-nosnippet>330</a>    } <span class="kw">else </span>{
-<a href=#331 id=331 data-nosnippet>331</a>        Line::from(<span class="macro">vec!</span>[
-<a href=#332 id=332 data-nosnippet>332</a>            Span::styled(<span class="macro">format!</span>(<span class="string">" {} "</span>, m.status), Style::default().fg(Color::White)),
-<a href=#333 id=333 data-nosnippet>333</a>            Span::styled(<span class="macro">format!</span>(<span class="string">" {hints}"</span>), Style::default().fg(MUTED)),
-<a href=#334 id=334 data-nosnippet>334</a>        ])
-<a href=#335 id=335 data-nosnippet>335</a>    };
-<a href=#336 id=336 data-nosnippet>336</a>    f.render_widget(Paragraph::new(line), area);
-<a href=#337 id=337 data-nosnippet>337</a>}
-<a href=#338 id=338 data-nosnippet>338</a>
-<a href=#339 id=339 data-nosnippet>339</a><span class="doccomment">/// A `width`×`height` rect centered in `area`, clamped to fit.
-<a href=#340 id=340 data-nosnippet>340</a></span><span class="kw">fn </span>centered(area: Rect, width: u16, height: u16) -&gt; Rect {
-<a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">let </span>width = width.min(area.width);
-<a href=#342 id=342 data-nosnippet>342</a>    <span class="kw">let </span>height = height.min(area.height);
-<a href=#343 id=343 data-nosnippet>343</a>    Rect {
-<a href=#344 id=344 data-nosnippet>344</a>        x: area.x + (area.width - width) / <span class="number">2</span>,
-<a href=#345 id=345 data-nosnippet>345</a>        y: area.y + (area.height - height) / <span class="number">2</span>,
-<a href=#346 id=346 data-nosnippet>346</a>        width,
-<a href=#347 id=347 data-nosnippet>347</a>        height,
-<a href=#348 id=348 data-nosnippet>348</a>    }
-<a href=#349 id=349 data-nosnippet>349</a>}
-<a href=#350 id=350 data-nosnippet>350</a>
-<a href=#351 id=351 data-nosnippet>351</a><span class="doccomment">/// The `?` overlay — every bind, grouped like the status bar hints.
-<a href=#352 id=352 data-nosnippet>352</a></span><span class="kw">fn </span>help_lines() -&gt; Vec&lt;Line&lt;<span class="lifetime">'static</span>&gt;&gt; {
-<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">fn </span>group(name: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str) -&gt; Line&lt;<span class="lifetime">'static</span>&gt; {
-<a href=#354 id=354 data-nosnippet>354</a>        Line::from(Span::styled(
-<a href=#355 id=355 data-nosnippet>355</a>            name,
-<a href=#356 id=356 data-nosnippet>356</a>            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-<a href=#357 id=357 data-nosnippet>357</a>        ))
-<a href=#358 id=358 data-nosnippet>358</a>    }
-<a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">fn </span>bind(keys: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str, desc: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str) -&gt; Line&lt;<span class="lifetime">'static</span>&gt; {
-<a href=#360 id=360 data-nosnippet>360</a>        Line::from(<span class="macro">vec!</span>[
-<a href=#361 id=361 data-nosnippet>361</a>            Span::raw(<span class="string">"  "</span>),
-<a href=#362 id=362 data-nosnippet>362</a>            Span::styled(<span class="macro">format!</span>(<span class="string">"{keys:&lt;12}"</span>), Style::default().fg(ACCENT)),
-<a href=#363 id=363 data-nosnippet>363</a>            Span::styled(desc, Style::default().fg(MUTED)),
-<a href=#364 id=364 data-nosnippet>364</a>        ])
-<a href=#365 id=365 data-nosnippet>365</a>    }
-<a href=#366 id=366 data-nosnippet>366</a>    <span class="comment">// No blank separators — the whole list must fit a 24-row screen.
-<a href=#367 id=367 data-nosnippet>367</a>    </span><span class="macro">vec!</span>[
-<a href=#368 id=368 data-nosnippet>368</a>        group(<span class="string">"nav"</span>),
-<a href=#369 id=369 data-nosnippet>369</a>        bind(<span class="string">"j/k, ↑/↓"</span>, <span class="string">"move"</span>),
-<a href=#370 id=370 data-nosnippet>370</a>        bind(<span class="string">"gg / G"</span>, <span class="string">"first / last"</span>),
-<a href=#371 id=371 data-nosnippet>371</a>        bind(<span class="string">"enter"</span>, <span class="string">"preview item"</span>),
-<a href=#372 id=372 data-nosnippet>372</a>        group(<span class="string">"tabs"</span>),
-<a href=#373 id=373 data-nosnippet>373</a>        bind(<span class="string">"1 / 2"</span>, <span class="string">"TODO / BACKLOG"</span>),
-<a href=#374 id=374 data-nosnippet>374</a>        bind(<span class="string">"h/l, ←/→"</span>, <span class="string">"switch board"</span>),
-<a href=#375 id=375 data-nosnippet>375</a>        group(<span class="string">"items"</span>),
-<a href=#376 id=376 data-nosnippet>376</a>        bind(<span class="string">"space, dd"</span>, <span class="string">"mark done"</span>),
-<a href=#377 id=377 data-nosnippet>377</a>        bind(<span class="string">"D"</span>, <span class="string">"defer → BACKLOG"</span>),
-<a href=#378 id=378 data-nosnippet>378</a>        bind(<span class="string">"p"</span>, <span class="string">"promote → TODO"</span>),
-<a href=#379 id=379 data-nosnippet>379</a>        bind(<span class="string">"alt+j/k, ↑/↓"</span>, <span class="string">"reorder"</span>),
-<a href=#380 id=380 data-nosnippet>380</a>        group(<span class="string">"edit"</span>),
-<a href=#381 id=381 data-nosnippet>381</a>        bind(<span class="string">"a"</span>, <span class="string">"add item"</span>),
-<a href=#382 id=382 data-nosnippet>382</a>        bind(<span class="string">"E"</span>, <span class="string">"open in $EDITOR"</span>),
-<a href=#383 id=383 data-nosnippet>383</a>        bind(<span class="string">"R"</span>, <span class="string">"reload"</span>),
-<a href=#384 id=384 data-nosnippet>384</a>        group(<span class="string">"mouse"</span>),
-<a href=#385 id=385 data-nosnippet>385</a>        bind(<span class="string">"click, wheel"</span>, <span class="string">"select, scroll"</span>),
-<a href=#386 id=386 data-nosnippet>386</a>        group(<span class="string">"misc"</span>),
-<a href=#387 id=387 data-nosnippet>387</a>        bind(<span class="string">": / ?"</span>, <span class="string">"command line / help"</span>),
-<a href=#388 id=388 data-nosnippet>388</a>        bind(<span class="string">"q, ctrl+c"</span>, <span class="string">"quit"</span>),
-<a href=#389 id=389 data-nosnippet>389</a>        Line::from(Span::styled(
-<a href=#390 id=390 data-nosnippet>390</a>            <span class="string">"esc / ? / q to close"</span>,
-<a href=#391 id=391 data-nosnippet>391</a>            Style::default().fg(MUTED),
-<a href=#392 id=392 data-nosnippet>392</a>        )),
-<a href=#393 id=393 data-nosnippet>393</a>    ]
-<a href=#394 id=394 data-nosnippet>394</a>}
-<a href=#395 id=395 data-nosnippet>395</a>
-<a href=#396 id=396 data-nosnippet>396</a><span class="doccomment">/// Break `lines` into side-by-side columns: as many as the screen
-<a href=#397 id=397 data-nosnippet>397</a>/// height needs (one when everything fits vertically), capped by
-<a href=#398 id=398 data-nosnippet>398</a>/// what the width affords. `inner` is the box content area.
-<a href=#399 id=399 data-nosnippet>399</a></span><span class="kw">fn </span>help_columns(lines: <span class="kw-2">&amp;</span>[Line&lt;<span class="lifetime">'static</span>&gt;], area: Rect) -&gt; Vec&lt;Vec&lt;Line&lt;<span class="lifetime">'static</span>&gt;&gt;&gt; {
-<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">let </span>inner_h = area.height.saturating_sub(<span class="number">2</span>).max(<span class="number">1</span>) <span class="kw">as </span>usize;
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">let </span>inner_w = area.width.saturating_sub(<span class="number">2</span>).max(<span class="number">1</span>) <span class="kw">as </span>usize;
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">let </span>col_w = lines.iter().map(Line::width).max().unwrap_or(<span class="number">0</span>) + <span class="number">3</span>;
-<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">let </span>fits = (inner_w / col_w.max(<span class="number">1</span>)).max(<span class="number">1</span>); <span class="comment">// columns the width allows
-<a href=#404 id=404 data-nosnippet>404</a>    </span><span class="kw">let </span>needs = lines.len().div_ceil(inner_h).max(<span class="number">1</span>); <span class="comment">// columns the height wants
-<a href=#405 id=405 data-nosnippet>405</a>    </span><span class="kw">let </span>n = fits.min(needs);
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span>per = lines.len().div_ceil(n);
-<a href=#407 id=407 data-nosnippet>407</a>    lines.chunks(per).map(&lt;[Line]&gt;::to_vec).collect()
-<a href=#408 id=408 data-nosnippet>408</a>}
-<a href=#409 id=409 data-nosnippet>409</a>
-<a href=#410 id=410 data-nosnippet>410</a><span class="kw">fn </span>draw_help(f: <span class="kw-2">&amp;mut </span>Frame, area: Rect) {
-<a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">let </span>cols = help_columns(<span class="kw-2">&amp;</span>help_lines(), area);
-<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">let </span>col_ws: Vec&lt;u16&gt; = cols
-<a href=#413 id=413 data-nosnippet>413</a>        .iter()
-<a href=#414 id=414 data-nosnippet>414</a>        .map(|c| c.iter().map(Line::width).max().unwrap_or(<span class="number">0</span>) <span class="kw">as </span>u16 + <span class="number">3</span>)
-<a href=#415 id=415 data-nosnippet>415</a>        .collect();
-<a href=#416 id=416 data-nosnippet>416</a>    <span class="kw">let </span>width = col_ws.iter().sum::&lt;u16&gt;() + <span class="number">2</span>;
-<a href=#417 id=417 data-nosnippet>417</a>    <span class="kw">let </span>height = cols.iter().map(Vec::len).max().unwrap_or(<span class="number">0</span>) <span class="kw">as </span>u16 + <span class="number">2</span>;
-<a href=#418 id=418 data-nosnippet>418</a>    <span class="kw">let </span>popup = centered(area, width, height);
-<a href=#419 id=419 data-nosnippet>419</a>    f.render_widget(Clear, popup);
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">let </span>block = Block::default()
-<a href=#421 id=421 data-nosnippet>421</a>        .borders(Borders::ALL)
-<a href=#422 id=422 data-nosnippet>422</a>        .border_style(Style::default().fg(ACCENT))
-<a href=#423 id=423 data-nosnippet>423</a>        .title(Span::styled(<span class="string">" keys "</span>, Style::default().fg(ACCENT)));
-<a href=#424 id=424 data-nosnippet>424</a>    <span class="kw">let </span>inner = block.inner(popup);
-<a href=#425 id=425 data-nosnippet>425</a>    f.render_widget(block, popup);
-<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span>rects = Layout::horizontal(col_ws.iter().map(|w| Constraint::Length(<span class="kw-2">*</span>w))).split(inner);
-<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">for </span>(lines, rect) <span class="kw">in </span>cols.iter().zip(rects.iter()) {
-<a href=#428 id=428 data-nosnippet>428</a>        f.render_widget(Paragraph::new(lines.clone()), <span class="kw-2">*</span>rect);
-<a href=#429 id=429 data-nosnippet>429</a>    }
-<a href=#430 id=430 data-nosnippet>430</a>}
-<a href=#431 id=431 data-nosnippet>431</a>
-<a href=#432 id=432 data-nosnippet>432</a><span class="attr">#[cfg(test)]
-<a href=#433 id=433 data-nosnippet>433</a></span><span class="kw">mod </span>tests {
-<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#435 id=435 data-nosnippet>435</a>
-<a href=#436 id=436 data-nosnippet>436</a>    <span class="doccomment">/// Rendered text of a span set, for truncation assertions.
-<a href=#437 id=437 data-nosnippet>437</a>    </span><span class="kw">fn </span>text(spans: <span class="kw-2">&amp;</span>[Span]) -&gt; String {
-<a href=#438 id=438 data-nosnippet>438</a>        spans.iter().map(|s| s.content.as_ref()).collect()
-<a href=#439 id=439 data-nosnippet>439</a>    }
-<a href=#440 id=440 data-nosnippet>440</a>
-<a href=#441 id=441 data-nosnippet>441</a>    <span class="attr">#[test]
-<a href=#442 id=442 data-nosnippet>442</a>    </span><span class="kw">fn </span>chrome_yields_to_the_viewport() {
-<a href=#443 id=443 data-nosnippet>443</a>        <span class="macro">assert_eq!</span>(chrome(<span class="number">24</span>), (<span class="bool-val">true</span>, <span class="bool-val">true</span>));
-<a href=#444 id=444 data-nosnippet>444</a>        <span class="macro">assert_eq!</span>(chrome(<span class="number">5</span>), (<span class="bool-val">true</span>, <span class="bool-val">true</span>));
-<a href=#445 id=445 data-nosnippet>445</a>        <span class="macro">assert_eq!</span>(chrome(<span class="number">4</span>), (<span class="bool-val">true</span>, <span class="bool-val">false</span>)); <span class="comment">// status yields: 3-row list
-<a href=#446 id=446 data-nosnippet>446</a>        </span><span class="macro">assert_eq!</span>(chrome(<span class="number">3</span>), (<span class="bool-val">true</span>, <span class="bool-val">false</span>));
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="macro">assert_eq!</span>(chrome(<span class="number">2</span>), (<span class="bool-val">false</span>, <span class="bool-val">false</span>)); <span class="comment">// everything yields
-<a href=#448 id=448 data-nosnippet>448</a>    </span>}
-<a href=#449 id=449 data-nosnippet>449</a>
-<a href=#450 id=450 data-nosnippet>450</a>    <span class="attr">#[test]
-<a href=#451 id=451 data-nosnippet>451</a>    </span><span class="kw">fn </span>tab_labels_shrink_to_initials() {
-<a href=#452 id=452 data-nosnippet>452</a>        <span class="macro">assert_eq!</span>(tab_labels(<span class="number">80</span>), <span class="macro">vec!</span>[<span class="string">" TODO "</span>, <span class="string">" BACKLOG "</span>, <span class="string">" ITEMS "</span>]);
-<a href=#453 id=453 data-nosnippet>453</a>        <span class="macro">assert_eq!</span>(tab_labels(<span class="number">26</span>), <span class="macro">vec!</span>[<span class="string">" TODO "</span>, <span class="string">" BACKLOG "</span>, <span class="string">" ITEMS "</span>]);
-<a href=#454 id=454 data-nosnippet>454</a>        <span class="macro">assert_eq!</span>(tab_labels(<span class="number">25</span>), <span class="macro">vec!</span>[<span class="string">"T"</span>, <span class="string">"B"</span>, <span class="string">"I"</span>]);
-<a href=#455 id=455 data-nosnippet>455</a>        <span class="macro">assert_eq!</span>(tab_labels(<span class="number">2</span>), <span class="macro">vec!</span>[<span class="string">"T"</span>, <span class="string">"B"</span>, <span class="string">"I"</span>]);
-<a href=#456 id=456 data-nosnippet>456</a>    }
+<a href=#286 id=286 data-nosnippet>286</a><span class="doccomment">/// Normal-mode hint sets, widest first — `pick_hints` takes the
+<a href=#287 id=287 data-nosnippet>287</a>/// first that fits so narrow terminals degrade instead of cropping.
+<a href=#288 id=288 data-nosnippet>288</a></span><span class="kw">const </span>HINTS: [<span class="kw-2">&amp;</span>str; <span class="number">3</span>] = [
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="string">"j/k move · 1/2/3 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · / filter · : cmd · enter preview · E edit · R reload · ? help · q quit"</span>,
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="string">"j/k move · space done · a add · / filter · : cmd · enter · E edit · ? help · q quit"</span>,
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="string">"? help · q quit"</span>,
+<a href=#292 id=292 data-nosnippet>292</a>];
+<a href=#293 id=293 data-nosnippet>293</a>
+<a href=#294 id=294 data-nosnippet>294</a><span class="doccomment">/// The hint line for `mode` that fits `width` columns (including the
+<a href=#295 id=295 data-nosnippet>295</a>/// leading space). The minimal set always wins as the fallback.
+<a href=#296 id=296 data-nosnippet>296</a></span><span class="kw">fn </span>pick_hints(mode: Mode, width: usize) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#297 id=297 data-nosnippet>297</a>    <span class="kw">match </span>mode {
+<a href=#298 id=298 data-nosnippet>298</a>        Mode::Add =&gt; <span class="string">"enter add · esc cancel"</span>,
+<a href=#299 id=299 data-nosnippet>299</a>        Mode::Filter =&gt; <span class="string">"enter keep · esc clear"</span>,
+<a href=#300 id=300 data-nosnippet>300</a>        Mode::Command =&gt; <span class="string">"enter run · esc cancel"</span>,
+<a href=#301 id=301 data-nosnippet>301</a>        Mode::Preview =&gt; <span class="string">"j/k scroll · esc back"</span>,
+<a href=#302 id=302 data-nosnippet>302</a>        Mode::Help =&gt; <span class="string">"esc/?/q close"</span>,
+<a href=#303 id=303 data-nosnippet>303</a>        Mode::Normal =&gt; HINTS
+<a href=#304 id=304 data-nosnippet>304</a>            .iter()
+<a href=#305 id=305 data-nosnippet>305</a>            .copied()
+<a href=#306 id=306 data-nosnippet>306</a>            .find(|h| h.chars().count() &lt; width)
+<a href=#307 id=307 data-nosnippet>307</a>            .unwrap_or(HINTS[HINTS.len() - <span class="number">1</span>]),
+<a href=#308 id=308 data-nosnippet>308</a>    }
+<a href=#309 id=309 data-nosnippet>309</a>}
+<a href=#310 id=310 data-nosnippet>310</a>
+<a href=#311 id=311 data-nosnippet>311</a><span class="kw">fn </span>draw_status(f: <span class="kw-2">&amp;mut </span>Frame, m: <span class="kw-2">&amp;</span>Model, area: Rect) {
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">if </span><span class="macro">matches!</span>(m.mode, Mode::Add | Mode::Filter | Mode::Command) {
+<a href=#313 id=313 data-nosnippet>313</a>        <span class="kw">let </span>(prompt, buf) = <span class="kw">match </span>m.mode {
+<a href=#314 id=314 data-nosnippet>314</a>            Mode::Add =&gt; (<span class="string">"add&gt; "</span>, <span class="kw-2">&amp;</span>m.input),
+<a href=#315 id=315 data-nosnippet>315</a>            Mode::Filter =&gt; (<span class="string">"/ "</span>, <span class="kw-2">&amp;</span>m.filter),
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="kw">_ </span>=&gt; (<span class="string">":"</span>, <span class="kw-2">&amp;</span>m.cmdline),
+<a href=#317 id=317 data-nosnippet>317</a>        };
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">let </span>line = Line::from(<span class="macro">vec!</span>[
+<a href=#319 id=319 data-nosnippet>319</a>            Span::styled(prompt, Style::default().fg(ACCENT)),
+<a href=#320 id=320 data-nosnippet>320</a>            Span::raw(buf.clone()),
+<a href=#321 id=321 data-nosnippet>321</a>            Span::styled(<span class="string">"█"</span>, Style::default().fg(ACCENT)),
+<a href=#322 id=322 data-nosnippet>322</a>        ]);
+<a href=#323 id=323 data-nosnippet>323</a>        f.render_widget(Paragraph::new(line), area);
+<a href=#324 id=324 data-nosnippet>324</a>        <span class="kw">return</span>;
+<a href=#325 id=325 data-nosnippet>325</a>    }
+<a href=#326 id=326 data-nosnippet>326</a>    <span class="comment">// The status message eats columns first; hints get what remains.
+<a href=#327 id=327 data-nosnippet>327</a>    </span><span class="kw">let </span>status_w = <span class="kw">if </span>m.status.is_empty() {
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="number">0
+<a href=#329 id=329 data-nosnippet>329</a>    </span>} <span class="kw">else </span>{
+<a href=#330 id=330 data-nosnippet>330</a>        m.status.chars().count() + <span class="number">2
+<a href=#331 id=331 data-nosnippet>331</a>    </span>};
+<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">let </span>hints = pick_hints(m.mode, (area.width <span class="kw">as </span>usize).saturating_sub(status_w));
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">let </span>line = <span class="kw">if </span>m.status.is_empty() {
+<a href=#334 id=334 data-nosnippet>334</a>        Line::from(Span::styled(
+<a href=#335 id=335 data-nosnippet>335</a>            <span class="macro">format!</span>(<span class="string">" {hints}"</span>),
+<a href=#336 id=336 data-nosnippet>336</a>            Style::default().fg(MUTED),
+<a href=#337 id=337 data-nosnippet>337</a>        ))
+<a href=#338 id=338 data-nosnippet>338</a>    } <span class="kw">else </span>{
+<a href=#339 id=339 data-nosnippet>339</a>        Line::from(<span class="macro">vec!</span>[
+<a href=#340 id=340 data-nosnippet>340</a>            Span::styled(<span class="macro">format!</span>(<span class="string">" {} "</span>, m.status), Style::default().fg(Color::White)),
+<a href=#341 id=341 data-nosnippet>341</a>            Span::styled(<span class="macro">format!</span>(<span class="string">" {hints}"</span>), Style::default().fg(MUTED)),
+<a href=#342 id=342 data-nosnippet>342</a>        ])
+<a href=#343 id=343 data-nosnippet>343</a>    };
+<a href=#344 id=344 data-nosnippet>344</a>    f.render_widget(Paragraph::new(line), area);
+<a href=#345 id=345 data-nosnippet>345</a>}
+<a href=#346 id=346 data-nosnippet>346</a>
+<a href=#347 id=347 data-nosnippet>347</a><span class="doccomment">/// A `width`×`height` rect centered in `area`, clamped to fit.
+<a href=#348 id=348 data-nosnippet>348</a></span><span class="kw">fn </span>centered(area: Rect, width: u16, height: u16) -&gt; Rect {
+<a href=#349 id=349 data-nosnippet>349</a>    <span class="kw">let </span>width = width.min(area.width);
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw">let </span>height = height.min(area.height);
+<a href=#351 id=351 data-nosnippet>351</a>    Rect {
+<a href=#352 id=352 data-nosnippet>352</a>        x: area.x + (area.width - width) / <span class="number">2</span>,
+<a href=#353 id=353 data-nosnippet>353</a>        y: area.y + (area.height - height) / <span class="number">2</span>,
+<a href=#354 id=354 data-nosnippet>354</a>        width,
+<a href=#355 id=355 data-nosnippet>355</a>        height,
+<a href=#356 id=356 data-nosnippet>356</a>    }
+<a href=#357 id=357 data-nosnippet>357</a>}
+<a href=#358 id=358 data-nosnippet>358</a>
+<a href=#359 id=359 data-nosnippet>359</a><span class="doccomment">/// The `?` overlay — every bind, grouped like the status bar hints.
+<a href=#360 id=360 data-nosnippet>360</a></span><span class="kw">fn </span>help_lines() -&gt; Vec&lt;Line&lt;<span class="lifetime">'static</span>&gt;&gt; {
+<a href=#361 id=361 data-nosnippet>361</a>    <span class="kw">fn </span>group(name: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str) -&gt; Line&lt;<span class="lifetime">'static</span>&gt; {
+<a href=#362 id=362 data-nosnippet>362</a>        Line::from(Span::styled(
+<a href=#363 id=363 data-nosnippet>363</a>            name,
+<a href=#364 id=364 data-nosnippet>364</a>            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+<a href=#365 id=365 data-nosnippet>365</a>        ))
+<a href=#366 id=366 data-nosnippet>366</a>    }
+<a href=#367 id=367 data-nosnippet>367</a>    <span class="kw">fn </span>bind(keys: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str, desc: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str) -&gt; Line&lt;<span class="lifetime">'static</span>&gt; {
+<a href=#368 id=368 data-nosnippet>368</a>        Line::from(<span class="macro">vec!</span>[
+<a href=#369 id=369 data-nosnippet>369</a>            Span::raw(<span class="string">"  "</span>),
+<a href=#370 id=370 data-nosnippet>370</a>            Span::styled(<span class="macro">format!</span>(<span class="string">"{keys:&lt;12}"</span>), Style::default().fg(ACCENT)),
+<a href=#371 id=371 data-nosnippet>371</a>            Span::styled(desc, Style::default().fg(MUTED)),
+<a href=#372 id=372 data-nosnippet>372</a>        ])
+<a href=#373 id=373 data-nosnippet>373</a>    }
+<a href=#374 id=374 data-nosnippet>374</a>    <span class="comment">// No blank separators — the whole list must fit a 24-row screen.
+<a href=#375 id=375 data-nosnippet>375</a>    </span><span class="macro">vec!</span>[
+<a href=#376 id=376 data-nosnippet>376</a>        group(<span class="string">"nav"</span>),
+<a href=#377 id=377 data-nosnippet>377</a>        bind(<span class="string">"j/k, ↑/↓"</span>, <span class="string">"move"</span>),
+<a href=#378 id=378 data-nosnippet>378</a>        bind(<span class="string">"gg / G"</span>, <span class="string">"first / last"</span>),
+<a href=#379 id=379 data-nosnippet>379</a>        bind(<span class="string">"enter"</span>, <span class="string">"preview (j/k scroll)"</span>),
+<a href=#380 id=380 data-nosnippet>380</a>        group(<span class="string">"tabs"</span>),
+<a href=#381 id=381 data-nosnippet>381</a>        bind(<span class="string">"1 / 2 / 3"</span>, <span class="string">"TODO / BACKLOG / FILES"</span>),
+<a href=#382 id=382 data-nosnippet>382</a>        bind(<span class="string">"h/l, ←/→"</span>, <span class="string">"switch board"</span>),
+<a href=#383 id=383 data-nosnippet>383</a>        group(<span class="string">"items (TODO/BACKLOG)"</span>),
+<a href=#384 id=384 data-nosnippet>384</a>        bind(<span class="string">"space, dd"</span>, <span class="string">"mark done"</span>),
+<a href=#385 id=385 data-nosnippet>385</a>        bind(<span class="string">"D"</span>, <span class="string">"defer → BACKLOG"</span>),
+<a href=#386 id=386 data-nosnippet>386</a>        bind(<span class="string">"p"</span>, <span class="string">"promote → TODO"</span>),
+<a href=#387 id=387 data-nosnippet>387</a>        bind(<span class="string">"alt+j/k, ↑/↓"</span>, <span class="string">"reorder"</span>),
+<a href=#388 id=388 data-nosnippet>388</a>        group(<span class="string">"edit"</span>),
+<a href=#389 id=389 data-nosnippet>389</a>        bind(<span class="string">"a"</span>, <span class="string">"add item"</span>),
+<a href=#390 id=390 data-nosnippet>390</a>        bind(<span class="string">"E"</span>, <span class="string">"open in $EDITOR"</span>),
+<a href=#391 id=391 data-nosnippet>391</a>        bind(<span class="string">"R"</span>, <span class="string">"reload"</span>),
+<a href=#392 id=392 data-nosnippet>392</a>        group(<span class="string">"mouse"</span>),
+<a href=#393 id=393 data-nosnippet>393</a>        bind(<span class="string">"click, wheel"</span>, <span class="string">"select, scroll"</span>),
+<a href=#394 id=394 data-nosnippet>394</a>        group(<span class="string">"misc"</span>),
+<a href=#395 id=395 data-nosnippet>395</a>        bind(<span class="string">": / ?"</span>, <span class="string">"command line / help"</span>),
+<a href=#396 id=396 data-nosnippet>396</a>        bind(<span class="string">"q, ctrl+c"</span>, <span class="string">"quit"</span>),
+<a href=#397 id=397 data-nosnippet>397</a>        Line::from(Span::styled(
+<a href=#398 id=398 data-nosnippet>398</a>            <span class="string">"esc / ? / q to close"</span>,
+<a href=#399 id=399 data-nosnippet>399</a>            Style::default().fg(MUTED),
+<a href=#400 id=400 data-nosnippet>400</a>        )),
+<a href=#401 id=401 data-nosnippet>401</a>    ]
+<a href=#402 id=402 data-nosnippet>402</a>}
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a><span class="doccomment">/// Break `lines` into side-by-side columns: as many as the screen
+<a href=#405 id=405 data-nosnippet>405</a>/// height needs (one when everything fits vertically), capped by
+<a href=#406 id=406 data-nosnippet>406</a>/// what the width affords. `inner` is the box content area.
+<a href=#407 id=407 data-nosnippet>407</a></span><span class="kw">fn </span>help_columns(lines: <span class="kw-2">&amp;</span>[Line&lt;<span class="lifetime">'static</span>&gt;], area: Rect) -&gt; Vec&lt;Vec&lt;Line&lt;<span class="lifetime">'static</span>&gt;&gt;&gt; {
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">let </span>inner_h = area.height.saturating_sub(<span class="number">2</span>).max(<span class="number">1</span>) <span class="kw">as </span>usize;
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">let </span>inner_w = area.width.saturating_sub(<span class="number">2</span>).max(<span class="number">1</span>) <span class="kw">as </span>usize;
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span>col_w = lines.iter().map(Line::width).max().unwrap_or(<span class="number">0</span>) + <span class="number">3</span>;
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">let </span>fits = (inner_w / col_w.max(<span class="number">1</span>)).max(<span class="number">1</span>); <span class="comment">// columns the width allows
+<a href=#412 id=412 data-nosnippet>412</a>    </span><span class="kw">let </span>needs = lines.len().div_ceil(inner_h).max(<span class="number">1</span>); <span class="comment">// columns the height wants
+<a href=#413 id=413 data-nosnippet>413</a>    </span><span class="kw">let </span>n = fits.min(needs);
+<a href=#414 id=414 data-nosnippet>414</a>    <span class="kw">let </span>per = lines.len().div_ceil(n);
+<a href=#415 id=415 data-nosnippet>415</a>    lines.chunks(per).map(&lt;[Line]&gt;::to_vec).collect()
+<a href=#416 id=416 data-nosnippet>416</a>}
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a><span class="kw">fn </span>draw_help(f: <span class="kw-2">&amp;mut </span>Frame, area: Rect) {
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="kw">let </span>cols = help_columns(<span class="kw-2">&amp;</span>help_lines(), area);
+<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">let </span>col_ws: Vec&lt;u16&gt; = cols
+<a href=#421 id=421 data-nosnippet>421</a>        .iter()
+<a href=#422 id=422 data-nosnippet>422</a>        .map(|c| c.iter().map(Line::width).max().unwrap_or(<span class="number">0</span>) <span class="kw">as </span>u16 + <span class="number">3</span>)
+<a href=#423 id=423 data-nosnippet>423</a>        .collect();
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="kw">let </span>width = col_ws.iter().sum::&lt;u16&gt;() + <span class="number">2</span>;
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">let </span>height = cols.iter().map(Vec::len).max().unwrap_or(<span class="number">0</span>) <span class="kw">as </span>u16 + <span class="number">2</span>;
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span>popup = centered(area, width, height);
+<a href=#427 id=427 data-nosnippet>427</a>    f.render_widget(Clear, popup);
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="kw">let </span>block = Block::default()
+<a href=#429 id=429 data-nosnippet>429</a>        .borders(Borders::ALL)
+<a href=#430 id=430 data-nosnippet>430</a>        .border_style(Style::default().fg(ACCENT))
+<a href=#431 id=431 data-nosnippet>431</a>        .title(Span::styled(<span class="string">" keys "</span>, Style::default().fg(ACCENT)));
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">let </span>inner = block.inner(popup);
+<a href=#433 id=433 data-nosnippet>433</a>    f.render_widget(block, popup);
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">let </span>rects = Layout::horizontal(col_ws.iter().map(|w| Constraint::Length(<span class="kw-2">*</span>w))).split(inner);
+<a href=#435 id=435 data-nosnippet>435</a>    <span class="kw">for </span>(lines, rect) <span class="kw">in </span>cols.iter().zip(rects.iter()) {
+<a href=#436 id=436 data-nosnippet>436</a>        f.render_widget(Paragraph::new(lines.clone()), <span class="kw-2">*</span>rect);
+<a href=#437 id=437 data-nosnippet>437</a>    }
+<a href=#438 id=438 data-nosnippet>438</a>}
+<a href=#439 id=439 data-nosnippet>439</a>
+<a href=#440 id=440 data-nosnippet>440</a><span class="attr">#[cfg(test)]
+<a href=#441 id=441 data-nosnippet>441</a></span><span class="kw">mod </span>tests {
+<a href=#442 id=442 data-nosnippet>442</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#443 id=443 data-nosnippet>443</a>
+<a href=#444 id=444 data-nosnippet>444</a>    <span class="doccomment">/// Rendered text of a span set, for truncation assertions.
+<a href=#445 id=445 data-nosnippet>445</a>    </span><span class="kw">fn </span>text(spans: <span class="kw-2">&amp;</span>[Span]) -&gt; String {
+<a href=#446 id=446 data-nosnippet>446</a>        spans.iter().map(|s| s.content.as_ref()).collect()
+<a href=#447 id=447 data-nosnippet>447</a>    }
+<a href=#448 id=448 data-nosnippet>448</a>
+<a href=#449 id=449 data-nosnippet>449</a>    <span class="attr">#[test]
+<a href=#450 id=450 data-nosnippet>450</a>    </span><span class="kw">fn </span>chrome_yields_to_the_viewport() {
+<a href=#451 id=451 data-nosnippet>451</a>        <span class="macro">assert_eq!</span>(chrome(<span class="number">24</span>), (<span class="bool-val">true</span>, <span class="bool-val">true</span>));
+<a href=#452 id=452 data-nosnippet>452</a>        <span class="macro">assert_eq!</span>(chrome(<span class="number">5</span>), (<span class="bool-val">true</span>, <span class="bool-val">true</span>));
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="macro">assert_eq!</span>(chrome(<span class="number">4</span>), (<span class="bool-val">true</span>, <span class="bool-val">false</span>)); <span class="comment">// status yields: 3-row list
+<a href=#454 id=454 data-nosnippet>454</a>        </span><span class="macro">assert_eq!</span>(chrome(<span class="number">3</span>), (<span class="bool-val">true</span>, <span class="bool-val">false</span>));
+<a href=#455 id=455 data-nosnippet>455</a>        <span class="macro">assert_eq!</span>(chrome(<span class="number">2</span>), (<span class="bool-val">false</span>, <span class="bool-val">false</span>)); <span class="comment">// everything yields
+<a href=#456 id=456 data-nosnippet>456</a>    </span>}
 <a href=#457 id=457 data-nosnippet>457</a>
 <a href=#458 id=458 data-nosnippet>458</a>    <span class="attr">#[test]
-<a href=#459 id=459 data-nosnippet>459</a>    </span><span class="kw">fn </span>tab_hit_matches_drawn_columns() {
-<a href=#460 id=460 data-nosnippet>460</a>        <span class="comment">// full labels: " " + " TODO " + " " + " BACKLOG " + " " + " ITEMS "
-<a href=#461 id=461 data-nosnippet>461</a>        </span><span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">0</span>), <span class="prelude-val">None</span>); <span class="comment">// leading separator
-<a href=#462 id=462 data-nosnippet>462</a>        </span><span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">1</span>), <span class="prelude-val">Some</span>(<span class="number">0</span>));
-<a href=#463 id=463 data-nosnippet>463</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">6</span>), <span class="prelude-val">Some</span>(<span class="number">0</span>));
-<a href=#464 id=464 data-nosnippet>464</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">7</span>), <span class="prelude-val">None</span>); <span class="comment">// separator between tabs
-<a href=#465 id=465 data-nosnippet>465</a>        </span><span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">8</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">16</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">18</span>), <span class="prelude-val">Some</span>(<span class="number">2</span>));
-<a href=#468 id=468 data-nosnippet>468</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">24</span>), <span class="prelude-val">Some</span>(<span class="number">2</span>));
-<a href=#469 id=469 data-nosnippet>469</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">40</span>), <span class="prelude-val">None</span>); <span class="comment">// past the last tab
-<a href=#470 id=470 data-nosnippet>470</a>                                           // narrow terminal: initials "T"/"B"/"I" at cols 1, 3, 5
-<a href=#471 id=471 data-nosnippet>471</a>        </span><span class="macro">assert_eq!</span>(tab_hit(<span class="number">10</span>, <span class="number">1</span>), <span class="prelude-val">Some</span>(<span class="number">0</span>));
-<a href=#472 id=472 data-nosnippet>472</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">10</span>, <span class="number">3</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
-<a href=#473 id=473 data-nosnippet>473</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">10</span>, <span class="number">5</span>), <span class="prelude-val">Some</span>(<span class="number">2</span>));
-<a href=#474 id=474 data-nosnippet>474</a>    }
-<a href=#475 id=475 data-nosnippet>475</a>
-<a href=#476 id=476 data-nosnippet>476</a>    <span class="attr">#[test]
-<a href=#477 id=477 data-nosnippet>477</a>    </span><span class="kw">fn </span>ellipsize_cuts_with_ellipsis() {
-<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span>spans = || <span class="macro">vec!</span>[Span::raw(<span class="string">"hello world"</span>)];
-<a href=#479 id=479 data-nosnippet>479</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>ellipsize(spans(), <span class="number">20</span>)), <span class="string">"hello world"</span>);
-<a href=#480 id=480 data-nosnippet>480</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>ellipsize(spans(), <span class="number">11</span>)), <span class="string">"hello world"</span>);
-<a href=#481 id=481 data-nosnippet>481</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>ellipsize(spans(), <span class="number">8</span>)), <span class="string">"hello w…"</span>);
-<a href=#482 id=482 data-nosnippet>482</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>ellipsize(spans(), <span class="number">1</span>)), <span class="string">"…"</span>);
-<a href=#483 id=483 data-nosnippet>483</a>        <span class="macro">assert!</span>(ellipsize(spans(), <span class="number">0</span>).is_empty());
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="comment">// styles survive the cut: an accent id keeps its color
-<a href=#485 id=485 data-nosnippet>485</a>        </span><span class="kw">let </span>out = ellipsize(
-<a href=#486 id=486 data-nosnippet>486</a>            <span class="macro">vec!</span>[
-<a href=#487 id=487 data-nosnippet>487</a>                Span::styled(<span class="string">"T-001"</span>, Style::default().fg(ACCENT)),
-<a href=#488 id=488 data-nosnippet>488</a>                Span::raw(<span class="string">" a long title here"</span>),
-<a href=#489 id=489 data-nosnippet>489</a>            ],
-<a href=#490 id=490 data-nosnippet>490</a>            <span class="number">10</span>,
-<a href=#491 id=491 data-nosnippet>491</a>        );
-<a href=#492 id=492 data-nosnippet>492</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>out), <span class="string">"T-001 a l…"</span>);
-<a href=#493 id=493 data-nosnippet>493</a>        <span class="macro">assert_eq!</span>(out[<span class="number">0</span>].style.fg, <span class="prelude-val">Some</span>(ACCENT));
-<a href=#494 id=494 data-nosnippet>494</a>    }
-<a href=#495 id=495 data-nosnippet>495</a>
-<a href=#496 id=496 data-nosnippet>496</a>    <span class="attr">#[test]
-<a href=#497 id=497 data-nosnippet>497</a>    </span><span class="kw">fn </span>help_columns_only_when_short_and_wide() {
-<a href=#498 id=498 data-nosnippet>498</a>        <span class="kw">let </span>lines = help_lines();
-<a href=#499 id=499 data-nosnippet>499</a>        <span class="comment">// plenty of room: one column
-<a href=#500 id=500 data-nosnippet>500</a>        </span><span class="macro">assert_eq!</span>(help_columns(<span class="kw-2">&amp;</span>lines, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">80</span>, <span class="number">24</span>)).len(), <span class="number">1</span>);
-<a href=#501 id=501 data-nosnippet>501</a>        <span class="comment">// short but narrow: stays one column, crops
-<a href=#502 id=502 data-nosnippet>502</a>        </span><span class="macro">assert_eq!</span>(help_columns(<span class="kw-2">&amp;</span>lines, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">30</span>, <span class="number">10</span>)).len(), <span class="number">1</span>);
-<a href=#503 id=503 data-nosnippet>503</a>        <span class="comment">// short and wide: folds into columns that fit the height
-<a href=#504 id=504 data-nosnippet>504</a>        </span><span class="kw">let </span>cols = help_columns(<span class="kw-2">&amp;</span>lines, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">120</span>, <span class="number">10</span>));
-<a href=#505 id=505 data-nosnippet>505</a>        <span class="macro">assert!</span>(cols.len() &gt;= <span class="number">2</span>);
-<a href=#506 id=506 data-nosnippet>506</a>        <span class="macro">assert!</span>(cols.iter().all(|c| c.len() &lt;= <span class="number">8</span>));
-<a href=#507 id=507 data-nosnippet>507</a>        <span class="macro">assert_eq!</span>(cols.iter().map(Vec::len).sum::&lt;usize&gt;(), lines.len());
-<a href=#508 id=508 data-nosnippet>508</a>    }
-<a href=#509 id=509 data-nosnippet>509</a>
-<a href=#510 id=510 data-nosnippet>510</a>    <span class="attr">#[test]
-<a href=#511 id=511 data-nosnippet>511</a>    </span><span class="kw">fn </span>hints_degrade_full_to_minimal() {
-<a href=#512 id=512 data-nosnippet>512</a>        <span class="kw">let </span>len = |h: <span class="kw-2">&amp;</span>str| h.chars().count();
-<a href=#513 id=513 data-nosnippet>513</a>        <span class="macro">assert_eq!</span>(pick_hints(Mode::Normal, len(HINTS[<span class="number">0</span>]) + <span class="number">1</span>), HINTS[<span class="number">0</span>]);
-<a href=#514 id=514 data-nosnippet>514</a>        <span class="macro">assert_eq!</span>(pick_hints(Mode::Normal, len(HINTS[<span class="number">0</span>])), HINTS[<span class="number">1</span>]);
-<a href=#515 id=515 data-nosnippet>515</a>        <span class="macro">assert_eq!</span>(pick_hints(Mode::Normal, len(HINTS[<span class="number">1</span>])), HINTS[<span class="number">2</span>]);
-<a href=#516 id=516 data-nosnippet>516</a>        <span class="comment">// tiny terminals still get the minimal set (cropped, not absent)
-<a href=#517 id=517 data-nosnippet>517</a>        </span><span class="macro">assert_eq!</span>(pick_hints(Mode::Normal, <span class="number">0</span>), HINTS[<span class="number">2</span>]);
-<a href=#518 id=518 data-nosnippet>518</a>        <span class="macro">assert_eq!</span>(pick_hints(Mode::Preview, <span class="number">0</span>), <span class="string">"esc back"</span>);
-<a href=#519 id=519 data-nosnippet>519</a>    }
-<a href=#520 id=520 data-nosnippet>520</a>}
+<a href=#459 id=459 data-nosnippet>459</a>    </span><span class="kw">fn </span>tab_labels_shrink_to_initials() {
+<a href=#460 id=460 data-nosnippet>460</a>        <span class="macro">assert_eq!</span>(tab_labels(<span class="number">80</span>), <span class="macro">vec!</span>[<span class="string">" TODO "</span>, <span class="string">" BACKLOG "</span>, <span class="string">" FILES "</span>]);
+<a href=#461 id=461 data-nosnippet>461</a>        <span class="macro">assert_eq!</span>(tab_labels(<span class="number">26</span>), <span class="macro">vec!</span>[<span class="string">" TODO "</span>, <span class="string">" BACKLOG "</span>, <span class="string">" FILES "</span>]);
+<a href=#462 id=462 data-nosnippet>462</a>        <span class="macro">assert_eq!</span>(tab_labels(<span class="number">25</span>), <span class="macro">vec!</span>[<span class="string">"T"</span>, <span class="string">"B"</span>, <span class="string">"F"</span>]);
+<a href=#463 id=463 data-nosnippet>463</a>        <span class="macro">assert_eq!</span>(tab_labels(<span class="number">2</span>), <span class="macro">vec!</span>[<span class="string">"T"</span>, <span class="string">"B"</span>, <span class="string">"F"</span>]);
+<a href=#464 id=464 data-nosnippet>464</a>    }
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a>    <span class="attr">#[test]
+<a href=#467 id=467 data-nosnippet>467</a>    </span><span class="kw">fn </span>tab_hit_matches_drawn_columns() {
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="comment">// full labels: " " + " TODO " + " " + " BACKLOG " + " " + " FILES "
+<a href=#469 id=469 data-nosnippet>469</a>        </span><span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">0</span>), <span class="prelude-val">None</span>); <span class="comment">// leading separator
+<a href=#470 id=470 data-nosnippet>470</a>        </span><span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">1</span>), <span class="prelude-val">Some</span>(<span class="number">0</span>));
+<a href=#471 id=471 data-nosnippet>471</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">6</span>), <span class="prelude-val">Some</span>(<span class="number">0</span>));
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">7</span>), <span class="prelude-val">None</span>); <span class="comment">// separator between tabs
+<a href=#473 id=473 data-nosnippet>473</a>        </span><span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">8</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">16</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">18</span>), <span class="prelude-val">Some</span>(<span class="number">2</span>));
+<a href=#476 id=476 data-nosnippet>476</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">24</span>), <span class="prelude-val">Some</span>(<span class="number">2</span>));
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">80</span>, <span class="number">40</span>), <span class="prelude-val">None</span>); <span class="comment">// past the last tab
+<a href=#478 id=478 data-nosnippet>478</a>                                           // narrow terminal: initials "T"/"B"/"I" at cols 1, 3, 5
+<a href=#479 id=479 data-nosnippet>479</a>        </span><span class="macro">assert_eq!</span>(tab_hit(<span class="number">10</span>, <span class="number">1</span>), <span class="prelude-val">Some</span>(<span class="number">0</span>));
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">10</span>, <span class="number">3</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#481 id=481 data-nosnippet>481</a>        <span class="macro">assert_eq!</span>(tab_hit(<span class="number">10</span>, <span class="number">5</span>), <span class="prelude-val">Some</span>(<span class="number">2</span>));
+<a href=#482 id=482 data-nosnippet>482</a>    }
+<a href=#483 id=483 data-nosnippet>483</a>
+<a href=#484 id=484 data-nosnippet>484</a>    <span class="attr">#[test]
+<a href=#485 id=485 data-nosnippet>485</a>    </span><span class="kw">fn </span>ellipsize_cuts_with_ellipsis() {
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw">let </span>spans = || <span class="macro">vec!</span>[Span::raw(<span class="string">"hello world"</span>)];
+<a href=#487 id=487 data-nosnippet>487</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>ellipsize(spans(), <span class="number">20</span>)), <span class="string">"hello world"</span>);
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>ellipsize(spans(), <span class="number">11</span>)), <span class="string">"hello world"</span>);
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>ellipsize(spans(), <span class="number">8</span>)), <span class="string">"hello w…"</span>);
+<a href=#490 id=490 data-nosnippet>490</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>ellipsize(spans(), <span class="number">1</span>)), <span class="string">"…"</span>);
+<a href=#491 id=491 data-nosnippet>491</a>        <span class="macro">assert!</span>(ellipsize(spans(), <span class="number">0</span>).is_empty());
+<a href=#492 id=492 data-nosnippet>492</a>        <span class="comment">// styles survive the cut: an accent id keeps its color
+<a href=#493 id=493 data-nosnippet>493</a>        </span><span class="kw">let </span>out = ellipsize(
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="macro">vec!</span>[
+<a href=#495 id=495 data-nosnippet>495</a>                Span::styled(<span class="string">"T-001"</span>, Style::default().fg(ACCENT)),
+<a href=#496 id=496 data-nosnippet>496</a>                Span::raw(<span class="string">" a long title here"</span>),
+<a href=#497 id=497 data-nosnippet>497</a>            ],
+<a href=#498 id=498 data-nosnippet>498</a>            <span class="number">10</span>,
+<a href=#499 id=499 data-nosnippet>499</a>        );
+<a href=#500 id=500 data-nosnippet>500</a>        <span class="macro">assert_eq!</span>(text(<span class="kw-2">&amp;</span>out), <span class="string">"T-001 a l…"</span>);
+<a href=#501 id=501 data-nosnippet>501</a>        <span class="macro">assert_eq!</span>(out[<span class="number">0</span>].style.fg, <span class="prelude-val">Some</span>(ACCENT));
+<a href=#502 id=502 data-nosnippet>502</a>    }
+<a href=#503 id=503 data-nosnippet>503</a>
+<a href=#504 id=504 data-nosnippet>504</a>    <span class="attr">#[test]
+<a href=#505 id=505 data-nosnippet>505</a>    </span><span class="kw">fn </span>help_columns_only_when_short_and_wide() {
+<a href=#506 id=506 data-nosnippet>506</a>        <span class="kw">let </span>lines = help_lines();
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="comment">// plenty of room: one column
+<a href=#508 id=508 data-nosnippet>508</a>        </span><span class="macro">assert_eq!</span>(help_columns(<span class="kw-2">&amp;</span>lines, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">80</span>, <span class="number">24</span>)).len(), <span class="number">1</span>);
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="comment">// short but narrow: stays one column, crops
+<a href=#510 id=510 data-nosnippet>510</a>        </span><span class="macro">assert_eq!</span>(help_columns(<span class="kw-2">&amp;</span>lines, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">30</span>, <span class="number">10</span>)).len(), <span class="number">1</span>);
+<a href=#511 id=511 data-nosnippet>511</a>        <span class="comment">// short and wide: folds into columns that fit the height
+<a href=#512 id=512 data-nosnippet>512</a>        </span><span class="kw">let </span>cols = help_columns(<span class="kw-2">&amp;</span>lines, Rect::new(<span class="number">0</span>, <span class="number">0</span>, <span class="number">120</span>, <span class="number">10</span>));
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="macro">assert!</span>(cols.len() &gt;= <span class="number">2</span>);
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="macro">assert!</span>(cols.iter().all(|c| c.len() &lt;= <span class="number">8</span>));
+<a href=#515 id=515 data-nosnippet>515</a>        <span class="macro">assert_eq!</span>(cols.iter().map(Vec::len).sum::&lt;usize&gt;(), lines.len());
+<a href=#516 id=516 data-nosnippet>516</a>    }
+<a href=#517 id=517 data-nosnippet>517</a>
+<a href=#518 id=518 data-nosnippet>518</a>    <span class="attr">#[test]
+<a href=#519 id=519 data-nosnippet>519</a>    </span><span class="kw">fn </span>hints_degrade_full_to_minimal() {
+<a href=#520 id=520 data-nosnippet>520</a>        <span class="kw">let </span>len = |h: <span class="kw-2">&amp;</span>str| h.chars().count();
+<a href=#521 id=521 data-nosnippet>521</a>        <span class="macro">assert_eq!</span>(pick_hints(Mode::Normal, len(HINTS[<span class="number">0</span>]) + <span class="number">1</span>), HINTS[<span class="number">0</span>]);
+<a href=#522 id=522 data-nosnippet>522</a>        <span class="macro">assert_eq!</span>(pick_hints(Mode::Normal, len(HINTS[<span class="number">0</span>])), HINTS[<span class="number">1</span>]);
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="macro">assert_eq!</span>(pick_hints(Mode::Normal, len(HINTS[<span class="number">1</span>])), HINTS[<span class="number">2</span>]);
+<a href=#524 id=524 data-nosnippet>524</a>        <span class="comment">// tiny terminals still get the minimal set (cropped, not absent)
+<a href=#525 id=525 data-nosnippet>525</a>        </span><span class="macro">assert_eq!</span>(pick_hints(Mode::Normal, <span class="number">0</span>), HINTS[<span class="number">2</span>]);
+<a href=#526 id=526 data-nosnippet>526</a>        <span class="macro">assert_eq!</span>(pick_hints(Mode::Preview, <span class="number">0</span>), <span class="string">"j/k scroll · esc back"</span>);
+<a href=#527 id=527 data-nosnippet>527</a>    }
+<a href=#528 id=528 data-nosnippet>528</a>}
 </code></pre></div></section></main></body></html>

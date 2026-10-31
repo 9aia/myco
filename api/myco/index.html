@@ -58,7 +58,7 @@ verb. Human output is compact counts + the in-progress and
 blocked lists; <code>--prompt</code> is a token-sized block (repo, counts
 one-liner, then items grouped in-progress → blocked → claimed →
 open-by-priority, one per line, no prose); <code>--json</code> is the
-structured digest.</dd><dt><a class="mod" href="templates/index.html" title="mod myco::templates">templates</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Item-file body templates — embedded <code>format!</code> strings, not a
+structured digest — with <code>--prompt</code> it’s <code>{"prompt": "&lt;block&gt;"}</code>.</dd><dt><a class="mod" href="templates/index.html" title="mod myco::templates">templates</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Item-file body templates — embedded <code>format!</code> strings, not a
 templating engine. Four kinds, four static skeletons; pulling in
 <code>minijinja</code> + a <code>myco-template</code> crate would add a dependency for
 nothing these can’t do. Revisit when templates grow variants

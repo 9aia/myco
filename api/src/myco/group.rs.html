@@ -60,7 +60,7 @@
 <a href=#60 id=60 data-nosnippet>60</a>    root: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
 <a href=#61 id=61 data-nosnippet>61</a>    json_out: bool,
 <a href=#62 id=62 data-nosnippet>62</a>) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span>(_proj, store) = items::open(dir.as_deref(), root.as_deref())<span class="question-mark">?</span>;
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span>(_proj, store) = items::open_read(dir.as_deref(), root.as_deref())<span class="question-mark">?</span>;
 <a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">let </span>scan = digest::scan(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
 <a href=#65 id=65 data-nosnippet>65</a>    <span class="kw">match </span>name {
 <a href=#66 id=66 data-nosnippet>66</a>        <span class="prelude-val">None </span>=&gt; {
@@ -96,24 +96,30 @@
 <a href=#96 id=96 data-nosnippet>96</a>                .filter(|i| group.of(i) == <span class="prelude-val">Some</span>(name.as_str()))
 <a href=#97 id=97 data-nosnippet>97</a>                .collect();
 <a href=#98 id=98 data-nosnippet>98</a>            <span class="kw">if </span>json_out {
-<a href=#99 id=99 data-nosnippet>99</a>                ops::print_json(<span class="kw-2">&amp;</span>board::columns_json(members.into_iter(), <span class="prelude-val">None</span>));
-<a href=#100 id=100 data-nosnippet>100</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
-<a href=#101 id=101 data-nosnippet>101</a>            }
-<a href=#102 id=102 data-nosnippet>102</a>            <span class="kw">if </span>members.is_empty() {
-<a href=#103 id=103 data-nosnippet>103</a>                <span class="macro">println!</span>(<span class="string">"{}: no items in {} {name:?}"</span>, scan.name, group.name());
-<a href=#104 id=104 data-nosnippet>104</a>            } <span class="kw">else </span>{
-<a href=#105 id=105 data-nosnippet>105</a>                <span class="kw">let </span>interrupted =
-<a href=#106 id=106 data-nosnippet>106</a>                    <span class="kw">crate</span>::continuity::interrupted_set(<span class="kw-2">&amp;</span>store, members.iter().copied());
-<a href=#107 id=107 data-nosnippet>107</a>                ops::print_paged(<span class="kw-2">&amp;</span>board::render(
-<a href=#108 id=108 data-nosnippet>108</a>                    members.into_iter(),
-<a href=#109 id=109 data-nosnippet>109</a>                    <span class="prelude-val">None</span>,
-<a href=#110 id=110 data-nosnippet>110</a>                    md,
-<a href=#111 id=111 data-nosnippet>111</a>                    board::Fit::terminal(all),
-<a href=#112 id=112 data-nosnippet>112</a>                    <span class="kw-2">&amp;</span>interrupted,
-<a href=#113 id=113 data-nosnippet>113</a>                ));
-<a href=#114 id=114 data-nosnippet>114</a>            }
-<a href=#115 id=115 data-nosnippet>115</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
-<a href=#116 id=116 data-nosnippet>116</a>        }
-<a href=#117 id=117 data-nosnippet>117</a>    }
-<a href=#118 id=118 data-nosnippet>118</a>}
+<a href=#99 id=99 data-nosnippet>99</a>                <span class="kw">let </span>interrupted =
+<a href=#100 id=100 data-nosnippet>100</a>                    <span class="kw">crate</span>::continuity::interrupted_set(<span class="kw-2">&amp;</span>store, members.iter().copied())<span class="question-mark">?</span>;
+<a href=#101 id=101 data-nosnippet>101</a>                ops::print_json(<span class="kw-2">&amp;</span>board::columns_json(
+<a href=#102 id=102 data-nosnippet>102</a>                    members.into_iter(),
+<a href=#103 id=103 data-nosnippet>103</a>                    <span class="prelude-val">None</span>,
+<a href=#104 id=104 data-nosnippet>104</a>                    <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>interrupted),
+<a href=#105 id=105 data-nosnippet>105</a>                ));
+<a href=#106 id=106 data-nosnippet>106</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
+<a href=#107 id=107 data-nosnippet>107</a>            }
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">if </span>members.is_empty() {
+<a href=#109 id=109 data-nosnippet>109</a>                <span class="macro">println!</span>(<span class="string">"{}: no items in {} {name:?}"</span>, scan.name, group.name());
+<a href=#110 id=110 data-nosnippet>110</a>            } <span class="kw">else </span>{
+<a href=#111 id=111 data-nosnippet>111</a>                <span class="kw">let </span>interrupted =
+<a href=#112 id=112 data-nosnippet>112</a>                    <span class="kw">crate</span>::continuity::interrupted_set(<span class="kw-2">&amp;</span>store, members.iter().copied())<span class="question-mark">?</span>;
+<a href=#113 id=113 data-nosnippet>113</a>                ops::print_paged(<span class="kw-2">&amp;</span>board::render(
+<a href=#114 id=114 data-nosnippet>114</a>                    members.into_iter(),
+<a href=#115 id=115 data-nosnippet>115</a>                    <span class="prelude-val">None</span>,
+<a href=#116 id=116 data-nosnippet>116</a>                    md,
+<a href=#117 id=117 data-nosnippet>117</a>                    board::Fit::terminal(all),
+<a href=#118 id=118 data-nosnippet>118</a>                    <span class="kw-2">&amp;</span>interrupted,
+<a href=#119 id=119 data-nosnippet>119</a>                ));
+<a href=#120 id=120 data-nosnippet>120</a>            }
+<a href=#121 id=121 data-nosnippet>121</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
+<a href=#122 id=122 data-nosnippet>122</a>        }
+<a href=#123 id=123 data-nosnippet>123</a>    }
+<a href=#124 id=124 data-nosnippet>124</a>}
 </code></pre></div></section></main></body></html>

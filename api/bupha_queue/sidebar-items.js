@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["PersistedQueue"],"trait":["QueueStore"]};

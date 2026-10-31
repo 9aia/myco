@@ -82,150 +82,166 @@
 <a href=#82 id=82 data-nosnippet>82</a>                <span class="comment">// a backlog parent's children park with it
 <a href=#83 id=83 data-nosnippet>83</a>                </span>item.status = Status::Deferred;
 <a href=#84 id=84 data-nosnippet>84</a>            }
-<a href=#85 id=85 data-nosnippet>85</a>            ledger.item_mut(<span class="kw-2">&amp;</span>loc).children.push(item.clone());
-<a href=#86 id=86 data-nosnippet>86</a>            <span class="kw">if </span>loc.backlog {
-<a href=#87 id=87 data-nosnippet>87</a>                <span class="string">"BACKLOG.md"
-<a href=#88 id=88 data-nosnippet>88</a>            </span>} <span class="kw">else </span>{
-<a href=#89 id=89 data-nosnippet>89</a>                <span class="string">"TODO.md"
-<a href=#90 id=90 data-nosnippet>90</a>            </span>}
-<a href=#91 id=91 data-nosnippet>91</a>        }
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="prelude-val">None </span>=&gt; {
-<a href=#93 id=93 data-nosnippet>93</a>            ledger.put_todo(item.clone(), section);
-<a href=#94 id=94 data-nosnippet>94</a>            <span class="string">"TODO.md"
-<a href=#95 id=95 data-nosnippet>95</a>        </span>}
-<a href=#96 id=96 data-nosnippet>96</a>    };
-<a href=#97 id=97 data-nosnippet>97</a>    items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="prelude-val">Ok</span>((item, file))
-<a href=#99 id=99 data-nosnippet>99</a>}
-<a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a><span class="doccomment">/// The `todo done` mutation — walks to `done`, removes the line
-<a href=#102 id=102 data-nosnippet>102</a>/// (subtree included). Caller commits. Returns the removed item.
-<a href=#103 id=103 data-nosnippet>103</a></span><span class="kw">pub fn </span>done_item(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, id: ItemId) -&gt; <span class="prelude-ty">Result</span>&lt;Item, String&gt; {
-<a href=#104 id=104 data-nosnippet>104</a>    items::require_kind(id, ItemKind::Task, <span class="string">"todo done"</span>)<span class="question-mark">?</span>;
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(store)<span class="question-mark">?</span>;
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">let </span>loc = ledger
-<a href=#107 id=107 data-nosnippet>107</a>        .locate(id)
-<a href=#108 id=108 data-nosnippet>108</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
-<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw">if </span>loc.backlog {
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(
-<a href=#111 id=111 data-nosnippet>111</a>            <span class="string">"{id} is deferred (BACKLOG.md) — `myco backlog promote` it first"
-<a href=#112 id=112 data-nosnippet>112</a>        </span>));
-<a href=#113 id=113 data-nosnippet>113</a>    }
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="comment">// take removes the whole subtree — children die with
-<a href=#115 id=115 data-nosnippet>115</a>    // their parent; done on a child removes just the child
-<a href=#116 id=116 data-nosnippet>116</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
-<a href=#117 id=117 data-nosnippet>117</a>    items::walk_to(<span class="kw-2">&amp;mut </span>item, Status::Done)<span class="question-mark">?</span>;
-<a href=#118 id=118 data-nosnippet>118</a>    items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="prelude-val">Ok</span>(item)
-<a href=#120 id=120 data-nosnippet>120</a>}
-<a href=#121 id=121 data-nosnippet>121</a>
-<a href=#122 id=122 data-nosnippet>122</a><span class="doccomment">/// The `todo defer` mutation — walks to `deferred`, moves the
-<a href=#123 id=123 data-nosnippet>123</a>/// line (subtree included) into BACKLOG.md. Caller commits.
-<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub fn </span>defer_item(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, id: ItemId) -&gt; <span class="prelude-ty">Result</span>&lt;Item, String&gt; {
-<a href=#125 id=125 data-nosnippet>125</a>    items::require_kind(id, ItemKind::Task, <span class="string">"todo defer"</span>)<span class="question-mark">?</span>;
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(store)<span class="question-mark">?</span>;
-<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">let </span>loc = ledger
-<a href=#128 id=128 data-nosnippet>128</a>        .locate(id)
-<a href=#129 id=129 data-nosnippet>129</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
-<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">if </span>loc.backlog {
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"{id} is already deferred (BACKLOG.md)"</span>));
-<a href=#132 id=132 data-nosnippet>132</a>    }
-<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">let </span><span class="kw-2">mut </span>item = ledger.take(<span class="kw-2">&amp;</span>loc);
-<a href=#134 id=134 data-nosnippet>134</a>    items::walk_to(<span class="kw-2">&amp;mut </span>item, Status::Deferred)<span class="question-mark">?</span>;
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="comment">// the whole subtree parks too — BACKLOG.md is
-<a href=#136 id=136 data-nosnippet>136</a>    // deferred-only
-<a href=#137 id=137 data-nosnippet>137</a>    </span>items::walk_descendants_to(<span class="kw-2">&amp;mut </span>item, Status::Deferred)<span class="question-mark">?</span>;
-<a href=#138 id=138 data-nosnippet>138</a>    ledger.put_backlog(item.clone(), <span class="prelude-val">None</span>);
-<a href=#139 id=139 data-nosnippet>139</a>    items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
-<a href=#140 id=140 data-nosnippet>140</a>    <span class="prelude-val">Ok</span>(item)
-<a href=#141 id=141 data-nosnippet>141</a>}
-<a href=#142 id=142 data-nosnippet>142</a>
-<a href=#143 id=143 data-nosnippet>143</a><span class="doccomment">/// The `todo list`/`backlog list` read — filtered items in tree
-<a href=#144 id=144 data-nosnippet>144</a>/// order, depth flattened away (`myco serve` returns it raw).
-<a href=#145 id=145 data-nosnippet>145</a></span><span class="kw">pub fn </span>list_items(
-<a href=#146 id=146 data-nosnippet>146</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
-<a href=#147 id=147 data-nosnippet>147</a>    backlog: bool,
-<a href=#148 id=148 data-nosnippet>148</a>    filter: <span class="kw-2">&amp;</span>items::Filter,
-<a href=#149 id=149 data-nosnippet>149</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Item&gt;, String&gt; {
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">let </span>all = doc_items(store, backlog)<span class="question-mark">?</span>;
-<a href=#151 id=151 data-nosnippet>151</a>    <span class="prelude-val">Ok</span>(items::tree_view(<span class="kw-2">&amp;</span>all)
-<a href=#152 id=152 data-nosnippet>152</a>        .into_iter()
-<a href=#153 id=153 data-nosnippet>153</a>        .filter(|(<span class="kw">_</span>, i)| filter.matches(i))
-<a href=#154 id=154 data-nosnippet>154</a>        .take(filter.take())
-<a href=#155 id=155 data-nosnippet>155</a>        .map(|(<span class="kw">_</span>, i)| i.clone())
-<a href=#156 id=156 data-nosnippet>156</a>        .collect())
-<a href=#157 id=157 data-nosnippet>157</a>}
-<a href=#158 id=158 data-nosnippet>158</a>
-<a href=#159 id=159 data-nosnippet>159</a><span class="doccomment">/// The `todo` verb group.
-<a href=#160 id=160 data-nosnippet>160</a></span><span class="kw">pub fn </span>run(
-<a href=#161 id=161 data-nosnippet>161</a>    cmd: Cmd,
-<a href=#162 id=162 data-nosnippet>162</a>    dir: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
-<a href=#163 id=163 data-nosnippet>163</a>    root: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
-<a href=#164 id=164 data-nosnippet>164</a>    json_out: bool,
-<a href=#165 id=165 data-nosnippet>165</a>    no_commit: bool,
-<a href=#166 id=166 data-nosnippet>166</a>) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>(proj, store) = items::open(dir.as_deref(), root.as_deref())<span class="question-mark">?</span>;
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">match </span>cmd {
-<a href=#169 id=169 data-nosnippet>169</a>        Cmd::Add {
-<a href=#170 id=170 data-nosnippet>170</a>            title,
-<a href=#171 id=171 data-nosnippet>171</a>            section,
-<a href=#172 id=172 data-nosnippet>172</a>            parent,
-<a href=#173 id=173 data-nosnippet>173</a>            meta,
-<a href=#174 id=174 data-nosnippet>174</a>        } =&gt; {
-<a href=#175 id=175 data-nosnippet>175</a>            <span class="kw">let </span>(item, file) =
-<a href=#176 id=176 data-nosnippet>176</a>                add_item(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>title, section.as_deref(), parent, <span class="kw-2">&amp;</span>meta.to_meta())<span class="question-mark">?</span>;
-<a href=#177 id=177 data-nosnippet>177</a>            <span class="kw">let </span>committed = items::commit(
-<a href=#178 id=178 data-nosnippet>178</a>                <span class="kw-2">&amp;</span>proj.worktree,
-<a href=#179 id=179 data-nosnippet>179</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: add {}"</span>, item.id),
-<a href=#180 id=180 data-nosnippet>180</a>                no_commit,
-<a href=#181 id=181 data-nosnippet>181</a>            )<span class="question-mark">?</span>;
-<a href=#182 id=182 data-nosnippet>182</a>            items::report(
-<a href=#183 id=183 data-nosnippet>183</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"file"</span>: file, <span class="string">"parent"</span>: parent.map(|p| p.to_string())}),
-<a href=#184 id=184 data-nosnippet>184</a>                committed,
-<a href=#185 id=185 data-nosnippet>185</a>                json_out,
-<a href=#186 id=186 data-nosnippet>186</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"added {}"</span>, items::compact(<span class="kw-2">&amp;</span>item)),
-<a href=#187 id=187 data-nosnippet>187</a>            )
-<a href=#188 id=188 data-nosnippet>188</a>        }
-<a href=#189 id=189 data-nosnippet>189</a>        Cmd::Done { id } =&gt; {
-<a href=#190 id=190 data-nosnippet>190</a>            <span class="kw">let </span>item = done_item(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
-<a href=#191 id=191 data-nosnippet>191</a>            <span class="kw">let </span>committed = items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: done {id}"</span>), no_commit)<span class="question-mark">?</span>;
-<a href=#192 id=192 data-nosnippet>192</a>            items::report(
-<a href=#193 id=193 data-nosnippet>193</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item}),
-<a href=#194 id=194 data-nosnippet>194</a>                committed,
-<a href=#195 id=195 data-nosnippet>195</a>                json_out,
-<a href=#196 id=196 data-nosnippet>196</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"done {id} — {}"</span>, item.title),
-<a href=#197 id=197 data-nosnippet>197</a>            )
-<a href=#198 id=198 data-nosnippet>198</a>        }
-<a href=#199 id=199 data-nosnippet>199</a>        Cmd::Defer { id } =&gt; {
-<a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">let </span>item = defer_item(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
-<a href=#201 id=201 data-nosnippet>201</a>            <span class="kw">let </span>committed =
-<a href=#202 id=202 data-nosnippet>202</a>                items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: defer {id}"</span>), no_commit)<span class="question-mark">?</span>;
-<a href=#203 id=203 data-nosnippet>203</a>            items::report(
-<a href=#204 id=204 data-nosnippet>204</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"file"</span>: <span class="string">"BACKLOG.md"</span>}),
-<a href=#205 id=205 data-nosnippet>205</a>                committed,
-<a href=#206 id=206 data-nosnippet>206</a>                json_out,
-<a href=#207 id=207 data-nosnippet>207</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"deferred {id} → BACKLOG.md"</span>),
-<a href=#208 id=208 data-nosnippet>208</a>            )
-<a href=#209 id=209 data-nosnippet>209</a>        }
-<a href=#210 id=210 data-nosnippet>210</a>        Cmd::List { list } =&gt; {
-<a href=#211 id=211 data-nosnippet>211</a>            <span class="kw">let </span>all = doc_items(<span class="kw-2">&amp;</span>store, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
-<a href=#212 id=212 data-nosnippet>212</a>            <span class="kw">let </span>found: Vec&lt;(usize, <span class="kw-2">&amp;</span>Item)&gt; = items::tree_view(<span class="kw-2">&amp;</span>all)
-<a href=#213 id=213 data-nosnippet>213</a>                .into_iter()
-<a href=#214 id=214 data-nosnippet>214</a>                .filter(|(<span class="kw">_</span>, i)| list.matches(i))
-<a href=#215 id=215 data-nosnippet>215</a>                .take(list.take())
-<a href=#216 id=216 data-nosnippet>216</a>                .collect();
-<a href=#217 id=217 data-nosnippet>217</a>            items::print_tree(<span class="kw-2">&amp;</span>found, json_out)
-<a href=#218 id=218 data-nosnippet>218</a>        }
-<a href=#219 id=219 data-nosnippet>219</a>    }
-<a href=#220 id=220 data-nosnippet>220</a>}
-<a href=#221 id=221 data-nosnippet>221</a>
-<a href=#222 id=222 data-nosnippet>222</a><span class="doccomment">/// All items in one doc, cloned out (shared by the list verbs).
-<a href=#223 id=223 data-nosnippet>223</a></span><span class="kw">pub fn </span>doc_items(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, backlog: bool) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Item&gt;, String&gt; {
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">let </span>doc_items = <span class="kw">if </span>backlog {
-<a href=#225 id=225 data-nosnippet>225</a>        store.backlog().map(|d| d.items().cloned().collect())
-<a href=#226 id=226 data-nosnippet>226</a>    } <span class="kw">else </span>{
-<a href=#227 id=227 data-nosnippet>227</a>        store.todo().map(|d| d.items().cloned().collect())
-<a href=#228 id=228 data-nosnippet>228</a>    };
-<a href=#229 id=229 data-nosnippet>229</a>    doc_items.map_err(|e| e.to_string())
-<a href=#230 id=230 data-nosnippet>230</a>}
+<a href=#85 id=85 data-nosnippet>85</a>            <span class="kw">match </span>ledger.item_mut(<span class="kw-2">&amp;</span>loc) {
+<a href=#86 id=86 data-nosnippet>86</a>                <span class="prelude-val">Some</span>(parent) =&gt; parent.children.push(item.clone()),
+<a href=#87 id=87 data-nosnippet>87</a>                <span class="prelude-val">None </span>=&gt; {
+<a href=#88 id=88 data-nosnippet>88</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(
+<a href=#89 id=89 data-nosnippet>89</a>                        <span class="string">"{}: stale task location"</span>,
+<a href=#90 id=90 data-nosnippet>90</a>                        parent.map_or_else(|| <span class="string">"&lt;parent&gt;"</span>.into(), |p| p.to_string())
+<a href=#91 id=91 data-nosnippet>91</a>                    ))
+<a href=#92 id=92 data-nosnippet>92</a>                }
+<a href=#93 id=93 data-nosnippet>93</a>            }
+<a href=#94 id=94 data-nosnippet>94</a>            <span class="kw">if </span>loc.backlog {
+<a href=#95 id=95 data-nosnippet>95</a>                <span class="string">"BACKLOG.md"
+<a href=#96 id=96 data-nosnippet>96</a>            </span>} <span class="kw">else </span>{
+<a href=#97 id=97 data-nosnippet>97</a>                <span class="string">"TODO.md"
+<a href=#98 id=98 data-nosnippet>98</a>            </span>}
+<a href=#99 id=99 data-nosnippet>99</a>        }
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="prelude-val">None </span>=&gt; {
+<a href=#101 id=101 data-nosnippet>101</a>            ledger.put_todo(item.clone(), section);
+<a href=#102 id=102 data-nosnippet>102</a>            <span class="string">"TODO.md"
+<a href=#103 id=103 data-nosnippet>103</a>        </span>}
+<a href=#104 id=104 data-nosnippet>104</a>    };
+<a href=#105 id=105 data-nosnippet>105</a>    items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="prelude-val">Ok</span>((item, file))
+<a href=#107 id=107 data-nosnippet>107</a>}
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a><span class="doccomment">/// The `todo done` mutation — walks to `done`, removes the line
+<a href=#110 id=110 data-nosnippet>110</a>/// (subtree included). Caller commits. Returns the removed item.
+<a href=#111 id=111 data-nosnippet>111</a></span><span class="kw">pub fn </span>done_item(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, id: ItemId) -&gt; <span class="prelude-ty">Result</span>&lt;Item, String&gt; {
+<a href=#112 id=112 data-nosnippet>112</a>    items::require_kind(id, ItemKind::Task, <span class="string">"todo done"</span>)<span class="question-mark">?</span>;
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(store)<span class="question-mark">?</span>;
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span>loc = ledger
+<a href=#115 id=115 data-nosnippet>115</a>        .locate(id)
+<a href=#116 id=116 data-nosnippet>116</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">if </span>loc.backlog {
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(
+<a href=#119 id=119 data-nosnippet>119</a>            <span class="string">"{id} is deferred (BACKLOG.md) — `myco backlog promote` it first"
+<a href=#120 id=120 data-nosnippet>120</a>        </span>));
+<a href=#121 id=121 data-nosnippet>121</a>    }
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="comment">// take removes the whole subtree — children die with
+<a href=#123 id=123 data-nosnippet>123</a>    // their parent; done on a child removes just the child
+<a href=#124 id=124 data-nosnippet>124</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>item = ledger
+<a href=#125 id=125 data-nosnippet>125</a>        .take(<span class="kw-2">&amp;</span>loc)
+<a href=#126 id=126 data-nosnippet>126</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
+<a href=#127 id=127 data-nosnippet>127</a>    items::walk_to(<span class="kw-2">&amp;mut </span>item, Status::Done)<span class="question-mark">?</span>;
+<a href=#128 id=128 data-nosnippet>128</a>    items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="prelude-val">Ok</span>(item)
+<a href=#130 id=130 data-nosnippet>130</a>}
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a><span class="doccomment">/// The `todo defer` mutation — walks to `deferred`, moves the
+<a href=#133 id=133 data-nosnippet>133</a>/// line (subtree included) into BACKLOG.md. Caller commits.
+<a href=#134 id=134 data-nosnippet>134</a></span><span class="kw">pub fn </span>defer_item(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, id: ItemId) -&gt; <span class="prelude-ty">Result</span>&lt;Item, String&gt; {
+<a href=#135 id=135 data-nosnippet>135</a>    items::require_kind(id, ItemKind::Task, <span class="string">"todo defer"</span>)<span class="question-mark">?</span>;
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(store)<span class="question-mark">?</span>;
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="kw">let </span>loc = ledger
+<a href=#138 id=138 data-nosnippet>138</a>        .locate(id)
+<a href=#139 id=139 data-nosnippet>139</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">if </span>loc.backlog {
+<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">format!</span>(<span class="string">"{id} is already deferred (BACKLOG.md)"</span>));
+<a href=#142 id=142 data-nosnippet>142</a>    }
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">let </span><span class="kw-2">mut </span>item = ledger
+<a href=#144 id=144 data-nosnippet>144</a>        .take(<span class="kw-2">&amp;</span>loc)
+<a href=#145 id=145 data-nosnippet>145</a>        .ok_or_else(|| <span class="macro">format!</span>(<span class="string">"{id}: no such task"</span>))<span class="question-mark">?</span>;
+<a href=#146 id=146 data-nosnippet>146</a>    items::walk_to(<span class="kw-2">&amp;mut </span>item, Status::Deferred)<span class="question-mark">?</span>;
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="comment">// the whole subtree parks too — BACKLOG.md is
+<a href=#148 id=148 data-nosnippet>148</a>    // deferred-only
+<a href=#149 id=149 data-nosnippet>149</a>    </span>items::walk_descendants_to(<span class="kw-2">&amp;mut </span>item, Status::Deferred)<span class="question-mark">?</span>;
+<a href=#150 id=150 data-nosnippet>150</a>    ledger.put_backlog(item.clone(), <span class="prelude-val">None</span>);
+<a href=#151 id=151 data-nosnippet>151</a>    items::save_ledger(store, <span class="kw-2">&amp;</span>ledger)<span class="question-mark">?</span>;
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="prelude-val">Ok</span>(item)
+<a href=#153 id=153 data-nosnippet>153</a>}
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a><span class="doccomment">/// The `todo list`/`backlog list` read — filtered items in tree
+<a href=#156 id=156 data-nosnippet>156</a>/// order, depth flattened away (`myco serve` returns it raw).
+<a href=#157 id=157 data-nosnippet>157</a></span><span class="kw">pub fn </span>list_items(
+<a href=#158 id=158 data-nosnippet>158</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
+<a href=#159 id=159 data-nosnippet>159</a>    backlog: bool,
+<a href=#160 id=160 data-nosnippet>160</a>    filter: <span class="kw-2">&amp;</span>items::Filter,
+<a href=#161 id=161 data-nosnippet>161</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Item&gt;, String&gt; {
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">let </span>all = doc_items(store, backlog)<span class="question-mark">?</span>;
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="prelude-val">Ok</span>(items::tree_view(<span class="kw-2">&amp;</span>all)
+<a href=#164 id=164 data-nosnippet>164</a>        .into_iter()
+<a href=#165 id=165 data-nosnippet>165</a>        .filter(|(<span class="kw">_</span>, i)| filter.matches(i))
+<a href=#166 id=166 data-nosnippet>166</a>        .take(filter.take())
+<a href=#167 id=167 data-nosnippet>167</a>        .map(|(<span class="kw">_</span>, i)| i.clone())
+<a href=#168 id=168 data-nosnippet>168</a>        .collect())
+<a href=#169 id=169 data-nosnippet>169</a>}
+<a href=#170 id=170 data-nosnippet>170</a>
+<a href=#171 id=171 data-nosnippet>171</a><span class="doccomment">/// The `todo` verb group.
+<a href=#172 id=172 data-nosnippet>172</a></span><span class="kw">pub fn </span>run(
+<a href=#173 id=173 data-nosnippet>173</a>    cmd: Cmd,
+<a href=#174 id=174 data-nosnippet>174</a>    dir: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#175 id=175 data-nosnippet>175</a>    root: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+<a href=#176 id=176 data-nosnippet>176</a>    json_out: bool,
+<a href=#177 id=177 data-nosnippet>177</a>    no_commit: bool,
+<a href=#178 id=178 data-nosnippet>178</a>) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span>(proj, store) = <span class="kw">if </span><span class="macro">matches!</span>(cmd, Cmd::List { .. }) {
+<a href=#180 id=180 data-nosnippet>180</a>        items::open_read(dir.as_deref(), root.as_deref())<span class="question-mark">?
+<a href=#181 id=181 data-nosnippet>181</a>    </span>} <span class="kw">else </span>{
+<a href=#182 id=182 data-nosnippet>182</a>        items::open(dir.as_deref(), root.as_deref())<span class="question-mark">?
+<a href=#183 id=183 data-nosnippet>183</a>    </span>};
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">match </span>cmd {
+<a href=#185 id=185 data-nosnippet>185</a>        Cmd::Add {
+<a href=#186 id=186 data-nosnippet>186</a>            title,
+<a href=#187 id=187 data-nosnippet>187</a>            section,
+<a href=#188 id=188 data-nosnippet>188</a>            parent,
+<a href=#189 id=189 data-nosnippet>189</a>            meta,
+<a href=#190 id=190 data-nosnippet>190</a>        } =&gt; {
+<a href=#191 id=191 data-nosnippet>191</a>            <span class="kw">let </span>(item, file) =
+<a href=#192 id=192 data-nosnippet>192</a>                add_item(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>title, section.as_deref(), parent, <span class="kw-2">&amp;</span>meta.to_meta())<span class="question-mark">?</span>;
+<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw">let </span>committed = items::commit(
+<a href=#194 id=194 data-nosnippet>194</a>                <span class="kw-2">&amp;</span>proj.worktree,
+<a href=#195 id=195 data-nosnippet>195</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: add {}"</span>, item.id),
+<a href=#196 id=196 data-nosnippet>196</a>                no_commit,
+<a href=#197 id=197 data-nosnippet>197</a>            )<span class="question-mark">?</span>;
+<a href=#198 id=198 data-nosnippet>198</a>            items::report(
+<a href=#199 id=199 data-nosnippet>199</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"file"</span>: file, <span class="string">"parent"</span>: parent.map(|p| p.to_string())}),
+<a href=#200 id=200 data-nosnippet>200</a>                committed,
+<a href=#201 id=201 data-nosnippet>201</a>                json_out,
+<a href=#202 id=202 data-nosnippet>202</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"added {}"</span>, items::compact(<span class="kw-2">&amp;</span>item)),
+<a href=#203 id=203 data-nosnippet>203</a>            )
+<a href=#204 id=204 data-nosnippet>204</a>        }
+<a href=#205 id=205 data-nosnippet>205</a>        Cmd::Done { id } =&gt; {
+<a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">let </span>item = done_item(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
+<a href=#207 id=207 data-nosnippet>207</a>            <span class="kw">let </span>committed = items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: done {id}"</span>), no_commit)<span class="question-mark">?</span>;
+<a href=#208 id=208 data-nosnippet>208</a>            items::report(
+<a href=#209 id=209 data-nosnippet>209</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item}),
+<a href=#210 id=210 data-nosnippet>210</a>                committed,
+<a href=#211 id=211 data-nosnippet>211</a>                json_out,
+<a href=#212 id=212 data-nosnippet>212</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"done {id} — {}"</span>, item.title),
+<a href=#213 id=213 data-nosnippet>213</a>            )
+<a href=#214 id=214 data-nosnippet>214</a>        }
+<a href=#215 id=215 data-nosnippet>215</a>        Cmd::Defer { id } =&gt; {
+<a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">let </span>item = defer_item(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
+<a href=#217 id=217 data-nosnippet>217</a>            <span class="kw">let </span>committed =
+<a href=#218 id=218 data-nosnippet>218</a>                items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: defer {id}"</span>), no_commit)<span class="question-mark">?</span>;
+<a href=#219 id=219 data-nosnippet>219</a>            items::report(
+<a href=#220 id=220 data-nosnippet>220</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: item, <span class="string">"file"</span>: <span class="string">"BACKLOG.md"</span>}),
+<a href=#221 id=221 data-nosnippet>221</a>                committed,
+<a href=#222 id=222 data-nosnippet>222</a>                json_out,
+<a href=#223 id=223 data-nosnippet>223</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"deferred {id} → BACKLOG.md"</span>),
+<a href=#224 id=224 data-nosnippet>224</a>            )
+<a href=#225 id=225 data-nosnippet>225</a>        }
+<a href=#226 id=226 data-nosnippet>226</a>        Cmd::List { list } =&gt; {
+<a href=#227 id=227 data-nosnippet>227</a>            <span class="kw">let </span>all = doc_items(<span class="kw-2">&amp;</span>store, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
+<a href=#228 id=228 data-nosnippet>228</a>            <span class="kw">let </span>found: Vec&lt;(usize, <span class="kw-2">&amp;</span>Item)&gt; = items::tree_view(<span class="kw-2">&amp;</span>all)
+<a href=#229 id=229 data-nosnippet>229</a>                .into_iter()
+<a href=#230 id=230 data-nosnippet>230</a>                .filter(|(<span class="kw">_</span>, i)| list.matches(i))
+<a href=#231 id=231 data-nosnippet>231</a>                .take(list.take())
+<a href=#232 id=232 data-nosnippet>232</a>                .collect();
+<a href=#233 id=233 data-nosnippet>233</a>            items::print_tree(<span class="kw-2">&amp;</span>found, json_out)
+<a href=#234 id=234 data-nosnippet>234</a>        }
+<a href=#235 id=235 data-nosnippet>235</a>    }
+<a href=#236 id=236 data-nosnippet>236</a>}
+<a href=#237 id=237 data-nosnippet>237</a>
+<a href=#238 id=238 data-nosnippet>238</a><span class="doccomment">/// All items in one doc, cloned out (shared by the list verbs).
+<a href=#239 id=239 data-nosnippet>239</a></span><span class="kw">pub fn </span>doc_items(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, backlog: bool) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Item&gt;, String&gt; {
+<a href=#240 id=240 data-nosnippet>240</a>    <span class="kw">let </span>doc_items = <span class="kw">if </span>backlog {
+<a href=#241 id=241 data-nosnippet>241</a>        store.backlog().map(|d| d.items().cloned().collect())
+<a href=#242 id=242 data-nosnippet>242</a>    } <span class="kw">else </span>{
+<a href=#243 id=243 data-nosnippet>243</a>        store.todo().map(|d| d.items().cloned().collect())
+<a href=#244 id=244 data-nosnippet>244</a>    };
+<a href=#245 id=245 data-nosnippet>245</a>    doc_items.map_err(|e| e.to_string())
+<a href=#246 id=246 data-nosnippet>246</a>}
 </code></pre></div></section></main></body></html>
