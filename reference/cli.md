@@ -626,8 +626,8 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--owner <OWNER>` — Owner actor id
 * `--label <LABEL>` — Add (`+x` or `x`) or remove (`-x`) a label — repeatable
 * `--unlabel <UNLABEL>` — Remove a label — repeatable
-* `--blocks <BLOCKS>` — Add (`+T-1` or `T-1`) or remove (`-T-1`) a blocks dep — repeatable
-* `--unblock <UNBLOCK>` — Remove a blocks dep — repeatable
+* `--blocks <BLOCKS>` — Add (`+T-1` or `T-1`) or remove (`-T-1`) a blocks dep — repeatable or comma-separated
+* `--unblock <UNBLOCK>` — Remove a blocks dep — repeatable or comma-separated
 * `--epic <EPIC>` — Epic name — `""` clears the epic
 * `--milestone <MILESTONE>` — Milestone name — `""` clears the milestone
 
