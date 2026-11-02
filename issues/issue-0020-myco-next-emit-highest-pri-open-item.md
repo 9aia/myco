@@ -1,8 +1,9 @@
 +++
 id = "I-020"
 title = "myco next — emit highest-pri open item"
-status = "open"
+status = "in-progress"
 created = "2026-10-31"
+owner = "devin"
 priority = "medium"
 labels = ["agent-dx"]
 +++
