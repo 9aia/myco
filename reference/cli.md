@@ -46,6 +46,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco status`↴](#myco-status)
 * [`myco board`↴](#myco-board)
 * [`myco epic`↴](#myco-epic)
+* [`myco view`↴](#myco-view)
 * [`myco milestone`↴](#myco-milestone)
 * [`myco absorb`↴](#myco-absorb)
 * [`myco absorb comments`↴](#myco-absorb-comments)
@@ -91,6 +92,7 @@ myco — project management, grown not built: agent-first PM CLI
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized
 * `board` — Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
 * `epic` — Items grouped by epic — bare lists epics with counts, a name renders that epic's board (`epic v2` ≡ `board --epic v2`)
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. Bare `myco view` lists views
 * `milestone` — Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
 * `absorb` — Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps
 * `report` — Aging + velocity + blocked — how the ledger is trending
@@ -729,6 +731,40 @@ Items grouped by epic — bare lists epics with counts, a name renders that epic
 
 
 
+## `myco view`
+
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. Bare `myco view` lists views
+
+**Usage:** `myco view [OPTIONS] [NAME]`
+
+###### **Arguments:**
+
+* `<NAME>` — View name — builtin preset or config view
+
+###### **Options:**
+
+* `--list` — List defined views and exit
+* `--md` — Emit a markdown table (board format)
+* `--all` — Show every row — no cap
+* `--kind <KIND>` — Item kinds — task|issue|proposal|adr|plan (repeatable/comma-separated)
+* `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred (repeatable/comma-separated)
+* `--pri-min <PRI_MIN>` — Inclusive lower severity bound — low|med|high|crit
+* `--pri-max <PRI_MAX>` — Inclusive upper severity bound
+* `--label <LABEL>` — `#`-less label — item carries any of these (repeatable/comma-separated)
+* `--owner <OWNER>` — Owner actor — item's owner is any of these (repeatable/comma-separated)
+* `--claimed` — Items with an owner
+* `--unclaimed` — Items with no owner
+* `--epic <EPIC>` — Items in this epic
+* `--milestone <MILESTONE>` — Items in this milestone
+* `--live-only` — Items not superseded by another (ADRs)
+* `--superseded` — Items superseded by another (ADRs)
+* `--group-by <GROUP_BY>` — Group axis — status|priority|kind|owner|epic|milestone
+* `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction
+* `--limit <N>` — Keep the first N items after sorting
+* `--format <FORMAT>` — Renderer — list|board
+
+
+
 ## `myco milestone`
 
 Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
@@ -928,7 +964,11 @@ Re-run `init` on every registered repo — refreshes the worktree scaffold and r
 
 Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
 
-**Usage:** `myco ui`
+**Usage:** `myco ui [OPTIONS]`
+
+###### **Options:**
+
+* `--view <NAME>` — Open with a named view's filter narrowing every board
 
 
 

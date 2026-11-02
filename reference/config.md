@@ -7,6 +7,7 @@
 | field | type | required | notes |
 |---|---|---|---|
 | `project_dir` | `string` | optional | Path to the project worktree, relative to the repo root. |
+| `views` | `map` | optional | Named declarative views — the one section that *merges* across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the higher-precedence layer wins a name collision. |
 
 ## Constraints
 

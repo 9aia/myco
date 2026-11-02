@@ -22,7 +22,8 @@ TITLES = {n: t for names in SRCS.values() for n, t in names.items()}
 STRUCTS = [n for names in SRCS.values() for n in names]
 
 SIMPLE = {"String": "string", "PathBuf": "path", "bool": "bool",
-          "u16": "int", "usize": "int", "Vec<String>": "list"}
+          "u16": "int", "usize": "int", "Vec<String>": "list",
+          "std::collections::BTreeMap<String, ViewSpec>": "map"}
 
 def fields(name):
     m = re.search(rf"pub struct {name} \{{(.*?)\n\}}", SRC[name], re.S)
@@ -30,11 +31,15 @@ def fields(name):
     rows = []
     for fm in re.finditer(
             r"((?:\s*(?:///|#\[)[^\n]*\n)+)\s*"
-            r"pub (\w+): ([^,\n]+),?", m.group(1)):
+            # type runs to end of line — generics can hold commas
+            # (`BTreeMap<String, ViewSpec>`); the field comma is
+            # stripped below, and the last field has no trailing
+            # \n (the outer \n} ate it)
+            r"pub (\w+): ([^\n]+)", m.group(1)):
         prelude = fm.group(1)
         doc = " ".join(l.split("///", 1)[1].strip()
                        for l in prelude.splitlines() if "///" in l)
-        fname, ty = fm.group(2), fm.group(3).strip()
+        fname, ty = fm.group(2), fm.group(3).strip().rstrip(",")
         opt = (ty.startswith("Option")
                or "serde(default" in prelude)
         inner = ty[7:-1] if ty.startswith("Option") else ty
