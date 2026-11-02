@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use myco_core::{eval, Actor, Item, ItemKind, SortKey, Status, ViewFilter, ViewSpec};
+use myco_core::{eval, Actor, Item, SortKey, Status, ViewSpec};
 use myco_store::Store;
 use serde_json::json;
 
@@ -33,25 +33,25 @@ pub struct NextFlags {
     pub(crate) claim: bool,
 }
 
-/// The default `next` spec — open tasks+issues, top item only.
+/// The default `next` spec — the builtin `next` view (open
+/// tasks+issues, top item only), before config shadows/flags.
 pub(crate) fn base_spec() -> ViewSpec {
-    ViewSpec {
-        filter: ViewFilter {
-            kind: vec![ItemKind::Task, ItemKind::Issue],
-            status: vec![Status::Open],
-            ..ViewFilter::default()
-        },
-        limit: Some(1),
-        ..ViewSpec::default()
-    }
+    myco_ops::view::builtins()
+        .into_iter()
+        .find(|v| v.name == "next")
+        .map(|v| v.spec)
+        .unwrap_or_default()
 }
 
-/// Flags merged over [`base_spec`], validated — the same merge
-/// `myco view` performs over a named spec. Under `--claim` the
-/// `--owner` flag names the claimer, so it must not also
-/// restrict the pick to items that owner already holds.
-pub(crate) fn spec(flags: &NextFlags) -> Result<ViewSpec, String> {
-    let mut spec = base_spec();
+/// Resolve the `next` named view — a repo's `[views.next]`
+/// shadows the builtin like any other name — then merge flags,
+/// validated. Under `--claim` the `--owner` flag names the
+/// claimer, so it must not also restrict the pick to items that
+/// owner already holds.
+pub(crate) fn spec(root: &std::path::Path, flags: &NextFlags) -> Result<ViewSpec, String> {
+    let (view, warnings) = myco_ops::view::resolve_lenient(root, "next", ops::CONFIG)?;
+    view::warn(&warnings);
+    let mut spec = view.spec;
     flags.filter.apply(&mut spec.filter);
     if flags.claim {
         spec.filter.owner = Vec::new();
@@ -107,13 +107,13 @@ pub fn run(
     json_out: bool,
     no_commit: bool,
 ) -> Result<i32, String> {
-    let spec = spec(&flags)?;
     let owner = flags.claim.then(|| claim_owner(&flags)).transpose()?;
     let (proj, store) = if flags.claim {
         items::open(dir.as_deref(), root.as_deref())?
     } else {
         items::open_read(dir.as_deref(), root.as_deref())?
     };
+    let spec = spec(&proj.root, &flags)?;
     let scan = digest::scan(&store)?;
     let Some(item) = pick(&scan, &spec).cloned() else {
         if json_out {
@@ -152,11 +152,19 @@ pub fn run(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use myco_core::ItemId;
+    use myco_core::{ItemId, ItemKind};
+
+    /// A hermetic root — no myco.toml, no user config leaks.
+    fn spec_at(dir: &tempfile::TempDir, flags: &NextFlags) -> ViewSpec {
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            spec(dir.path(), flags).unwrap()
+        })
+    }
 
     #[test]
     fn default_spec_is_open_tasks_and_issues_limit_1() {
-        let spec = spec(&NextFlags::default()).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let spec = spec_at(&dir, &NextFlags::default());
         assert_eq!(spec.limit, Some(1));
         assert_eq!(spec.filter.kind, [ItemKind::Task, ItemKind::Issue]);
         assert_eq!(spec.filter.status, [Status::Open]);
@@ -174,7 +182,8 @@ mod tests {
             sort: vec!["-id".parse().unwrap()],
             claim: false,
         };
-        let spec = spec(&flags).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let spec = spec_at(&dir, &flags);
         assert_eq!(spec.filter.kind, [ItemKind::Issue]);
         // unset fields keep the base: status stays [open]
         assert_eq!(spec.filter.status, [Status::Open]);

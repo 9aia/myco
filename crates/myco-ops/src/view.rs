@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use myco_core::{GroupAxis, Status, ViewFilter, ViewFormat, ViewSpec};
+use myco_core::{GroupAxis, ItemKind, Status, ViewFilter, ViewFormat, ViewSpec};
 
 use crate::config::ConfigLoader;
 
@@ -76,6 +76,21 @@ pub fn builtins() -> Vec<NamedView> {
         NamedView {
             name: "milestone".into(),
             spec: spec(live, Some(GroupAxis::Milestone), ViewFormat::Board),
+            origin: Origin::Builtin,
+        },
+        NamedView {
+            name: "next".into(),
+            spec: ViewSpec {
+                filter: ViewFilter {
+                    kind: vec![ItemKind::Task, ItemKind::Issue],
+                    status: vec![Status::Open],
+                    ..ViewFilter::default()
+                },
+                group_by: None,
+                sort: vec![],
+                limit: Some(1),
+                format: ViewFormat::List,
+            },
             origin: Origin::Builtin,
         },
     ]
@@ -230,7 +245,7 @@ mod tests {
     #[test]
     fn builtins_are_valid() {
         let names: Vec<_> = builtins().iter().map(|v| v.name.clone()).collect();
-        assert_eq!(names, ["board", "open", "epic", "milestone"]);
+        assert_eq!(names, ["board", "open", "epic", "milestone", "next"]);
         for v in builtins() {
             v.spec.validate().unwrap();
         }

@@ -674,8 +674,11 @@ impl Server {
             }
             "next" => {
                 let p: NextParams = parse_params(params)?;
-                let (_proj, store) = self.open_read()?;
-                let mut spec = next::base_spec();
+                let (proj, store) = self.open_read()?;
+                let (view, _warnings) =
+                    myco_ops::view::resolve_lenient(&proj.root, "next", crate::ops::CONFIG)
+                        .map_err(Fail::Verb)?;
+                let mut spec = view.spec;
                 if let Some(patch) = &p.spec {
                     patch.apply(&mut spec);
                 }
@@ -1073,7 +1076,7 @@ mod tests {
                 .iter()
                 .map(|x| x["name"].as_str().unwrap())
                 .collect();
-            assert_eq!(names, ["board", "open", "epic", "milestone"]);
+            assert_eq!(names, ["board", "open", "epic", "milestone", "next"]);
             assert_eq!(v["views"][0]["origin"], "builtin");
             assert!(v["views"][0]["spec"].is_object());
             assert_eq!(v["warnings"], json!([]));
