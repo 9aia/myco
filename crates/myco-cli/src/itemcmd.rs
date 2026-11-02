@@ -13,13 +13,15 @@ use crate::items;
 
 #[derive(Subcommand)]
 pub enum Cmd {
-    /// Dump one item — frontmatter fields plus the body for
+    /// Dump items — frontmatter fields plus the body for
     /// file-backed kinds (`--json` = the full Item + location +
-    /// body).
+    /// body). 1..n ids: a batch repeats the block in argument
+    /// order; `--json` emits the per-id `[{id, ok, …}]` array.
     Show {
         /// Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`,
         /// `PL-NNN`) — live or archived.
-        id: ItemId,
+        #[arg(required = true, num_args = 1..)]
+        id: Vec<ItemId>,
     },
     /// Mutate an item in place. `--status` is the only field routed
     /// through the state machine — single steps only, invalid ones
@@ -184,32 +186,7 @@ pub fn run(
         items::open(dir.as_deref(), root.as_deref())?
     };
     match cmd {
-        Cmd::Show { id } => match items::find_item(&store, id)? {
-            Some((item, location, body)) => {
-                let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
-                let interrupted = crate::continuity::is_interrupted(&store, id)?;
-                if json_out {
-                    crate::ops::print_json(
-                        &json!({"item": item, "location": location, "handoffs": handoffs, "interrupted": interrupted, "body": body}),
-                    );
-                } else {
-                    println!("{}", items::compact(&item));
-                    println!("  {location}");
-                    println!("  handoffs: {handoffs}");
-                    if interrupted {
-                        println!("  ⚡ interrupted — latest handoff marks it; `myco resume {id}`");
-                    }
-                    if let Some(body) = &body {
-                        if !body.is_empty() {
-                            println!();
-                            println!("{body}");
-                        }
-                    }
-                }
-                Ok(0)
-            }
-            None => Err(format!("{id}: no such item")),
-        },
+        Cmd::Show { id: ids } => show(&store, &ids, json_out),
         Cmd::Set {
             id,
             status,
@@ -252,22 +229,108 @@ pub fn run(
     }
 }
 
+/// The gathered `item show` pieces — one id's load shared by
+/// the human block, the `--json` payload, and the multi-id
+/// batch (`myco serve` rides [`show_json`]).
+struct ShowData {
+    item: Item,
+    location: String,
+    handoffs: usize,
+    interrupted: bool,
+    body: Option<String>,
+}
+
+/// Load one id anywhere in the ledger — TODO/BACKLOG line or
+/// item file, live or archived.
+fn show_data(store: &myco_store_md::MdStore, id: ItemId) -> Result<ShowData, String> {
+    match items::find_item(store, id)? {
+        Some((item, location, body)) => {
+            let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
+            let interrupted = crate::continuity::is_interrupted(store, id)?;
+            Ok(ShowData {
+                item,
+                location,
+                handoffs,
+                interrupted,
+                body,
+            })
+        }
+        None => Err(format!("{id}: no such item")),
+    }
+}
+
+/// One item's human block — identical for single- and multi-id
+/// output (blocks join on a blank line).
+fn show_block(d: &ShowData) -> String {
+    let mut out = format!(
+        "{}\n  {}\n  handoffs: {}",
+        items::compact(&d.item),
+        d.location,
+        d.handoffs
+    );
+    if d.interrupted {
+        out.push_str(&format!(
+            "\n  ⚡ interrupted — latest handoff marks it; `myco resume {}`",
+            d.item.id
+        ));
+    }
+    if let Some(body) = &d.body {
+        if !body.is_empty() {
+            out.push_str(&format!("\n\n{body}"));
+        }
+    }
+    out
+}
+
+/// `ShowData` → the `{item, location, handoffs, interrupted,
+/// body}` payload shape.
+fn show_value(d: &ShowData) -> serde_json::Value {
+    json!({"item": d.item, "location": d.location, "handoffs": d.handoffs, "interrupted": d.interrupted, "body": d.body})
+}
+
 /// The `item show` payload — `{item, location, handoffs,
 /// interrupted, body}` — the `myco serve` method surface.
 pub(crate) fn show_json(
     store: &myco_store_md::MdStore,
     id: ItemId,
 ) -> Result<serde_json::Value, String> {
-    match items::find_item(store, id)? {
-        Some((item, location, body)) => {
-            let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
-            let interrupted = crate::continuity::is_interrupted(store, id)?;
-            Ok(
-                json!({"item": item, "location": location, "handoffs": handoffs, "interrupted": interrupted, "body": body}),
-            )
+    Ok(show_value(&show_data(store, id)?))
+}
+
+/// The `item show` body — 1..n ids in one open. Single id keeps
+/// the classic block + bare payload; multi-id repeats the block
+/// in argument order (a bad id reports to stderr, exit 1) and
+/// `--json` becomes the `[{id, ok, payload|error}]` array.
+fn show(store: &myco_store_md::MdStore, ids: &[ItemId], json_out: bool) -> Result<i32, String> {
+    if ids.len() == 1 {
+        let d = show_data(store, ids[0])?;
+        if json_out {
+            crate::ops::print_json(&show_value(&d));
+        } else {
+            println!("{}", show_block(&d));
         }
-        None => Err(format!("{id}: no such item")),
+        return Ok(0);
     }
+    if json_out {
+        let (entries, failed) = items::multi_json(ids, |id| show_json(store, id));
+        crate::ops::print_json(&entries);
+        return Ok(if failed { 1 } else { 0 });
+    }
+    let mut blocks = Vec::new();
+    let mut failed = false;
+    for id in ids {
+        match show_data(store, *id) {
+            Ok(d) => blocks.push(show_block(&d)),
+            Err(e) => {
+                failed = true;
+                eprintln!("myco: error: {e}");
+            }
+        }
+    }
+    if !blocks.is_empty() {
+        println!("{}", blocks.join("\n\n"));
+    }
+    Ok(if failed { 1 } else { 0 })
 }
 
 /// Re-land a `take`n top-level task in its origin section: the

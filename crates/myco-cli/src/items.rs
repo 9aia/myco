@@ -4,7 +4,7 @@
 //! layer itself is re-exported so call sites read `items::X` for
 //! either.
 
-use myco_core::{Item, NewItemMeta};
+use myco_core::{Item, ItemId, NewItemMeta};
 
 pub use myco_ops::items::*;
 
@@ -120,4 +120,29 @@ impl BodyFlags {
                 .map_err(|e| format!("read --body {path}: {e}")),
         }
     }
+}
+
+/// `[{id, ok, payload|error}]` — the multi-id `--json` shape
+/// (P-004): one entry per id in argument order; a bad or
+/// missing id reports inline (`ok: false` + `error`) instead of
+/// aborting the batch. Returns the array plus whether any id
+/// failed — the caller maps that to a nonzero exit.
+pub(crate) fn multi_json(
+    ids: &[ItemId],
+    f: impl Fn(ItemId) -> Result<serde_json::Value, String>,
+) -> (serde_json::Value, bool) {
+    let mut failed = false;
+    let entries: Vec<serde_json::Value> = ids
+        .iter()
+        .map(|id| match f(*id) {
+            Ok(payload) => {
+                serde_json::json!({"id": id.to_string(), "ok": true, "payload": payload})
+            }
+            Err(error) => {
+                failed = true;
+                serde_json::json!({"id": id.to_string(), "ok": false, "error": error})
+            }
+        })
+        .collect();
+    (serde_json::json!(entries), failed)
 }

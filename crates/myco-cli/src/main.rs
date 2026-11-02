@@ -177,10 +177,12 @@ enum Cmd {
     },
     /// Minimal context block to restart work on an item — the
     /// item, `blocks:` dep titles, latest handoffs, open
-    /// checklist. The single-item `status --prompt`.
+    /// checklist. The single-item `status --prompt`. 1..n ids
+    /// batch in one call.
     Resume {
-        /// Any item id.
-        id: myco_core::ItemId,
+        /// Any item id — several resume in argument order.
+        #[arg(required = true, num_args = 1..)]
+        id: Vec<myco_core::ItemId>,
         /// Only the latest N handoff entries (default 10).
         #[arg(long)]
         last: Option<usize>,
@@ -407,7 +409,7 @@ fn main() {
             json,
             no_commit,
         ),
-        Cmd::Resume { id, last } => continuity::resume(id, last, dir, root, json),
+        Cmd::Resume { id, last } => continuity::resume(&id, last, dir, root, json),
         Cmd::Next { flags } => next::run(flags, dir, root, json, no_commit),
         Cmd::Schema => schema::run(),
         Cmd::Status { prompt } => status::run(dir, root, prompt, json),

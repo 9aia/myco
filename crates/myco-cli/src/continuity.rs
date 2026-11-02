@@ -326,6 +326,19 @@ fn resume_data(
     })
 }
 
+/// `ResumeData` → the `{item, location, blocks_titles,
+/// handoffs[], open_checklist}` payload shape.
+fn resume_value(d: &ResumeData) -> serde_json::Value {
+    json!({
+        "item": d.item,
+        "location": d.location,
+        "blocks_titles": d.blocks_titles,
+        "handoffs": d.shown,
+        "handoffs_total": d.total,
+        "open_checklist": d.checklist,
+    })
+}
+
 /// The resume payload — `{item, location, blocks_titles,
 /// handoffs[], open_checklist}` — shared by `--json` and
 /// `myco serve`.
@@ -334,86 +347,92 @@ pub fn resume_json(
     id: ItemId,
     last: Option<usize>,
 ) -> Result<serde_json::Value, String> {
-    let d = resume_data(store, id, last)?;
-    Ok(json!({
-        "item": d.item,
-        "location": d.location,
-        "blocks_titles": d.blocks_titles,
-        "handoffs": d.shown,
-        "handoffs_total": d.total,
-        "open_checklist": d.checklist,
-    }))
+    Ok(resume_value(&resume_data(store, id, last)?))
 }
 
-/// The `resume` verb — `--json` is
-/// `{item, location, blocks_titles, handoffs[], open_checklist}`;
-/// human output is a compact prompt-ready block.
+/// One item's prompt-ready block — the compact item line first,
+/// sections only when they carry context. Identical for single-
+/// and multi-id output (blocks join on a blank line).
+fn resume_block(d: &ResumeData) -> String {
+    let mut out = format!("{}\nin: {}", items::compact(&d.item), d.location);
+    if !d.blocks_titles.is_empty() {
+        out.push_str("\nblocks:");
+        for b in &d.blocks_titles {
+            out.push_str(&format!(
+                "\n  {} {}",
+                b["id"].as_str().unwrap_or_default(),
+                b["title"].as_str().unwrap_or("(missing)")
+            ));
+        }
+    }
+    if !d.shown.is_empty() {
+        out.push_str("\nhandoffs:");
+        for e in &d.shown {
+            let mut head = format!("{} · {}", e.date, e.actor);
+            if let Some(s) = &e.session {
+                head.push_str(&format!(" · session:{s}"));
+            }
+            out.push_str(&format!("\n{head}"));
+            for line in e.note.lines() {
+                out.push_str(&format!("\n  {line}"));
+            }
+            out.push('\n');
+        }
+        if d.total > d.shown.len() {
+            out.push_str(&format!("\n… +{} earlier entries", d.total - d.shown.len()));
+        }
+    }
+    if !d.checklist.is_empty() {
+        out.push_str("\nopen checklist:");
+        for c in &d.checklist {
+            out.push_str(&format!("\n  - [ ] {c}"));
+        }
+    }
+    out
+}
+
+/// The `resume` verb — 1..n ids, one discover + store open.
+/// `--json` is the single-id payload for one id, else the
+/// `[{id, ok, payload|error}]` batch array. Human output is the
+/// prompt block per id in argument order; a bad id reports to
+/// stderr and exits 1 without aborting the rest.
 pub fn resume(
-    id: ItemId,
+    ids: &[ItemId],
     last: Option<usize>,
     dir: Option<PathBuf>,
     root: Option<PathBuf>,
     json_out: bool,
 ) -> Result<i32, String> {
     let (_proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
-    let d = resume_data(&store, id, last)?;
-    if json_out {
-        ops::print_json(&json!({
-            "item": d.item,
-            "location": d.location,
-            "blocks_titles": d.blocks_titles,
-            "handoffs": d.shown,
-            "handoffs_total": d.total,
-            "open_checklist": d.checklist,
-        }));
+    if ids.len() == 1 {
+        let d = resume_data(&store, ids[0], last)?;
+        if json_out {
+            ops::print_json(&resume_value(&d));
+        } else {
+            println!("{}", resume_block(&d));
+        }
         return Ok(0);
     }
-    let ResumeData {
-        item,
-        location,
-        blocks_titles,
-        shown,
-        total,
-        checklist,
-    } = d;
-    // prompt-ready block — compact item line first; sections only
-    // when they carry context
-    println!("{}", items::compact(&item));
-    println!("in: {location}");
-    if !blocks_titles.is_empty() {
-        println!("blocks:");
-        for b in &blocks_titles {
-            println!(
-                "  {} {}",
-                b["id"].as_str().unwrap_or_default(),
-                b["title"].as_str().unwrap_or("(missing)")
-            );
-        }
+    if json_out {
+        let (entries, failed) = items::multi_json(ids, |id| resume_json(&store, id, last));
+        ops::print_json(&entries);
+        return Ok(if failed { 1 } else { 0 });
     }
-    if !shown.is_empty() {
-        println!("handoffs:");
-        for e in &shown {
-            let mut head = format!("{} · {}", e.date, e.actor);
-            if let Some(s) = &e.session {
-                head.push_str(&format!(" · session:{s}"));
+    let mut blocks = Vec::new();
+    let mut failed = false;
+    for id in ids {
+        match resume_data(&store, *id, last) {
+            Ok(d) => blocks.push(resume_block(&d)),
+            Err(e) => {
+                failed = true;
+                eprintln!("myco: error: {e}");
             }
-            println!("{head}");
-            for line in e.note.lines() {
-                println!("  {line}");
-            }
-            println!();
-        }
-        if total > shown.len() {
-            println!("… +{} earlier entries", total - shown.len());
         }
     }
-    if !checklist.is_empty() {
-        println!("open checklist:");
-        for c in &checklist {
-            println!("  - [ ] {c}");
-        }
+    if !blocks.is_empty() {
+        println!("{}", blocks.join("\n\n"));
     }
-    Ok(0)
+    Ok(if failed { 1 } else { 0 })
 }
 
 #[cfg(test)]
