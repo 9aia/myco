@@ -64,6 +64,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco org init`↴](#myco-org-init)
 * [`myco ui`↴](#myco-ui)
 * [`myco serve`↴](#myco-serve)
+* [`myco batch`↴](#myco-batch)
 
 ## `myco`
 
@@ -100,6 +101,7 @@ myco — project management, grown not built: agent-first PM CLI
 * `org` — Cross-repo views over the index (auto-rebuilds stale repos)
 * `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
 * `serve` — Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it
+* `batch` — One-shot `serve` — NDJSON verb requests from stdin or `--file`, one JSON-RPC response line per request, dispatched through the same served surface. Per-line errors never fail the run; mutations keep per-request commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS the wire here too — requests that would read it are rejected
 
 ###### **Options:**
 
@@ -977,6 +979,18 @@ Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes thro
 Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it
 
 **Usage:** `myco serve`
+
+
+
+## `myco batch`
+
+One-shot `serve` — NDJSON verb requests from stdin or `--file`, one JSON-RPC response line per request, dispatched through the same served surface. Per-line errors never fail the run; mutations keep per-request commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS the wire here too — requests that would read it are rejected
+
+**Usage:** `myco batch [OPTIONS]`
+
+###### **Options:**
+
+* `--file <PATH>` — Read NDJSON requests from this file instead of stdin
 
 
 

@@ -40,6 +40,7 @@ export default defineConfig({
           { text: "Session continuity with sepia", link: "/how-to/session-continuity" },
           { text: "Migrate a legacy ledger", link: "/how-to/migrate" },
           { text: "Import external work", link: "/how-to/import-work" },
+          { text: "Shape the board with named views", link: "/how-to/views" },
           { text: "See work across repos", link: "/how-to/org-views" },
         ],
       },
