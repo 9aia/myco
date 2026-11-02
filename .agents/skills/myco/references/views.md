@@ -1,4 +1,4 @@
-# Views — board / report / epic / milestone / index / org
+# Views — view / board / report / epic / milestone / index / org
 
 Read-only lenses over the ledger. All accept `--json`; none mutate
 (except `index` maintenance commands, which only touch the derived
@@ -43,6 +43,29 @@ myco milestone 0.2         # that milestone's board
 Bare name lists groups; a name renders the group as a board. `--md`
 emits the table form.
 
+## Declarative views — `view`
+
+One engine (filter → group → sort → limit → format) behind named
+presets and ad-hoc flag specs. Builtins: `board`, `open`, `epic`,
+`milestone`. Config adds `[views.<name>]` tables — repo `myco.toml`
+presets are shared, `~/.config/myco/myco.toml` presets personal;
+the layers merge by name (user wins; either shadows a builtin with
+a warning). `myco check` lints repo-layer `[views]` only.
+
+```bash
+myco view                     # list defined views
+myco view board               # ≡ myco board
+myco view my-preset           # a [views.my-preset] config spec
+myco view --kind issue --status open --group-by owner --sort -created
+myco view open --limit 5 --md # named spec + flag overrides merge
+```
+
+Flags merge over a named spec: a set flag replaces that field,
+unset fields keep the spec's value. `--format list|board`;
+`--live-only`/`--superseded` filter ADR chains. `myco ui --view
+<name>` opens the TUI with that view's *filter* narrowing every
+board (sort/group/format don't map onto columns).
+
 ## Cross-repo — `index` + `org`
 
 The index is a disposable derived cache (redb under
@@ -70,4 +93,6 @@ with `index add`, then `org status` is the cheap org-wide answer to
 - Session start → `status --prompt` (see continuity.md).
 - "Show me the work" / standup → `board` or `report`.
 - "What's left in this push" → `epic <name>` / `milestone <name>`.
+- A filter/group you'll reuse → `[views.<name>]` + `myco view <name>`;
+  one-off slices → `myco view --status … --group-by …`.
 - Multiple repos in play → `index add` once per repo, then `org`.

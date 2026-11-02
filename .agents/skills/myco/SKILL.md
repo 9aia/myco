@@ -50,7 +50,7 @@ myco <verb> --help     # every verb, self-documenting
 | Session end (resumable state) | `myco handoff T-NNN --note "done/next/open"` |
 | Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
 | Restart work on an item | `myco resume T-NNN` |
-| Views | `myco board` · `report` · `epic` · `milestone` · `ui` (interactive TUI) |
+| Views | `myco board` · `report` · `epic` · `milestone` · `view [name]` (presets + `--status`/`--group-by`/`--sort` flags) · `ui` (interactive TUI) |
 | Cross-repo | `myco index add <repo>` · `myco org status` |
 | Housekeeping | `myco init` · `check` · `migrate` · `commit` · `org init` |
 
@@ -70,5 +70,5 @@ myco <verb> --help     # every verb, self-documenting
   scheme, state machine, metadata tokens
 - [continuity.md](file://./references/continuity.md) — handoff /
   resume / status --prompt — the core agent workflow
-- [views.md](file://./references/views.md) — board / report / epic /
-  milestone / index / org
+- [views.md](file://./references/views.md) — view / board / report /
+  epic / milestone / index / org
