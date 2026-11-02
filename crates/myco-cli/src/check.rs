@@ -40,7 +40,8 @@ pub struct Finding {
     /// Stable machine code — `parse`, `done-item`, `counter-behind`,
     /// `duplicate-id`, `dangling-blocks`, `dangling-ref`, `filename`,
     /// `missing-file`, `unexpected-file`, `emit-drift`,
-    /// `orphan-handoff`, `id-title-mismatch`, `unreadable-file`.
+    /// `orphan-handoff`, `id-title-mismatch`, `unreadable-file`,
+    /// `config`, `view-invalid`.
     pub code: &'static str,
     /// Human/agent-readable message.
     pub msg: String,
@@ -1408,6 +1409,28 @@ pub fn check_json(proj: &Project) -> Result<serde_json::Value, String> {
     }))
 }
 
+/// `[views]` lint — unparseable config or an invalid spec is a
+/// finding (unfixable — the repair is editing myco.toml). Only the
+/// repo layer is linted: check output must be identical for every
+/// user and CI. Shadowing a builtin is legal (warned at use), not
+/// a finding.
+fn view_findings(root: &std::path::Path) -> Vec<Finding> {
+    match myco_ops::view::validate_repo_views(root) {
+        Ok(errs) => errs
+            .into_iter()
+            .map(|(name, e)| {
+                Finding::at(
+                    "myco.toml",
+                    "view-invalid",
+                    format!("view \"{name}\": {e}"),
+                    false,
+                )
+            })
+            .collect(),
+        Err(e) => vec![Finding::at("myco.toml", "config", e, false)],
+    }
+}
+
 /// The `check` verb. Exit 1 with findings, 0 when clean.
 pub fn run(
     dir: Option<PathBuf>,
@@ -1445,6 +1468,10 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             analysis = analyze(wt);
         }
     }
+    // config layer: `[views]` specs in the repo/user myco.toml —
+    // lint-only (no fixer); a broken spec fails every verb that
+    // loads config, so it surfaces here too
+    analysis.findings.extend(view_findings(&proj.root));
     // root-side: the managed AGENTS.md block lives on the checked-
     // out branch, not in the worktree — validated/repaired against
     // proj.root separately.

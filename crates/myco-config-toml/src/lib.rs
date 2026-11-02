@@ -1,5 +1,11 @@
 //! TOML impl of `ConfigSource` — explicit path → $MYCO_CONFIG →
 //! ./myco.toml → ~/.config/myco/myco.toml.
+//!
+//! Scalar fields keep first-match semantics (the repo layer wins
+//! over the user layer). `[views]` is the one *merged* section
+//! (P-006): both layers contribute named views and the user layer
+//! wins name collisions — repo presets are shared, personal
+//! presets always reach through.
 
 use myco_config::ConfigSource;
 use std::path::PathBuf;
@@ -10,6 +16,32 @@ pub struct TomlSource {
     pub path: Option<String>,
 }
 
+/// Parse exactly one config file — no layer search, no merge.
+/// For callers that need a specific layer (e.g. `myco check`
+/// linting only the repo's own myco.toml).
+pub fn load_file(path: &PathBuf) -> Result<myco_core::Config, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    toml::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))
+}
+
+fn parse(path: &PathBuf) -> Result<myco_core::Config, String> {
+    load_file(path)
+}
+
+/// First existing path wins within the user layer — XDG dir
+/// preferred over ~/.config.
+fn user_layer() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        candidates.push(PathBuf::from(xdg).join("myco/myco.toml"));
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        candidates.push(PathBuf::from(home).join(".config/myco/myco.toml"));
+    }
+    candidates.into_iter().find(|p| p.exists())
+}
+
 impl ConfigSource for TomlSource {
     fn load(&self) -> Result<myco_core::Config, String> {
         // an explicit path (--config or $MYCO_CONFIG) that doesn't
@@ -18,38 +50,43 @@ impl ConfigSource for TomlSource {
             .path
             .clone()
             .or_else(|| std::env::var("MYCO_CONFIG").ok());
-        let candidates: Vec<PathBuf> = match explicit {
+        let repo_layer: Option<PathBuf> = match explicit {
             Some(p) => {
                 let p = PathBuf::from(p);
                 if !p.exists() {
                     return Err(format!("config {} not found", p.display()));
                 }
-                vec![p]
+                Some(p)
             }
             None => {
-                let mut c = vec![PathBuf::from("myco.toml")];
-                // XDG first, then ~/.config — a bare `./.config`
-                // under an unrelated cwd must never load as config
-                if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-                    c.push(PathBuf::from(xdg).join("myco/myco.toml"));
-                }
-                if let Ok(home) = std::env::var("HOME") {
-                    c.push(PathBuf::from(home).join(".config/myco/myco.toml"));
-                }
-                c
+                let p = PathBuf::from("myco.toml");
+                p.exists().then_some(p)
             }
         };
-        for p in candidates {
-            if p.exists() {
-                let text = std::fs::read_to_string(&p)
-                    .map_err(|e| format!("read {}: {e}", p.display()))?;
-                return toml::from_str(&text).map_err(|e| format!("parse {}: {e}", p.display()));
-            }
+        let user_path = user_layer();
+        if repo_layer.is_none() && user_path.is_none() {
+            return Err(
+                "no myco.toml found (search: $MYCO_CONFIG, ., $XDG_CONFIG_HOME/myco/, ~/.config/myco/)"
+                    .into(),
+            );
         }
-        Err(
-            "no myco.toml found (search: $MYCO_CONFIG, ., $XDG_CONFIG_HOME/myco/, ~/.config/myco/)"
-                .into(),
-        )
+
+        let repo_cfg = repo_layer.as_ref().map(parse).transpose()?;
+        let user_cfg = user_path.as_ref().map(parse).transpose()?;
+
+        // scalars: repo layer wins (today's first-match behavior);
+        // views: merged, user layer wins name collisions
+        let mut merged = myco_core::Config {
+            project_dir: repo_cfg
+                .as_ref()
+                .and_then(|c| c.project_dir.clone())
+                .or_else(|| user_cfg.as_ref().and_then(|c| c.project_dir.clone())),
+            ..Default::default()
+        };
+        for cfg in [repo_cfg, user_cfg].into_iter().flatten() {
+            merged.views.extend(cfg.views);
+        }
+        Ok(merged)
     }
 }
 
@@ -90,6 +127,7 @@ mod tests {
         temp_env::with_vars(
             [
                 ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
                 ("HOME", Some("/nonexistent-home")),
             ],
             || {
@@ -109,5 +147,46 @@ mod tests {
                 let _ = std::fs::remove_dir_all(&dir);
             },
         );
+    }
+
+    #[test]
+    fn views_merge_with_user_winning() {
+        let base = std::env::temp_dir().join(format!("myco-cfg-merge-{}", std::process::id()));
+        let repo_dir = base.join("repo");
+        let home = base.join("home");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+        std::fs::create_dir_all(home.join(".config/myco")).unwrap();
+        std::fs::write(
+            repo_dir.join("myco.toml"),
+            "[views.shared]\nfilter = { kind = [\"issue\"] }\n[views.repo_only]\nfilter = { kind = [\"task\"] }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            home.join(".config/myco/myco.toml"),
+            "[views.shared]\nfilter = { kind = [\"task\"] }\n[views.user_only]\nfilter = { kind = [\"plan\"] }\n",
+        )
+        .unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.to_string_lossy().as_ref())),
+            ],
+            || {
+                let cwd = std::env::current_dir().unwrap();
+                std::env::set_current_dir(&repo_dir).unwrap();
+                let cfg = TomlSource { path: None }.load().unwrap();
+                std::env::set_current_dir(cwd).unwrap();
+                assert_eq!(cfg.views.len(), 3);
+                // user layer wins the collision
+                assert_eq!(
+                    cfg.views["shared"].filter.kind,
+                    vec![myco_core::ItemKind::Task]
+                );
+                assert!(cfg.views.contains_key("repo_only"));
+                assert!(cfg.views.contains_key("user_only"));
+            },
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

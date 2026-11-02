@@ -13,3 +13,4 @@
 pub mod discover;
 pub mod items;
 pub mod ops;
+pub mod view;

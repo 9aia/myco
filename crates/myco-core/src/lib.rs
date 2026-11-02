@@ -16,17 +16,22 @@ pub mod ledger;
 pub mod meta;
 pub mod priority;
 pub mod status;
+pub mod view;
 pub mod walk;
 
 pub use actor::{is_valid_actor, Actor, ParseActorError};
 pub use doc::{BacklogDoc, ItemFile, Section, TodoDoc};
 pub use handoff::{is_valid_session, HandoffEntry};
-pub use id::{require_kind, ItemId, ItemKind, ParseItemIdError};
+pub use id::{require_kind, ItemId, ItemKind, ParseItemIdError, ParseItemKindError};
 pub use item::{is_valid_group_name, is_valid_label, tree_view, Item, ItemMeta, NewItemMeta};
 pub use ledger::{Ledger, TaskLoc};
 pub use meta::{NextCounters, ProjectMeta, Registry};
 pub use priority::{ParsePriorityError, Priority};
 pub use status::{InvalidTransition, ParseStatusError, Status};
+pub use view::{
+    eval, GroupAxis, ParseGroupAxisError, ParseSortKeyError, ParseViewFormatError, SortField,
+    SortKey, ViewFilter, ViewFormat, ViewGroup, ViewSpec, UNGROUPED,
+};
 pub use walk::{status_path, targets, walk_descendants_to, walk_to};
 
 use serde::Deserialize;
@@ -90,6 +95,12 @@ impl Default for Seen {
 pub struct Config {
     /// Path to the project worktree, relative to the repo root.
     pub project_dir: Option<String>,
+    /// Named declarative views — the one section that *merges*
+    /// across config layers (P-006): repo `myco.toml` presets are
+    /// shared, user-config presets personal; the higher-precedence
+    /// layer wins a name collision.
+    #[serde(default)]
+    pub views: std::collections::BTreeMap<String, ViewSpec>,
 }
 
 #[cfg(test)]

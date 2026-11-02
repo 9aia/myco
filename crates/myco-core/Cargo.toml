@@ -23,6 +23,7 @@ schemars = { workspace = true, optional = true }
 # Self-dep so `cargo test` compiles the `schema` feature code.
 myco-core = { path = ".", features = ["schema"] }
 serde_json.workspace = true
+toml.workspace = true
 
 [lints]
 workspace = true

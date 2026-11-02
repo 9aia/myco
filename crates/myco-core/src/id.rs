@@ -67,6 +67,34 @@ impl ItemKind {
     pub fn from_prefix(prefix: &str) -> Option<ItemKind> {
         ItemKind::ALL.into_iter().find(|k| k.prefix() == prefix)
     }
+
+    /// Serde name — `task`, `issue`, `proposal`, `adr`, `plan`
+    /// (lowercase, same as `kind = …` in config/frontmatter).
+    pub fn name(self) -> &'static str {
+        match self {
+            ItemKind::Task => "task",
+            ItemKind::Issue => "issue",
+            ItemKind::Proposal => "proposal",
+            ItemKind::Adr => "adr",
+            ItemKind::Plan => "plan",
+        }
+    }
+}
+
+/// Failure to parse an [`ItemKind`] serde name.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("invalid item kind {0:?} — expected task|issue|proposal|adr|plan")]
+pub struct ParseItemKindError(pub String);
+
+impl FromStr for ItemKind {
+    type Err = ParseItemKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ItemKind::ALL
+            .into_iter()
+            .find(|k| k.name() == s)
+            .ok_or_else(|| ParseItemKindError(s.to_string()))
+    }
 }
 
 /// A typed, numbered id: kind + counter. `Ord` sorts by kind, then

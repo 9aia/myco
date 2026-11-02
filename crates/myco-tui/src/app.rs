@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use myco_core::Ledger;
-use myco_core::{Item, ItemFile, ItemId, ItemKind, Status};
+use myco_core::{Item, ItemFile, ItemId, ItemKind, Status, ViewSpec};
 use myco_ops::{discover, items, ops};
 use myco_store::Store;
 use myco_store_md::MdStore;
@@ -96,6 +96,9 @@ pub struct Model {
     pub input: String,
     /// `/` live filter — narrows visible item rows when non-empty.
     pub filter: String,
+    /// `--view <name>` spec — narrows every board's item source
+    /// (the filter only; group/sort/format are renderer concerns).
+    pub view: Option<ViewSpec>,
     /// `:` command-line buffer — separate from `input` so an `a`
     /// draft isn't clobbered.
     pub cmdline: String,
@@ -126,8 +129,15 @@ pub struct Model {
 
 impl Model {
     /// Discovery + first ledger load. `dir`/`root` override like the
-    /// CLI globals.
-    pub fn open(dir: Option<&Path>, root: Option<&Path>, no_commit: bool) -> Result<Self, String> {
+    /// CLI globals; `view` names a declarative view (builtin preset
+    /// or `[views.<name>]` config) whose filter narrows the item
+    /// source on every board.
+    pub fn open(
+        dir: Option<&Path>,
+        root: Option<&Path>,
+        no_commit: bool,
+        view: Option<String>,
+    ) -> Result<Self, String> {
         // Shared read lock for the initial load only — a live writer
         // fails us fast rather than rendering mid-mutation. It drops
         // with this scope: holding any lock for the session would
@@ -137,6 +147,10 @@ impl Model {
             (proj, items::load_ledger(&store)?)
         };
         let store = ops::store_at(&proj.worktree)?;
+        let view_spec = match &view {
+            Some(name) => Some(myco_ops::view::resolve(&proj.root, name)?.0.spec),
+            None => None,
+        };
         let mut m = Model {
             proj,
             store,
@@ -148,6 +162,7 @@ impl Model {
             mode: Mode::Normal,
             input: String::new(),
             filter: String::new(),
+            view: view_spec,
             cmdline: String::new(),
             show_ids: true,
             status: String::new(),
@@ -162,7 +177,16 @@ impl Model {
         m.load_files();
         m.rebuild_rows();
         m.restore_session();
+        if let Some(name) = &view {
+            m.status = format!("view: {name}");
+        }
         Ok(m)
+    }
+
+    /// `--view` narrows the item source — top-level only; children
+    /// ride with a matching parent.
+    fn view_matches(&self, item: &Item) -> bool {
+        self.view.as_ref().is_none_or(|v| v.filter.matches(item))
     }
 
     /// Pull file-backed items for the `Files` board. Per-kind read
@@ -226,7 +250,7 @@ impl Model {
                     let group: Vec<Item> = self
                         .files
                         .iter()
-                        .filter(|f| f.meta.id.kind() == kind)
+                        .filter(|f| f.meta.id.kind() == kind && self.view_matches(&f.meta))
                         .map(|f| f.meta.clone())
                         .collect();
                     if group.is_empty() {
@@ -246,7 +270,13 @@ impl Model {
                     if let Some(name) = &s.name {
                         self.rows.push(Row::Header(name.clone()));
                     }
-                    push_items(&s.items, 0, &mut self.rows);
+                    let items: Vec<Item> = s
+                        .items
+                        .iter()
+                        .filter(|i| self.view_matches(i))
+                        .cloned()
+                        .collect();
+                    push_items(&items, 0, &mut self.rows);
                 }
             }
         }
@@ -944,6 +974,7 @@ mod tests {
             mode: Mode::Normal,
             input: String::new(),
             filter: String::new(),
+            view: None,
             cmdline: String::new(),
             show_ids: true,
             status: String::new(),

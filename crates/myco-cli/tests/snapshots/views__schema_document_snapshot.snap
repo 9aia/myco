@@ -843,7 +843,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     },
     "NextCounters": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit.",
+      "additionalProperties": false,
+      "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit; *unknown* keys are rejected — a typo (`tx = 9`)\nmust surface, not silently reset the counter to 1 and reissue\nids.",
       "properties": {
         "adr": {
           "default": 1,
@@ -914,7 +915,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "ProjectMeta": {
       "$defs": {
         "NextCounters": {
-          "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit.",
+          "additionalProperties": false,
+          "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit; *unknown* keys are rejected — a typo (`tx = 9`)\nmust surface, not silently reset the counter to 1 and reissue\nids.",
           "properties": {
             "adr": {
               "default": 1,
@@ -956,7 +958,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "description": "`meta.toml` — the one piece of project state that isn't\nderivable from the item files.",
+      "additionalProperties": false,
+      "description": "`meta.toml` — the one piece of project state that isn't\nderivable from the item files. Unknown keys are rejected:\na typo'd table (`[netx]`) would otherwise silently drop the\nreal counters and restart id allocation at 1 — done ids get\nreissued, colliding with their handoffs and history.",
       "properties": {
         "name": {
           "description": "Repo/project name — used in `# TODO — <name>` and views.",

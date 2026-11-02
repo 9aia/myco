@@ -44,6 +44,7 @@ mod serve;
 mod status;
 mod templates;
 mod todo;
+mod view;
 
 /// myco — agent-first project management for a repo's `project/`
 /// worktree.
@@ -217,6 +218,24 @@ enum Cmd {
         #[arg(long)]
         all: bool,
     },
+    /// Declarative views — named presets (`[views.<name>]` in
+    /// config + built-ins `board|open|epic|milestone`) or an
+    /// ad-hoc spec from flags. Bare `myco view` lists views.
+    View {
+        /// View name — builtin preset or config view.
+        name: Option<String>,
+        /// List defined views and exit.
+        #[arg(long)]
+        list: bool,
+        /// Emit a markdown table (board format).
+        #[arg(long)]
+        md: bool,
+        /// Show every row — no cap.
+        #[arg(long)]
+        all: bool,
+        #[command(flatten)]
+        flags: view::ViewFlags,
+    },
     /// Items grouped by milestone — bare lists milestones with
     /// counts, a name renders that milestone's board.
     Milestone {
@@ -250,7 +269,11 @@ enum Cmd {
     /// Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item
     /// preview, writes through the same ops the verbs use.
     #[cfg(feature = "tui")]
-    Ui,
+    Ui {
+        /// Open with a named view's filter narrowing every board.
+        #[arg(long, value_name = "NAME")]
+        view: Option<String>,
+    },
     /// Sequential request/response verb surface on stdio —
     /// JSON-RPC 2.0, one line in / one line out. For embedding
     /// (peregrin spawns one per repo); stdin IS the wire, so
@@ -283,7 +306,7 @@ fn manifest() -> serde_json::Value {
             "init", "check", "migrate", "commit", "absorb",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
-            "epic", "milestone",
+            "epic", "milestone", "view",
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
@@ -294,7 +317,7 @@ fn manifest() -> serde_json::Value {
             "init", "check", "migrate", "commit", "absorb",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
-            "epic", "milestone",
+            "epic", "milestone", "view",
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
@@ -374,12 +397,21 @@ fn main() {
         Cmd::Milestone { name, md, all } => {
             group::run(group::Group::Milestone, name, md, all, dir, root, json)
         }
+        Cmd::View {
+            name,
+            list,
+            md,
+            all,
+            flags,
+        } => view::run(name, flags, view::Out { list, md, all }, dir, root, json),
         Cmd::Absorb { cmd } => absorb::run(cmd, dir, root, json, no_commit),
         Cmd::Report => report::run(dir, root, json),
         Cmd::Index { cmd } => indexcmd::run(cmd, json),
         Cmd::Org { cmd } => org::run(cmd, json, no_commit),
         #[cfg(feature = "tui")]
-        Cmd::Ui => myco_tui::run(dir.as_deref(), root.as_deref(), no_commit).map(|_| 0),
+        Cmd::Ui { view } => {
+            myco_tui::run(dir.as_deref(), root.as_deref(), no_commit, view).map(|_| 0)
+        }
         Cmd::Serve => serve::run(dir, root, no_commit),
     };
     match result {

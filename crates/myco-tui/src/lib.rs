@@ -51,9 +51,16 @@ fn install_panic_hook() {
 }
 
 /// Launch the TUI. `dir`/`root` are the same discovery overrides the
-/// CLI takes; `no_commit` suppresses the per-mutation commit.
-pub fn run(dir: Option<&Path>, root: Option<&Path>, no_commit: bool) -> Result<(), String> {
-    let mut model = app::Model::open(dir, root, no_commit)?;
+/// CLI takes; `no_commit` suppresses the per-mutation commit. `view`
+/// names a declarative view (builtin preset or `[views.<name>]`
+/// config entry) whose filter narrows every board's item source.
+pub fn run(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    no_commit: bool,
+    view: Option<String>,
+) -> Result<(), String> {
+    let mut model = app::Model::open(dir, root, no_commit, view)?;
     enable_raw_mode().map_err(|e| format!("raw mode: {e}"))?;
     // Guard first — raw mode is on from here, so every fallible
     // step below (alt screen, terminal init) must restore on `?`.

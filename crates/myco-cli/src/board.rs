@@ -10,8 +10,8 @@ use std::path::PathBuf;
 
 use myco_core::{Item, Status};
 use serde_json::json;
+use tabled::builder::Builder;
 use tabled::settings::Style;
-use tabled::{Table, Tabled};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::{digest, items, ops};
@@ -21,8 +21,10 @@ use crate::{digest, items, ops};
 pub const DEFAULT_MAX_ROWS: usize = 25;
 
 /// The ascii style's per-table overhead: `| ` + ` ` per column
-/// (3×5) plus the outer borders (1).
-const TABLE_OVERHEAD: usize = 16;
+/// (3n) plus the outer borders (1).
+fn table_overhead(n_cols: usize) -> usize {
+    3 * n_cols + 1
+}
 
 /// Human-render constraints for the board — width budget + row
 /// cap. `--md`/`--json` use [`Fit::UNBOUNDED`]; caps are a terminal
@@ -188,13 +190,12 @@ fn truncate(s: &str, w: usize) -> String {
     out
 }
 
-/// Water-fill `budget` across the five columns: a column under the
-/// fair share keeps its natural width and the rest split what's
-/// left. Never grows a column past its natural width.
-fn fit_widths(natural: [usize; 5], budget: usize) -> [usize; 5] {
-    let mut out = natural;
-    let mut locked = [false; 5];
-    let mut open = 5usize;
+/// Water-fill `budget` across N columns: a column under the fair
+/// share keeps its natural width and the rest split what's left.
+/// Never grows a column past its natural width.
+fn fit_widths_dyn(mut out: Vec<usize>, budget: usize) -> Vec<usize> {
+    let mut locked = vec![false; out.len()];
+    let mut open = out.len();
     let mut rem = budget;
     loop {
         if open == 0 {
@@ -203,7 +204,7 @@ fn fit_widths(natural: [usize; 5], budget: usize) -> [usize; 5] {
         let share = rem / open;
         let mut extra = rem - share * open;
         let mut progressed = false;
-        for c in 0..5 {
+        for c in 0..out.len() {
             if !locked[c] && out[c] <= share {
                 locked[c] = true;
                 open -= 1;
@@ -212,7 +213,7 @@ fn fit_widths(natural: [usize; 5], budget: usize) -> [usize; 5] {
             }
         }
         if !progressed {
-            for c in 0..5 {
+            for c in 0..out.len() {
                 if !locked[c] {
                     // every open column wants more than the share
                     out[c] = share + usize::from(extra > 0);
@@ -236,24 +237,9 @@ pub const COLUMNS: [(&str, Option<Status>); 5] = [
     ("blocked", Some(Status::Blocked)),
 ];
 
-/// One board row — five card cells, any may be empty.
-#[derive(Tabled)]
-struct Row {
-    #[tabled(rename = "Backlog")]
-    backlog: String,
-    #[tabled(rename = "Open")]
-    open: String,
-    #[tabled(rename = "Claimed")]
-    claimed: String,
-    #[tabled(rename = "In Progress")]
-    in_progress: String,
-    #[tabled(rename = "Blocked")]
-    blocked: String,
-}
-
 /// Card text — `T-012 the title`, with an optional prefix
 /// (`myco:`) for org boards.
-fn card(item: &Item, prefix: Option<&str>, interrupted: bool) -> String {
+pub(crate) fn card(item: &Item, prefix: Option<&str>, interrupted: bool) -> String {
     let id = match prefix {
         Some(p) => format!("{p}:{}", item.id),
         None => item.id.to_string(),
@@ -302,47 +288,46 @@ pub fn render<'a>(
     render_cards(&cards, md, fit)
 }
 
-/// Render five columns of card strings — shared with `org board`,
-/// which builds mixed-repo cards itself.
-pub fn render_cards(cards: &[Vec<String>; 5], md: bool, fit: Fit) -> String {
+/// Render N columns of card strings — the five-column board and
+/// `myco view`'s generic columnar format share this. `headers[c]`
+/// heads `columns[c]`; the same width-fitting, row cap, and chrome
+/// apply at any column count.
+pub fn render_columns(headers: &[String], columns: &[Vec<String>], md: bool, fit: Fit) -> String {
     let fit = if md { Fit::UNBOUNDED } else { fit };
     // shrink cards to the terminal budget — wide columns split
     // what's left once narrow ones keep their natural width
-    let headers = ["Backlog", "Open", "Claimed", "In Progress", "Blocked"];
-    let natural: [usize; 5] = std::array::from_fn(|c| {
-        cards[c]
-            .iter()
-            .map(|s| UnicodeWidthStr::width(s.as_str()))
-            .max()
-            .unwrap_or(0)
-            .max(UnicodeWidthStr::width(headers[c]))
-    });
-    let budget = fit.width.saturating_sub(TABLE_OVERHEAD);
-    let widths = fit_widths(natural, budget);
-    let height = cards.iter().map(Vec::len).max().unwrap_or(0);
+    let natural: Vec<usize> = headers
+        .iter()
+        .enumerate()
+        .map(|(c, h)| {
+            columns[c]
+                .iter()
+                .map(|s| UnicodeWidthStr::width(s.as_str()))
+                .max()
+                .unwrap_or(0)
+                .max(UnicodeWidthStr::width(h.as_str()))
+        })
+        .collect();
+    let budget = fit.width.saturating_sub(table_overhead(headers.len()));
+    let widths = fit_widths_dyn(natural, budget);
+    let height = columns.iter().map(Vec::len).max().unwrap_or(0);
     let shown = height.min(fit.max_rows);
-    let mut rows = Vec::with_capacity(shown);
+    let mut builder = Builder::default();
+    builder.push_record(headers.iter().map(String::as_str));
     for r in 0..shown {
-        let cell = |c: usize| {
-            cards[c]
+        builder.push_record(headers.iter().enumerate().map(|(c, _)| {
+            columns[c]
                 .get(r)
                 .map(|s| truncate(s, widths[c]))
                 .unwrap_or_default()
-        };
-        rows.push(Row {
-            backlog: cell(0),
-            open: cell(1),
-            claimed: cell(2),
-            in_progress: cell(3),
-            blocked: cell(4),
-        });
+        }));
     }
-    let mut table = Table::new(rows);
+    let mut table = builder.build();
     if md {
         table.with(Style::markdown());
     }
     let mut out = table.to_string();
-    let hidden: usize = cards.iter().map(|c| c.len().saturating_sub(shown)).sum();
+    let hidden: usize = columns.iter().map(|c| c.len().saturating_sub(shown)).sum();
     if hidden > 0 {
         out.push_str(&format!("\n… +{hidden} more (`--all` to show)"));
     }
@@ -350,6 +335,16 @@ pub fn render_cards(cards: &[Vec<String>; 5], md: bool, fit: Fit) -> String {
         out = colorize(&out);
     }
     out
+}
+
+/// Render five columns of card strings — shared with `org board`,
+/// which builds mixed-repo cards itself.
+pub fn render_cards(cards: &[Vec<String>; 5], md: bool, fit: Fit) -> String {
+    let headers: Vec<String> = ["Backlog", "Open", "Claimed", "In Progress", "Blocked"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    render_columns(&headers, cards, md, fit)
 }
 
 /// Bucket `(label, item)` pairs into the five columns, sorting
@@ -505,13 +500,19 @@ mod tests {
     fn fit_widths_water_fills() {
         // narrow columns keep natural width; the wide one gets
         // what's left of the budget
-        assert_eq!(fit_widths([500, 4, 4, 4, 4], 84), [68, 4, 4, 4, 4]);
+        assert_eq!(fit_widths_dyn(vec![500, 4, 4, 4, 4], 84), [68, 4, 4, 4, 4]);
         // everything fits → natural widths unchanged
-        assert_eq!(fit_widths([20, 10, 8, 11, 7], 100), [20, 10, 8, 11, 7]);
+        assert_eq!(
+            fit_widths_dyn(vec![20, 10, 8, 11, 7], 100),
+            [20, 10, 8, 11, 7]
+        );
         // several wide columns split evenly (remainder to the first)
-        assert_eq!(fit_widths([30, 30, 30, 4, 4], 50), [14, 14, 14, 4, 4]);
+        assert_eq!(
+            fit_widths_dyn(vec![30, 30, 30, 4, 4], 50),
+            [14, 14, 14, 4, 4]
+        );
         // never grown past natural
-        assert_eq!(fit_widths([80, 4, 4, 4, 4], 100), [80, 4, 4, 4, 4]);
+        assert_eq!(fit_widths_dyn(vec![80, 4, 4, 4, 4], 100), [80, 4, 4, 4, 4]);
     }
 
     #[test]
