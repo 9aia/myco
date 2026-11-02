@@ -22,7 +22,7 @@ Design rules:
   diffs. `myco-testkit` freezes emit with golden fixtures and
   proptest round-trips, so the format can't drift silently.
 * **The index is derived, never canonical** — `myco-index-redb`
-  snapshots ledgers into redb for `status`/`board`/`org`; it can
+  snapshots ledgers into redb for `status`/`view`/`org`; it can
   be deleted and rebuilt at any time.
 
 | crate | layer | purpose |

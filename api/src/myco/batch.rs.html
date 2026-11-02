@@ -72,7 +72,7 @@
 <a href=#72 id=72 data-nosnippet>72</a>        std::fs::create_dir(<span class="kw-2">&amp;</span>wt).unwrap();
 <a href=#73 id=73 data-nosnippet>73</a>        <span class="kw">let </span>store =
 <a href=#74 id=74 data-nosnippet>74</a>            myco_store_md::MdStore::new(camino::Utf8PathBuf::from_path_buf(wt.clone()).unwrap());
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">crate</span>::ops::scaffold(<span class="kw-2">&amp;</span>store, <span class="string">"p"</span>).unwrap();
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">crate</span>::ops::scaffold(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>wt, <span class="string">"p"</span>).unwrap();
 <a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">let </span>s = Server::new(<span class="prelude-val">Some</span>(wt), <span class="prelude-val">Some</span>(d.path().to_path_buf()), no_commit);
 <a href=#77 id=77 data-nosnippet>77</a>        (d, s)
 <a href=#78 id=78 data-nosnippet>78</a>    }
@@ -200,7 +200,7 @@
 <a href=#200 id=200 data-nosnippet>200</a>    </span><span class="kw">fn </span>serve_method_error_shape_is_jsonrpc() {
 <a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">let </span>(_d, s) = fixture(<span class="bool-val">true</span>);
 <a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">let </span>line = s
-<a href=#203 id=203 data-nosnippet>203</a>            .handle_line(<span class="kw-2">&amp;</span>JsonRpc2, <span class="kw-2">&amp;</span><span class="macro">json!</span>({<span class="string">"id"</span>: <span class="number">9</span>, <span class="string">"method"</span>: <span class="string">"board"</span>}).to_string())
+<a href=#203 id=203 data-nosnippet>203</a>            .handle_line(<span class="kw-2">&amp;</span>JsonRpc2, <span class="kw-2">&amp;</span><span class="macro">json!</span>({<span class="string">"id"</span>: <span class="number">9</span>, <span class="string">"method"</span>: <span class="string">"view"</span>}).to_string())
 <a href=#204 id=204 data-nosnippet>204</a>            .unwrap();
 <a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>v: Value = serde_json::from_str(<span class="kw-2">&amp;</span>line).unwrap();
 <a href=#206 id=206 data-nosnippet>206</a>        <span class="macro">assert_eq!</span>(v[<span class="string">"jsonrpc"</span>], <span class="string">"2.0"</span>);

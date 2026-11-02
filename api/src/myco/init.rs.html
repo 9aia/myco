@@ -96,7 +96,7 @@
 <a href=#96 id=96 data-nosnippet>96</a>    <span class="comment">// scaffold via canonical emit — never overwrites
 <a href=#97 id=97 data-nosnippet>97</a>    </span><span class="kw">let </span>store = ops::store_at(<span class="kw-2">&amp;</span>worktree)<span class="question-mark">?</span>;
 <a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span>name = repo_name(<span class="kw-2">&amp;</span>root);
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">let </span>files_created = ops::scaffold(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>name).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">let </span>files_created = ops::scaffold(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>worktree, <span class="kw-2">&amp;</span>name).map_err(|e| e.to_string())<span class="question-mark">?</span>;
 <a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">if </span>ops::autocommit(<span class="kw-2">&amp;</span>worktree, <span class="string">"chore: init project ledger"</span>, enabled)<span class="question-mark">? </span>{
 <a href=#101 id=101 data-nosnippet>101</a>        committed = <span class="bool-val">true</span>;
 <a href=#102 id=102 data-nosnippet>102</a>    }

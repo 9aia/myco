@@ -48,7 +48,7 @@ equivalent columns. `closed` issues are skipped unless
 
 ```sh
 myco status         # the ledger, now bigger
-myco board          # or the kanban view
+myco view board     # or the kanban view
 myco check          # sanity
 ```
 

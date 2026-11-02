@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["autocommit","commit_paths","commits_enabled","index_template","lock_shared","lock_worktree","print_json","print_paged","scaffold","store_at"],"struct":["WorktreeLock"]};
+window.SIDEBAR_ITEMS = {"fn":["autocommit","commit_paths","commits_enabled","index_template","lock_shared","lock_worktree","print_json","print_paged","scaffold"],"struct":["WorktreeLock"]};

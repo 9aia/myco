@@ -169,7 +169,7 @@
 <a href=#169 id=169 data-nosnippet>169</a>/// skipped_done, archived, ids)` — `skipped_done` counts `Done`
 <a href=#170 id=170 data-nosnippet>170</a>/// rows dropped for lacking `--include-done`.
 <a href=#171 id=171 data-nosnippet>171</a></span><span class="kw">fn </span>import_issues(
-<a href=#172 id=172 data-nosnippet>172</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
+<a href=#172 id=172 data-nosnippet>172</a>    store: <span class="kw-2">&amp;</span><span class="kw">impl </span>Store,
 <a href=#173 id=173 data-nosnippet>173</a>    notes: <span class="kw-2">&amp;</span>[String],
 <a href=#174 id=174 data-nosnippet>174</a>    rows: <span class="kw-2">&amp;</span>[ImportRow],
 <a href=#175 id=175 data-nosnippet>175</a>    include_done: bool,
@@ -394,7 +394,7 @@
 <a href=#394 id=394 data-nosnippet>394</a>
 <a href=#395 id=395 data-nosnippet>395</a><span class="kw">fn </span>comments(
 <a href=#396 id=396 data-nosnippet>396</a>    proj: <span class="kw-2">&amp;</span>Project,
-<a href=#397 id=397 data-nosnippet>397</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
+<a href=#397 id=397 data-nosnippet>397</a>    store: <span class="kw-2">&amp;</span><span class="kw">impl </span>Store,
 <a href=#398 id=398 data-nosnippet>398</a>    spec: CommentSpec,
 <a href=#399 id=399 data-nosnippet>399</a>    json_out: bool,
 <a href=#400 id=400 data-nosnippet>400</a>    no_commit: bool,
@@ -713,7 +713,7 @@
 <a href=#713 id=713 data-nosnippet>713</a>
 <a href=#714 id=714 data-nosnippet>714</a><span class="kw">fn </span>jira(
 <a href=#715 id=715 data-nosnippet>715</a>    proj: <span class="kw-2">&amp;</span>Project,
-<a href=#716 id=716 data-nosnippet>716</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
+<a href=#716 id=716 data-nosnippet>716</a>    store: <span class="kw-2">&amp;</span><span class="kw">impl </span>Store,
 <a href=#717 id=717 data-nosnippet>717</a>    file: <span class="kw-2">&amp;</span>Path,
 <a href=#718 id=718 data-nosnippet>718</a>    include_done: bool,
 <a href=#719 id=719 data-nosnippet>719</a>    json_out: bool,
@@ -942,7 +942,7 @@
 <a href=#942 id=942 data-nosnippet>942</a>
 <a href=#943 id=943 data-nosnippet>943</a><span class="kw">fn </span>github(
 <a href=#944 id=944 data-nosnippet>944</a>    proj: <span class="kw-2">&amp;</span>Project,
-<a href=#945 id=945 data-nosnippet>945</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
+<a href=#945 id=945 data-nosnippet>945</a>    store: <span class="kw-2">&amp;</span><span class="kw">impl </span>Store,
 <a href=#946 id=946 data-nosnippet>946</a>    file: <span class="kw-2">&amp;</span>Path,
 <a href=#947 id=947 data-nosnippet>947</a>    include_done: bool,
 <a href=#948 id=948 data-nosnippet>948</a>    json_out: bool,

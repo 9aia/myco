@@ -70,8 +70,8 @@ board spans the whole org.
 
 ## Board output
 
-Human boards — `org board`, `board`, `epic <name>`,
-`milestone <name>` — are fitted to the terminal: sized to its
+Human boards — `org board` and `view`'s board format (`view
+board`, `view epic`, …) — are fitted to the terminal: sized to its
 width (`$MYCO_WIDTH` overrides; 100 columns when piped) and
 capped at a screenful of rows (~25) with a `… +N more` footer —
 `--all` lifts the cap. `--md` and `--json` are unbounded. Output

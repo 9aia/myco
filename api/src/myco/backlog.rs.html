@@ -38,7 +38,7 @@
 <a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// The `backlog add` mutation — allocs a T-id straight into
 <a href=#39 id=39 data-nosnippet>39</a>/// BACKLOG.md (backlog items are born deferred). Caller commits.
 <a href=#40 id=40 data-nosnippet>40</a></span><span class="kw">pub fn </span>add_item(
-<a href=#41 id=41 data-nosnippet>41</a>    store: <span class="kw-2">&amp;</span>myco_store_md::MdStore,
+<a href=#41 id=41 data-nosnippet>41</a>    store: <span class="kw-2">&amp;</span><span class="kw">impl </span>Store,
 <a href=#42 id=42 data-nosnippet>42</a>    title: <span class="kw-2">&amp;</span>str,
 <a href=#43 id=43 data-nosnippet>43</a>    section: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
 <a href=#44 id=44 data-nosnippet>44</a>    meta: <span class="kw-2">&amp;</span>myco_core::NewItemMeta,
@@ -57,7 +57,7 @@
 <a href=#57 id=57 data-nosnippet>57</a>
 <a href=#58 id=58 data-nosnippet>58</a><span class="doccomment">/// The `backlog promote` mutation — `deferred → open`, moves the
 <a href=#59 id=59 data-nosnippet>59</a>/// line (subtree included) into TODO.md. Caller commits.
-<a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">pub fn </span>promote_item(store: <span class="kw-2">&amp;</span>myco_store_md::MdStore, id: ItemId) -&gt; <span class="prelude-ty">Result</span>&lt;Item, String&gt; {
+<a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">pub fn </span>promote_item(store: <span class="kw-2">&amp;</span><span class="kw">impl </span>Store, id: ItemId) -&gt; <span class="prelude-ty">Result</span>&lt;Item, String&gt; {
 <a href=#61 id=61 data-nosnippet>61</a>    items::require_kind(id, ItemKind::Task, <span class="string">"backlog promote"</span>)<span class="question-mark">?</span>;
 <a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span><span class="kw-2">mut </span>ledger = items::load_ledger(store)<span class="question-mark">?</span>;
 <a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span>loc = ledger

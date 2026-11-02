@@ -23,8 +23,8 @@ a <code>Store</code> lives in <code>myco-ops</code>.</dd><dt><a class="mod" href
 <code>low|med|high|crit</code>.</dd><dt><a class="mod" href="status/index.html" title="mod myco_core::status">status</a></dt><dd>Item status — the owned state machine.</dd><dt><a class="mod" href="view/index.html" title="mod myco_core::view">view</a></dt><dd>Declarative views — <code>filter → group → sort → limit → format</code>
 as data (P-006). A <a href="view/struct.ViewSpec.html" title="struct myco_core::view::ViewSpec"><code>ViewSpec</code></a> is pure config; <a href="view/fn.eval.html" title="fn myco_core::view::eval"><code>eval</code></a> is a
 pure fn over <code>&amp;[Item]</code>. Named views come from <code>[views]</code> in
-myco.toml layers; built-in verbs (<code>board</code>, <code>epic</code>, …) are
-presets of the same engine.</dd><dt><a class="mod" href="walk/index.html" title="mod myco_core::walk">walk</a></dt><dd>Status-transition walks — the shortest legal path <code>from → to</code>
+myco.toml layers; the built-in presets (<code>board</code>, <code>epic</code>, …)
+are the same engine’s shapes as data.</dd><dt><a class="mod" href="walk/index.html" title="mod myco_core::walk">walk</a></dt><dd>Status-transition walks — the shortest legal path <code>from → to</code>
 through the state machine (BFS over <a href="status/enum.Status.html#method.transitions" title="method myco_core::status::Status::transitions"><code>Status::transitions</code></a>).</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Config.html" title="struct myco_core::Config">Config</a></dt><dd>The <code>myco.toml</code>-shaped config value every <code>myco-config</code> source
 loads. Fields grow per phase; unknown keys are rejected so a typo
 fails loud instead of silently doing nothing.</dd><dt><a class="struct" href="struct.Seen.html" title="struct myco_core::Seen">Seen</a></dt><dd>Bounded dedup set — <code>insert</code> returning false means “already

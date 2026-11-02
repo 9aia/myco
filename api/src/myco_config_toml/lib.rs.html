@@ -8,7 +8,7 @@
 <a href=#8 id=8 data-nosnippet>8</a>//! presets always reach through.
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span>myco_config::ConfigSource;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>std::path::PathBuf;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>std::path::{Path, PathBuf};
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="doccomment">/// File-backed config source.
 <a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">pub struct </span>TomlSource {
@@ -19,13 +19,13 @@
 <a href=#19 id=19 data-nosnippet>19</a><span class="doccomment">/// Parse exactly one config file — no layer search, no merge.
 <a href=#20 id=20 data-nosnippet>20</a>/// For callers that need a specific layer (e.g. `myco check`
 <a href=#21 id=21 data-nosnippet>21</a>/// linting only the repo's own myco.toml).
-<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub fn </span>load_file(path: <span class="kw-2">&amp;</span>PathBuf) -&gt; <span class="prelude-ty">Result</span>&lt;myco_core::Config, String&gt; {
+<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub fn </span>load_file(path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;myco_core::Config, String&gt; {
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">let </span>text =
 <a href=#24 id=24 data-nosnippet>24</a>        std::fs::read_to_string(path).map_err(|e| <span class="macro">format!</span>(<span class="string">"read {}: {e}"</span>, path.display()))<span class="question-mark">?</span>;
 <a href=#25 id=25 data-nosnippet>25</a>    toml::from_str(<span class="kw-2">&amp;</span>text).map_err(|e| <span class="macro">format!</span>(<span class="string">"parse {}: {e}"</span>, path.display()))
 <a href=#26 id=26 data-nosnippet>26</a>}
 <a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a><span class="kw">fn </span>parse(path: <span class="kw-2">&amp;</span>PathBuf) -&gt; <span class="prelude-ty">Result</span>&lt;myco_core::Config, String&gt; {
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">fn </span>parse(path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;myco_core::Config, String&gt; {
 <a href=#29 id=29 data-nosnippet>29</a>    load_file(path)
 <a href=#30 id=30 data-nosnippet>30</a>}
 <a href=#31 id=31 data-nosnippet>31</a>
@@ -71,8 +71,8 @@
 <a href=#71 id=71 data-nosnippet>71</a>            );
 <a href=#72 id=72 data-nosnippet>72</a>        }
 <a href=#73 id=73 data-nosnippet>73</a>
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let </span>repo_cfg = repo_layer.as_ref().map(parse).transpose()<span class="question-mark">?</span>;
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">let </span>user_cfg = user_path.as_ref().map(parse).transpose()<span class="question-mark">?</span>;
+<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let </span>repo_cfg = repo_layer.as_deref().map(parse).transpose()<span class="question-mark">?</span>;
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">let </span>user_cfg = user_path.as_deref().map(parse).transpose()<span class="question-mark">?</span>;
 <a href=#76 id=76 data-nosnippet>76</a>
 <a href=#77 id=77 data-nosnippet>77</a>        <span class="comment">// scalars: repo layer wins (today's first-match behavior);
 <a href=#78 id=78 data-nosnippet>78</a>        // views: merged, user layer wins name collisions

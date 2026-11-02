@@ -62,7 +62,7 @@ They are full items — same metadata, same state machine — and
 
 ```sh
 myco item set T-001 --status in-progress --owner devin
-myco board
+myco view board
 ```
 
 ```text
@@ -224,7 +224,7 @@ myco status --prompt    # token-sized digest, sized for a context window
 `status --prompt` is the session opener: counts by kind, what's
 in progress, what's open — enough to pick work without reading
 the files. `myco status` (no flag) is the human-readable version;
-`myco board` and `myco report` give the kanban and the trend.
+`myco view board` and `myco report` give the kanban and the trend.
 Boards cap at a screenful of rows — `--all` shows every card.
 For a human at the wheel, `myco ui` is the same board as a
 full-screen TUI — see
@@ -536,7 +536,7 @@ equivalent columns. `closed` issues are skipped unless
 
 ```sh
 myco status         # the ledger, now bigger
-myco board          # or the kanban view
+myco view board     # or the kanban view
 myco check          # sanity
 ```
 
@@ -576,26 +576,33 @@ myco view hot --limit 3                  # flags patch the named spec
 
 Every read is also `--json`: `{view, spec, groups, interrupted}`.
 
-## The verbs are verb-fronted views
+## Views are the read surface
 
-`myco board`, `myco epic`, `myco milestone` and `myco status`
-resolve the same-named view before rendering — so a config view
-shadowing a built-in name redefines the verb itself:
+`myco view <name>` is *the* lens — there are no per-view verbs.
+`view board` renders the kanban (Backlog | Open | Claimed | In
+Progress | Blocked lanes); `view epic` and `view milestone` group
+by that metadata, one column per group with `ungrouped` trailing.
+The filter flags scope any view — `myco view board --epic v2` is
+one epic's lanes.
+
+A config view shadowing a built-in name redefines `myco view <name>`
+itself:
 
 ```toml
 [views.board]
-filter = { kind = ["issue"] } # myco board is now issues-only
+filter = { kind = ["issue"] } # view board is now issues-only
 ```
 
 A shadow warns on stderr (`view "board" shadows the built-in
-preset`) and `myco check` lints the repo layer's specs. Under a
-shadowed spec the legacy chrome falls back to the generic
-renderers: a non-status `group_by` renders its own columns, and
-`--json` emits the `myco view` payload instead of the five-lane
-map. Specs that admit non-lane buckets (e.g. `done`) surface them
-as extra columns/keys — nothing matched is silently dropped.
+preset`) and `myco check` lints the repo layer's specs. The lane
+chrome applies only to a status-grouped board spec: a shadowed
+spec with a non-status `group_by` renders generic columns headed
+by the group labels, and `--json` emits the `{view, spec, groups,
+interrupted}` payload instead of the five-lane map. Specs that
+admit non-lane buckets (e.g. `done`) surface them as extra
+columns/keys — nothing matched is silently dropped.
 
-Layering is repo `<` user `<` flags: a `[views]` table merges
+Layering is repo < user < flags: a `[views]` table merges
 across config layers; scalar fields stay first-match.
 
 ## Over the wire
@@ -682,8 +689,8 @@ board spans the whole org.
 
 ## Board output
 
-Human boards — `org board`, `board`, `epic <name>`,
-`milestone <name>` — are fitted to the terminal: sized to its
+Human boards — `org board` and `view`'s board format (`view
+board`, `view epic`, …) — are fitted to the terminal: sized to its
 width (`$MYCO_WIDTH` overrides; 100 columns when piped) and
 capped at a screenful of rows (~25) with a `… +N more` footer —
 `--all` lifts the cap. `--md` and `--json` are unbounded. Output
@@ -750,11 +757,9 @@ This document contains the help content for the `myco` command-line program.
 * [`myco handoff`↴](#myco-handoff)
 * [`myco interrupt`↴](#myco-interrupt)
 * [`myco resume`↴](#myco-resume)
+* [`myco next`↴](#myco-next)
 * [`myco status`↴](#myco-status)
-* [`myco board`↴](#myco-board)
-* [`myco epic`↴](#myco-epic)
 * [`myco view`↴](#myco-view)
-* [`myco milestone`↴](#myco-milestone)
 * [`myco absorb`↴](#myco-absorb)
 * [`myco absorb comments`↴](#myco-absorb-comments)
 * [`myco absorb jira`↴](#myco-absorb-jira)
@@ -796,12 +801,10 @@ myco — project management, grown not built: agent-first PM CLI
 * `item` — Kind-agnostic item verbs — show / set
 * `handoff` — Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only)
 * `interrupt` — A session ended with work still claimed/in-progress/ blocked — revert the item to `open` + `interrupted` handoff, one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself
-* `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`
+* `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call
+* `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized
-* `board` — Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
-* `epic` — Items grouped by epic — bare lists epics with counts, a name renders that epic's board (`epic v2` ≡ `board --epic v2`)
-* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. Bare `myco view` lists views
-* `milestone` — Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. `myco view board` is the kanban; bare `myco view` lists views
 * `absorb` — Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps
 * `report` — Aging + velocity + blocked — how the ledger is trending
 * `index` — The derived index: register repos, query/rebuild snapshots
@@ -1237,14 +1240,14 @@ Kind-agnostic item verbs — show / set
 
 ###### **Subcommands:**
 
-* `show` — Dump one item — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body)
+* `show` — Dump items — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array
 * `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it)
 
 ## `myco item show`
 
-Dump one item — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body)
+Dump items — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array
 
-**Usage:** `myco item show <ID>`
+**Usage:** `myco item show <ID>...`
 
 ###### **Arguments:**
 
@@ -1306,17 +1309,40 @@ A session ended with work still claimed/in-progress/ blocked — revert the item
 
 ## `myco resume`
 
-Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`
+Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call
 
-**Usage:** `myco resume [OPTIONS] <ID>`
+**Usage:** `myco resume [OPTIONS] <ID>...`
 
 ###### **Arguments:**
 
-* `<ID>` — Any item id
+* `<ID>` — Any item id — several resume in argument order
 
 ###### **Options:**
 
 * `--last <LAST>` — Only the latest N handoff entries (default 10)
+
+## `myco next`
+
+The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit
+
+**Usage:** `myco next [OPTIONS]`
+
+###### **Options:**
+
+* `--kind <KIND>` — Item kinds — task|issue|proposal|adr|plan (repeatable/comma-separated)
+* `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred (repeatable/comma-separated)
+* `--pri-min <PRI_MIN>` — Inclusive lower severity bound — low|med|high|crit
+* `--pri-max <PRI_MAX>` — Inclusive upper severity bound
+* `--label <LABEL>` — `#`-less label — item carries any of these (repeatable/comma-separated)
+* `--owner <OWNER>` — Owner actor — item's owner is any of these (repeatable/comma-separated)
+* `--claimed` — Items with an owner
+* `--unclaimed` — Items with no owner
+* `--epic <EPIC>` — Items in this epic
+* `--milestone <MILESTONE>` — Items in this milestone
+* `--live-only` — Items not superseded by another (ADRs)
+* `--superseded` — Items superseded by another (ADRs)
+* `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction. Default `pri,id`
+* `--claim` — Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else `cli`); `--owner` names the claimer here and doesn't filter. Mutating: one commit
 
 ## `myco status`
 
@@ -1328,37 +1354,9 @@ Cheap digest of the work ledger. `--prompt` = token-sized
 
 * `--prompt` — Render for an agent prompt (minimal tokens)
 
-## `myco board`
-
-Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
-
-**Usage:** `myco board [OPTIONS]`
-
-###### **Options:**
-
-* `--md` — Emit a markdown table (for docs/READMEs)
-* `--all` — Show every card — no row cap
-* `--epic <EPIC>` — Only items in this epic
-* `--milestone <MILESTONE>` — Only items in this milestone
-
-## `myco epic`
-
-Items grouped by epic — bare lists epics with counts, a name renders that epic's board (`epic v2` ≡ `board --epic v2`)
-
-**Usage:** `myco epic [OPTIONS] [NAME]`
-
-###### **Arguments:**
-
-* `<NAME>` — Epic name — omit for the all-epics summary
-
-###### **Options:**
-
-* `--md` — Emit a markdown table (with a name)
-* `--all` — Show every card — no row cap (with a name)
-
 ## `myco view`
 
-Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. Bare `myco view` lists views
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. `myco view board` is the kanban; bare `myco view` lists views
 
 **Usage:** `myco view [OPTIONS] [NAME]`
 
@@ -1387,21 +1385,6 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction
 * `--limit <N>` — Keep the first N items after sorting
 * `--format <FORMAT>` — Renderer — list|board
-
-## `myco milestone`
-
-Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
-
-**Usage:** `myco milestone [OPTIONS] [NAME]`
-
-###### **Arguments:**
-
-* `<NAME>` — Milestone name — omit for the all-milestones summary
-
-###### **Options:**
-
-* `--md` — Emit a markdown table (with a name)
-* `--all` — Show every card — no row cap (with a name)
 
 ## `myco absorb`
 
@@ -1630,6 +1613,132 @@ documented at source (doc comments).
 ---
 
 ---
+url: /myco/reference/agents-md-block.md
+---
+# Managed `AGENTS.md` blocks
+
+The `<tool>:agent-awareness` convention — how multiple tools each
+maintain a section of a repo's `AGENTS.md` without clobbering human
+prose or each other. Normative; **myco is the reference
+implementation** (`crates/myco-cli/src/agentmd.rs`). sturn, kuda,
+bupha, and mimus blocks are deployed against it.
+
+Keywords **MUST** / **MUST NOT** / **SHOULD** / **MAY** read as in
+RFC 2119.
+
+## Purpose
+
+`AGENTS.md` at the repo root is agent-facing operating
+instructions. Each participating tool owns exactly one
+marker-delimited block; everything outside markers is human-owned
+and untouchable. A tool's init writes its block, its check
+verifies it, and syncs are idempotent — safe to re-run forever.
+
+## The block
+
+```markdown
+<!-- <tool>:agent-awareness -->
+
+## <Tool> awareness
+
+- <tool-specific bullets>
+
+<!-- /<tool>:agent-awareness -->
+```
+
+* `<tool>` is the implementer's canonical lowercase name (`myco`,
+  `sturn`, `kuda`…). The marker pair is the ownership boundary —
+  everything between them MAY be rewritten by the owning tool at
+  any time.
+* Markers **MUST** sit on their own lines. Detection tolerates
+  leading/trailing whitespace; canonical emission has none.
+* The section heading **SHOULD** be `## <Tool> awareness` —
+  uniqueness across tools is what matters (see *upgrade* below).
+* Block content is tool-internal: markers are the contract, the
+  prose inside is the tool's own business.
+
+## Ownership
+
+* A tool **MUST** rewrite only inside its own marker pair.
+* All other content — human prose and foreign tools' marked
+  blocks — is opaque: preserved verbatim, never reordered, never
+  merged, never reformatted.
+* Blocks coexist in any order. A new block appends at end of
+  file; a tool **MUST NOT** move its own or others' blocks.
+* A tool **MUST NOT** emit a second marker pair, emit markers
+  inside foreign blocks, or leave stray markers behind.
+
+## Sync
+
+The write path (`init`, `check --fix`, any rollout) applies one
+merge:
+
+1. **Own complete marker pair** → replace the span
+   `[BEGIN … END]` inclusive with the canonical block.
+2. **No intact pair** → drop stray own-markers; if the file holds
+   the tool's claimed heading (an *unmarked* `## <Tool>
+   awareness` section), replace that section through the next
+   heading of the same-or-higher level — the upgrade path for
+   pre-convention or hand-written content.
+3. **Neither** → append the canonical block at end of file.
+
+Emission rules:
+
+* Exactly one blank line on each side of the block.
+* File ends with exactly one newline.
+* Bytes outside the block survive byte-for-byte — no other
+  whitespace normalization.
+* Sync of already-canonical input is a **no-op** (no write) —
+  this is what makes it idempotent.
+
+## States & `check --fix`
+
+Every implementation exposes the same four-state read:
+
+| state | meaning | `check --fix` |
+|---|---|---|
+| `missing` | no `AGENTS.md` | creates file + block |
+| `absent` | file exists, nothing block-shaped | appends block |
+| `drift` | stray markers, handwritten section, or non-canonical content | rewrites to canonical |
+| `ok` | canonical | no finding, no write |
+
+`check` **MUST** surface non-`ok` as a fixable finding. Detection
+is a simulated sync: markers present and `sync(content) ==
+content` (modulo the trailing newline) → `ok`.
+
+## Multi-tool coexistence
+
+* Foreign marked regions are opaque to *all* of a tool's logic —
+  including its upgrade scan. When looking for its claimed
+  heading, a tool skips headings inside other tools' marker
+  pairs.
+* The `## <Tool> awareness` naming rule is what prevents upgrade
+  collisions: two tools scanning the same unmarked file must
+  claim different headings.
+* Deployed blocks may interleave with prose arbitrarily — no tool
+  may assume adjacency or ordering.
+
+## Deployment
+
+* Writes happen on the repo's checked-out branch (the block lives
+  beside `AGENTS.md`, not on any tool-owned branch), committed
+  separately from other init artifacts. myco's message:
+  `chore: manage AGENTS.md agent-awareness block`.
+* Multi-repo rollout is an implementer concern (myco: `myco org
+  init` applies the block across registered repos).
+
+## Implementation notes
+
+* myco's deployed heading is `## Agent awareness` — predates the
+  `<Tool> awareness` rule; it is the one allowed exception, and
+  its upgrade matcher is deliberately scoped to that heading so
+  no other tool can accidentally adopt it.
+* myco exposes the state over the wire: `check --json` reports
+  `agents_md: missing|absent|drift|ok` alongside the finding.
+
+---
+
+---
 url: /myco/explanation/worktree-model.md
 ---
 # The worktree model
@@ -1686,7 +1795,7 @@ The markdown in `project/` is canonical — human-editable,
 diffable, frozen by golden fixtures. The redb index
 (`index.redb` + `repos.toml` under `$MYCO_HOME` →
 `$XDG_DATA_HOME/myco` → `~/.local/share/myco`) is a *derived
-cache* that powers `status`, `board`, `report`, and `org` without
+cache* that powers `status`, `view`, `report`, and `org` without
 re-parsing files. Delete it and `myco index rebuild` derives it
 back; `myco check` finds and repairs drift between the two.
 
@@ -1846,7 +1955,7 @@ Design rules:
   diffs. `myco-testkit` freezes emit with golden fixtures and
   proptest round-trips, so the format can't drift silently.
 * **The index is derived, never canonical** — `myco-index-redb`
-  snapshots ledgers into redb for `status`/`board`/`org`; it can
+  snapshots ledgers into redb for `status`/`view`/`org`; it can
   be deleted and rebuilt at any time.
 
 | crate | layer | purpose |

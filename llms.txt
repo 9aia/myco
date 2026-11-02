@@ -26,6 +26,7 @@ a mycorrhizal network for your agents — tasks, signals, handoffs, grown not bu
 - [Command-Line Help for `myco`](/myco/reference/cli.md)
 - [Config — `myco.toml`](/myco/reference/config.md)
 - [Crate API](/myco/reference/crate-api.md)
+- [Managed `AGENTS.md` blocks](/myco/reference/agents-md-block.md)
 
 ### Explanation
 

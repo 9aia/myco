@@ -116,32 +116,34 @@
 <a href=#116 id=116 data-nosnippet>116</a>                    file.meta.status
 <a href=#117 id=117 data-nosnippet>117</a>                ));
 <a href=#118 id=118 data-nosnippet>118</a>            }
-<a href=#119 id=119 data-nosnippet>119</a>            <span class="kw">let </span>rel = items::item_rel_path(<span class="kw-2">&amp;</span>file.meta).replacen(<span class="string">'/'</span>, <span class="string">"/archive/"</span>, <span class="number">1</span>);
-<a href=#120 id=120 data-nosnippet>120</a>            store.archive_item(id).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#121 id=121 data-nosnippet>121</a>            <span class="kw">let </span>committed =
-<a href=#122 id=122 data-nosnippet>122</a>                items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: archive {id}"</span>), no_commit)<span class="question-mark">?</span>;
-<a href=#123 id=123 data-nosnippet>123</a>            items::report(
-<a href=#124 id=124 data-nosnippet>124</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: file.meta, <span class="string">"archived_to"</span>: rel}),
-<a href=#125 id=125 data-nosnippet>125</a>                committed,
-<a href=#126 id=126 data-nosnippet>126</a>                json_out,
-<a href=#127 id=127 data-nosnippet>127</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"archived {id} → {rel}"</span>),
-<a href=#128 id=128 data-nosnippet>128</a>            )
-<a href=#129 id=129 data-nosnippet>129</a>        }
-<a href=#130 id=130 data-nosnippet>130</a>        Cmd::Comment { id, text } =&gt; {
-<a href=#131 id=131 data-nosnippet>131</a>            items::require_kind(id, ItemKind::Issue, <span class="string">"issue comment"</span>)<span class="question-mark">?</span>;
-<a href=#132 id=132 data-nosnippet>132</a>            <span class="kw">let </span><span class="kw-2">mut </span>file = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
-<a href=#133 id=133 data-nosnippet>133</a>            <span class="kw">let </span>line = <span class="macro">format!</span>(<span class="string">"- {} {}"</span>, myco_core::date::render(items::today()), text);
-<a href=#134 id=134 data-nosnippet>134</a>            templates::append_to_section(<span class="kw-2">&amp;mut </span>file.body, <span class="string">"## Comments"</span>, <span class="kw-2">&amp;</span>line);
-<a href=#135 id=135 data-nosnippet>135</a>            store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
-<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let </span>committed =
-<a href=#137 id=137 data-nosnippet>137</a>                items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: comment {id}"</span>), no_commit)<span class="question-mark">?</span>;
-<a href=#138 id=138 data-nosnippet>138</a>            items::report(
-<a href=#139 id=139 data-nosnippet>139</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: file.meta}),
-<a href=#140 id=140 data-nosnippet>140</a>                committed,
-<a href=#141 id=141 data-nosnippet>141</a>                json_out,
-<a href=#142 id=142 data-nosnippet>142</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"commented on {id}"</span>),
-<a href=#143 id=143 data-nosnippet>143</a>            )
-<a href=#144 id=144 data-nosnippet>144</a>        }
-<a href=#145 id=145 data-nosnippet>145</a>    }
-<a href=#146 id=146 data-nosnippet>146</a>}
+<a href=#119 id=119 data-nosnippet>119</a>            store.archive_item(id).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#120 id=120 data-nosnippet>120</a>            <span class="comment">// asked after the move so the impl reports the
+<a href=#121 id=121 data-nosnippet>121</a>            // archive-scope path itself
+<a href=#122 id=122 data-nosnippet>122</a>            </span><span class="kw">let </span>rel = items::item_rel_path(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>file.meta)<span class="question-mark">?</span>;
+<a href=#123 id=123 data-nosnippet>123</a>            <span class="kw">let </span>committed =
+<a href=#124 id=124 data-nosnippet>124</a>                items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: archive {id}"</span>), no_commit)<span class="question-mark">?</span>;
+<a href=#125 id=125 data-nosnippet>125</a>            items::report(
+<a href=#126 id=126 data-nosnippet>126</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: file.meta, <span class="string">"archived_to"</span>: rel}),
+<a href=#127 id=127 data-nosnippet>127</a>                committed,
+<a href=#128 id=128 data-nosnippet>128</a>                json_out,
+<a href=#129 id=129 data-nosnippet>129</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"archived {id} → {rel}"</span>),
+<a href=#130 id=130 data-nosnippet>130</a>            )
+<a href=#131 id=131 data-nosnippet>131</a>        }
+<a href=#132 id=132 data-nosnippet>132</a>        Cmd::Comment { id, text } =&gt; {
+<a href=#133 id=133 data-nosnippet>133</a>            items::require_kind(id, ItemKind::Issue, <span class="string">"issue comment"</span>)<span class="question-mark">?</span>;
+<a href=#134 id=134 data-nosnippet>134</a>            <span class="kw">let </span><span class="kw-2">mut </span>file = items::item_for_edit(<span class="kw-2">&amp;</span>store, id)<span class="question-mark">?</span>;
+<a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">let </span>line = <span class="macro">format!</span>(<span class="string">"- {} {}"</span>, myco_core::date::render(items::today()), text);
+<a href=#136 id=136 data-nosnippet>136</a>            templates::append_to_section(<span class="kw-2">&amp;mut </span>file.body, <span class="string">"## Comments"</span>, <span class="kw-2">&amp;</span>line);
+<a href=#137 id=137 data-nosnippet>137</a>            store.save_item(<span class="kw-2">&amp;</span>file).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#138 id=138 data-nosnippet>138</a>            <span class="kw">let </span>committed =
+<a href=#139 id=139 data-nosnippet>139</a>                items::commit(<span class="kw-2">&amp;</span>proj.worktree, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: comment {id}"</span>), no_commit)<span class="question-mark">?</span>;
+<a href=#140 id=140 data-nosnippet>140</a>            items::report(
+<a href=#141 id=141 data-nosnippet>141</a>                <span class="macro">json!</span>({<span class="string">"item"</span>: file.meta}),
+<a href=#142 id=142 data-nosnippet>142</a>                committed,
+<a href=#143 id=143 data-nosnippet>143</a>                json_out,
+<a href=#144 id=144 data-nosnippet>144</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"commented on {id}"</span>),
+<a href=#145 id=145 data-nosnippet>145</a>            )
+<a href=#146 id=146 data-nosnippet>146</a>        }
+<a href=#147 id=147 data-nosnippet>147</a>    }
+<a href=#148 id=148 data-nosnippet>148</a>}
 </code></pre></div></section></main></body></html>

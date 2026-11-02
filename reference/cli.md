@@ -46,11 +46,9 @@ This document contains the help content for the `myco` command-line program.
 * [`myco handoff`↴](#myco-handoff)
 * [`myco interrupt`↴](#myco-interrupt)
 * [`myco resume`↴](#myco-resume)
+* [`myco next`↴](#myco-next)
 * [`myco status`↴](#myco-status)
-* [`myco board`↴](#myco-board)
-* [`myco epic`↴](#myco-epic)
 * [`myco view`↴](#myco-view)
-* [`myco milestone`↴](#myco-milestone)
 * [`myco absorb`↴](#myco-absorb)
 * [`myco absorb comments`↴](#myco-absorb-comments)
 * [`myco absorb jira`↴](#myco-absorb-jira)
@@ -92,12 +90,10 @@ myco — project management, grown not built: agent-first PM CLI
 * `item` — Kind-agnostic item verbs — show / set
 * `handoff` — Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only)
 * `interrupt` — A session ended with work still claimed/in-progress/ blocked — revert the item to `open` + `interrupted` handoff, one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself
-* `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`
+* `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call
+* `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized
-* `board` — Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
-* `epic` — Items grouped by epic — bare lists epics with counts, a name renders that epic's board (`epic v2` ≡ `board --epic v2`)
-* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. Bare `myco view` lists views
-* `milestone` — Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. `myco view board` is the kanban; bare `myco view` lists views
 * `absorb` — Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps
 * `report` — Aging + velocity + blocked — how the ledger is trending
 * `index` — The derived index: register repos, query/rebuild snapshots
@@ -533,14 +529,14 @@ Kind-agnostic item verbs — show / set
 
 ###### **Subcommands:**
 
-* `show` — Dump one item — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body)
+* `show` — Dump items — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array
 * `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it)
 
 ## `myco item show`
 
-Dump one item — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body)
+Dump items — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array
 
-**Usage:** `myco item show <ID>`
+**Usage:** `myco item show <ID>...`
 
 ###### **Arguments:**
 
@@ -602,17 +598,40 @@ A session ended with work still claimed/in-progress/ blocked — revert the item
 
 ## `myco resume`
 
-Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`
+Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call
 
-**Usage:** `myco resume [OPTIONS] <ID>`
+**Usage:** `myco resume [OPTIONS] <ID>...`
 
 ###### **Arguments:**
 
-* `<ID>` — Any item id
+* `<ID>` — Any item id — several resume in argument order
 
 ###### **Options:**
 
 * `--last <LAST>` — Only the latest N handoff entries (default 10)
+
+## `myco next`
+
+The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit
+
+**Usage:** `myco next [OPTIONS]`
+
+###### **Options:**
+
+* `--kind <KIND>` — Item kinds — task|issue|proposal|adr|plan (repeatable/comma-separated)
+* `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred (repeatable/comma-separated)
+* `--pri-min <PRI_MIN>` — Inclusive lower severity bound — low|med|high|crit
+* `--pri-max <PRI_MAX>` — Inclusive upper severity bound
+* `--label <LABEL>` — `#`-less label — item carries any of these (repeatable/comma-separated)
+* `--owner <OWNER>` — Owner actor — item's owner is any of these (repeatable/comma-separated)
+* `--claimed` — Items with an owner
+* `--unclaimed` — Items with no owner
+* `--epic <EPIC>` — Items in this epic
+* `--milestone <MILESTONE>` — Items in this milestone
+* `--live-only` — Items not superseded by another (ADRs)
+* `--superseded` — Items superseded by another (ADRs)
+* `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction. Default `pri,id`
+* `--claim` — Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else `cli`); `--owner` names the claimer here and doesn't filter. Mutating: one commit
 
 ## `myco status`
 
@@ -624,37 +643,9 @@ Cheap digest of the work ledger. `--prompt` = token-sized
 
 * `--prompt` — Render for an agent prompt (minimal tokens)
 
-## `myco board`
-
-Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
-
-**Usage:** `myco board [OPTIONS]`
-
-###### **Options:**
-
-* `--md` — Emit a markdown table (for docs/READMEs)
-* `--all` — Show every card — no row cap
-* `--epic <EPIC>` — Only items in this epic
-* `--milestone <MILESTONE>` — Only items in this milestone
-
-## `myco epic`
-
-Items grouped by epic — bare lists epics with counts, a name renders that epic's board (`epic v2` ≡ `board --epic v2`)
-
-**Usage:** `myco epic [OPTIONS] [NAME]`
-
-###### **Arguments:**
-
-* `<NAME>` — Epic name — omit for the all-epics summary
-
-###### **Options:**
-
-* `--md` — Emit a markdown table (with a name)
-* `--all` — Show every card — no row cap (with a name)
-
 ## `myco view`
 
-Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. Bare `myco view` lists views
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. `myco view board` is the kanban; bare `myco view` lists views
 
 **Usage:** `myco view [OPTIONS] [NAME]`
 
@@ -683,21 +674,6 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction
 * `--limit <N>` — Keep the first N items after sorting
 * `--format <FORMAT>` — Renderer — list|board
-
-## `myco milestone`
-
-Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
-
-**Usage:** `myco milestone [OPTIONS] [NAME]`
-
-###### **Arguments:**
-
-* `<NAME>` — Milestone name — omit for the all-milestones summary
-
-###### **Options:**
-
-* `--md` — Emit a markdown table (with a name)
-* `--all` — Show every card — no row cap (with a name)
 
 ## `myco absorb`
 

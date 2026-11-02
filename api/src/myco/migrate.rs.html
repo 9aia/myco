@@ -536,7 +536,7 @@
 <a href=#536 id=536 data-nosnippet>536</a>    }
 <a href=#537 id=537 data-nosnippet>537</a>
 <a href=#538 id=538 data-nosnippet>538</a>    <span class="comment">// fill any remaining scaffold gaps (dirs, index, docs)
-<a href=#539 id=539 data-nosnippet>539</a>    </span><span class="kw">let </span>created = ops::scaffold(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>meta.name).map_err(|e| e.to_string())<span class="question-mark">?</span>;
+<a href=#539 id=539 data-nosnippet>539</a>    </span><span class="kw">let </span>created = ops::scaffold(<span class="kw-2">&amp;</span>store, wt, <span class="kw-2">&amp;</span>meta.name).map_err(|e| e.to_string())<span class="question-mark">?</span>;
 <a href=#540 id=540 data-nosnippet>540</a>
 <a href=#541 id=541 data-nosnippet>541</a>    <span class="kw">let </span>enabled = ops::commits_enabled(no_commit);
 <a href=#542 id=542 data-nosnippet>542</a>    <span class="kw">let </span>msg = <span class="macro">format!</span>(

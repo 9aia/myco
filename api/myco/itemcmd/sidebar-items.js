@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Cmd"],"fn":["apply_set","mutate_item","put_back","run","show_json","signed"],"struct":["SetFlags"]};
+window.SIDEBAR_ITEMS = {"enum":["Cmd"],"fn":["apply_set","mutate_item","put_back","run","show","show_block","show_data","show_json","show_value","signed"],"struct":["SetFlags","ShowData"]};

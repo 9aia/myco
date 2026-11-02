@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["discover","items","ops","view"]};
+window.SIDEBAR_ITEMS = {"mod":["config","discover","items","ops","view"]};
