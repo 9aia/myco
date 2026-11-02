@@ -21,6 +21,7 @@ mod absorb;
 mod adr;
 mod agentmd;
 mod backlog;
+mod batch;
 mod board;
 mod check;
 mod commit;
@@ -279,6 +280,18 @@ enum Cmd {
     /// (peregrin spawns one per repo); stdin IS the wire, so
     /// no served method reads content from it.
     Serve,
+    /// One-shot `serve` — NDJSON verb requests from stdin or
+    /// `--file`, one JSON-RPC response line per request,
+    /// dispatched through the same served surface. Per-line
+    /// errors never fail the run; mutations keep per-request
+    /// commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS
+    /// the wire here too — requests that would read it are
+    /// rejected.
+    Batch {
+        /// Read NDJSON requests from this file instead of stdin.
+        #[arg(long, value_name = "PATH")]
+        file: Option<PathBuf>,
+    },
     /// Print the CLI reference as markdown (docs pipeline).
     #[command(hide = true, name = "gen-cli-docs")]
     GenCliDocs,
@@ -311,6 +324,7 @@ fn manifest() -> serde_json::Value {
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
             "handoff", "resume", "interrupt", "ui", "serve",
+            "batch",
         ],
         "implemented": [
             "manifest", "gen-cli-docs", "schema",
@@ -323,6 +337,7 @@ fn manifest() -> serde_json::Value {
             "org status", "org board", "org init",
             "handoff", "resume", "interrupt",
             "ui", "serve",
+            "batch",
         ],
         "notes": "markdown in project/ is canonical; every verb is one \
                   atomic commit on the `project` branch; the redb index \
@@ -413,6 +428,7 @@ fn main() {
             myco_tui::run(dir.as_deref(), root.as_deref(), no_commit, view).map(|_| 0)
         }
         Cmd::Serve => serve::run(dir, root, no_commit),
+        Cmd::Batch { file } => batch::run(file, dir, root, no_commit),
     };
     match result {
         Ok(code) => std::process::exit(code),

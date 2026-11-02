@@ -11,17 +11,21 @@
 //! responses (JSON-RPC 2.0 first — the default, not the spec).
 //! [`Server::dispatch`] is the verb surface itself and knows
 //! neither. stdin IS the wire — no served method reads content
-//! from it.
+//! from it. `myco batch` drives the identical surface one-shot
+//! through [`Server::handle_line`] — NDJSON in, NDJSON out.
 
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
-use myco_core::{Actor, ItemId, ItemKind, Priority, Status};
+use myco_core::{
+    eval, Actor, GroupAxis, ItemId, ItemKind, Priority, SortKey, Status, ViewFormat, ViewSpec,
+};
+use myco_ops::view::Origin;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
-    backlog, board, check, continuity, digest, itemcmd, items, report, schema, status, todo,
+    backlog, board, check, continuity, digest, itemcmd, items, report, schema, status, todo, view,
 };
 
 // ---------------------------------------------------------------- wire
@@ -319,6 +323,109 @@ struct InterruptParams {
     session: Option<String>,
 }
 
+/// `view` — `{name}` resolves a named view (builtin preset or
+/// `[views]` config); `{spec}` is a partial spec merged over it
+/// (each set field replaces — `myco view`'s flag-merge on the
+/// wire), or over the default spec when `name` is absent —
+/// an ad-hoc view. Neither = list the defined views.
+#[derive(Deserialize)]
+struct ViewParams {
+    name: Option<String>,
+    spec: Option<SpecPatch>,
+}
+
+/// A partial `ViewSpec` — absent fields keep the base's value.
+/// `deny_unknown_fields` so a typo'd key is -32602, not a silent
+/// no-op.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpecPatch {
+    filter: Option<FilterPatch>,
+    group_by: Option<GroupAxis>,
+    sort: Option<Vec<SortKey>>,
+    limit: Option<u32>,
+    format: Option<ViewFormat>,
+}
+
+/// A partial `ViewFilter` — same set-replaces/absent-keeps rule.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FilterPatch {
+    kind: Option<Vec<ItemKind>>,
+    status: Option<Vec<Status>>,
+    #[serde(default, deserialize_with = "de_opt_priority")]
+    pri_min: Option<Priority>,
+    #[serde(default, deserialize_with = "de_opt_priority")]
+    pri_max: Option<Priority>,
+    label: Option<Vec<String>>,
+    owner: Option<Vec<Actor>>,
+    claimed: Option<bool>,
+    epic: Option<String>,
+    milestone: Option<String>,
+    superseded: Option<bool>,
+}
+
+/// `pri_min`/`pri_max` wire values take the same lenient read as
+/// `[views]` TOML — `crit` and `critical` both parse.
+fn de_opt_priority<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Priority>, D::Error> {
+    Option::<String>::deserialize(d)?
+        .map(|s| s.parse().map_err(serde::de::Error::custom))
+        .transpose()
+}
+
+impl SpecPatch {
+    /// Fold set fields over `base` — a set field replaces, an
+    /// unset one keeps the base's value (`Option` scalars can be
+    /// set but never cleared, matching the CLI flags).
+    fn apply(&self, base: &mut ViewSpec) {
+        if let Some(p) = &self.filter {
+            let f = &mut base.filter;
+            if let Some(v) = &p.kind {
+                f.kind = v.clone();
+            }
+            if let Some(v) = &p.status {
+                f.status = v.clone();
+            }
+            if let Some(v) = p.pri_min {
+                f.pri_min = Some(v);
+            }
+            if let Some(v) = p.pri_max {
+                f.pri_max = Some(v);
+            }
+            if let Some(v) = &p.label {
+                f.label = v.clone();
+            }
+            if let Some(v) = &p.owner {
+                f.owner = v.clone();
+            }
+            if let Some(v) = p.claimed {
+                f.claimed = Some(v);
+            }
+            if let Some(v) = &p.epic {
+                f.epic = Some(v.clone());
+            }
+            if let Some(v) = &p.milestone {
+                f.milestone = Some(v.clone());
+            }
+            if let Some(v) = p.superseded {
+                f.superseded = Some(v);
+            }
+        }
+        if let Some(g) = self.group_by {
+            base.group_by = Some(g);
+        }
+        if let Some(s) = &self.sort {
+            base.sort = s.clone();
+        }
+        if let Some(n) = self.limit {
+            base.limit = Some(n);
+        }
+        if let Some(fmt) = self.format {
+            base.format = fmt;
+        }
+    }
+}
+
 // ---------------------------------------------------------------- dispatch
 
 /// Dispatch failure — [`Server::respond`] maps these to wire
@@ -355,6 +462,7 @@ const METHODS: &[&str] = &[
     "schema",
     "status",
     "board",
+    "view",
     "item.show",
     "item.set",
     "todo.list",
@@ -416,18 +524,30 @@ impl Server {
         wire: &W,
     ) -> Result<i32, String> {
         while let Some(line) = transport.read_request()? {
-            let response = match wire.parse(&line) {
-                Ok(req) => self.respond(req),
-                Err(e) => Response::Error {
-                    id: Value::Null,
-                    code: e.code,
-                    message: e.message,
-                    data: None,
-                },
-            };
-            transport.write_response(&wire.encode(&response))?;
+            if let Some(response) = self.handle_line(wire, &line) {
+                transport.write_response(&response)?;
+            }
         }
         Ok(0)
+    }
+
+    /// One raw request line → one encoded response line — `None`
+    /// for blank lines (skipped, not an error). `myco batch`
+    /// drives this same path for one-shot NDJSON runs.
+    pub fn handle_line<W: WireProtocol>(&self, wire: &W, line: &str) -> Option<String> {
+        if line.trim().is_empty() {
+            return None;
+        }
+        let response = match wire.parse(line) {
+            Ok(req) => self.respond(req),
+            Err(e) => Response::Error {
+                id: Value::Null,
+                code: e.code,
+                message: e.message,
+                data: None,
+            },
+        };
+        Some(wire.encode(&response))
     }
 
     fn respond(&self, req: Request) -> Response {
@@ -490,26 +610,82 @@ impl Server {
             }
             "board" => {
                 let p: BoardParams = parse_params(params)?;
-                let (_proj, store) = self.open_read()?;
-                let scan = digest::scan(&store).map_err(Fail::Verb)?;
-                let live: Vec<&myco_core::Item> = scan
-                    .live()
-                    .filter(|i| {
-                        p.epic
-                            .as_deref()
-                            .is_none_or(|e| i.epic.as_deref() == Some(e))
-                            && p.milestone
-                                .as_deref()
-                                .is_none_or(|m| i.milestone.as_deref() == Some(m))
-                    })
-                    .collect();
-                let interrupted = crate::continuity::interrupted_set(&store, live.iter().copied())
+                let (proj, store) = self.open_read()?;
+                // same path as the verb — a repo's [views.board]
+                // shadow reaches the wire too
+                let spec = view::scoped_spec(&proj.root, "board", p.epic, p.milestone)
                     .map_err(Fail::Verb)?;
-                Ok(board::columns_json(
-                    live.into_iter(),
-                    None,
-                    Some(&interrupted),
-                ))
+                let scan = digest::scan(&store).map_err(Fail::Verb)?;
+                let groups = eval(scan.live(), &spec);
+                let interrupted = crate::continuity::interrupted_set(
+                    &store,
+                    groups.iter().flat_map(|g| g.items.iter().copied()),
+                )
+                .map_err(Fail::Verb)?;
+                Ok(if board::is_status_board(&spec) {
+                    board::groups_json(&groups, &interrupted)
+                } else {
+                    view::view_json(Some("board"), &spec, &groups, &interrupted)
+                })
+            }
+            "view" => {
+                let p: ViewParams = parse_params(params)?;
+                let (proj, store) = self.open_read()?;
+                match (p.name.as_deref(), p.spec.as_ref()) {
+                    // bare — enumerate the defined views
+                    (None, None) => {
+                        let (views, warnings) =
+                            myco_ops::view::named_views(&proj.root).map_err(Fail::Verb)?;
+                        Ok(json!({
+                            "views": views
+                                .iter()
+                                .map(|v| json!({
+                                    "name": v.name,
+                                    "origin": match v.origin {
+                                        Origin::Builtin => "builtin",
+                                        Origin::Config => "config",
+                                    },
+                                    "spec": v.spec,
+                                }))
+                                .collect::<Vec<_>>(),
+                            "warnings": warnings,
+                        }))
+                    }
+                    (name, patch) => {
+                        let (mut spec, warnings) = match name {
+                            Some(n) => {
+                                let (v, w) =
+                                    myco_ops::view::resolve(&proj.root, n).map_err(Fail::Verb)?;
+                                (v.spec, w)
+                            }
+                            None => (ViewSpec::default(), Vec::new()),
+                        };
+                        if let Some(patch) = patch {
+                            patch.apply(&mut spec);
+                        }
+                        spec.validate().map_err(Fail::Verb)?;
+                        let scan = digest::scan(&store).map_err(Fail::Verb)?;
+                        // the universe: top-level items only —
+                        // children ride with their parent
+                        let universe = scan.items.iter().filter(|i| !scan.archived.contains(&i.id));
+                        let groups = eval(universe, &spec);
+                        let interrupted =
+                            continuity::interrupted_set(&store, scan.live()).map_err(Fail::Verb)?;
+                        Ok(json!({
+                            "view": name,
+                            "spec": spec,
+                            "groups": groups
+                                .iter()
+                                .map(|g| json!({"label": g.label, "items": g.items}))
+                                .collect::<Vec<_>>(),
+                            "interrupted": interrupted
+                                .iter()
+                                .map(|i| i.to_string())
+                                .collect::<Vec<_>>(),
+                            "warnings": warnings,
+                        }))
+                    }
+                }
             }
             "item.show" => {
                 let p: IdParams = parse_params(params)?;
@@ -704,6 +880,33 @@ mod tests {
         (d, s)
     }
 
+    /// A scaffolded worktree under an explicit root — `dir` =
+    /// `<d>/project`, `root` = `d`, so repo-layer `myco.toml`
+    /// views resolve hermetically inside the tempdir.
+    fn rooted_fixture() -> (tempfile::TempDir, Server) {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path().join("project");
+        std::fs::create_dir(&wt).unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(wt.clone()).unwrap();
+        let store = myco_store_md::MdStore::new(root);
+        crate::ops::scaffold(&store, "p").unwrap();
+        let s = Server::new(Some(wt), Some(d.path().to_path_buf()), true);
+        (d, s)
+    }
+
+    /// Pin config discovery to nowhere — user-layer views can't
+    /// leak into `resolve`/`named_views` mid-test.
+    fn no_user_config<T>(f: impl FnOnce() -> T) -> T {
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", Some("/nonexistent-xdg")),
+                ("HOME", Some("/nonexistent-home")),
+            ],
+            f,
+        )
+    }
+
     fn call(s: &Server, method: &str, params: Value) -> Result<Value, Fail> {
         s.dispatch(method, &params)
     }
@@ -859,5 +1062,149 @@ mod tests {
         assert_eq!(t.read_request().unwrap(), None);
         t.write_response("resp").unwrap();
         assert_eq!(out, b"resp\n");
+    }
+
+    #[test]
+    fn view_named_adhoc_list_and_errors() {
+        let (_d, s) = rooted_fixture();
+        no_user_config(|| {
+            // list mode — `{}` enumerates the defined views
+            let v = call(&s, "view", json!({})).unwrap();
+            let names: Vec<&str> = v["views"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x["name"].as_str().unwrap())
+                .collect();
+            assert_eq!(names, ["board", "open", "epic", "milestone"]);
+            assert_eq!(v["views"][0]["origin"], "builtin");
+            assert!(v["views"][0]["spec"].is_object());
+            assert_eq!(v["warnings"], json!([]));
+
+            call(&s, "todo.add", json!({"title": "a"})).unwrap();
+            call(&s, "todo.add", json!({"title": "b", "pri": "high"})).unwrap();
+
+            // named view — `open` selects open items, ungrouped
+            let v = call(&s, "view", json!({"name": "open"})).unwrap();
+            assert_eq!(v["view"], "open");
+            assert_eq!(v["spec"]["filter"]["status"], json!(["open"]));
+            let items = v["groups"][0]["items"].as_array().unwrap();
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0]["id"], "T-002"); // pri,id sort
+            assert_eq!(v["interrupted"], json!([]));
+            assert_eq!(v["warnings"], json!([]));
+
+            // ad-hoc spec — group_by yields labeled buckets
+            let v = call(
+                &s,
+                "view",
+                json!({"spec": {"filter": {"kind": ["task"]}, "group_by": "priority"}}),
+            )
+            .unwrap();
+            assert_eq!(v["view"], Value::Null);
+            let groups = v["groups"].as_array().unwrap();
+            assert_eq!(groups[0]["label"], "critical");
+            assert_eq!(
+                groups.iter().find(|g| g["label"] == "high").unwrap()["items"][0]["id"],
+                "T-002"
+            );
+
+            // spec merges over the named view — the set field
+            // replaces, unset keep the named spec's values
+            let v = call(
+                &s,
+                "view",
+                json!({"name": "open", "spec": {"filter": {"status": ["done"]}}}),
+            )
+            .unwrap();
+            let total: usize = v["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|g| g["items"].as_array().unwrap().len())
+                .sum();
+            assert_eq!(total, 0, "done filter over `open`'s spec");
+
+            // unknown name → verb error naming the defined set
+            match call(&s, "view", json!({"name": "nope"})) {
+                Err(Fail::Verb(m)) => assert!(m.contains("open"), "{m}"),
+                other => panic!("expected verb failure: {other:?}"),
+            }
+            // malformed spec shape → -32602; unknown key → -32602
+            assert!(matches!(
+                call(&s, "view", json!({"spec": {"group_by": "wat"}})),
+                Err(Fail::BadParams(_))
+            ));
+            assert!(matches!(
+                call(&s, "view", json!({"spec": {"nonsense": 1}})),
+                Err(Fail::BadParams(_))
+            ));
+            // an invalid-but-decodable spec → verb error
+            assert!(matches!(
+                call(
+                    &s,
+                    "view",
+                    json!({"spec": {"filter": {"claimed": true, "owner": ["devin"]}}})
+                ),
+                Err(Fail::Verb(_))
+            ));
+        });
+    }
+
+    #[test]
+    fn view_resolves_repo_config_views() {
+        let (d, s) = rooted_fixture();
+        std::fs::write(
+            d.path().join("myco.toml"),
+            "[views.hot]\nfilter = { pri_min = \"high\" }\n",
+        )
+        .unwrap();
+        no_user_config(|| {
+            call(&s, "todo.add", json!({"title": "cold"})).unwrap();
+            call(&s, "todo.add", json!({"title": "hot", "pri": "critical"})).unwrap();
+            let v = call(&s, "view", json!({"name": "hot"})).unwrap();
+            let items = v["groups"][0]["items"].as_array().unwrap();
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0]["id"], "T-002");
+            // list reports the config origin too
+            let v = call(&s, "view", json!({})).unwrap();
+            let hot = v["views"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|x| x["name"] == "hot")
+                .unwrap();
+            assert_eq!(hot["origin"], "config");
+        });
+    }
+
+    #[test]
+    fn view_spec_accepts_priority_tokens_like_toml() {
+        let (_d, s) = rooted_fixture();
+        no_user_config(|| {
+            call(&s, "todo.add", json!({"title": "hot", "pri": "high"})).unwrap();
+            call(&s, "todo.add", json!({"title": "cold"})).unwrap();
+            // "crit" (token) parses like "critical" (serde name)
+            let v = call(
+                &s,
+                "view",
+                json!({"spec": {"filter": {"pri_min": "high", "pri_max": "crit"}}}),
+            )
+            .unwrap();
+            let items = v["groups"][0]["items"].as_array().unwrap();
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0]["id"], "T-001");
+        });
+    }
+
+    #[test]
+    fn handle_line_skips_blanks_and_encodes_errors() {
+        let (_d, s) = fixture();
+        assert_eq!(s.handle_line(&JsonRpc2, ""), None);
+        assert_eq!(s.handle_line(&JsonRpc2, "   "), None);
+        let bad = s.handle_line(&JsonRpc2, "not json").unwrap();
+        let v: Value = serde_json::from_str(&bad).unwrap();
+        assert_eq!(v["id"], Value::Null);
+        assert_eq!(v["error"]["code"], PARSE_ERROR);
     }
 }
