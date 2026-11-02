@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["is_valid_rev"],"mod":["actor","date","doc","handoff","id","item","ledger","meta","priority","status","walk"],"struct":["Config","Seen"]};
+window.SIDEBAR_ITEMS = {"fn":["is_valid_rev"],"mod":["actor","date","doc","handoff","id","item","ledger","meta","priority","status","view","walk"],"struct":["Config","Seen"]};

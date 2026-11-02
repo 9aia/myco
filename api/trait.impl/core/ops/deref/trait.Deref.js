@@ -1,5 +1,5 @@
 (function() {
-    const implementors = Object.fromEntries([["myco_ops",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.98.0/core/ops/deref/trait.Deref.html\" title=\"trait core::ops::deref::Deref\">Deref</a> for <a class=\"struct\" href=\"myco_ops/items/struct.LockedStore.html\" title=\"struct myco_ops::items::LockedStore\">LockedStore</a>",0]]]]);
+    const implementors = Object.fromEntries([["myco_ops",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.99.1/core/ops/deref/trait.Deref.html\" title=\"trait core::ops::deref::Deref\">Deref</a> for <a class=\"struct\" href=\"myco_ops/items/struct.LockedStore.html\" title=\"struct myco_ops::items::LockedStore\">LockedStore</a>",0]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {

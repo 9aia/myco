@@ -38,6 +38,17 @@ Hit a wall mid-task: `myco item set T-012 --status blocked`.
 Need the details: `myco item show T-012` (add `--json` for the
 full item + location + body).
 
+Fan-out reads (a resume + two shows + a view) batch into one
+call — `myco batch` maps NDJSON requests onto the whole `myco
+serve` surface, one JSON-RPC response per line:
+
+```sh
+printf '%s\n' \
+  '{"id":1,"method":"resume","params":{"id":"T-012"}}' \
+  '{"id":2,"method":"view","params":{"name":"open"}}' \
+  | myco batch
+```
+
 ## Hand off
 
 Before the session ends, leave resumable state on the item:

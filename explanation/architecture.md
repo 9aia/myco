@@ -48,8 +48,9 @@ ADRs, handoffs). Neighbors own their own memory:
 
 * **sturn** — ephemeral coordination (live claims/ops/topics)
 * **kuda** — code memory; myco indexes work items, not code
-* **peregrin** — orchestration; an optional `myco serve` ndjson
-  wire is deferred per `adrs/0001`
+* **peregrin** — orchestration; it embeds the ledger through
+  `myco serve` (JSON-RPC 2.0 on stdio — `adrs/0001`), reachable
+  one-shot via `myco batch`
 * **bupha** — CI gate; `myco check` in pipelines, `Item:` trailers
 * **mycena** — surfaces TODO/FIXME in code → `myco absorb`
 * **sepia** — session lifecycle → `myco handoff` / `myco resume`

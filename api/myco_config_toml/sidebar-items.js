@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["TomlSource"]};
+window.SIDEBAR_ITEMS = {"fn":["load_file"],"struct":["TomlSource"]};

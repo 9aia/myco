@@ -18,6 +18,7 @@ a mycorrhizal network for your agents — tasks, signals, handoffs, grown not bu
 - [Session continuity with sepia](/myco/how-to/session-continuity.md)
 - [Migrate a legacy ledger](/myco/how-to/migrate.md)
 - [Import external work](/myco/how-to/import-work.md)
+- [Shape the board with named views](/myco/how-to/views.md)
 - [See work across repos](/myco/how-to/org-views.md)
 
 ### Reference

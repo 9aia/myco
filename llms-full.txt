@@ -246,6 +246,17 @@ Hit a wall mid-task: `myco item set T-012 --status blocked`.
 Need the details: `myco item show T-012` (add `--json` for the
 full item + location + body).
 
+Fan-out reads (a resume + two shows + a view) batch into one
+call — `myco batch` maps NDJSON requests onto the whole `myco
+serve` surface, one JSON-RPC response per line:
+
+```sh
+printf '%s\n' \
+  '{"id":1,"method":"resume","params":{"id":"T-012"}}' \
+  '{"id":2,"method":"view","params":{"name":"open"}}' \
+  | myco batch
+```
+
 ## Hand off
 
 Before the session ends, leave resumable state on the item:
@@ -534,6 +545,71 @@ imports into one `myco commit`.
 ---
 
 ---
+url: /myco/how-to/views.md
+---
+# Shape the board with named views
+
+A view is a declarative spec — `filter`, `group_by`, `sort`,
+`limit`, `format` — evaluated by one engine. Names come from two
+places: built-in presets (`board`, `open`, `epic`, `milestone`)
+and `[views.<name>]` tables in `myco.toml`
+([spec fields](../reference/config.md)).
+
+## Define one
+
+```toml
+# myco.toml
+[views.hot]
+filter  = { pri_min = "high", status = ["open", "in-progress"] }
+group_by = "owner"
+sort    = "-created"
+format  = "list"
+```
+
+```sh
+myco view hot          # resolves the named view
+myco view              # lists every defined view + origin
+myco view --status open --pri-min high   # ad-hoc spec from flags
+myco view hot --limit 3                  # flags patch the named spec
+```
+
+Every read is also `--json`: `{view, spec, groups, interrupted}`.
+
+## The verbs are verb-fronted views
+
+`myco board`, `myco epic`, `myco milestone` and `myco status`
+resolve the same-named view before rendering — so a config view
+shadowing a built-in name redefines the verb itself:
+
+```toml
+[views.board]
+filter = { kind = ["issue"] }   # myco board is now issues-only
+```
+
+A shadow warns on stderr (`view "board" shadows the built-in
+preset`) and `myco check` lints the repo layer's specs. Under a
+shadowed spec the legacy chrome falls back to the generic
+renderers: a non-status `group_by` renders its own columns, and
+`--json` emits the `myco view` payload instead of the five-lane
+map. Specs that admit non-lane buckets (e.g. `done`) surface them
+as extra columns/keys — nothing matched is silently dropped.
+
+Layering is repo `<` user `<` flags: a `[views]` table merges
+across config layers; scalar fields stay first-match.
+
+## Over the wire
+
+`myco serve` exposes `view` (`{name?, spec?}` — `spec` is the
+same per-field patch) alongside the rest of the verb surface;
+`myco batch` reaches all of it one-shot:
+
+```sh
+printf '{"id":1,"method":"view","params":{"name":"hot"}}\n' | myco batch
+```
+
+---
+
+---
 url: /myco/how-to/org-views.md
 ---
 # See work across repos
@@ -676,6 +752,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco status`↴](#myco-status)
 * [`myco board`↴](#myco-board)
 * [`myco epic`↴](#myco-epic)
+* [`myco view`↴](#myco-view)
 * [`myco milestone`↴](#myco-milestone)
 * [`myco absorb`↴](#myco-absorb)
 * [`myco absorb comments`↴](#myco-absorb-comments)
@@ -693,6 +770,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco org init`↴](#myco-org-init)
 * [`myco ui`↴](#myco-ui)
 * [`myco serve`↴](#myco-serve)
+* [`myco batch`↴](#myco-batch)
 
 ## `myco`
 
@@ -721,6 +799,7 @@ myco — project management, grown not built: agent-first PM CLI
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized
 * `board` — Kanban of the ledger — Backlog | Open | Claimed | In Progress | Blocked. `--md` emits a markdown table
 * `epic` — Items grouped by epic — bare lists epics with counts, a name renders that epic's board (`epic v2` ≡ `board --epic v2`)
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. Bare `myco view` lists views
 * `milestone` — Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
 * `absorb` — Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps
 * `report` — Aging + velocity + blocked — how the ledger is trending
@@ -728,6 +807,7 @@ myco — project management, grown not built: agent-first PM CLI
 * `org` — Cross-repo views over the index (auto-rebuilds stale repos)
 * `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
 * `serve` — Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it
+* `batch` — One-shot `serve` — NDJSON verb requests from stdin or `--file`, one JSON-RPC response line per request, dispatched through the same served surface. Per-line errors never fail the run; mutations keep per-request commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS the wire here too — requests that would read it are rejected
 
 ###### **Options:**
 
@@ -1275,6 +1355,38 @@ Items grouped by epic — bare lists epics with counts, a name renders that epic
 * `--md` — Emit a markdown table (with a name)
 * `--all` — Show every card — no row cap (with a name)
 
+## `myco view`
+
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. Bare `myco view` lists views
+
+**Usage:** `myco view [OPTIONS] [NAME]`
+
+###### **Arguments:**
+
+* `<NAME>` — View name — builtin preset or config view
+
+###### **Options:**
+
+* `--list` — List defined views and exit
+* `--md` — Emit a markdown table (board format)
+* `--all` — Show every row — no cap
+* `--kind <KIND>` — Item kinds — task|issue|proposal|adr|plan (repeatable/comma-separated)
+* `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred (repeatable/comma-separated)
+* `--pri-min <PRI_MIN>` — Inclusive lower severity bound — low|med|high|crit
+* `--pri-max <PRI_MAX>` — Inclusive upper severity bound
+* `--label <LABEL>` — `#`-less label — item carries any of these (repeatable/comma-separated)
+* `--owner <OWNER>` — Owner actor — item's owner is any of these (repeatable/comma-separated)
+* `--claimed` — Items with an owner
+* `--unclaimed` — Items with no owner
+* `--epic <EPIC>` — Items in this epic
+* `--milestone <MILESTONE>` — Items in this milestone
+* `--live-only` — Items not superseded by another (ADRs)
+* `--superseded` — Items superseded by another (ADRs)
+* `--group-by <GROUP_BY>` — Group axis — status|priority|kind|owner|epic|milestone
+* `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction
+* `--limit <N>` — Keep the first N items after sorting
+* `--format <FORMAT>` — Renderer — list|board
+
 ## `myco milestone`
 
 Items grouped by milestone — bare lists milestones with counts, a name renders that milestone's board
@@ -1444,13 +1556,27 @@ Re-run `init` on every registered repo — refreshes the worktree scaffold and r
 
 Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
 
-**Usage:** `myco ui`
+**Usage:** `myco ui [OPTIONS]`
+
+###### **Options:**
+
+* `--view <NAME>` — Open with a named view's filter narrowing every board
 
 ## `myco serve`
 
 Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it
 
 **Usage:** `myco serve`
+
+## `myco batch`
+
+One-shot `serve` — NDJSON verb requests from stdin or `--file`, one JSON-RPC response line per request, dispatched through the same served surface. Per-line errors never fail the run; mutations keep per-request commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS the wire here too — requests that would read it are rejected
+
+**Usage:** `myco batch [OPTIONS]`
+
+###### **Options:**
+
+* `--file <PATH>` — Read NDJSON requests from this file instead of stdin
 
 &#xA;This document was generated automatically by
 clap-markdown.&#xA;
@@ -1467,6 +1593,7 @@ url: /myco/reference/config.md
 | field | type | required | notes |
 |---|---|---|---|
 | `project_dir` | `string` | optional | Path to the project worktree, relative to the repo root. |
+| `views` | `map` | optional | Named declarative views — the one section that *merges* across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the higher-precedence layer wins a name collision. |
 
 ## Constraints
 
@@ -1743,8 +1870,9 @@ ADRs, handoffs). Neighbors own their own memory:
 
 * **sturn** — ephemeral coordination (live claims/ops/topics)
 * **kuda** — code memory; myco indexes work items, not code
-* **peregrin** — orchestration; an optional `myco serve` ndjson
-  wire is deferred per `adrs/0001`
+* **peregrin** — orchestration; it embeds the ledger through
+  `myco serve` (JSON-RPC 2.0 on stdio — `adrs/0001`), reachable
+  one-shot via `myco batch`
 * **bupha** — CI gate; `myco check` in pipelines, `Item:` trailers
 * **mycena** — surfaces TODO/FIXME in code → `myco absorb`
 * **sepia** — session lifecycle → `myco handoff` / `myco resume`
