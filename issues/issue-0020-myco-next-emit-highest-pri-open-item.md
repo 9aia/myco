@@ -1,7 +1,7 @@
 +++
 id = "I-020"
 title = "myco next — emit highest-pri open item"
-status = "in-progress"
+status = "done"
 created = "2026-10-31"
 owner = "devin"
 priority = "medium"
