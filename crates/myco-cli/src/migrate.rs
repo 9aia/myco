@@ -19,7 +19,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use myco_core::{BacklogDoc, Item, ItemFile, ItemId, ItemKind, Section, Status, TodoDoc};
+use myco_core::{BacklogDoc, Item, ItemFile, ItemId, ItemKind, Registry, Section, Status, TodoDoc};
 use myco_store::Store;
 use myco_store_md::frontmatter_id;
 use serde_json::json;
@@ -131,19 +131,28 @@ impl AdoptClaims {
 }
 
 /// Turn a legacy item into a real one — keep a same-kind id or
-/// allocate via the store.
+/// allocate from the run's [`Registry`]. The store's `alloc_id`
+/// can't serve here: it scans `all_ids`, which strict-parses
+/// `TODO.md`/`BACKLOG.md` — the very files a project-mode
+/// migration is mid-way through normalizing.
 fn materialize(
-    store: &myco_store_md::MdStore,
+    reg: &mut Registry,
     li: &myco_store_md::LegacyItem,
     kind: ItemKind,
     stats: &mut Stats,
 ) -> Result<Item, String> {
     let mut item = li.item.clone();
     item.id = match li.id {
-        Some(id) if id.kind() == kind => id,
+        Some(id) if id.kind() == kind => {
+            // a kept id must still raise the counter floor —
+            // `all_ids` never sees pm/-source ids, so without
+            // this a later alloc could reissue it mid-run
+            reg.observe(id);
+            id
+        }
         _ => {
             stats.ids_allocated += 1;
-            store.alloc_id(kind).map_err(|e| e.to_string())?
+            reg.alloc(kind)
         }
     };
     stats.converted_items += 1;
@@ -152,7 +161,7 @@ fn materialize(
 
 /// Legacy sections → v2 `Section`s, allocating ids as needed.
 fn convert_sections(
-    store: &myco_store_md::MdStore,
+    reg: &mut Registry,
     doc: &myco_store_md::LegacyDoc,
     kind: ItemKind,
     stats: &mut Stats,
@@ -164,7 +173,7 @@ fn convert_sections(
             items: Vec::new(),
         };
         for li in &sec.items {
-            s.items.push(materialize(store, li, kind, stats)?);
+            s.items.push(materialize(reg, li, kind, stats)?);
         }
         out.push(s);
     }
@@ -193,6 +202,11 @@ fn migrate_pm(
 
     let mut todo = store.todo().map_err(|e| e.to_string())?;
     let mut backlog = store.backlog().map_err(|e| e.to_string())?;
+    // run-scoped allocator — one persisted reconcile at the end
+    // instead of alloc_id's per-call meta rewrite
+    let mut meta = store.meta().map_err(|e| e.to_string())?;
+    let mut reg = meta.registry();
+    reg.observe_all(store.all_ids().map_err(|e| e.to_string())?);
     let mut names: Vec<String> = std::fs::read_dir(&pm)
         .map_err(|e| e.to_string())?
         .flatten()
@@ -208,14 +222,18 @@ fn migrate_pm(
             Some(PmDest::Todo) => {
                 let (_repo, doc) = myco_store_md::parse_legacy_todo(&src, "migrated");
                 stats.dropped_done += doc.dropped;
-                todo.sections
-                    .extend(convert_sections(&store, &doc, ItemKind::Task, &mut stats)?);
+                todo.sections.extend(convert_sections(
+                    &mut reg,
+                    &doc,
+                    ItemKind::Task,
+                    &mut stats,
+                )?);
                 stats.files_moved.insert(rel_from, "TODO.md".into());
             }
             Some(PmDest::Backlog) => {
                 let doc = myco_store_md::parse_legacy_backlog(&src);
                 stats.dropped_done += doc.dropped;
-                let mut secs = convert_sections(&store, &doc, ItemKind::Task, &mut stats)?;
+                let mut secs = convert_sections(&mut reg, &doc, ItemKind::Task, &mut stats)?;
                 for s in &mut secs {
                     for i in &mut s.items {
                         i.status = Status::Deferred;
@@ -225,7 +243,7 @@ fn migrate_pm(
                 stats.files_moved.insert(rel_from, "BACKLOG.md".into());
             }
             Some(PmDest::Plan) => {
-                let id = store.alloc_id(ItemKind::Plan).map_err(|e| e.to_string())?;
+                let id = reg.alloc(ItemKind::Plan);
                 stats.ids_allocated += 1;
                 let title = first_heading(&src, "Roadmap");
                 let file = ItemFile::new(Item::new(id, &title)).body(src);
@@ -238,7 +256,7 @@ fn migrate_pm(
                 stats.files_moved.insert(rel_from, rel);
             }
             Some(PmDest::Issue) => {
-                let id = store.alloc_id(ItemKind::Issue).map_err(|e| e.to_string())?;
+                let id = reg.alloc(ItemKind::Issue);
                 stats.ids_allocated += 1;
                 let stem = name.trim_end_matches(".md");
                 let title = first_heading(&src, stem);
@@ -256,6 +274,8 @@ fn migrate_pm(
     }
     store.save_todo(&todo).map_err(|e| e.to_string())?;
     store.save_backlog(&backlog).map_err(|e| e.to_string())?;
+    meta.next = reg.counters();
+    store.save_meta(&meta).map_err(|e| e.to_string())?;
 
     // remove converted files; the dir only goes when it's empty
     for name in &names {
@@ -360,6 +380,11 @@ fn migrate_project(
             meta.name = n.to_string_lossy().into_owned();
         }
     }
+    // run-scoped allocator over the tolerant id scan — the store's
+    // `all_ids` strict-parses the ledger docs, which fails on
+    // exactly the legacy files migrate exists to fix
+    let mut reg = meta.registry();
+    reg.observe_all(migrate_ids(wt)?);
 
     // --- TODO.md ---
     if let Some(src) = read_str(wt, "TODO.md") {
@@ -368,9 +393,8 @@ fn migrate_project(
             Err(_) => {
                 let (repo, legacy) = myco_store_md::parse_legacy_todo(&src, &meta.name);
                 stats.dropped_done += legacy.dropped;
-                seed_counters(&store, &legacy)?;
                 let mut doc = TodoDoc::new(if repo.is_empty() { &meta.name } else { &repo });
-                doc.sections = convert_sections(&store, &legacy, ItemKind::Task, &mut stats)?;
+                doc.sections = convert_sections(&mut reg, &legacy, ItemKind::Task, &mut stats)?;
                 doc
             }
         };
@@ -384,8 +408,7 @@ fn migrate_project(
             Err(_) => {
                 let legacy = myco_store_md::parse_legacy_backlog(&src);
                 stats.dropped_done += legacy.dropped;
-                seed_counters(&store, &legacy)?;
-                let mut secs = convert_sections(&store, &legacy, ItemKind::Task, &mut stats)?;
+                let mut secs = convert_sections(&mut reg, &legacy, ItemKind::Task, &mut stats)?;
                 for s in &mut secs {
                     for i in &mut s.items {
                         i.status = Status::Deferred;
@@ -406,7 +429,7 @@ fn migrate_project(
     // still want, so a collision probes past them instead of
     // jumping to the counter.
     let mut claims = AdoptClaims {
-        taken: store.all_ids().map_err(|e| e.to_string())?,
+        taken: migrate_ids(wt)?,
         pending: BTreeMap::new(),
     };
     for (kind, dir_name) in FILE_KINDS
@@ -481,7 +504,7 @@ fn migrate_project(
                 Some(s) => s,
                 None => continue,
             };
-            match adopt_or_normalize(&store, &src, kind, &rel, &mut stats, &mut claims)? {
+            match adopt_or_normalize(&store, &mut reg, &src, kind, &rel, &mut stats, &mut claims)? {
                 Some(new_rel) if new_rel != rel => {
                     renames.insert(rel.clone(), new_rel.clone());
                     stats.files_moved.insert(rel, new_rel);
@@ -507,7 +530,6 @@ fn migrate_project(
 
     // meta.toml: create if missing + reconcile counters
     {
-        let mut reg = meta.registry();
         reg.observe_all(store.all_ids().map_err(|e| e.to_string())?);
         meta.next = reg.counters();
         store.save_meta(&meta).map_err(|e| e.to_string())?;
@@ -540,24 +562,79 @@ fn migrate_project(
     Ok((out, 0))
 }
 
-/// Raise meta counters above any ids the legacy doc keeps, so later
-/// `alloc_id` calls can't reissue them. Persists meta.toml.
-fn seed_counters(
-    store: &myco_store_md::MdStore,
-    legacy: &myco_store_md::LegacyDoc,
-) -> Result<(), String> {
-    let mut meta = store.meta().map_err(|e| e.to_string())?;
-    let mut reg = meta.registry();
-    reg.observe_all(store.all_ids().map_err(|e| e.to_string())?);
-    reg.observe_all(legacy.items().filter_map(|li| li.id));
-    meta.next = reg.counters();
-    store.save_meta(&meta).map_err(|e| e.to_string())
+/// The id scan migrate needs mid-run — `Store::all_ids`
+/// strict-parses `TODO.md`/`BACKLOG.md`, which fails on exactly
+/// the legacy files a migration is there to fix. Same coverage,
+/// tolerant reads: an unparseable ledger doc falls back to the
+/// legacy parser (its kept ids still reserve their numbers), and
+/// item files reserve by filename with the same filename-vs-
+/// frontmatter cross-check `MdStore` does.
+fn migrate_ids(wt: &Path) -> Result<BTreeSet<ItemId>, String> {
+    let mut ids = BTreeSet::new();
+    if let Some(src) = read_str(wt, "TODO.md") {
+        match myco_store_md::parse_todo(&src) {
+            Ok(doc) => ids.extend(doc.items().flat_map(|i| i.subtree()).map(|i| i.id)),
+            Err(_) => {
+                let (_, legacy) = myco_store_md::parse_legacy_todo(&src, "");
+                ids.extend(legacy.items().filter_map(|li| li.id));
+            }
+        }
+    }
+    if let Some(src) = read_str(wt, "BACKLOG.md") {
+        match myco_store_md::parse_backlog(&src) {
+            Ok(doc) => ids.extend(doc.items().flat_map(|i| i.subtree()).map(|i| i.id)),
+            Err(_) => {
+                let legacy = myco_store_md::parse_legacy_backlog(&src);
+                ids.extend(legacy.items().filter_map(|li| li.id));
+            }
+        }
+    }
+    for (kind, dir_name) in FILE_KINDS
+        .into_iter()
+        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
+    {
+        for archived in [false, true] {
+            let rel_dir = match archived {
+                false => dir_name.to_string(),
+                true => format!("{dir_name}/archive"),
+            };
+            let Ok(read) = std::fs::read_dir(wt.join(&rel_dir)) else {
+                continue;
+            };
+            for entry in read.flatten().filter(|e| e.path().is_file()) {
+                let Some(name) = entry.file_name().to_str().map(String::from) else {
+                    continue;
+                };
+                let Some(fname_id) = myco_store_md::parse_item_filename(kind, &name) else {
+                    continue;
+                };
+                let rel = format!("{rel_dir}/{name}");
+                match read_str(wt, &rel).as_deref().and_then(frontmatter_id) {
+                    Some(fm_id) if fm_id != fname_id => {
+                        return Err(format!(
+                            "{rel}: filename says {fname_id} but frontmatter id is {fm_id}"
+                        ));
+                    }
+                    // a frontmatter-less file borrows its filename
+                    // number — reserved either way
+                    Some(id) => {
+                        ids.insert(id);
+                    }
+                    None => {
+                        ids.insert(fname_id);
+                    }
+                };
+            }
+        }
+    }
+    Ok(ids)
 }
 
 /// Bring one file in an item dir to spec. Returns its new rel path
 /// when it moved (or was adopted), `None` when left as-is.
 fn adopt_or_normalize(
     store: &myco_store_md::MdStore,
+    reg: &mut Registry,
     src: &str,
     kind: ItemKind,
     rel: &str,
@@ -612,10 +689,11 @@ fn adopt_or_normalize(
                     .warnings
                     .push(format!("{rel}: {desired} already taken — adopted as {id}"));
             }
+            reg.observe(id);
             id
         }
         None => {
-            let id = store.alloc_id(kind).map_err(|e| e.to_string())?;
+            let id = reg.alloc(kind);
             claims.reserve(id);
             id
         }
