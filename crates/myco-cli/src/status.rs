@@ -8,13 +8,46 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use myco_core::{Item, ItemId, Status};
+use myco_core::{eval, GroupAxis, Item, ItemId, Status, ViewFilter, ViewGroup, ViewSpec};
 use serde_json::json;
 
 use crate::{digest, items, ops};
 
 /// Hard cap on `--prompt` lines — the block must stay token-cheap.
 pub const PROMPT_MAX_LINES: usize = 60;
+
+/// The four active-status buckets via the view engine —
+/// status-grouped, `pri,id`-sorted (the engine default). One
+/// `eval` replaces the per-status `in_status` scans the digest
+/// paths used to hand-roll; deferred/done items don't reach any
+/// bucket.
+fn active_groups(scan: &digest::Scan) -> Vec<ViewGroup<'_>> {
+    eval(
+        scan.live(),
+        &ViewSpec {
+            filter: ViewFilter {
+                status: vec![
+                    Status::InProgress,
+                    Status::Blocked,
+                    Status::Claimed,
+                    Status::Open,
+                ],
+                ..ViewFilter::default()
+            },
+            group_by: Some(GroupAxis::Status),
+            ..ViewSpec::default()
+        },
+    )
+}
+
+/// One status's slice of [`active_groups`] — `[]` when empty.
+fn in_group<'a>(groups: &'a [ViewGroup<'a>], status: Status) -> &'a [&'a Item] {
+    groups
+        .iter()
+        .find(|g| g.label.as_deref() == Some(status.token()))
+        .map(|g| g.items.as_slice())
+        .unwrap_or(&[])
+}
 
 /// `<id> <pri> <title> [⚡]` — one prompt line, no prose; `⚡`
 /// marks an interrupted item (latest handoff is an interrupt).
@@ -38,14 +71,18 @@ fn prompt_item(i: &Item, interrupted: bool) -> String {
 /// summarizes it).
 pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> String {
     let c = digest::counts(scan);
-    let mut groups: Vec<(&str, Vec<&Item>, usize)> = vec![
-        ("in-progress", scan.in_status(Status::InProgress), 0),
-        ("blocked", scan.in_status(Status::Blocked), 0),
-        ("claimed", scan.in_status(Status::Claimed), 0),
-        ("open", scan.in_status(Status::Open), 0),
-    ];
-    let open = &mut groups[3].1;
-    open.sort_by(|a, b| digest::pri_then_id(a, b));
+    let evaled = active_groups(scan);
+    // every bucket is already pri,id-sorted by the engine — the
+    // open group used to be sorted by hand here
+    let mut groups: Vec<(&str, Vec<&Item>, usize)> = [
+        ("in-progress", Status::InProgress),
+        ("blocked", Status::Blocked),
+        ("claimed", Status::Claimed),
+        ("open", Status::Open),
+    ]
+    .into_iter()
+    .map(|(name, s)| (name, in_group(&evaled, s).to_vec(), 0))
+    .collect();
 
     // render cost: repo line + per non-empty group (header +
     // shown items + marker when truncated)
@@ -98,8 +135,9 @@ pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> Stri
 /// The `--json` digest — counts + the active groups as full items.
 pub fn digest_json(scan: &digest::Scan) -> serde_json::Value {
     let c = digest::counts(scan);
+    let groups = active_groups(scan);
     let group = |s: Status| {
-        scan.in_status(s)
+        in_group(&groups, s)
             .iter()
             .map(|i| serde_json::to_value(i).unwrap_or(json!(null)))
             .collect::<Vec<_>>()
@@ -164,13 +202,14 @@ pub fn run(
     }
     // human: counts + the two groups an agent asks about first
     let c = digest::counts(&scan);
+    let groups = active_groups(&scan);
     println!("{} — project ledger", scan.name);
     println!("{}", c.oneline());
     for (name, status) in [
         ("in progress", Status::InProgress),
         ("blocked", Status::Blocked),
     ] {
-        let list = scan.in_status(status);
+        let list = in_group(&groups, status);
         if !list.is_empty() {
             println!("{name}:");
             for i in list {

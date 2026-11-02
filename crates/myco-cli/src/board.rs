@@ -4,17 +4,25 @@
 //! output is a `tabled` grid; `--md` is the same board as a
 //! markdown table for embedding in docs; `--json` is the columns
 //! map.
+//!
+//! The verb resolves the `board` named view — a repo's
+//! `[views.board]` config shadows the built-in preset — and
+//! evaluates it through `myco_core::eval`. The classic
+//! status-columns spec keeps the legacy chrome described above; a
+//! shadowed spec renders through the generic view renderers.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use myco_core::{Item, Status};
+use myco_core::{
+    eval, GroupAxis, Item, ItemId, Status, ViewFilter, ViewFormat, ViewGroup, ViewSpec,
+};
 use serde_json::json;
 use tabled::builder::Builder;
 use tabled::settings::Style;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::{digest, items, ops};
+use crate::{digest, items, ops, view};
 
 /// Default cap on board rows for human output (`--all` lifts it) —
 /// a screenful, so a huge ledger can't bury the terminal.
@@ -252,40 +260,72 @@ pub(crate) fn card(item: &Item, prefix: Option<&str>, interrupted: bool) -> Stri
     }
 }
 
-/// Bucket live items into the five columns (in-column order is by
-/// priority then id — the most urgent cards float to the top).
-fn columns<'a>(items: impl Iterator<Item = &'a Item>) -> [Vec<&'a Item>; 5] {
-    let mut cols: [Vec<&'a Item>; 5] = Default::default();
-    for i in items {
-        let idx = COLUMNS.iter().position(|(_, s)| *s == Some(i.status));
-        if let Some(idx) = idx {
-            cols[idx].push(i);
-        }
+/// The lane spec — the five lane statuses grouped by status;
+/// sort and limit take the engine defaults (`pri,id`, none). It
+/// matches the built-in `board` view's selection, so [`columns`]
+/// and [`columns_json`] keep their exact legacy bucketing while
+/// going through `eval`.
+fn lane_spec() -> ViewSpec {
+    ViewSpec {
+        filter: ViewFilter {
+            status: COLUMNS.iter().filter_map(|(_, s)| *s).collect(),
+            ..ViewFilter::default()
+        },
+        group_by: Some(GroupAxis::Status),
+        ..ViewSpec::default()
     }
-    for col in &mut cols {
-        col.sort_by(|a, b| digest::pri_then_id(a, b));
-    }
-    cols
 }
 
-/// Render the board. `prefix` puts `repo:` on every card (org).
-/// `fit` constrains human output (`--md` passes [`Fit::UNBOUNDED`]).
-/// `interrupted` ids get a `⚡` marker on their card.
-pub fn render<'a>(
-    items: impl Iterator<Item = &'a Item>,
+/// The lane a status-token group label maps to, if any —
+/// `deferred` leads as `backlog`; `done` has no lane.
+fn lane_index(label: Option<&str>) -> Option<usize> {
+    COLUMNS
+        .iter()
+        .position(|(_, s)| s.map(Status::token) == label)
+}
+
+/// Is `spec` the classic status-columns board? Then the legacy
+/// chrome applies (capitalized lanes, backlog-first, no Done
+/// column); a config-shadowed spec renders through the generic
+/// view renderers instead.
+pub(crate) fn is_status_board(spec: &ViewSpec) -> bool {
+    spec.format == ViewFormat::Board && spec.effective_group_by() == Some(GroupAxis::Status)
+}
+
+/// `(header, cards)` pairs for a status-grouped eval result —
+/// the five lanes in legacy order headed by their chrome titles,
+/// then any extra non-empty bucket the spec admitted (a config
+/// `board` view matching `done` earns a `done` column).
+fn status_cards(
+    groups: &[ViewGroup],
     prefix: Option<&str>,
-    md: bool,
-    fit: Fit,
-    interrupted: &BTreeSet<myco_core::ItemId>,
-) -> String {
-    let cols = columns(items);
-    let cards: [Vec<String>; 5] = std::array::from_fn(|c| {
-        cols[c]
+    interrupted: &BTreeSet<ItemId>,
+) -> (Vec<String>, Vec<Vec<String>>) {
+    let card_col = |items: &[&Item]| {
+        items
             .iter()
-            .map(|i| card(i, prefix, interrupted.contains(&i.id)))
-            .collect()
-    });
-    render_cards(&cards, md, fit)
+            .map(|&i| card(i, prefix, interrupted.contains(&i.id)))
+            .collect::<Vec<String>>()
+    };
+    let mut headers = Vec::new();
+    let mut columns = Vec::new();
+    for (i, (title, _)) in HEADER_STYLE.iter().enumerate() {
+        headers.push((*title).to_string());
+        columns.push(
+            groups
+                .iter()
+                .find(|g| lane_index(g.label.as_deref()) == Some(i))
+                .map(|g| card_col(&g.items))
+                .unwrap_or_default(),
+        );
+    }
+    for g in groups {
+        if lane_index(g.label.as_deref()).is_none() && !g.items.is_empty() {
+            headers.push(g.label.clone().unwrap_or_default());
+            columns.push(card_col(&g.items));
+        }
+    }
+    (headers, columns)
 }
 
 /// Render N columns of card strings — the five-column board and
@@ -363,43 +403,149 @@ pub fn cards_by_column<'a>(items: impl Iterator<Item = (String, &'a Item)>) -> [
     })
 }
 
+/// Serialize one column's items — `prefix` tags each item `repo`
+/// (org boards); `interrupted` adds the `"interrupted": bool`
+/// flag (`None` omits it — org snapshots carry no handoffs).
+fn items_json(
+    items: &[&Item],
+    prefix: Option<&str>,
+    interrupted: Option<&BTreeSet<ItemId>>,
+) -> Vec<serde_json::Value> {
+    items
+        .iter()
+        .map(|it| {
+            let mut v = serde_json::to_value(it).unwrap_or(json!(null));
+            if let Some(obj) = v.as_object_mut() {
+                if let Some(p) = prefix {
+                    obj.insert("repo".into(), json!(p));
+                }
+                if let Some(set) = interrupted {
+                    obj.insert("interrupted".into(), json!(set.contains(&it.id)));
+                }
+            }
+            v
+        })
+        .collect()
+}
+
 /// The `--json` columns map — column name → full items. `prefix`
 /// tags each item `repo` (org boards). `interrupted` — the set
 /// whose latest handoff is an interrupt — marks each item
 /// `"interrupted": bool`; `None` omits the flag (org board, where
 /// snapshots carry no handoffs).
+///
+/// Bucketing goes through `eval` on the lane spec — identical to
+/// the legacy shape, so `myco serve` and org boards keep the
+/// five fixed keys (non-lane groups, e.g. `done`, stay dropped).
 pub fn columns_json<'a>(
     items: impl Iterator<Item = &'a Item>,
     prefix: Option<&str>,
     interrupted: Option<&BTreeSet<myco_core::ItemId>>,
 ) -> serde_json::Value {
-    let cols = columns(items);
+    let groups = eval(items, &lane_spec());
     let mut map = serde_json::Map::new();
-    for (i, (name, _)) in COLUMNS.iter().enumerate() {
-        map.insert(
-            (*name).to_string(),
-            json!(cols[i]
-                .iter()
-                .map(|it| {
-                    let mut v = serde_json::to_value(it).unwrap_or(json!(null));
-                    if let Some(obj) = v.as_object_mut() {
-                        if let Some(p) = prefix {
-                            obj.insert("repo".into(), json!(p));
-                        }
-                        if let Some(set) = interrupted {
-                            obj.insert("interrupted".into(), json!(set.contains(&it.id)));
-                        }
-                    }
-                    v
-                })
-                .collect::<Vec<_>>()),
-        );
+    for g in &groups {
+        if let Some(i) = lane_index(g.label.as_deref()) {
+            map.insert(
+                COLUMNS[i].0.to_string(),
+                json!(items_json(&g.items, prefix, interrupted)),
+            );
+        }
     }
     json!(map)
 }
 
-/// The `board` verb. `--epic`/`--milestone` scope the columns to
-/// items in that group (both set = AND); `--all` lifts the row cap.
+/// Columns-map JSON from eval'd groups — the five lanes under
+/// their legacy names, plus any extra non-empty bucket the spec
+/// admitted (a shadowed `board` view matching `done` earns a
+/// `done` key — the spec asked for it).
+pub(crate) fn groups_json(
+    groups: &[ViewGroup],
+    interrupted: &BTreeSet<ItemId>,
+) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    for g in groups {
+        match lane_index(g.label.as_deref()) {
+            Some(i) => {
+                map.insert(
+                    COLUMNS[i].0.to_string(),
+                    json!(items_json(&g.items, None, Some(interrupted))),
+                );
+            }
+            None if !g.items.is_empty() => {
+                if let Some(label) = &g.label {
+                    map.insert(
+                        label.clone(),
+                        json!(items_json(&g.items, None, Some(interrupted))),
+                    );
+                }
+            }
+            None => {}
+        }
+    }
+    json!(map)
+}
+
+/// An evaluated view ready to emit — the shared tail of the
+/// view-backed board verbs (`board`, `epic <name>`,
+/// `milestone <name>`).
+pub(crate) struct Emit<'a> {
+    /// Repo name for the nothing-matched message.
+    pub repo: &'a str,
+    /// View name for the generic `--json` payload.
+    pub view: &'a str,
+    /// The merged spec (named view + flag overrides).
+    pub spec: &'a ViewSpec,
+    /// The `eval` result.
+    pub groups: &'a [ViewGroup<'a>],
+    /// Interrupted-item marker set.
+    pub interrupted: &'a BTreeSet<ItemId>,
+    /// `--md` — markdown table.
+    pub md: bool,
+    /// `--all` — no row cap.
+    pub all: bool,
+    /// `--json` — machine output.
+    pub json_out: bool,
+    /// The verb's nothing-matched line.
+    pub empty_msg: &'a str,
+}
+
+/// Emit one evaluated view. The classic status-board spec keeps
+/// the legacy chrome + columns-map `--json`; a config-shadowed
+/// spec renders through the generic view renderers and the
+/// `myco view` payload shape.
+pub(crate) fn emit(job: &Emit) -> Result<i32, String> {
+    if job.json_out {
+        if is_status_board(job.spec) {
+            ops::print_json(&groups_json(job.groups, job.interrupted));
+        } else {
+            ops::print_json(&view::view_json(
+                Some(job.view),
+                job.spec,
+                job.groups,
+                job.interrupted,
+            ));
+        }
+        return Ok(0);
+    }
+    if job.groups.iter().all(|g| g.items.is_empty()) {
+        println!("{}: {}", job.repo, job.empty_msg);
+        return Ok(0);
+    }
+    let rendered = if is_status_board(job.spec) {
+        let (headers, cards) = status_cards(job.groups, None, job.interrupted);
+        render_columns(&headers, &cards, job.md, Fit::terminal(job.all))
+    } else {
+        view::render_groups(job.spec, job.groups, job.interrupted, job.md, job.all)
+    };
+    ops::print_paged(&rendered);
+    Ok(0)
+}
+
+/// The `board` verb — resolves the `board` named view (a repo's
+/// `[views.board]` config shadows the preset) and folds
+/// `--epic`/`--milestone` into its filter (both set = AND);
+/// `--all` lifts the row cap.
 pub fn run(
     dir: Option<PathBuf>,
     root: Option<PathBuf>,
@@ -409,35 +555,27 @@ pub fn run(
     milestone: Option<String>,
     json_out: bool,
 ) -> Result<i32, String> {
-    let (_proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
+    let (proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
+    let spec = view::scoped_spec(&proj.root, "board", epic, milestone)?;
     let scan = digest::scan(&store)?;
-    let live: Vec<&Item> = scan
-        .live()
-        .filter(|i| {
-            epic.as_deref().is_none_or(|e| i.epic.as_deref() == Some(e))
-                && milestone
-                    .as_deref()
-                    .is_none_or(|m| i.milestone.as_deref() == Some(m))
-        })
-        .collect();
-    if json_out {
-        let interrupted = crate::continuity::interrupted_set(&store, live.iter().copied())?;
-        ops::print_json(&columns_json(live.into_iter(), None, Some(&interrupted)));
-        return Ok(0);
-    }
-    if live.is_empty() {
-        println!("{}: empty board — `myco todo add` something", scan.name);
-    } else {
-        let interrupted = crate::continuity::interrupted_set(&store, live.iter().copied())?;
-        ops::print_paged(&render(
-            live.into_iter(),
-            None,
-            md,
-            Fit::terminal(all),
-            &interrupted,
-        ));
-    }
-    Ok(0)
+    // the flattened live set — nested children board as their own
+    // cards, exactly like the legacy bucketing did
+    let groups = eval(scan.live(), &spec);
+    let interrupted = crate::continuity::interrupted_set(
+        &store,
+        groups.iter().flat_map(|g| g.items.iter().copied()),
+    )?;
+    emit(&Emit {
+        repo: &scan.name,
+        view: "board",
+        spec: &spec,
+        groups: &groups,
+        interrupted: &interrupted,
+        md,
+        all,
+        json_out,
+        empty_msg: "empty board — `myco todo add` something",
+    })
 }
 
 #[cfg(test)]
@@ -458,37 +596,55 @@ mod tests {
         ]
     }
 
+    /// Render through the same path `emit` takes for the classic
+    /// spec — eval + lane chrome.
+    fn render_lanes(items: &[Item], prefix: Option<&str>, md: bool, fit: Fit) -> String {
+        let groups = eval(items.iter(), &lane_spec());
+        let (headers, cards) = status_cards(&groups, prefix, &BTreeSet::new());
+        render_columns(&headers, &cards, md, fit)
+    }
+
     #[test]
     fn columns_bucket_and_sort() {
         let v = items();
-        let cols = columns(v.iter());
-        assert_eq!(cols[0][0].id, ItemId::new(ItemKind::Task, 1));
+        let groups = eval(v.iter(), &lane_spec());
+        let col = |label: &str| {
+            groups
+                .iter()
+                .find(|g| g.label.as_deref() == Some(label))
+                .unwrap()
+        };
+        assert_eq!(col("deferred").items[0].id, ItemId::new(ItemKind::Task, 1));
         // open column: crit before med
         assert_eq!(
-            cols[1].iter().map(|i| i.id.number()).collect::<Vec<_>>(),
+            col("open")
+                .items
+                .iter()
+                .map(|i| i.id.number())
+                .collect::<Vec<_>>(),
             [3, 2]
         );
-        assert_eq!(cols[2][0].id, ItemId::new(ItemKind::Issue, 1));
-        assert_eq!(cols[3][0].id, ItemId::new(ItemKind::Task, 4));
-        assert_eq!(cols[4][0].id, ItemId::new(ItemKind::Task, 5));
+        assert_eq!(col("claimed").items[0].id, ItemId::new(ItemKind::Issue, 1));
+        assert_eq!(
+            col("in-progress").items[0].id,
+            ItemId::new(ItemKind::Task, 4)
+        );
+        assert_eq!(col("blocked").items[0].id, ItemId::new(ItemKind::Task, 5));
         // done items land nowhere
-        assert!(cols.iter().flatten().all(|i| i.status != Status::Done));
+        assert!(groups
+            .iter()
+            .flat_map(|g| g.items.iter())
+            .all(|i| i.status != Status::Done));
     }
 
     #[test]
     fn render_grid_and_md() {
         let v = items();
-        let grid = render(v.iter(), None, false, Fit::UNBOUNDED, &BTreeSet::new());
+        let grid = render_lanes(&v, None, false, Fit::UNBOUNDED);
         assert!(grid.contains("Backlog"));
         assert!(grid.contains("In Progress"));
         assert!(grid.contains("T-004 wip"));
-        let md = render(
-            v.iter(),
-            Some("myco"),
-            true,
-            Fit::UNBOUNDED,
-            &BTreeSet::new(),
-        );
+        let md = render_lanes(&v, Some("myco"), true, Fit::UNBOUNDED);
         assert!(md.starts_with('|'));
         assert!(md.contains("myco:T-001 parked"));
         assert!(md.contains("myco:I-001 owned"));
@@ -535,7 +691,7 @@ mod tests {
     #[test]
     fn colorize_dims_chrome_and_bolds_ids() {
         let v = [Item::new(ItemId::new(ItemKind::Task, 8), "work")];
-        let plain = render(v.iter(), None, false, Fit::UNBOUNDED, &BTreeSet::new());
+        let plain = render_lanes(&v, None, false, Fit::UNBOUNDED);
         let out = colorize(&plain);
         // borders dimmed
         assert!(out.contains("\x1b[2m+"), "{out}");
@@ -564,7 +720,7 @@ mod tests {
             width: 60,
             max_rows: 25,
         };
-        let out = render(v.iter(), None, false, fit, &BTreeSet::new());
+        let out = render_lanes(&v, None, false, fit);
         assert!(out.contains("… +5 more"), "{out}");
         for line in out.lines() {
             assert!(
@@ -573,7 +729,7 @@ mod tests {
             );
         }
         // --all-equivalent: uncapped renders every row
-        let full = render(v.iter(), None, false, Fit::UNBOUNDED, &BTreeSet::new());
+        let full = render_lanes(&v, None, false, Fit::UNBOUNDED);
         assert!(full.contains("number 30"));
     }
 

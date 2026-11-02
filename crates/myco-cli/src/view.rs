@@ -253,7 +253,7 @@ fn list_views(views: &[NamedView], json_out: bool) {
 
 /// `list` — compact lines; `<label> (n)` headers when the spec
 /// groups; children ride indented under their parent.
-fn render_list(groups: &[ViewGroup], interrupted: &BTreeSet<ItemId>) -> String {
+pub(crate) fn render_list(groups: &[ViewGroup], interrupted: &BTreeSet<ItemId>) -> String {
     fn push_item(
         out: &mut String,
         item: &Item,
@@ -289,7 +289,7 @@ fn render_list(groups: &[ViewGroup], interrupted: &BTreeSet<ItemId>) -> String {
 }
 
 /// `board` — group labels become column headers.
-fn render_board(
+pub(crate) fn render_board(
     groups: &[ViewGroup],
     interrupted: &BTreeSet<ItemId>,
     md: bool,
@@ -322,6 +322,76 @@ pub struct Out {
     pub all: bool,
 }
 
+/// Print resolution warnings to stderr — every verb fronting a
+/// named view reports a shadowed preset identically.
+pub(crate) fn warn(warnings: &[String]) {
+    for w in warnings {
+        eprintln!("myco: warning: {w}");
+    }
+}
+
+/// Resolve a named view and fold `--epic`/`--milestone`-style
+/// scope overrides into its filter — the same merge
+/// [`ViewFlags::apply`] performs (a set override wins, unset
+/// fields keep the named spec). The merged spec is re-validated.
+/// This is the front of the verb-fronted views (`board`,
+/// `epic <name>`, `milestone <name>`): a repo's `[views.<name>]`
+/// config shadows the built-in preset the same way it does for
+/// `myco view`.
+pub(crate) fn scoped_spec(
+    root: &std::path::Path,
+    name: &str,
+    epic: Option<String>,
+    milestone: Option<String>,
+) -> Result<ViewSpec, String> {
+    let (view, warnings) = myco_ops::view::resolve_lenient(root, name)?;
+    warn(&warnings);
+    let mut spec = view.spec;
+    if let Some(e) = epic {
+        spec.filter.epic = Some(e);
+    }
+    if let Some(m) = milestone {
+        spec.filter.milestone = Some(m);
+    }
+    spec.validate()?;
+    Ok(spec)
+}
+
+/// Pick the renderer `spec.format` names — the shared tail of
+/// every eval-driven verb.
+pub(crate) fn render_groups(
+    spec: &ViewSpec,
+    groups: &[ViewGroup],
+    interrupted: &BTreeSet<ItemId>,
+    md: bool,
+    all: bool,
+) -> String {
+    match spec.format {
+        ViewFormat::Board => render_board(groups, interrupted, md, all),
+        ViewFormat::List => render_list(groups, interrupted),
+    }
+}
+
+/// The `--json` payload — `myco view`'s shape, reused by the
+/// verb-fronted views when a config-shadowed spec no longer fits
+/// the legacy columns map.
+pub(crate) fn view_json(
+    name: Option<&str>,
+    spec: &ViewSpec,
+    groups: &[ViewGroup],
+    interrupted: &BTreeSet<ItemId>,
+) -> serde_json::Value {
+    json!({
+        "view": name,
+        "spec": spec,
+        "groups": groups.iter().map(|g| json!({
+            "label": g.label,
+            "items": g.items,
+        })).collect::<Vec<_>>(),
+        "interrupted": interrupted.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
+    })
+}
+
 /// The `view` verb — `NAME` resolves builtin presets then config
 /// views; no NAME builds the spec from flags alone; bare `myco
 /// view` (or `--list`) enumerates the defined views.
@@ -350,9 +420,7 @@ pub fn run(
     };
     flags.apply(&mut spec);
     spec.validate()?;
-    for w in &warnings {
-        eprintln!("myco: warning: {w}");
-    }
+    warn(&warnings);
 
     // the universe: top-level items only — children ride with
     // their parent (they can't match a filter on their own)
@@ -362,26 +430,63 @@ pub fn run(
     let interrupted = continuity::interrupted_set(&store, scan.live())?;
 
     if json_out {
-        ops::print_json(&json!({
-            "view": name,
-            "spec": spec,
-            "groups": groups.iter().map(|g| json!({
-                "label": g.label,
-                "items": g.items,
-            })).collect::<Vec<_>>(),
-            "interrupted": interrupted.iter().map(|i| i.to_string()).collect::<Vec<_>>(),
-        }));
+        ops::print_json(&view_json(name.as_deref(), &spec, &groups, &interrupted));
         return Ok(0);
     }
 
-    let rendered = match spec.format {
-        ViewFormat::Board => render_board(&groups, &interrupted, out.md, out.all),
-        ViewFormat::List => render_list(&groups, &interrupted),
-    };
+    let rendered = render_groups(&spec, &groups, &interrupted, out.md, out.all);
     if groups.iter().all(|g| g.items.is_empty()) {
         println!("{}: empty view — no items match", scan.name);
     } else {
         ops::print_paged(&rendered);
     }
     Ok(0)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scoped_spec_repo_config_shadows_the_verb() {
+        // `[views.board]` in the repo's myco.toml replaces the
+        // preset `myco board` (and `epic|milestone <name>`)
+        // evaluate — the spec-level proof that config shadowing
+        // reaches the read verbs, not just `myco view`.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("myco.toml"),
+            "[views.board]\nfilter = { kind = [\"issue\"] }\n",
+        )
+        .unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                (
+                    "HOME",
+                    Some(dir.path().join("nohome").to_string_lossy().as_ref()),
+                ),
+                ("XDG_CONFIG_HOME", None::<&str>),
+            ],
+            || {
+                let spec = scoped_spec(dir.path(), "board", None, None).unwrap();
+                assert_eq!(spec.filter.kind, vec![ItemKind::Issue]);
+                // flag merge still applies over the shadowed spec
+                let scoped = scoped_spec(dir.path(), "board", Some("v2".into()), None).unwrap();
+                assert_eq!(scoped.filter.epic.as_deref(), Some("v2"));
+                // and eval honours the shadow — tasks drop out of
+                // every group, so the rendered board changes
+                let items = vec![
+                    Item::new(ItemId::new(ItemKind::Task, 1), "t"),
+                    Item::new(ItemId::new(ItemKind::Issue, 1), "i"),
+                ];
+                let ids: Vec<String> = eval(&items, &spec)
+                    .iter()
+                    .flat_map(|g| g.items.iter().map(|i| i.id.to_string()))
+                    .collect();
+                assert_eq!(ids, ["I-001"]);
+            },
+        );
+    }
 }

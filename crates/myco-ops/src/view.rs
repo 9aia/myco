@@ -84,8 +84,12 @@ pub fn builtins() -> Vec<NamedView> {
 /// `[views]` for a repo — the repo layer is `<root>/myco.toml` when
 /// it exists (else the default `./myco.toml` probe), merged with
 /// the user layer by `TomlSource`. "No config anywhere" is empty,
-/// not an error — builtins still resolve.
-fn config_views(root: &Path) -> Result<BTreeMap<String, ViewSpec>, String> {
+/// not an error — builtins still resolve. `strict`: a config path
+/// that names a missing file errors (an explicit `$MYCO_CONFIG` is
+/// "the user pointed at it" — `myco view` reports the miss);
+/// lenient callers degrade to the presets — a read verb shouldn't
+/// brick on a config-file absence.
+fn config_views(root: &Path, strict: bool) -> Result<BTreeMap<String, ViewSpec>, String> {
     let repo_cfg = root.join("myco.toml");
     let src = TomlSource {
         path: repo_cfg
@@ -96,19 +100,25 @@ fn config_views(root: &Path) -> Result<BTreeMap<String, ViewSpec>, String> {
         Ok(c) => Ok(c.views),
         // the documented search-miss — absence isn't a failure
         Err(e) if e.contains("no myco.toml found") => Ok(BTreeMap::new()),
+        Err(e) if !strict && e.contains("not found") => Ok(BTreeMap::new()),
         Err(e) => Err(e),
     }
+}
+
+/// The warning a config-vs-builtin name collision earns.
+fn shadow_warning(name: &str) -> String {
+    format!("view \"{name}\" shadows the built-in preset")
 }
 
 /// Builtin presets merged with the repo's config views — config
 /// wins a name collision and the returned warnings name it.
 /// Specs are *not* validated here — `myco check` lints them all.
-pub fn named_views(root: &Path) -> Result<(Vec<NamedView>, Vec<String>), String> {
+fn merged_views(root: &Path, strict: bool) -> Result<(Vec<NamedView>, Vec<String>), String> {
     let mut warnings = Vec::new();
     let mut out = builtins();
-    for (name, spec) in config_views(root)? {
+    for (name, spec) in config_views(root, strict)? {
         if let Some(v) = out.iter_mut().find(|v| v.name == name) {
-            warnings.push(format!("view \"{name}\" shadows the built-in preset"));
+            warnings.push(shadow_warning(&name));
             v.spec = spec;
             v.origin = Origin::Config;
         } else {
@@ -120,6 +130,20 @@ pub fn named_views(root: &Path) -> Result<(Vec<NamedView>, Vec<String>), String>
         }
     }
     Ok((out, warnings))
+}
+
+/// [`merged_views`] with strict config handling — `myco view`,
+/// `myco check`, `myco serve`.
+pub fn named_views(root: &Path) -> Result<(Vec<NamedView>, Vec<String>), String> {
+    merged_views(root, true)
+}
+
+/// [`merged_views`] tolerant of a *missing* config — for the read
+/// verbs that now resolve named views (`board`, `epic`, …):
+/// `$MYCO_CONFIG` naming a missing file degrades to the presets;
+/// an unparseable or invalid config still errors.
+pub fn named_views_lenient(root: &Path) -> Result<(Vec<NamedView>, Vec<String>), String> {
+    merged_views(root, false)
 }
 
 /// Lint the repo-layer config only — deterministic, so `myco
@@ -142,15 +166,32 @@ pub fn validate_repo_views(root: &Path) -> Result<Vec<(String, String)>, String>
 
 /// Resolve one view by name — config shadows builtin (warns).
 /// Unknown names error listing the defined set. The spec is
-/// validated before return.
+/// validated before return. Warnings are scoped to the resolved
+/// view — a verb loading `board` shouldn't hear about a shadowed
+/// `[views.epic]`.
 pub fn resolve(root: &Path, name: &str) -> Result<(NamedView, Vec<String>), String> {
-    let (views, warnings) = named_views(root)?;
+    resolve_in(root, name, true)
+}
+
+/// [`resolve`] tolerant of a *missing* config — the read-verb
+/// entry point (`board`, `epic <name>`, `milestone <name>`).
+pub fn resolve_lenient(root: &Path, name: &str) -> Result<(NamedView, Vec<String>), String> {
+    resolve_in(root, name, false)
+}
+
+fn resolve_in(root: &Path, name: &str, strict: bool) -> Result<(NamedView, Vec<String>), String> {
+    let (views, _) = merged_views(root, strict)?;
     let names: Vec<String> = views.iter().map(|v| v.name.clone()).collect();
     let view = views
         .into_iter()
         .find(|v| v.name == name)
         .ok_or_else(|| format!("unknown view \"{name}\" — defined: {}", names.join(", ")))?;
     view.spec.validate()?;
+    let warnings = if view.origin == Origin::Config && builtins().iter().any(|b| b.name == name) {
+        vec![shadow_warning(name)]
+    } else {
+        Vec::new()
+    };
     Ok((view, warnings))
 }
 

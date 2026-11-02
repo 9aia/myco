@@ -1,52 +1,33 @@
 //! `myco epic [name]` / `myco milestone [name]` — grouping views
-//! over item metadata. Bare lists every group with its live-item
-//! count; a name renders that group's items as the board's five
-//! status columns (`epic v2` ≡ `board --epic v2`).
+//! over item metadata, driven by the named views of the same
+//! names (`[views.epic]`/`[views.milestone]` config shadows the
+//! presets). Bare lists every group with its item count; a name
+//! renders that group's board (`epic v2` ≡ `board --epic v2`).
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use myco_core::Item;
+use myco_core::{eval, UNGROUPED};
 use serde_json::json;
 
-use crate::{board, digest, items, ops};
+use crate::{board, digest, items, ops, view};
 
-/// Which metadata field the group verb reads.
+/// Which named view the group verb resolves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
-    /// `item.epic` — `myco epic`.
+    /// `item.epic` — `myco epic` resolves the `epic` view.
     Epic,
-    /// `item.milestone` — `myco milestone`.
+    /// `item.milestone` — `myco milestone` resolves `milestone`.
     Milestone,
 }
 
 impl Group {
-    /// The verb/field name in output (`epic`, `milestone`).
+    /// The verb/view/field name in output (`epic`, `milestone`).
     pub fn name(self) -> &'static str {
         match self {
             Group::Epic => "epic",
             Group::Milestone => "milestone",
         }
     }
-
-    /// The item's group membership, if any.
-    pub fn of(self, item: &Item) -> Option<&str> {
-        match self {
-            Group::Epic => item.epic.as_deref(),
-            Group::Milestone => item.milestone.as_deref(),
-        }
-    }
-}
-
-/// Live-item counts per group name — sorted (`BTreeMap`).
-fn counts(scan: &digest::Scan, group: Group) -> BTreeMap<&str, usize> {
-    let mut m: BTreeMap<&str, usize> = BTreeMap::new();
-    for i in scan.live() {
-        if let Some(name) = group.of(i) {
-            *m.entry(name).or_default() += 1;
-        }
-    }
-    m
 }
 
 /// The shared `epic`/`milestone` verb body. `all` lifts the board
@@ -60,20 +41,34 @@ pub fn run(
     root: Option<PathBuf>,
     json_out: bool,
 ) -> Result<i32, String> {
-    let (_proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
+    let (proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
     let scan = digest::scan(&store)?;
     match name {
         None => {
-            let groups = counts(&scan, group);
+            // the named view's buckets, summarized to
+            // `name  count` lines — empty and `ungrouped`
+            // buckets aren't groups
+            let spec = view::scoped_spec(&proj.root, group.name(), None, None)?;
+            let groups = eval(scan.live(), &spec);
+            let counts: Vec<(&str, usize)> = groups
+                .iter()
+                .filter(|g| !g.items.is_empty())
+                .filter_map(|g| {
+                    g.label
+                        .as_deref()
+                        .filter(|l| *l != UNGROUPED)
+                        .map(|l| (l, g.items.len()))
+                })
+                .collect();
             if json_out {
                 ops::print_json(&json!({
                     "group": group.name(),
-                    "groups": groups
+                    "groups": counts
                         .iter()
                         .map(|(name, count)| json!({"name": name, "count": count}))
                         .collect::<Vec<_>>(),
                 }));
-            } else if groups.is_empty() {
+            } else if counts.is_empty() {
                 println!(
                     "{}: no {}s — set one via `myco item set <id> --{} <name>`",
                     scan.name,
@@ -81,7 +76,7 @@ pub fn run(
                     group.name()
                 );
             } else {
-                for (name, count) in groups {
+                for (name, count) in counts {
                     println!("{name}  {count}");
                 }
             }
@@ -91,34 +86,29 @@ pub fn run(
             if !myco_core::is_valid_group_name(&name) {
                 return Err(format!("invalid {} name {name:?}", group.name()));
             }
-            let members: Vec<&Item> = scan
-                .live()
-                .filter(|i| group.of(i) == Some(name.as_str()))
-                .collect();
-            if json_out {
-                let interrupted =
-                    crate::continuity::interrupted_set(&store, members.iter().copied())?;
-                ops::print_json(&board::columns_json(
-                    members.into_iter(),
-                    None,
-                    Some(&interrupted),
-                ));
-                return Ok(0);
-            }
-            if members.is_empty() {
-                println!("{}: no items in {} {name:?}", scan.name, group.name());
-            } else {
-                let interrupted =
-                    crate::continuity::interrupted_set(&store, members.iter().copied())?;
-                ops::print_paged(&board::render(
-                    members.into_iter(),
-                    None,
-                    md,
-                    board::Fit::terminal(all),
-                    &interrupted,
-                ));
-            }
-            Ok(0)
+            // `epic v2` ≡ `board --epic v2` — the board view
+            // scoped to this group
+            let (epic, milestone) = match group {
+                Group::Epic => (Some(name.clone()), None),
+                Group::Milestone => (None, Some(name.clone())),
+            };
+            let spec = view::scoped_spec(&proj.root, "board", epic, milestone)?;
+            let groups = eval(scan.live(), &spec);
+            let interrupted = crate::continuity::interrupted_set(
+                &store,
+                groups.iter().flat_map(|g| g.items.iter().copied()),
+            )?;
+            board::emit(&board::Emit {
+                repo: &scan.name,
+                view: "board",
+                spec: &spec,
+                groups: &groups,
+                interrupted: &interrupted,
+                md,
+                all,
+                json_out,
+                empty_msg: &format!("no items in {} {name:?}", group.name()),
+            })
         }
     }
 }
