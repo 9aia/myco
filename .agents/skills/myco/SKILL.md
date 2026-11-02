@@ -51,6 +51,7 @@ myco <verb> --help     # every verb, self-documenting
 | Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
 | Restart work on an item | `myco resume T-NNN` |
 | Views | `myco board` · `report` · `epic` · `milestone` · `view [name]` (presets + `--status`/`--group-by`/`--sort` flags) · `ui` (interactive TUI) |
+| Served surface | `myco serve` (JSON-RPC 2.0 on stdio, for pipe-holding embedders) · `myco batch` (one-shot: NDJSON requests stdin/`--file` → NDJSON responses) |
 | Cross-repo | `myco index add <repo>` · `myco org status` |
 | Housekeeping | `myco init` · `check` · `migrate` · `commit` · `org init` |
 
