@@ -52,7 +52,7 @@ The markdown in `project/` is canonical — human-editable,
 diffable, frozen by golden fixtures. The redb index
 (`index.redb` + `repos.toml` under `$MYCO_HOME` →
 `$XDG_DATA_HOME/myco` → `~/.local/share/myco`) is a _derived
-cache_ that powers `status`, `board`, `report`, and `org` without
+cache_ that powers `status`, `view`, `report`, and `org` without
 re-parsing files. Delete it and `myco index rebuild` derives it
 back; `myco check` finds and repairs drift between the two.
 

@@ -59,7 +59,7 @@ They are full items — same metadata, same state machine — and
 
 ```sh
 myco item set T-001 --status in-progress --owner devin
-myco board
+myco view board
 ```
 
 ```text

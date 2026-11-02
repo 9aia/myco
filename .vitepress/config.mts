@@ -50,6 +50,7 @@ export default defineConfig({
           { text: "CLI", link: "/reference/cli" },
           { text: "Config", link: "/reference/config" },
           { text: "Crate API", link: "/reference/crate-api" },
+          { text: "AGENTS.md blocks", link: "/reference/agents-md-block" },
         ],
       },
       {

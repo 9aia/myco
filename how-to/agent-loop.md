@@ -13,7 +13,7 @@ myco status --prompt    # token-sized digest, sized for a context window
 `status --prompt` is the session opener: counts by kind, what's
 in progress, what's open — enough to pick work without reading
 the files. `myco status` (no flag) is the human-readable version;
-`myco board` and `myco report` give the kanban and the trend.
+`myco view board` and `myco report` give the kanban and the trend.
 Boards cap at a screenful of rows — `--all` shows every card.
 For a human at the wheel, `myco ui` is the same board as a
 full-screen TUI — see

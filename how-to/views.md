@@ -26,24 +26,31 @@ myco view hot --limit 3                  # flags patch the named spec
 
 Every read is also `--json`: `{view, spec, groups, interrupted}`.
 
-## The verbs are verb-fronted views
+## Views are the read surface
 
-`myco board`, `myco epic`, `myco milestone` and `myco status`
-resolve the same-named view before rendering — so a config view
-shadowing a built-in name redefines the verb itself:
+`myco view <name>` is *the* lens — there are no per-view verbs.
+`view board` renders the kanban (Backlog | Open | Claimed | In
+Progress | Blocked lanes); `view epic` and `view milestone` group
+by that metadata, one column per group with `ungrouped` trailing.
+The filter flags scope any view — `myco view board --epic v2` is
+one epic's lanes.
+
+A config view shadowing a built-in name redefines `myco view
+<name>` itself:
 
 ```toml
 [views.board]
-filter = { kind = ["issue"] } # myco board is now issues-only
+filter = { kind = ["issue"] } # view board is now issues-only
 ```
 
 A shadow warns on stderr (`view "board" shadows the built-in
-preset`) and `myco check` lints the repo layer's specs. Under a
-shadowed spec the legacy chrome falls back to the generic
-renderers: a non-status `group_by` renders its own columns, and
-`--json` emits the `myco view` payload instead of the five-lane
-map. Specs that admit non-lane buckets (e.g. `done`) surface them
-as extra columns/keys — nothing matched is silently dropped.
+preset`) and `myco check` lints the repo layer's specs. The lane
+chrome applies only to a status-grouped board spec: a shadowed
+spec with a non-status `group_by` renders generic columns headed
+by the group labels, and `--json` emits the `{view, spec, groups,
+interrupted}` payload instead of the five-lane map. Specs that
+admit non-lane buckets (e.g. `done`) surface them as extra
+columns/keys — nothing matched is silently dropped.
 
 Layering is repo `<` user `<` flags: a `[views]` table merges
 across config layers; scalar fields stay first-match.
