@@ -57,8 +57,6 @@ This document contains the help content for the `myco` command-line program.
 * [`myco index list`↴](#myco-index-list)
 * [`myco index rebuild`↴](#myco-index-rebuild)
 * [`myco org`↴](#myco-org)
-* [`myco org status`↴](#myco-org-status)
-* [`myco org board`↴](#myco-org-board)
 * [`myco org init`↴](#myco-org-init)
 * [`myco ui`↴](#myco-ui)
 * [`myco serve`↴](#myco-serve)
@@ -90,11 +88,11 @@ myco — project management, grown not built: agent-first PM CLI
 * `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized
-* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. `myco view board` is the kanban; bare `myco view` lists views
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; bare `myco view` lists views
 * `absorb` — Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps
 * `report` — Aging + velocity + blocked — how the ledger is trending
 * `index` — The derived index: register repos, query/rebuild snapshots
-* `org` — Cross-repo views over the index (auto-rebuilds stale repos)
+* `org` — Cross-repo scaffolding — re-run `init` on every registered repo. Cross-repo *views* are `myco view org-board|org-status` (index-sourced)
 * `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use
 * `serve` — Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it
 * `batch` — One-shot `serve` — NDJSON verb requests from stdin or `--file`, one JSON-RPC response line per request, dispatched through the same served surface. Per-line errors never fail the run; mutations keep per-request commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS the wire here too — requests that would read it are rejected
@@ -724,7 +722,7 @@ Cheap digest of the work ledger. `--prompt` = token-sized
 
 ## `myco view`
 
-Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`) or an ad-hoc spec from flags. `myco view board` is the kanban; bare `myco view` lists views
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; bare `myco view` lists views
 
 **Usage:** `myco view [OPTIONS] [NAME]`
 
@@ -749,7 +747,8 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--milestone <MILESTONE>` — Items in this milestone
 * `--live-only` — Items not superseded by another (ADRs)
 * `--superseded` — Items superseded by another (ADRs)
-* `--group-by <GROUP_BY>` — Group axis — status|priority|kind|owner|epic|milestone
+* `--source <SOURCE>` — Item universe — repo (default) reads this worktree; index unions every registered repo's snapshot (org views)
+* `--group-by <GROUP_BY>` — Group axis — status|priority|kind|owner|epic|milestone|repo
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction
 * `--limit <N>` — Keep the first N items after sorting
 * `--format <FORMAT>` — Renderer — list|board
@@ -888,41 +887,13 @@ Re-scan a registered repo (all of them without `<path>`)
 
 ## `myco org`
 
-Cross-repo views over the index (auto-rebuilds stale repos)
+Cross-repo scaffolding — re-run `init` on every registered repo. Cross-repo *views* are `myco view org-board|org-status` (index-sourced)
 
 **Usage:** `myco org <COMMAND>`
 
 ###### **Subcommands:**
 
-* `status` — Per-repo counts + org totals + items grouped by owner
-* `board` — Org kanban — repo-prefixed cards over every live item
 * `init` — Re-run `init` on every registered repo — refreshes the worktree scaffold and root files (.gitignore, the AGENTS.md agent-awareness block). The rollout path for new scaffolding
-
-
-
-## `myco org status`
-
-Per-repo counts + org totals + items grouped by owner
-
-**Usage:** `myco org status [OPTIONS]`
-
-###### **Options:**
-
-* `--all` — Show repos with no live items too
-
-
-
-## `myco org board`
-
-Org kanban — repo-prefixed cards over every live item
-
-**Usage:** `myco org board [OPTIONS]`
-
-###### **Options:**
-
-* `--md` — Emit a markdown table (for docs/READMEs)
-* `--all` — Show every card — no row cap
-* `--repo <REPO>` — Only this repo's items (name or registered path)
 
 
 
