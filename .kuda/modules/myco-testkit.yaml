@@ -1,0 +1,239 @@
+name: myco-testkit
+path: crates/myco-testkit/Cargo.toml
+purpose: 'Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec'
+api:
+- name: actor
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 97
+  module: myco-testkit
+- name: backlog_doc
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 248
+  module: myco-testkit
+- name: backlog_emit
+  kind: function
+  file: crates/myco-testkit/tests/golden.rs
+  line: 33
+  module: myco-testkit
+- name: backlog_invalid
+  kind: function
+  file: crates/myco-testkit/tests/invalid.rs
+  line: 20
+  module: myco-testkit
+- name: collect
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 34
+  module: myco-testkit
+- name: date
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 111
+  module: myco-testkit
+- name: file_kind
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 72
+  module: myco-testkit
+- name: fixture
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 19
+  module: myco-testkit
+- name: fixtures_dir
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 14
+  module: myco-testkit
+- name: fixtures_exist
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 345
+  module: myco-testkit
+- name: fixtures_under
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 26
+  module: myco-testkit
+- name: group_name
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 134
+  module: myco-testkit
+- name: handoff_entry
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 277
+  module: myco-testkit
+- name: handoffs_emit
+  kind: function
+  file: crates/myco-testkit/tests/golden.rs
+  line: 84
+  module: myco-testkit
+- name: handoffs_invalid
+  kind: function
+  file: crates/myco-testkit/tests/invalid.rs
+  line: 40
+  module: myco-testkit
+- name: item_emit
+  kind: function
+  file: crates/myco-testkit/tests/golden.rs
+  line: 62
+  module: myco-testkit
+- name: item_file
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 294
+  module: myco-testkit
+- name: item_id
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 82
+  module: myco-testkit
+- name: item_invalid
+  kind: function
+  file: crates/myco-testkit/tests/invalid.rs
+  line: 30
+  module: myco-testkit
+- name: item_kind
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 67
+  module: myco-testkit
+- name: label
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 106
+  module: myco-testkit
+- name: leaf_item
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 145
+  module: myco-testkit
+- name: line_item
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 184
+  module: myco-testkit
+- name: line_note
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 140
+  module: myco-testkit
+- name: meta_emit
+  kind: function
+  file: crates/myco-testkit/tests/golden.rs
+  line: 51
+  module: myco-testkit
+- name: meta_invalid
+  kind: function
+  file: crates/myco-testkit/tests/invalid.rs
+  line: 50
+  module: myco-testkit
+- name: myco-testkit
+  kind: module
+  file: crates/myco-testkit/Cargo.toml
+  line: 1
+  module: myco-testkit
+- name: priority
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 92
+  module: myco-testkit
+- name: project_meta
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 257
+  module: myco-testkit
+- name: section_name
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 127
+  module: myco-testkit
+- name: sections
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 204
+  module: myco-testkit
+- name: session
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 271
+  module: myco-testkit
+- name: snap_name
+  kind: function
+  file: crates/myco-testkit/tests/golden.rs
+  line: 13
+  module: myco-testkit
+- name: status
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 87
+  module: myco-testkit
+- name: status_tree
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 197
+  module: myco-testkit
+- name: strat
+  kind: module
+  file: crates/myco-testkit/src/lib.rs
+  line: 58
+  module: myco-testkit
+- name: tests
+  kind: module
+  file: crates/myco-testkit/src/lib.rs
+  line: 341
+  module: myco-testkit
+- name: title
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 120
+  module: myco-testkit
+- name: todo_doc
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 239
+  module: myco-testkit
+- name: todo_emit
+  kind: function
+  file: crates/myco-testkit/tests/golden.rs
+  line: 18
+  module: myco-testkit
+api_omitted: 1
+deps:
+- myco-core
+- myco-store
+- myco-store-md
+- proptest
+- time
+- insta
+- tempfile
+- myco-core
+- myco-store-md
+- time
+notes: ''
+verify:
+- crates/myco-testkit/Cargo.toml
+- crates/myco-testkit/src/lib.rs
+- crates/myco-testkit/tests/golden.rs
+- crates/myco-testkit/tests/invalid.rs
+- crates/myco-testkit/tests/roundtrip.rs
+provenance:
+  files:
+  - crates/myco-testkit/Cargo.toml
+  - crates/myco-testkit/src/lib.rs
+  - crates/myco-testkit/tests/golden.rs
+  - crates/myco-testkit/tests/invalid.rs
+  - crates/myco-testkit/tests/roundtrip.rs
+  hashes:
+  - df0b6d5c2130f3266885cbf75cf653df9869ea2c
+  - 51859464fb98e86397b7d8e1932d51227a4e4e7c
+  - 632ae32341111985711a332a53b3366dcf5b86ca
+  - 67e9bcc050a10acb1a5b7922b22e5d8868a26d6a
+  - b9e3e614d3ca69d8639d291a7e795cd67ce94bd6
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2

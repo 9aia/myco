@@ -1,0 +1,250 @@
+name: myco-ops
+path: crates/myco-ops/Cargo.toml
+purpose: 'myco — ops I/O shell: project discovery, store open/save, commit-per-mutation, verb plumbing'
+api:
+- name: BRANCH
+  kind: const
+  file: crates/myco-ops/src/discover.rs
+  line: 20
+  module: myco-ops
+- name: DEFAULT_PAGER
+  kind: const
+  file: crates/myco-ops/src/ops.rs
+  line: 212
+  module: myco-ops
+- name: DIR
+  kind: const
+  file: crates/myco-ops/src/discover.rs
+  line: 22
+  module: myco-ops
+- name: Filter
+  kind: type
+  file: crates/myco-ops/src/items.rs
+  line: 220
+  module: myco-ops
+- name: LOCK_FILE
+  kind: const
+  file: crates/myco-ops/src/ops.rs
+  line: 31
+  module: myco-ops
+- name: LockedStore
+  kind: type
+  file: crates/myco-ops/src/items.rs
+  line: 64
+  module: myco-ops
+- name: NamedView
+  kind: type
+  file: crates/myco-ops/src/view.rs
+  line: 23
+  module: myco-ops
+- name: NewItem
+  kind: type
+  file: crates/myco-ops/src/items.rs
+  line: 286
+  module: myco-ops
+- name: Origin
+  kind: type
+  file: crates/myco-ops/src/view.rs
+  line: 14
+  module: myco-ops
+- name: Project
+  kind: type
+  file: crates/myco-ops/src/discover.rs
+  line: 27
+  module: myco-ops
+- name: SCAFFOLD_DIRS
+  kind: const
+  file: crates/myco-ops/src/ops.rs
+  line: 18
+  module: myco-ops
+- name: Target
+  kind: type
+  file: crates/myco-ops/src/items.rs
+  line: 78
+  module: myco-ops
+- name: WorktreeLock
+  kind: type
+  file: crates/myco-ops/src/ops.rs
+  line: 37
+  module: myco-ops
+- name: all_ids
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 98
+  module: myco-ops
+- name: alloc_id
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 95
+  module: myco-ops
+- name: append_handoff
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 143
+  module: myco-ops
+- name: archive_item
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 128
+  module: myco-ops
+- name: autocommit
+  kind: function
+  file: crates/myco-ops/src/ops.rs
+  line: 162
+  module: myco-ops
+- name: backlog
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 107
+  module: myco-ops
+- name: builtins
+  kind: function
+  file: crates/myco-ops/src/view.rs
+  line: 35
+  module: myco-ops
+- name: builtins_are_valid
+  kind: function
+  file: crates/myco-ops/src/view.rs
+  line: 205
+  module: myco-ops
+- name: canon
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 36
+  module: myco-ops
+- name: canonical_dir
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 122
+  module: myco-ops
+- name: canonicalize
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 115
+  module: myco-ops
+- name: commit
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 196
+  module: myco-ops
+- name: commit_paths
+  kind: function
+  file: crates/myco-ops/src/ops.rs
+  line: 181
+  module: myco-ops
+- name: commit_paths_clean_tree_is_noop
+  kind: function
+  file: crates/myco-ops/src/ops.rs
+  line: 341
+  module: myco-ops
+- name: commits_enabled
+  kind: function
+  file: crates/myco-ops/src/ops.rs
+  line: 155
+  module: myco-ops
+- name: compact
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 25
+  module: myco-ops
+- name: concurrent_open_fails_fast_no_dup_ids
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 472
+  module: myco-ops
+- name: config_views
+  kind: function
+  file: crates/myco-ops/src/view.rs
+  line: 92
+  module: myco-ops
+- name: configured_project_dir
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 102
+  module: myco-ops
+- name: deref
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 80
+  module: myco-ops
+- name: dir_flag_missing_is_error
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 331
+  module: myco-ops
+- name: dir_flag_rejects_non_project_dir
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 336
+  module: myco-ops
+- name: dir_flag_resolves
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 313
+  module: myco-ops
+- name: discover
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 142
+  module: myco-ops
+- name: discover
+  kind: module
+  file: crates/myco-ops/src/lib.rs
+  line: 13
+  module: myco-ops
+- name: discover_in
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 149
+  module: myco-ops
+- name: enclosing_project_worktree
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 65
+  module: myco-ops
+api_omitted: 87
+deps:
+- camino
+- myco-config
+- myco-config-toml
+- myco-core
+- myco-git
+- myco-store
+- myco-store-md
+- serde_json
+- time
+- temp-env
+- tempfile
+- myco-core
+- myco-store
+- myco-store-md
+- serde_json
+- camino
+- myco-config
+- myco-config-toml
+notes: ''
+verify:
+- crates/myco-ops/Cargo.toml
+- crates/myco-ops/src/discover.rs
+- crates/myco-ops/src/items.rs
+- crates/myco-ops/src/lib.rs
+- crates/myco-ops/src/ops.rs
+- crates/myco-ops/src/view.rs
+provenance:
+  files:
+  - crates/myco-ops/Cargo.toml
+  - crates/myco-ops/src/discover.rs
+  - crates/myco-ops/src/items.rs
+  - crates/myco-ops/src/lib.rs
+  - crates/myco-ops/src/ops.rs
+  - crates/myco-ops/src/view.rs
+  hashes:
+  - e7e3f83865831cc2059552870f72d32171c6d5ff
+  - c8dc828a444d7baa1432271e2ac218472da889bd
+  - cd194f1e49c34a745c909a32f286f69be69d14fc
+  - 5fe165717dddc8de5f8e3d6dd9b1470d49b65986
+  - a33add20f5662ec9f24b306e6e9eccf62a5ada05
+  - aae65df10a538240d789f9cb8e4a613b77193b76
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2

@@ -1,4 +1,271 @@
 name: myco-core
 path: crates/myco-core/Cargo.toml
-purpose: myco domain core — pure, no I/O
-api: []
+purpose: 'myco domain core: item models, ID registry, state machine — pure, no I/O'
+api:
+- name: ALL
+  kind: const
+  file: crates/myco-core/src/id.rs
+  line: 28
+  module: myco-core
+- name: ALL
+  kind: const
+  file: crates/myco-core/src/priority.rs
+  line: 27
+  module: myco-core
+- name: ALL
+  kind: const
+  file: crates/myco-core/src/status.rs
+  line: 39
+  module: myco-core
+- name: ALL
+  kind: const
+  file: crates/myco-core/src/view.rs
+  line: 299
+  module: myco-core
+- name: Actor
+  kind: type
+  file: crates/myco-core/src/actor.rs
+  line: 10
+  module: myco-core
+- name: BacklogDoc
+  kind: type
+  file: crates/myco-core/src/doc.rs
+  line: 68
+  module: myco-core
+- name: Config
+  kind: type
+  file: crates/myco-core/src/lib.rs
+  line: 95
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/actor.rs
+  line: 45
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/id.rs
+  line: 90
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/id.rs
+  line: 155
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/priority.rs
+  line: 62
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/status.rs
+  line: 106
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 153
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 322
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 348
+  module: myco-core
+- name: Error
+  kind: type
+  file: crates/myco-core/src/actor.rs
+  line: 53
+  module: myco-core
+- name: FORMAT
+  kind: const
+  file: crates/myco-core/src/date.rs
+  line: 7
+  module: myco-core
+- name: GroupAxis
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 91
+  module: myco-core
+- name: GroupKey
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 362
+  module: myco-core
+- name: HandoffEntry
+  kind: type
+  file: crates/myco-core/src/handoff.rs
+  line: 18
+  module: myco-core
+- name: InvalidTransition
+  kind: type
+  file: crates/myco-core/src/status.rs
+  line: 93
+  module: myco-core
+- name: Item
+  kind: type
+  file: crates/myco-core/src/item.rs
+  line: 20
+  module: myco-core
+- name: Item
+  kind: type
+  file: crates/myco-core/src/item.rs
+  line: 87
+  module: myco-core
+- name: ItemFile
+  kind: type
+  file: crates/myco-core/src/doc.rs
+  line: 87
+  module: myco-core
+- name: ItemId
+  kind: type
+  file: crates/myco-core/src/id.rs
+  line: 103
+  module: myco-core
+- name: ItemKind
+  kind: type
+  file: crates/myco-core/src/id.rs
+  line: 13
+  module: myco-core
+- name: ItemMeta
+  kind: type
+  file: crates/myco-core/src/item.rs
+  line: 78
+  module: myco-core
+- name: Ledger
+  kind: type
+  file: crates/myco-core/src/ledger.rs
+  line: 12
+  module: myco-core
+- name: NewItemMeta
+  kind: type
+  file: crates/myco-core/src/item.rs
+  line: 235
+  module: myco-core
+- name: NextCounters
+  kind: type
+  file: crates/myco-core/src/meta.rs
+  line: 40
+  module: myco-core
+- name: ParseActorError
+  kind: type
+  file: crates/myco-core/src/actor.rs
+  line: 42
+  module: myco-core
+- name: ParseGroupAxisError
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 295
+  module: myco-core
+- name: ParseItemIdError
+  kind: type
+  file: crates/myco-core/src/id.rs
+  line: 152
+  module: myco-core
+- name: ParseItemKindError
+  kind: type
+  file: crates/myco-core/src/id.rs
+  line: 87
+  module: myco-core
+- name: ParsePriorityError
+  kind: type
+  file: crates/myco-core/src/priority.rs
+  line: 59
+  module: myco-core
+- name: ParseSortKeyError
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 150
+  module: myco-core
+- name: ParseStatusError
+  kind: type
+  file: crates/myco-core/src/status.rs
+  line: 103
+  module: myco-core
+- name: ParseViewFormatError
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 335
+  module: myco-core
+- name: Priority
+  kind: type
+  file: crates/myco-core/src/priority.rs
+  line: 13
+  module: myco-core
+- name: ProjectMeta
+  kind: type
+  file: crates/myco-core/src/meta.rs
+  line: 104
+  module: myco-core
+api_omitted: 259
+deps:
+- schemars
+- serde
+- thiserror
+- time
+- serde_json
+- toml
+- time
+- serde
+- actor
+- doc
+- handoff
+- id
+- item
+- ledger
+- meta
+- priority
+- status
+- view
+- walk
+notes: ''
+verify:
+- crates/myco-core/Cargo.toml
+- crates/myco-core/src/lib.rs
+- crates/myco-core/src/actor.rs
+- crates/myco-core/src/date.rs
+- crates/myco-core/src/doc.rs
+- crates/myco-core/src/handoff.rs
+- crates/myco-core/src/id.rs
+- crates/myco-core/src/item.rs
+- crates/myco-core/src/ledger.rs
+- crates/myco-core/src/meta.rs
+provenance:
+  files:
+  - crates/myco-core/Cargo.toml
+  - crates/myco-core/src/actor.rs
+  - crates/myco-core/src/date.rs
+  - crates/myco-core/src/doc.rs
+  - crates/myco-core/src/handoff.rs
+  - crates/myco-core/src/id.rs
+  - crates/myco-core/src/item.rs
+  - crates/myco-core/src/ledger.rs
+  - crates/myco-core/src/lib.rs
+  - crates/myco-core/src/meta.rs
+  - crates/myco-core/src/priority.rs
+  - crates/myco-core/src/status.rs
+  - crates/myco-core/src/view.rs
+  - crates/myco-core/src/walk.rs
+  hashes:
+  - f75323e2b82195a4149a5fb91548e75ba386acbf
+  - 604b979a927c5d66c866f7f0b061a5285483be02
+  - 06e989397088667febfffba9ce2aa5e36a6d671b
+  - 36f393005367816f96b7a1000421dcdd8b97e071
+  - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
+  - b48e800b5a407388c4cd7b30bad5d13295e21f66
+  - a886a32d4e43262a036bdb4e0d65e0fa42e57699
+  - b3a42358373c65df10e2bfd9302c6ffe0c85da27
+  - 2b13c952931ff418cda19e233ae6d85622409583
+  - 3596fdfc8abae05aed72f1415ee33a6d601cde49
+  - b6f0e2f2ea7098c82a0bc8424159bb7c0bc8198c
+  - 8151702a3a351e7e0190b10dc05471a8cf7de0b0
+  - f8ce0550ce9adf4bda53899aaa84ce9dcac0182d
+  - 19167458ecf5237d6a3366ba776195a0e5fad160
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2

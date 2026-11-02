@@ -1,4 +1,79 @@
 name: myco-config-toml
 path: crates/myco-config-toml/Cargo.toml
-purpose: Config impl: myco.toml file
-api: []
+purpose: 'Config impl: myco.toml file (explicit path, env, ./, ~/.config)'
+api:
+- name: TomlSource
+  kind: type
+  file: crates/myco-config-toml/src/lib.rs
+  line: 14
+  module: myco-config-toml
+- name: default_search_builds_candidates
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 122
+  module: myco-config-toml
+- name: explicit_missing_file_errors
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 99
+  module: myco-config-toml
+- name: load
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 46
+  module: myco-config-toml
+- name: load_file
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 22
+  module: myco-config-toml
+- name: myco-config-toml
+  kind: module
+  file: crates/myco-config-toml/Cargo.toml
+  line: 1
+  module: myco-config-toml
+- name: parse
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 28
+  module: myco-config-toml
+- name: parses_project_dir
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 108
+  module: myco-config-toml
+- name: tests
+  kind: module
+  file: crates/myco-config-toml/src/lib.rs
+  line: 95
+  module: myco-config-toml
+- name: user_layer
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 34
+  module: myco-config-toml
+- name: views_merge_with_user_winning
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 153
+  module: myco-config-toml
+deps:
+- myco-config
+- myco-core
+- toml
+- temp-env
+- myco-config
+notes: ''
+verify:
+- crates/myco-config-toml/Cargo.toml
+- crates/myco-config-toml/src/lib.rs
+provenance:
+  files:
+  - crates/myco-config-toml/Cargo.toml
+  - crates/myco-config-toml/src/lib.rs
+  hashes:
+  - 1a25ef123f1406c0e6eb8b48a0d2be5084a400e9
+  - b27f419bc7224882731009a68f9ea2ab84a0cdb4
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2

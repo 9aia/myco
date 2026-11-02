@@ -1,4 +1,54 @@
 name: myco-shell
 path: crates/myco-shell/Cargo.toml
-purpose: bash -c shell-out helper
-api: []
+purpose: Run a command in a working directory via bash -c — the generic shell-out helper
+api:
+- name: captures_output
+  kind: function
+  file: crates/myco-shell/src/lib.rs
+  line: 54
+  module: myco-shell
+- name: myco-shell
+  kind: module
+  file: crates/myco-shell/Cargo.toml
+  line: 1
+  module: myco-shell
+- name: output
+  kind: function
+  file: crates/myco-shell/src/lib.rs
+  line: 25
+  module: myco-shell
+- name: run
+  kind: function
+  file: crates/myco-shell/src/lib.rs
+  line: 17
+  module: myco-shell
+- name: runs_in_worktree
+  kind: function
+  file: crates/myco-shell/src/lib.rs
+  line: 44
+  module: myco-shell
+- name: tests
+  kind: module
+  file: crates/myco-shell/src/lib.rs
+  line: 34
+  module: myco-shell
+- name: tmpdir
+  kind: function
+  file: crates/myco-shell/src/lib.rs
+  line: 37
+  module: myco-shell
+deps: []
+notes: ''
+verify:
+- crates/myco-shell/Cargo.toml
+- crates/myco-shell/src/lib.rs
+provenance:
+  files:
+  - crates/myco-shell/Cargo.toml
+  - crates/myco-shell/src/lib.rs
+  hashes:
+  - 29badfbe337fbf8e0367f2fa9a7857042662a868
+  - 1a9f28d5ae0c3fc4ea6587fa0e94a963aee430ea
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2

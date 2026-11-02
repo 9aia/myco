@@ -1,0 +1,233 @@
+name: myco-index-redb
+path: crates/myco-index-redb/Cargo.toml
+purpose: 'Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache)'
+api:
+- name: DB
+  kind: const
+  file: crates/myco-index-redb/src/lib.rs
+  line: 32
+  module: myco-index-redb
+- name: LOCK_RETRY_BUDGET
+  kind: const
+  file: crates/myco-index-redb/src/lib.rs
+  line: 36
+  module: myco-index-redb
+- name: LOCK_RETRY_MAX
+  kind: const
+  file: crates/myco-index-redb/src/lib.rs
+  line: 42
+  module: myco-index-redb
+- name: LOCK_RETRY_MIN
+  kind: const
+  file: crates/myco-index-redb/src/lib.rs
+  line: 39
+  module: myco-index-redb
+- name: REGISTRY
+  kind: const
+  file: crates/myco-index-redb/src/lib.rs
+  line: 25
+  module: myco-index-redb
+- name: REGISTRY_LOCK
+  kind: const
+  file: crates/myco-index-redb/src/lib.rs
+  line: 29
+  module: myco-index-redb
+- name: RedbIndex
+  kind: type
+  file: crates/myco-index-redb/src/lib.rs
+  line: 101
+  module: myco-index-redb
+- name: Registry
+  kind: type
+  file: crates/myco-index-redb/src/lib.rs
+  line: 65
+  module: myco-index-redb
+- name: SNAPSHOTS
+  kind: const
+  file: crates/myco-index-redb/src/lib.rs
+  line: 22
+  module: myco-index-redb
+- name: concurrent_registers_dont_lose_entries
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 447
+  module: myco-index-redb
+- name: contended_open_reports_index_busy
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 432
+  module: myco-index-redb
+- name: contended_open_retries_until_free
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 416
+  module: myco-index-redb
+- name: corrupt_snapshot_reads_as_missing
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 463
+  module: myco-index-redb
+- name: data_dir
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 49
+  module: myco-index-redb
+- name: data_dir_env_override
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 363
+  module: myco-index-redb
+- name: data_dir_falls_back_to_home_then_errors
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 387
+  module: myco-index-redb
+- name: db
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 198
+  module: myco-index-redb
+- name: db_path
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 129
+  module: myco-index-redb
+- name: dir
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 121
+  module: myco-index-redb
+- name: entry
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 305
+  module: myco-index-redb
+- name: idx
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 299
+  module: myco-index-redb
+- name: load_registry
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 133
+  module: myco-index-redb
+- name: lock_registry
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 145
+  module: myco-index-redb
+- name: malformed_registry_is_codec_error
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 379
+  module: myco-index-redb
+- name: myco-index-redb
+  kind: module
+  file: crates/myco-index-redb/Cargo.toml
+  line: 1
+  module: myco-index-redb
+- name: open
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 107
+  module: myco-index-redb
+- name: open_at
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 114
+  module: myco-index-redb
+- name: open_db
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 74
+  module: myco-index-redb
+- name: register
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 228
+  module: myco-index-redb
+- name: register_list_remove_cycle
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 321
+  module: myco-index-redb
+- name: register_updates_name_and_worktree
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 482
+  module: myco-index-redb
+- name: registry_path
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 125
+  module: myco-index-redb
+- name: remove
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 241
+  module: myco-index-redb
+- name: repos
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 257
+  module: myco-index-redb
+- name: save_registry
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 178
+  module: myco-index-redb
+- name: save_snapshot
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 285
+  module: myco-index-redb
+- name: snap
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 309
+  module: myco-index-redb
+- name: snapshot
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 263
+  module: myco-index-redb
+- name: snapshot_roundtrip_and_overwrite
+  kind: function
+  file: crates/myco-index-redb/src/lib.rs
+  line: 346
+  module: myco-index-redb
+- name: tests
+  kind: module
+  file: crates/myco-index-redb/src/lib.rs
+  line: 294
+  module: myco-index-redb
+api_omitted: 2
+deps:
+- camino
+- myco-core
+- myco-index
+- redb
+- serde
+- serde_json
+- toml
+- temp-env
+- tempfile
+- camino
+- myco-index
+- redb
+- myco-core
+notes: ''
+verify:
+- crates/myco-index-redb/Cargo.toml
+- crates/myco-index-redb/src/lib.rs
+provenance:
+  files:
+  - crates/myco-index-redb/Cargo.toml
+  - crates/myco-index-redb/src/lib.rs
+  hashes:
+  - ed7878723f2aeca5305d834b0ab071f7ba611399
+  - d12c546d5327f2f0819f04c2e9c9863b146b4d16
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2

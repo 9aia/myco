@@ -1,4 +1,74 @@
 name: xtask
 path: xtask/Cargo.toml
-purpose: Repo chores: check / test / coverage / install / site
-api: []
+purpose: 'Repo chores: check / test / coverage / install / site'
+api:
+- name: check
+  kind: function
+  file: xtask/src/main.rs
+  line: 57
+  module: xtask
+- name: coverage
+  kind: function
+  file: xtask/src/main.rs
+  line: 86
+  module: xtask
+- name: have
+  kind: function
+  file: xtask/src/main.rs
+  line: 37
+  module: xtask
+- name: have_cargo_sub
+  kind: function
+  file: xtask/src/main.rs
+  line: 47
+  module: xtask
+- name: install
+  kind: function
+  file: xtask/src/main.rs
+  line: 106
+  module: xtask
+- name: main
+  kind: function
+  file: xtask/src/main.rs
+  line: 129
+  module: xtask
+- name: run
+  kind: function
+  file: xtask/src/main.rs
+  line: 13
+  module: xtask
+- name: run_in
+  kind: function
+  file: xtask/src/main.rs
+  line: 24
+  module: xtask
+- name: site
+  kind: function
+  file: xtask/src/main.rs
+  line: 112
+  module: xtask
+- name: test
+  kind: function
+  file: xtask/src/main.rs
+  line: 76
+  module: xtask
+- name: xtask
+  kind: module
+  file: xtask/Cargo.toml
+  line: 1
+  module: xtask
+deps: []
+notes: ''
+verify:
+- xtask/Cargo.toml
+- xtask/src/main.rs
+provenance:
+  files:
+  - xtask/Cargo.toml
+  - xtask/src/main.rs
+  hashes:
+  - 3bb61ce46463344ee41a3f06bc39d58040459339
+  - 773f6d024b2b2368dd3b68fefe9d228b66fa67f6
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2

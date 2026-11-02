@@ -1,0 +1,86 @@
+name: myco-index
+path: crates/myco-index/Cargo.toml
+purpose: 'Index port: the derived, disposable cache powering status/board/report/org views'
+api:
+- name: Error
+  kind: type
+  file: crates/myco-index/src/lib.rs
+  line: 118
+  module: myco-index
+- name: Index
+  kind: trait
+  file: crates/myco-index/src/lib.rs
+  line: 98
+  module: myco-index
+- name: RepoEntry
+  kind: type
+  file: crates/myco-index/src/lib.rs
+  line: 20
+  module: myco-index
+- name: RepoSnapshot
+  kind: type
+  file: crates/myco-index/src/lib.rs
+  line: 68
+  module: myco-index
+- name: entry_and_snapshot_serde
+  kind: function
+  file: crates/myco-index/src/lib.rs
+  line: 139
+  module: myco-index
+- name: error_display
+  kind: function
+  file: crates/myco-index/src/lib.rs
+  line: 168
+  module: myco-index
+- name: live_items
+  kind: function
+  file: crates/myco-index/src/lib.rs
+  line: 89
+  module: myco-index
+- name: myco-index
+  kind: module
+  file: crates/myco-index/Cargo.toml
+  line: 1
+  module: myco-index
+- name: new
+  kind: function
+  file: crates/myco-index/src/lib.rs
+  line: 36
+  module: myco-index
+- name: tests
+  kind: module
+  file: crates/myco-index/src/lib.rs
+  line: 134
+  module: myco-index
+- name: with_worktree
+  kind: function
+  file: crates/myco-index/src/lib.rs
+  line: 45
+  module: myco-index
+- name: worktree_path
+  kind: function
+  file: crates/myco-index/src/lib.rs
+  line: 52
+  module: myco-index
+deps:
+- camino
+- myco-core
+- serde
+- thiserror
+- serde_json
+- camino
+- myco-core
+notes: ''
+verify:
+- crates/myco-index/Cargo.toml
+- crates/myco-index/src/lib.rs
+provenance:
+  files:
+  - crates/myco-index/Cargo.toml
+  - crates/myco-index/src/lib.rs
+  hashes:
+  - 603766bf82de1f798dd22041c9985a6184720ea1
+  - 8207ee2403f581ce9b534bad8d43d8deb9a55cce
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2

@@ -1,4 +1,381 @@
 name: myco
-path: crates/myco-cli/Cargo.toml
-purpose: myco — agent-first PM CLI
-api: []
+path: Cargo.toml
+purpose: '*Project management, grown not built.*'
+api:
+- name: AdoptClaims
+  kind: type
+  file: crates/myco-cli/src/migrate.rs
+  line: 94
+  module: myco
+- name: Aging
+  kind: type
+  file: crates/myco-cli/src/report.rs
+  line: 21
+  module: myco
+- name: Analysis
+  kind: type
+  file: crates/myco-cli/src/check.rs
+  line: 95
+  module: myco
+- name: BEGIN
+  kind: const
+  file: crates/myco-cli/src/agentmd.rs
+  line: 12
+  module: myco
+- name: BacklogAddParams
+  kind: type
+  file: crates/myco-cli/src/serve.rs
+  line: 283
+  module: myco
+- name: BoardParams
+  kind: type
+  file: crates/myco-cli/src/serve.rs
+  line: 211
+  module: myco
+- name: BodyFlags
+  kind: type
+  file: crates/myco-cli/src/items.rs
+  line: 93
+  module: myco
+- name: COLUMNS
+  kind: const
+  file: crates/myco-cli/src/board.rs
+  line: 240
+  module: myco
+- name: Change
+  kind: type
+  file: crates/myco-cli/src/agentmd.rs
+  line: 62
+  module: myco
+- name: Claim
+  kind: type
+  file: crates/myco-cli/src/check.rs
+  line: 151
+  module: myco
+- name: Cli
+  kind: type
+  file: crates/myco-cli/src/main.rs
+  line: 54
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/absorb.rs
+  line: 41
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/adr.rs
+  line: 15
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/backlog.rs
+  line: 13
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/indexcmd.rs
+  line: 22
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/issue.rs
+  line: 15
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/itemcmd.rs
+  line: 15
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/main.rs
+  line: 77
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/org.rs
+  line: 19
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/plan.rs
+  line: 13
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/proposal.rs
+  line: 15
+  module: myco
+- name: Cmd
+  kind: type
+  file: crates/myco-cli/src/todo.rs
+  line: 13
+  module: myco
+- name: CommentSpec
+  kind: type
+  file: crates/myco-cli/src/absorb.rs
+  line: 388
+  module: myco
+- name: Counts
+  kind: type
+  file: crates/myco-cli/src/digest.rs
+  line: 91
+  module: myco
+- name: DEFAULT_ACTOR
+  kind: const
+  file: crates/myco-cli/src/continuity.rs
+  line: 26
+  module: myco
+- name: DEFAULT_LAST
+  kind: const
+  file: crates/myco-cli/src/continuity.rs
+  line: 29
+  module: myco
+- name: DEFAULT_MAX_ROWS
+  kind: const
+  file: crates/myco-cli/src/board.rs
+  line: 29
+  module: myco
+- name: DEFAULT_MSG
+  kind: const
+  file: crates/myco-cli/src/commit.rs
+  line: 13
+  module: myco
+- name: END
+  kind: const
+  file: crates/myco-cli/src/agentmd.rs
+  line: 14
+  module: myco
+- name: Emit
+  kind: type
+  file: crates/myco-cli/src/board.rs
+  line: 492
+  module: myco
+- name: FILE_KINDS
+  kind: const
+  file: crates/myco-cli/src/check.rs
+  line: 316
+  module: myco
+- name: FILE_KINDS
+  kind: const
+  file: crates/myco-cli/src/digest.rs
+  line: 16
+  module: myco
+- name: FILE_KINDS
+  kind: const
+  file: crates/myco-cli/src/migrate.rs
+  line: 32
+  module: myco
+- name: Fail
+  kind: type
+  file: crates/myco-cli/src/serve.rs
+  line: 434
+  module: myco
+- name: FilterPatch
+  kind: type
+  file: crates/myco-cli/src/serve.rs
+  line: 353
+  module: myco
+- name: Finding
+  kind: type
+  file: crates/myco-cli/src/absorb.rs
+  line: 336
+  module: myco
+- name: Finding
+  kind: type
+  file: crates/myco-cli/src/check.rs
+  line: 33
+  module: myco
+- name: Fit
+  kind: type
+  file: crates/myco-cli/src/board.rs
+  line: 41
+  module: myco
+- name: Fix
+  kind: type
+  file: crates/myco-cli/src/check.rs
+  line: 84
+  module: myco
+- name: Group
+  kind: type
+  file: crates/myco-cli/src/group.rs
+  line: 16
+  module: myco
+api_omitted: 650
+deps:
+- camino
+- clap
+- clap-markdown
+- csv
+- miette
+- myco-config
+- myco-config-toml
+- myco-core
+- myco-git
+- myco-index
+- myco-index-redb
+- myco-ops
+- myco-shell
+- myco-store
+- myco-store-md
+- myco-tui
+- schemars
+- serde
+- serde_json
+- sigpipe
+- tabled
+- terminal_size
+- time
+- unicode-width
+- insta
+- temp-env
+- tempfile
+- serde_json
+- myco-core
+- clap
+- myco-store
+- unicode_width
+- serde
+- myco-index
+- myco-store-md
+- camino
+- myco-index-redb
+notes: ''
+verify:
+- .agents/skills/skill-creator/scripts/__init__.py
+- .claude/skills/skill-creator/scripts/__init__.py
+- Cargo.toml
+- crates/myco-cli/Cargo.toml
+- crates/myco-cli/src/main.rs
+- .agents/skills/skill-creator/eval-viewer/generate_review.py
+- .agents/skills/skill-creator/scripts/aggregate_benchmark.py
+- .agents/skills/skill-creator/scripts/generate_report.py
+- .agents/skills/skill-creator/scripts/improve_description.py
+- .agents/skills/skill-creator/scripts/package_skill.py
+provenance:
+  files:
+  - .agents/skills/skill-creator/eval-viewer/generate_review.py
+  - .agents/skills/skill-creator/scripts/__init__.py
+  - .agents/skills/skill-creator/scripts/aggregate_benchmark.py
+  - .agents/skills/skill-creator/scripts/generate_report.py
+  - .agents/skills/skill-creator/scripts/improve_description.py
+  - .agents/skills/skill-creator/scripts/package_skill.py
+  - .agents/skills/skill-creator/scripts/quick_validate.py
+  - .agents/skills/skill-creator/scripts/run_eval.py
+  - .agents/skills/skill-creator/scripts/run_loop.py
+  - .agents/skills/skill-creator/scripts/utils.py
+  - .claude/skills/skill-creator/eval-viewer/generate_review.py
+  - .claude/skills/skill-creator/scripts/__init__.py
+  - .claude/skills/skill-creator/scripts/aggregate_benchmark.py
+  - .claude/skills/skill-creator/scripts/generate_report.py
+  - .claude/skills/skill-creator/scripts/improve_description.py
+  - .claude/skills/skill-creator/scripts/package_skill.py
+  - .claude/skills/skill-creator/scripts/quick_validate.py
+  - .claude/skills/skill-creator/scripts/run_eval.py
+  - .claude/skills/skill-creator/scripts/run_loop.py
+  - .claude/skills/skill-creator/scripts/utils.py
+  - Cargo.toml
+  - crates/myco-cli/Cargo.toml
+  - crates/myco-cli/src/absorb.rs
+  - crates/myco-cli/src/adr.rs
+  - crates/myco-cli/src/agentmd.rs
+  - crates/myco-cli/src/backlog.rs
+  - crates/myco-cli/src/batch.rs
+  - crates/myco-cli/src/board.rs
+  - crates/myco-cli/src/check.rs
+  - crates/myco-cli/src/commit.rs
+  - crates/myco-cli/src/continuity.rs
+  - crates/myco-cli/src/digest.rs
+  - crates/myco-cli/src/discover.rs
+  - crates/myco-cli/src/group.rs
+  - crates/myco-cli/src/indexcmd.rs
+  - crates/myco-cli/src/init.rs
+  - crates/myco-cli/src/issue.rs
+  - crates/myco-cli/src/itemcmd.rs
+  - crates/myco-cli/src/items.rs
+  - crates/myco-cli/src/main.rs
+  - crates/myco-cli/src/migrate.rs
+  - crates/myco-cli/src/ops.rs
+  - crates/myco-cli/src/org.rs
+  - crates/myco-cli/src/plan.rs
+  - crates/myco-cli/src/proposal.rs
+  - crates/myco-cli/src/report.rs
+  - crates/myco-cli/src/schema.rs
+  - crates/myco-cli/src/serve.rs
+  - crates/myco-cli/src/status.rs
+  - crates/myco-cli/src/templates.rs
+  - crates/myco-cli/src/todo.rs
+  - crates/myco-cli/src/view.rs
+  - crates/myco-cli/tests/continuity.rs
+  - crates/myco-cli/tests/edges.rs
+  - crates/myco-cli/tests/id_repair.rs
+  - crates/myco-cli/tests/items.rs
+  - crates/myco-cli/tests/lifecycle.rs
+  - crates/myco-cli/tests/parity.rs
+  - crates/myco-cli/tests/serve.rs
+  - crates/myco-cli/tests/views.rs
+  hashes:
+  - 7fa5978631fed1ed545591dbb2b0eb21ce3f3d08
+  - e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+  - 3e66e8c105be9bab9f0e9c61f0d1482619401580
+  - 959e30a0014ec165c41a2bb7420b7dfe1416bbac
+  - 06bcec76122446986e3610c20a39c466de36f495
+  - f48eac444656ddc41204aac1760a217951ce609e
+  - ed8e1dddce77b16af13c6f36b3fe86c4ac7c590c
+  - e58c70bea39d5b252a1e819f242bbdcdf20e8b87
+  - 30a263d674ef19de11c756d6f7537f91a421909e
+  - 51b6a07dd57174197a937034b7eecebd5768ff8a
+  - 7fa5978631fed1ed545591dbb2b0eb21ce3f3d08
+  - e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+  - 3e66e8c105be9bab9f0e9c61f0d1482619401580
+  - 959e30a0014ec165c41a2bb7420b7dfe1416bbac
+  - 06bcec76122446986e3610c20a39c466de36f495
+  - f48eac444656ddc41204aac1760a217951ce609e
+  - ed8e1dddce77b16af13c6f36b3fe86c4ac7c590c
+  - e58c70bea39d5b252a1e819f242bbdcdf20e8b87
+  - 30a263d674ef19de11c756d6f7537f91a421909e
+  - 51b6a07dd57174197a937034b7eecebd5768ff8a
+  - 6542c4476e1b679648721be037960de963c3aad4
+  - 7f306d69a2e5652e836dd07e0af1b560a2aea67d
+  - 1cf2991abe3d05c93bee1275ceea961914cdfbff
+  - 786355a69fe2d5b49321bacf904d52c8c9941e3b
+  - d0c9c43178d521abef849094a7455d894cd855e8
+  - 7587b25eda6b9457785a1f0979621d887ac435ea
+  - a21803c7dd37408ef0c2d1a7c5e006b4c846c4ad
+  - 7192b62998659cefcb7700c742cf931865eb45c1
+  - 9e9213f43f7af98988bb006003ac87bd11a9b60c
+  - d8746a823bb2c2a9c759559316cfe60736ba1ad3
+  - f754318f428bc8a5341d6a4f6f49d5e17a25b6a3
+  - 138b2133d116368a6726a304949c7831846da50e
+  - d18d2d455145f6c4ebb0b6453105d7b3cfa86f95
+  - db7ceefdf1c659f2efc831c54c65b2ebe314d4c2
+  - 2d067f20c57fa9a0178c51842c9a8a09e3e87b14
+  - 3cb90edaab812c8862b4dad05e37df9bc73148dc
+  - 610d2e7928fd9b3ebc599e582bac7c7261f29833
+  - 06943c05cbec2195f663511fa12c8f2b213491ac
+  - 4f3b89ec5fb2bf0b95925ebe5b16b43baac9ac21
+  - 275b294214a984aeea0f379d6fb4029963b47d1a
+  - 911b069154eec9c7148bf0fbdbea74abe311bb00
+  - 59e2e450597aecd10daf78d0cb806d863c81f1ca
+  - 0caff896bc64ee6e49891bf51802a63e4d095f57
+  - 042f8a9fded4a8d41d5f31b7c4d2bea3af7d2138
+  - b38dc85a2bbbd64a47b6f19ad54e330055dd101d
+  - f64dacf6fc80208973f8d8048f985cf159f9cad1
+  - e446934219ad64f7c777b671e4ce01b24dffc3e0
+  - 1a5288116250786b5fb5c248e7233e6096d2d53d
+  - ef06a72ff98145ad73aa8144393cd261a02d32b7
+  - 7be39d581a523abe21ae23e03481689006e804f0
+  - 78fcb863917e1a609db91f84e23ca5c89ab1ee32
+  - 74c1bcb126a0d6d1a2bd33f37cf4923592a91ed6
+  - 13d3bb618eddc733e6d5dd68cb116b8093c8723e
+  - eaedfeb70a0f0d04e5a286ce10f0f6c5f380d348
+  - fec24fa68dead615385d1c965c464aa90b52614a
+  - 7ea9f74e15d4aceafacc379b447e7965bc3e8342
+  - e257b61108820fe23db09e2874628a7cd69a757d
+  - bdc1d49e57a6f951e1fee23fca2e1ea46664f9e8
+  - a43956a72d4e2eec983cc53446e62a5dea4db50b
+  - 7dcbbafb73d2abb7591e21934110184aa9aef5ee
+  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
+  generated_at: '1793653566'
+  generator: kuda-template/0.1.2
