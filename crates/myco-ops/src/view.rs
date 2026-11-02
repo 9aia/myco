@@ -5,9 +5,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use myco_config::ConfigSource;
-use myco_config_toml::TomlSource;
 use myco_core::{GroupAxis, Status, ViewFilter, ViewFormat, ViewSpec};
+
+use crate::config::ConfigLoader;
 
 /// Where a named view came from — config shadows builtin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,21 +82,21 @@ pub fn builtins() -> Vec<NamedView> {
 }
 
 /// `[views]` for a repo — the repo layer is `<root>/myco.toml` when
-/// it exists (else the default `./myco.toml` probe), merged with
-/// the user layer by `TomlSource`. "No config anywhere" is empty,
-/// not an error — builtins still resolve. `strict`: a config path
-/// that names a missing file errors (an explicit `$MYCO_CONFIG` is
-/// "the user pointed at it" — `myco view` reports the miss);
-/// lenient callers degrade to the presets — a read verb shouldn't
-/// brick on a config-file absence.
-fn config_views(root: &Path, strict: bool) -> Result<BTreeMap<String, ViewSpec>, String> {
+/// it exists (else the impl's default probe), merged with the user
+/// layer by the injected `cfg`. "No config anywhere" is empty, not
+/// an error — builtins still resolve (the impl signals a
+/// search-miss by error text). `strict`: a config path that names
+/// a missing file errors (an explicit `$MYCO_CONFIG` is "the user
+/// pointed at it" — `myco check` reports the miss); lenient
+/// callers degrade to the presets — a read shouldn't brick on a
+/// config-file absence.
+fn config_views(
+    root: &Path,
+    strict: bool,
+    cfg: ConfigLoader,
+) -> Result<BTreeMap<String, ViewSpec>, String> {
     let repo_cfg = root.join("myco.toml");
-    let src = TomlSource {
-        path: repo_cfg
-            .exists()
-            .then(|| repo_cfg.to_string_lossy().into_owned()),
-    };
-    match src.load() {
+    match cfg.load(repo_cfg.exists().then_some(repo_cfg.as_path())) {
         Ok(c) => Ok(c.views),
         // the documented search-miss — absence isn't a failure
         Err(e) if e.contains("no myco.toml found") => Ok(BTreeMap::new()),
@@ -113,10 +113,14 @@ fn shadow_warning(name: &str) -> String {
 /// Builtin presets merged with the repo's config views — config
 /// wins a name collision and the returned warnings name it.
 /// Specs are *not* validated here — `myco check` lints them all.
-fn merged_views(root: &Path, strict: bool) -> Result<(Vec<NamedView>, Vec<String>), String> {
+fn merged_views(
+    root: &Path,
+    strict: bool,
+    cfg: ConfigLoader,
+) -> Result<(Vec<NamedView>, Vec<String>), String> {
     let mut warnings = Vec::new();
     let mut out = builtins();
-    for (name, spec) in config_views(root, strict)? {
+    for (name, spec) in config_views(root, strict, cfg)? {
         if let Some(v) = out.iter_mut().find(|v| v.name == name) {
             warnings.push(shadow_warning(&name));
             v.spec = spec;
@@ -132,18 +136,23 @@ fn merged_views(root: &Path, strict: bool) -> Result<(Vec<NamedView>, Vec<String
     Ok((out, warnings))
 }
 
-/// [`merged_views`] with strict config handling — `myco view`,
-/// `myco check`, `myco serve`.
-pub fn named_views(root: &Path) -> Result<(Vec<NamedView>, Vec<String>), String> {
-    merged_views(root, true)
+/// [`merged_views`] with strict config handling — `myco check`,
+/// `myco serve`.
+pub fn named_views(
+    root: &Path,
+    cfg: ConfigLoader,
+) -> Result<(Vec<NamedView>, Vec<String>), String> {
+    merged_views(root, true, cfg)
 }
 
-/// [`merged_views`] tolerant of a *missing* config — for the read
-/// verbs that now resolve named views (`board`, `epic`, …):
-/// `$MYCO_CONFIG` naming a missing file degrades to the presets;
-/// an unparseable or invalid config still errors.
-pub fn named_views_lenient(root: &Path) -> Result<(Vec<NamedView>, Vec<String>), String> {
-    merged_views(root, false)
+/// [`merged_views`] tolerant of a *missing* config — the `myco
+/// view` read: `$MYCO_CONFIG` naming a missing file degrades to
+/// the presets; an unparseable or invalid config still errors.
+pub fn named_views_lenient(
+    root: &Path,
+    cfg: ConfigLoader,
+) -> Result<(Vec<NamedView>, Vec<String>), String> {
+    merged_views(root, false, cfg)
 }
 
 /// Lint the repo-layer config only — deterministic, so `myco
@@ -151,12 +160,15 @@ pub fn named_views_lenient(root: &Path) -> Result<(Vec<NamedView>, Vec<String>),
 /// `Ok` = per-view validation errors (`(name, error)`); `Err` =
 /// the file is unreadable/unparseable. Missing file is `Ok(vec![])`.
 /// Personal (user-layer) views are intentionally not linted here.
-pub fn validate_repo_views(root: &Path) -> Result<Vec<(String, String)>, String> {
+pub fn validate_repo_views(
+    root: &Path,
+    loader: ConfigLoader,
+) -> Result<Vec<(String, String)>, String> {
     let path = root.join("myco.toml");
     if !path.exists() {
         return Ok(vec![]);
     }
-    let cfg = myco_config_toml::load_file(&path)?;
+    let cfg = loader.load_file(&path)?;
     Ok(cfg
         .views
         .iter()
@@ -167,20 +179,33 @@ pub fn validate_repo_views(root: &Path) -> Result<Vec<(String, String)>, String>
 /// Resolve one view by name — config shadows builtin (warns).
 /// Unknown names error listing the defined set. The spec is
 /// validated before return. Warnings are scoped to the resolved
-/// view — a verb loading `board` shouldn't hear about a shadowed
+/// view — a `view board` lookup shouldn't hear about a shadowed
 /// `[views.epic]`.
-pub fn resolve(root: &Path, name: &str) -> Result<(NamedView, Vec<String>), String> {
-    resolve_in(root, name, true)
+pub fn resolve(
+    root: &Path,
+    name: &str,
+    cfg: ConfigLoader,
+) -> Result<(NamedView, Vec<String>), String> {
+    resolve_in(root, name, true, cfg)
 }
 
-/// [`resolve`] tolerant of a *missing* config — the read-verb
-/// entry point (`board`, `epic <name>`, `milestone <name>`).
-pub fn resolve_lenient(root: &Path, name: &str) -> Result<(NamedView, Vec<String>), String> {
-    resolve_in(root, name, false)
+/// [`resolve`] tolerant of a *missing* config — the `myco view`
+/// read.
+pub fn resolve_lenient(
+    root: &Path,
+    name: &str,
+    cfg: ConfigLoader,
+) -> Result<(NamedView, Vec<String>), String> {
+    resolve_in(root, name, false, cfg)
 }
 
-fn resolve_in(root: &Path, name: &str, strict: bool) -> Result<(NamedView, Vec<String>), String> {
-    let (views, _) = merged_views(root, strict)?;
+fn resolve_in(
+    root: &Path,
+    name: &str,
+    strict: bool,
+    cfg: ConfigLoader,
+) -> Result<(NamedView, Vec<String>), String> {
+    let (views, _) = merged_views(root, strict, cfg)?;
     let names: Vec<String> = views.iter().map(|v| v.name.clone()).collect();
     let view = views
         .into_iter()
@@ -199,6 +224,7 @@ fn resolve_in(root: &Path, name: &str, strict: bool) -> Result<(NamedView, Vec<S
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::config::test_loader;
     use myco_core::ItemKind;
 
     #[test]
@@ -223,7 +249,7 @@ mod tests {
         )
         .unwrap();
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
-            let (views, warnings) = named_views(dir.path()).unwrap();
+            let (views, warnings) = named_views(dir.path(), test_loader()).unwrap();
             assert_eq!(warnings.len(), 1);
             assert!(warnings[0].contains("shadows"));
             // config's board replaces the builtin
@@ -233,7 +259,7 @@ mod tests {
             // repo + builtin names coexist
             assert!(views.iter().any(|v| v.name == "mine"));
             // unknown name errors listing defined views
-            let err = resolve(dir.path(), "nope").unwrap_err();
+            let err = resolve(dir.path(), "nope", test_loader()).unwrap_err();
             assert!(err.contains("mine") && err.contains("board"), "{err}");
         });
     }
@@ -251,7 +277,7 @@ mod tests {
                 ("HOME", Some(dir.path().to_string_lossy().as_ref())),
             ],
             || {
-                let (v, _) = resolve(dir.path(), "board").unwrap();
+                let (v, _) = resolve(dir.path(), "board", test_loader()).unwrap();
                 assert_eq!(v.origin, Origin::Builtin);
             },
         );

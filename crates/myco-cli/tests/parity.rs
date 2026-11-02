@@ -1,7 +1,8 @@
-//! End-to-end Jira-parity tests — `epic`, `milestone`, `absorb`
-//! (comments/jira/github), `board --epic/--milestone`, and the
-//! `--epic`/`--milestone` flags on `add`/`new`/`item set`, driving
-//! the real binary against tempdir git repos.
+//! End-to-end Jira-parity tests — the `epic`/`milestone` grouping
+//! views (`view epic`, `view board --epic …`), `absorb`
+//! (comments/jira/github), and the `--epic`/`--milestone` flags
+//! on `add`/`new`/`item set`, driving the real binary against
+//! tempdir git repos.
 //!
 //! `MYCO_CONFIG` is pinned at a nonexistent path so a stray user
 //! config can't leak `project_dir` into discovery.
@@ -152,63 +153,70 @@ fn epic_and_milestone_views() {
         &["item", "set", "T-002", "--status", "in-progress"],
     );
 
-    // bare `myco epic` — groups with live-item counts
-    let out = run(d.path(), &["epic", "--json"]);
+    // `myco view epic` — the epic-grouped board: named buckets
+    // alphabetical, `ungrouped` trailing
+    let out = run(d.path(), &["view", "epic", "--json"]);
     assert_eq!(code(&out), 0);
     let v = json(&out);
-    assert_eq!(v["group"], "epic");
+    assert_eq!(v["view"], "epic");
     let groups = v["groups"].as_array().unwrap();
-    assert_eq!(groups.len(), 2, "{v}");
-    assert_eq!(groups[0]["name"], "platform");
-    assert_eq!(groups[0]["count"], 1);
-    assert_eq!(groups[1]["name"], "v2");
-    assert_eq!(groups[1]["count"], 3);
-    // human form lists name + count
-    let out = run(d.path(), &["epic"]);
+    let labels: Vec<&str> = groups
+        .iter()
+        .map(|g| g["label"].as_str().unwrap())
+        .collect();
+    assert_eq!(labels, ["platform", "v2", "ungrouped"], "{v}");
+    assert_eq!(groups[0]["items"].as_array().unwrap().len(), 1);
+    assert_eq!(groups[1]["items"].as_array().unwrap().len(), 3);
+    assert_eq!(groups[2]["items"].as_array().unwrap().len(), 1); // I-001, no epic
+                                                                 // human form — a column per epic
+    let out = run(d.path(), &["view", "epic"]);
     let s = stdout(&out);
-    assert!(s.contains("v2  3"), "{s}");
-    assert!(s.contains("platform  1"), "{s}");
+    assert!(s.contains("v2"), "{s}");
+    assert!(s.contains("platform"), "{s}");
 
-    // `myco epic v2` — board-style columns, scoped to the epic
-    let v = json(&run(d.path(), &["epic", "v2", "--json"]));
+    // `myco view board --epic v2` — the lanes scoped to the epic
+    // (the old `epic v2`)
+    let v = json(&run(d.path(), &["view", "board", "--epic", "v2", "--json"]));
     assert_eq!(v["open"].as_array().unwrap().len(), 1);
     assert_eq!(v["in-progress"].as_array().unwrap()[0]["id"], "T-002");
     assert_eq!(v["backlog"].as_array().unwrap().len(), 1);
     // human board render shows the member
-    let out = run(d.path(), &["epic", "v2"]);
+    let out = run(d.path(), &["view", "board", "--epic", "v2"]);
     assert!(stdout(&out).contains("T-001 one"), "{}", stdout(&out));
-    // empty group → friendly message, not an error
-    let out = run(d.path(), &["epic", "nope"]);
+    // an epic nothing matches → friendly message, not an error
+    let out = run(d.path(), &["view", "board", "--epic", "nope"]);
     assert_eq!(code(&out), 0);
-    assert!(stdout(&out).contains("no items"));
-    // invalid name → usage error
-    let out = run(d.path(), &["epic", "bad name"]);
-    assert_eq!(code(&out), 2);
+    assert!(stdout(&out).contains("empty view"));
 
-    // `myco milestone` mirrors it
-    let v = json(&run(d.path(), &["milestone", "--json"]));
-    assert_eq!(v["group"], "milestone");
+    // `myco view milestone` mirrors it
+    let v = json(&run(d.path(), &["view", "milestone", "--json"]));
     let groups = v["groups"].as_array().unwrap();
-    assert_eq!(groups.len(), 1);
-    assert_eq!(groups[0]["name"], "1.0");
-    assert_eq!(groups[0]["count"], 2);
-    let v = json(&run(d.path(), &["milestone", "1.0", "--json"]));
+    let m = groups.iter().find(|g| g["label"] == "1.0").unwrap();
+    assert_eq!(m["items"].as_array().unwrap().len(), 2);
+    let v = json(&run(
+        d.path(),
+        &["view", "board", "--milestone", "1.0", "--json"],
+    ));
     assert_eq!(v["open"].as_array().unwrap().len(), 1); // I-001; T-002 moved
     assert_eq!(v["in-progress"].as_array().unwrap()[0]["id"], "T-002");
 
-    // board --epic / --milestone filters (AND when both)
-    let v = json(&run(d.path(), &["board", "--epic", "v2", "--json"]));
-    let open = v["open"].as_array().unwrap();
-    assert_eq!(open.len(), 1);
-    assert_eq!(open[0]["id"], "T-001");
+    // --epic + --milestone filters (AND when both)
     let v = json(&run(
         d.path(),
-        &["board", "--epic", "v2", "--milestone", "1.0", "--json"],
+        &[
+            "view",
+            "board",
+            "--epic",
+            "v2",
+            "--milestone",
+            "1.0",
+            "--json",
+        ],
     ));
     assert!(v["open"].as_array().unwrap().is_empty());
     assert_eq!(v["in-progress"].as_array().unwrap()[0]["id"], "T-002");
     // md table output
-    let out = run(d.path(), &["epic", "v2", "--md"]);
+    let out = run(d.path(), &["view", "epic", "--md"]);
     assert!(stdout(&out).starts_with('|'));
 }
 
@@ -520,7 +528,11 @@ fn manifest_lists_parity_verbs() {
     let out = run(std::path::Path::new("/"), &["manifest", "--json"]);
     let v = json(&out);
     let implemented = v["implemented"].as_array().unwrap();
-    for verb in ["epic", "milestone", "absorb"] {
+    for verb in ["view", "absorb"] {
         assert!(implemented.contains(&Value::String(verb.into())), "{verb}");
+    }
+    // the legacy verb aliases are gone — `view <name>` is the surface
+    for gone in ["board", "epic", "milestone"] {
+        assert!(!implemented.contains(&Value::String(gone.into())), "{gone}");
     }
 }

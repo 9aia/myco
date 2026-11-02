@@ -1,18 +1,15 @@
-//! `myco board [--md]` — kanban of the current repo's ledger:
-//! Backlog | Open | Claimed | In Progress | Blocked columns (done
-//! items leave the ledger, so there's no Done column). Human
-//! output is a `tabled` grid; `--md` is the same board as a
-//! markdown table for embedding in docs; `--json` is the columns
-//! map.
+//! The board chrome — the columnar card renderer shared by
+//! `myco view` (board format) and `myco org board`.
 //!
-//! The verb resolves the `board` named view — a repo's
-//! `[views.board]` config shadows the built-in preset — and
-//! evaluates it through `myco_core::eval`. The classic
-//! status-columns spec keeps the legacy chrome described above; a
-//! shadowed spec renders through the generic view renderers.
+//! A status-grouped spec earns the lane chrome: capitalized lanes
+//! Backlog | Open | Claimed | In Progress | Blocked (deferred
+//! leads as `backlog`; done items leave the ledger, so there's
+//! no Done column), backlog-first order, and the five-lane
+//! columns-map `--json`. Any other grouping renders generic
+//! columns headed by the group labels. `--md` is the same board
+//! as a markdown table for embedding in docs.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 
 use myco_core::{
     eval, GroupAxis, Item, ItemId, Status, ViewFilter, ViewFormat, ViewGroup, ViewSpec,
@@ -22,7 +19,7 @@ use tabled::builder::Builder;
 use tabled::settings::Style;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use crate::{digest, items, ops, view};
+use crate::digest;
 
 /// Default cap on board rows for human output (`--all` lifts it) —
 /// a screenful, so a huge ledger can't bury the terminal.
@@ -284,10 +281,10 @@ fn lane_index(label: Option<&str>) -> Option<usize> {
         .position(|(_, s)| s.map(Status::token) == label)
 }
 
-/// Is `spec` the classic status-columns board? Then the legacy
+/// Is `spec` the classic status-columns board? Then the lane
 /// chrome applies (capitalized lanes, backlog-first, no Done
-/// column); a config-shadowed spec renders through the generic
-/// view renderers instead.
+/// column); any other spec renders through the generic view
+/// renderers instead.
 pub(crate) fn is_status_board(spec: &ViewSpec) -> bool {
     spec.format == ViewFormat::Board && spec.effective_group_by() == Some(GroupAxis::Status)
 }
@@ -296,7 +293,7 @@ pub(crate) fn is_status_board(spec: &ViewSpec) -> bool {
 /// the five lanes in legacy order headed by their chrome titles,
 /// then any extra non-empty bucket the spec admitted (a config
 /// `board` view matching `done` earns a `done` column).
-fn status_cards(
+pub(crate) fn status_cards(
     groups: &[ViewGroup],
     prefix: Option<&str>,
     interrupted: &BTreeSet<ItemId>,
@@ -435,8 +432,8 @@ fn items_json(
 /// snapshots carry no handoffs).
 ///
 /// Bucketing goes through `eval` on the lane spec — identical to
-/// the legacy shape, so `myco serve` and org boards keep the
-/// five fixed keys (non-lane groups, e.g. `done`, stay dropped).
+/// the legacy shape, so org boards keep the five fixed keys
+/// (non-lane groups, e.g. `done`, stay dropped).
 pub fn columns_json<'a>(
     items: impl Iterator<Item = &'a Item>,
     prefix: Option<&str>,
@@ -486,98 +483,6 @@ pub(crate) fn groups_json(
     json!(map)
 }
 
-/// An evaluated view ready to emit — the shared tail of the
-/// view-backed board verbs (`board`, `epic <name>`,
-/// `milestone <name>`).
-pub(crate) struct Emit<'a> {
-    /// Repo name for the nothing-matched message.
-    pub repo: &'a str,
-    /// View name for the generic `--json` payload.
-    pub view: &'a str,
-    /// The merged spec (named view + flag overrides).
-    pub spec: &'a ViewSpec,
-    /// The `eval` result.
-    pub groups: &'a [ViewGroup<'a>],
-    /// Interrupted-item marker set.
-    pub interrupted: &'a BTreeSet<ItemId>,
-    /// `--md` — markdown table.
-    pub md: bool,
-    /// `--all` — no row cap.
-    pub all: bool,
-    /// `--json` — machine output.
-    pub json_out: bool,
-    /// The verb's nothing-matched line.
-    pub empty_msg: &'a str,
-}
-
-/// Emit one evaluated view. The classic status-board spec keeps
-/// the legacy chrome + columns-map `--json`; a config-shadowed
-/// spec renders through the generic view renderers and the
-/// `myco view` payload shape.
-pub(crate) fn emit(job: &Emit) -> Result<i32, String> {
-    if job.json_out {
-        if is_status_board(job.spec) {
-            ops::print_json(&groups_json(job.groups, job.interrupted));
-        } else {
-            ops::print_json(&view::view_json(
-                Some(job.view),
-                job.spec,
-                job.groups,
-                job.interrupted,
-            ));
-        }
-        return Ok(0);
-    }
-    if job.groups.iter().all(|g| g.items.is_empty()) {
-        println!("{}: {}", job.repo, job.empty_msg);
-        return Ok(0);
-    }
-    let rendered = if is_status_board(job.spec) {
-        let (headers, cards) = status_cards(job.groups, None, job.interrupted);
-        render_columns(&headers, &cards, job.md, Fit::terminal(job.all))
-    } else {
-        view::render_groups(job.spec, job.groups, job.interrupted, job.md, job.all)
-    };
-    ops::print_paged(&rendered);
-    Ok(0)
-}
-
-/// The `board` verb — resolves the `board` named view (a repo's
-/// `[views.board]` config shadows the preset) and folds
-/// `--epic`/`--milestone` into its filter (both set = AND);
-/// `--all` lifts the row cap.
-pub fn run(
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    md: bool,
-    all: bool,
-    epic: Option<String>,
-    milestone: Option<String>,
-    json_out: bool,
-) -> Result<i32, String> {
-    let (proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
-    let spec = view::scoped_spec(&proj.root, "board", epic, milestone)?;
-    let scan = digest::scan(&store)?;
-    // the flattened live set — nested children board as their own
-    // cards, exactly like the legacy bucketing did
-    let groups = eval(scan.live(), &spec);
-    let interrupted = crate::continuity::interrupted_set(
-        &store,
-        groups.iter().flat_map(|g| g.items.iter().copied()),
-    )?;
-    emit(&Emit {
-        repo: &scan.name,
-        view: "board",
-        spec: &spec,
-        groups: &groups,
-        interrupted: &interrupted,
-        md,
-        all,
-        json_out,
-        empty_msg: "empty board — `myco todo add` something",
-    })
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -596,8 +501,8 @@ mod tests {
         ]
     }
 
-    /// Render through the same path `emit` takes for the classic
-    /// spec — eval + lane chrome.
+    /// Render through the same path `view`'s board format takes
+    /// for a status-grouped spec — eval + lane chrome.
     fn render_lanes(items: &[Item], prefix: Option<&str>, md: bool, fit: Fit) -> String {
         let groups = eval(items.iter(), &lane_spec());
         let (headers, cards) = status_cards(&groups, prefix, &BTreeSet::new());

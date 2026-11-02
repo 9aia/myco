@@ -1415,7 +1415,7 @@ pub fn check_json(proj: &Project) -> Result<serde_json::Value, String> {
 /// user and CI. Shadowing a builtin is legal (warned at use), not
 /// a finding.
 fn view_findings(root: &std::path::Path) -> Vec<Finding> {
-    match myco_ops::view::validate_repo_views(root) {
+    match myco_ops::view::validate_repo_views(root, ops::CONFIG) {
         Ok(errs) => errs
             .into_iter()
             .map(|(name, e)| {

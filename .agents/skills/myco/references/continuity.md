@@ -44,7 +44,7 @@ can too (interrupt each in-progress item you own). myco never
 detects sessions itself.
 
 Interrupted items surface as `⚡` in `status`, `status --prompt`,
-`board`, and `item show`. An `in-progress` item idle >3d with no
+`view board`, and `item show`. An `in-progress` item idle >3d with no
 interrupt is flagged under `report`'s "stale claims" — the
 no-hook safety net.
 

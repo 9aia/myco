@@ -301,18 +301,18 @@ fn gen_cli_docs_prints_markdown() {
 }
 
 #[test]
-fn group_epic_empty_and_board_empty() {
+fn view_epic_and_board_empty() {
     let (d, _wt) = project();
-    let out = run(d.path(), &["epic"]);
+    let out = run(d.path(), &["view", "epic"]);
     assert_eq!(code(&out), 0);
     assert!(
-        String::from_utf8_lossy(&out.stdout).contains("no epics"),
+        String::from_utf8_lossy(&out.stdout).contains("empty view"),
         "{out:?}"
     );
-    let out = run(d.path(), &["board"]);
+    let out = run(d.path(), &["view", "board"]);
     assert_eq!(code(&out), 0);
     assert!(
-        String::from_utf8_lossy(&out.stdout).contains("empty board"),
+        String::from_utf8_lossy(&out.stdout).contains("empty view"),
         "{out:?}"
     );
 }

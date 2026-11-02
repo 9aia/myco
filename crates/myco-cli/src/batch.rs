@@ -200,7 +200,7 @@ mod tests {
     fn serve_method_error_shape_is_jsonrpc() {
         let (_d, s) = fixture(true);
         let line = s
-            .handle_line(&JsonRpc2, &json!({"id": 9, "method": "board"}).to_string())
+            .handle_line(&JsonRpc2, &json!({"id": 9, "method": "view"}).to_string())
             .unwrap();
         let v: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(v["jsonrpc"], "2.0");

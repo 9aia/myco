@@ -311,13 +311,21 @@ pub(crate) fn render_list(groups: &[ViewGroup], interrupted: &BTreeSet<ItemId>) 
     out.trim_end_matches('\n').to_string()
 }
 
-/// `board` — group labels become column headers.
+/// `board` — a status-grouped spec earns the lane chrome
+/// (capitalized Backlog | Open | … lanes via
+/// [`board::status_cards`]); any other grouping renders generic
+/// columns headed by the group labels.
 pub(crate) fn render_board(
+    spec: &ViewSpec,
     groups: &[ViewGroup],
     interrupted: &BTreeSet<ItemId>,
     md: bool,
     all: bool,
 ) -> String {
+    if board::is_status_board(spec) {
+        let (headers, cards) = board::status_cards(groups, None, interrupted);
+        return board::render_columns(&headers, &cards, md, board::Fit::terminal(all));
+    }
     let headers: Vec<String> = groups
         .iter()
         .map(|g| g.label.clone().unwrap_or_default())
@@ -345,43 +353,16 @@ pub struct Out {
     pub all: bool,
 }
 
-/// Print resolution warnings to stderr — every verb fronting a
-/// named view reports a shadowed preset identically.
+/// Print resolution warnings to stderr — a config view shadowing
+/// a built-in preset warns on every resolution.
 pub(crate) fn warn(warnings: &[String]) {
     for w in warnings {
         eprintln!("myco: warning: {w}");
     }
 }
 
-/// Resolve a named view and fold `--epic`/`--milestone`-style
-/// scope overrides into its filter — the same merge
-/// [`ViewFlags::apply`] performs (a set override wins, unset
-/// fields keep the named spec). The merged spec is re-validated.
-/// This is the front of the verb-fronted views (`board`,
-/// `epic <name>`, `milestone <name>`): a repo's `[views.<name>]`
-/// config shadows the built-in preset the same way it does for
-/// `myco view`.
-pub(crate) fn scoped_spec(
-    root: &std::path::Path,
-    name: &str,
-    epic: Option<String>,
-    milestone: Option<String>,
-) -> Result<ViewSpec, String> {
-    let (view, warnings) = myco_ops::view::resolve_lenient(root, name)?;
-    warn(&warnings);
-    let mut spec = view.spec;
-    if let Some(e) = epic {
-        spec.filter.epic = Some(e);
-    }
-    if let Some(m) = milestone {
-        spec.filter.milestone = Some(m);
-    }
-    spec.validate()?;
-    Ok(spec)
-}
-
 /// Pick the renderer `spec.format` names — the shared tail of
-/// every eval-driven verb.
+/// every eval-driven read.
 pub(crate) fn render_groups(
     spec: &ViewSpec,
     groups: &[ViewGroup],
@@ -390,14 +371,15 @@ pub(crate) fn render_groups(
     all: bool,
 ) -> String {
     match spec.format {
-        ViewFormat::Board => render_board(groups, interrupted, md, all),
+        ViewFormat::Board => render_board(spec, groups, interrupted, md, all),
         ViewFormat::List => render_list(groups, interrupted),
     }
 }
 
-/// The `--json` payload — `myco view`'s shape, reused by the
-/// verb-fronted views when a config-shadowed spec no longer fits
-/// the legacy columns map.
+/// The `--json` payload — `{view, spec, groups, interrupted}`.
+/// A status-axis board takes the five-lane columns map
+/// ([`board::groups_json`]) instead — the shape `myco board
+/// --json` always emitted.
 pub(crate) fn view_json(
     name: Option<&str>,
     spec: &ViewSpec,
@@ -429,14 +411,14 @@ pub fn run(
     let (proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
 
     if out.list || (name.is_none() && !flags.any_set()) {
-        let (views, _) = myco_ops::view::named_views(&proj.root)?;
+        let (views, _) = myco_ops::view::named_views_lenient(&proj.root, ops::CONFIG)?;
         list_views(&views, json_out);
         return Ok(0);
     }
 
     let (mut spec, warnings) = match &name {
         Some(n) => {
-            let (v, w) = myco_ops::view::resolve(&proj.root, n)?;
+            let (v, w) = myco_ops::view::resolve_lenient(&proj.root, n, ops::CONFIG)?;
             (v.spec, w)
         }
         None => (ViewSpec::default(), Vec::new()),
@@ -453,7 +435,12 @@ pub fn run(
     let interrupted = continuity::interrupted_set(&store, scan.live())?;
 
     if json_out {
-        ops::print_json(&view_json(name.as_deref(), &spec, &groups, &interrupted));
+        let payload = if board::is_status_board(&spec) {
+            board::groups_json(&groups, &interrupted)
+        } else {
+            view_json(name.as_deref(), &spec, &groups, &interrupted)
+        };
+        ops::print_json(&payload);
         return Ok(0);
     }
 
@@ -472,11 +459,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scoped_spec_repo_config_shadows_the_verb() {
+    fn repo_config_shadow_redefines_the_named_board() {
         // `[views.board]` in the repo's myco.toml replaces the
-        // preset `myco board` (and `epic|milestone <name>`)
-        // evaluate — the spec-level proof that config shadowing
-        // reaches the read verbs, not just `myco view`.
+        // preset `myco view board` resolves — the spec-level proof
+        // that config shadowing reaches the named view, and that a
+        // non-status spec drops the lane chrome.
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("myco.toml"),
@@ -493,10 +480,24 @@ mod tests {
                 ("XDG_CONFIG_HOME", None::<&str>),
             ],
             || {
-                let spec = scoped_spec(dir.path(), "board", None, None).unwrap();
+                let (v, warnings) =
+                    myco_ops::view::resolve_lenient(dir.path(), "board", ops::CONFIG).unwrap();
+                assert_eq!(warnings.len(), 1);
+                let spec = v.spec;
                 assert_eq!(spec.filter.kind, vec![ItemKind::Issue]);
+                // the shadowed spec isn't a status-axis board →
+                // the generic renderers/json, not the lane chrome
+                assert!(!board::is_status_board(&spec));
                 // flag merge still applies over the shadowed spec
-                let scoped = scoped_spec(dir.path(), "board", Some("v2".into()), None).unwrap();
+                let mut scoped = spec.clone();
+                ViewFlags {
+                    filter: FilterFlags {
+                        epic: Some("v2".into()),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+                .apply(&mut scoped);
                 assert_eq!(scoped.filter.epic.as_deref(), Some("v2"));
                 // and eval honours the shadow — tasks drop out of
                 // every group, so the rendered board changes

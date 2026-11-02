@@ -22,7 +22,7 @@ pub fn open(
     dir: Option<&Path>,
     root: Option<&Path>,
 ) -> Result<(myco_ops::discover::Project, LockedStore), String> {
-    myco_ops::items::open_with(dir, root, crate::ops::store_at)
+    myco_ops::items::open_with(dir, root, crate::ops::CONFIG, crate::ops::store_at)
 }
 
 /// [`myco_ops::items::open_read_with`] wired to `MdStore`.
@@ -30,7 +30,7 @@ pub fn open_read(
     dir: Option<&Path>,
     root: Option<&Path>,
 ) -> Result<(myco_ops::discover::Project, LockedStore), String> {
-    myco_ops::items::open_read_with(dir, root, crate::ops::store_at)
+    myco_ops::items::open_read_with(dir, root, crate::ops::CONFIG, crate::ops::store_at)
 }
 
 /// `--pri/--owner/--label/--blocks/--epic/--milestone` — the

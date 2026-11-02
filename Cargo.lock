@@ -1143,6 +1143,8 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "crossterm",
+ "myco-config",
+ "myco-config-toml",
  "myco-core",
  "myco-ops",
  "myco-store",

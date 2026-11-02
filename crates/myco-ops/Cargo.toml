@@ -8,14 +8,16 @@ repository.workspace = true
 
 [dependencies]
 myco-core.workspace = true
-myco-config.workspace = true
-myco-config-toml.workspace = true
 myco-git.workspace = true
 myco-store.workspace = true
 serde_json.workspace = true
 time.workspace = true
 
 [dev-dependencies]
+## config impls for `config::test_loader` — the port + TOML are
+## injected by the composition root, so they're test-only here.
+myco-config.workspace = true
+myco-config-toml.workspace = true
 myco-store-md.workspace = true
 camino.workspace = true
 tempfile.workspace = true

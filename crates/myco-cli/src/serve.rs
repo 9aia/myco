@@ -25,8 +25,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
-    backlog, board, check, continuity, digest, itemcmd, items, next, report, schema, status, todo,
-    view,
+    backlog, check, continuity, digest, itemcmd, items, next, report, schema, status, todo,
 };
 
 // ---------------------------------------------------------------- wire
@@ -206,12 +205,6 @@ fn parse_params<T: serde::de::DeserializeOwned>(v: &Value) -> Result<T, Fail> {
 struct StatusParams {
     #[serde(default)]
     prompt: bool,
-}
-
-#[derive(Deserialize)]
-struct BoardParams {
-    epic: Option<String>,
-    milestone: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -471,7 +464,6 @@ const METHODS: &[&str] = &[
     "manifest",
     "schema",
     "status",
-    "board",
     "view",
     "next",
     "item.show",
@@ -619,26 +611,6 @@ impl Server {
                     status::status_json(&store).map_err(Fail::Verb)
                 }
             }
-            "board" => {
-                let p: BoardParams = parse_params(params)?;
-                let (proj, store) = self.open_read()?;
-                // same path as the verb — a repo's [views.board]
-                // shadow reaches the wire too
-                let spec = view::scoped_spec(&proj.root, "board", p.epic, p.milestone)
-                    .map_err(Fail::Verb)?;
-                let scan = digest::scan(&store).map_err(Fail::Verb)?;
-                let groups = eval(scan.live(), &spec);
-                let interrupted = crate::continuity::interrupted_set(
-                    &store,
-                    groups.iter().flat_map(|g| g.items.iter().copied()),
-                )
-                .map_err(Fail::Verb)?;
-                Ok(if board::is_status_board(&spec) {
-                    board::groups_json(&groups, &interrupted)
-                } else {
-                    view::view_json(Some("board"), &spec, &groups, &interrupted)
-                })
-            }
             "view" => {
                 let p: ViewParams = parse_params(params)?;
                 let (proj, store) = self.open_read()?;
@@ -646,7 +618,8 @@ impl Server {
                     // bare — enumerate the defined views
                     (None, None) => {
                         let (views, warnings) =
-                            myco_ops::view::named_views(&proj.root).map_err(Fail::Verb)?;
+                            myco_ops::view::named_views(&proj.root, crate::ops::CONFIG)
+                                .map_err(Fail::Verb)?;
                         Ok(json!({
                             "views": views
                                 .iter()
@@ -666,7 +639,8 @@ impl Server {
                         let (mut spec, warnings) = match name {
                             Some(n) => {
                                 let (v, w) =
-                                    myco_ops::view::resolve(&proj.root, n).map_err(Fail::Verb)?;
+                                    myco_ops::view::resolve(&proj.root, n, crate::ops::CONFIG)
+                                        .map_err(Fail::Verb)?;
                                 (v.spec, w)
                             }
                             None => (ViewSpec::default(), Vec::new()),

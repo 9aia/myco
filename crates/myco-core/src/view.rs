@@ -1,8 +1,8 @@
 //! Declarative views — `filter → group → sort → limit → format`
 //! as data (P-006). A [`ViewSpec`] is pure config; [`eval`] is a
 //! pure fn over `&[Item]`. Named views come from `[views]` in
-//! myco.toml layers; built-in verbs (`board`, `epic`, …) are
-//! presets of the same engine.
+//! myco.toml layers; the built-in presets (`board`, `epic`, …)
+//! are the same engine's shapes as data.
 //!
 //! Semantics: OR within a filter list, AND across fields. Filters
 //! see top-level items only — children render with their parent.

@@ -1,4 +1,4 @@
-//! End-to-end view tests — `schema`, `status`, `board`, `report`,
+//! End-to-end view tests — `schema`, `status`, `view`, `report`,
 //! `index`, `org` driving the real binary against tempdir git
 //! repos. `MYCO_HOME` pins the index at a tempdir per test;
 //! `MYCO_CONFIG` is pinned nonexistent so a stray user config
@@ -166,7 +166,7 @@ fn board_views() {
     );
     ok(d.path(), &["item", "set", "I-001", "--status", "blocked"]);
     // human grid
-    let out = ok(d.path(), &["board"]);
+    let out = ok(d.path(), &["view", "board"]);
     let s = String::from_utf8_lossy(&out.stdout);
     for col in ["Backlog", "Open", "Claimed", "In Progress", "Blocked"] {
         assert!(s.contains(col), "{col} missing:\n{s}");
@@ -175,13 +175,13 @@ fn board_views() {
     assert!(s.contains("I-001 a bug"), "{s}");
     // done items have no column
     // md output — padded markdown table
-    let out = ok(d.path(), &["board", "--md"]);
+    let out = ok(d.path(), &["view", "board", "--md"]);
     let s = String::from_utf8_lossy(&out.stdout);
     assert!(s.lines().next().unwrap_or("").starts_with('|'), "{s}");
     assert!(s.contains("Backlog"), "{s}");
     assert!(s.contains("---"), "{s}");
     // json columns map
-    let v = json(&ok(d.path(), &["board", "--json"]));
+    let v = json(&ok(d.path(), &["view", "board", "--json"]));
     assert_eq!(v["backlog"].as_array().unwrap().len(), 1);
     assert_eq!(v["open"].as_array().unwrap().len(), 1);
     assert_eq!(v["in-progress"].as_array().unwrap()[0]["id"], "T-002");
@@ -189,7 +189,7 @@ fn board_views() {
     assert!(v["claimed"].as_array().unwrap().is_empty());
     // interrupted items carry the flag in --json
     ok(d.path(), &["interrupt", "T-002"]);
-    let v = json(&ok(d.path(), &["board", "--json"]));
+    let v = json(&ok(d.path(), &["view", "board", "--json"]));
     let open = v["open"].as_array().unwrap();
     assert_eq!(
         open.iter().find(|i| i["id"] == "T-002").unwrap()["interrupted"],

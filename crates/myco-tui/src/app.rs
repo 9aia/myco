@@ -29,6 +29,23 @@ fn store_at(worktree: &Path) -> Result<MdStore, String> {
     Ok(MdStore::new(root))
 }
 
+/// Layered TOML — `Some(path)` pins the repo layer, `None` runs
+/// the impl's default search. Same story as `store_at`: ops keeps
+/// the *which path* policy, the front-end names the format.
+fn config_layered(path: Option<&Path>) -> Result<myco_core::Config, String> {
+    use myco_config::ConfigSource;
+    myco_config_toml::TomlSource {
+        path: path.map(|p| p.to_string_lossy().into_owned()),
+    }
+    .load()
+}
+
+/// The config impl ops calls share.
+const CONFIG: myco_ops::config::ConfigLoader = myco_ops::config::ConfigLoader {
+    layered: config_layered,
+    file: myco_config_toml::load_file,
+};
+
 /// Which ledger doc the board tab shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Board {
@@ -152,12 +169,12 @@ impl Model {
         // with this scope: holding any lock for the session would
         // block every other myco invocation while the board is open.
         let (proj, ledger) = {
-            let (proj, store) = items::open_read_with(dir, root, store_at)?;
+            let (proj, store) = items::open_read_with(dir, root, CONFIG, store_at)?;
             (proj, items::load_ledger(&store)?)
         };
         let store = store_at(&proj.worktree)?;
         let view_spec = match &view {
-            Some(name) => Some(myco_ops::view::resolve(&proj.root, name)?.0.spec),
+            Some(name) => Some(myco_ops::view::resolve(&proj.root, name, CONFIG)?.0.spec),
             None => None,
         };
         let mut m = Model {

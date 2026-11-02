@@ -28,7 +28,6 @@ mod commit;
 mod continuity;
 mod digest;
 mod discover;
-mod group;
 mod indexcmd;
 mod init;
 mod issue;
@@ -202,38 +201,10 @@ enum Cmd {
         #[arg(long)]
         prompt: bool,
     },
-    /// Kanban of the ledger — Backlog | Open | Claimed | In
-    /// Progress | Blocked. `--md` emits a markdown table.
-    Board {
-        /// Emit a markdown table (for docs/READMEs).
-        #[arg(long)]
-        md: bool,
-        /// Show every card — no row cap.
-        #[arg(long)]
-        all: bool,
-        /// Only items in this epic.
-        #[arg(long)]
-        epic: Option<String>,
-        /// Only items in this milestone.
-        #[arg(long)]
-        milestone: Option<String>,
-    },
-    /// Items grouped by epic — bare lists epics with counts, a
-    /// name renders that epic's board (`epic v2` ≡ `board
-    /// --epic v2`).
-    Epic {
-        /// Epic name — omit for the all-epics summary.
-        name: Option<String>,
-        /// Emit a markdown table (with a name).
-        #[arg(long)]
-        md: bool,
-        /// Show every card — no row cap (with a name).
-        #[arg(long)]
-        all: bool,
-    },
     /// Declarative views — named presets (`[views.<name>]` in
     /// config + built-ins `board|open|epic|milestone`) or an
-    /// ad-hoc spec from flags. Bare `myco view` lists views.
+    /// ad-hoc spec from flags. `myco view board` is the kanban;
+    /// bare `myco view` lists views.
     View {
         /// View name — builtin preset or config view.
         name: Option<String>,
@@ -248,18 +219,6 @@ enum Cmd {
         all: bool,
         #[command(flatten)]
         flags: view::ViewFlags,
-    },
-    /// Items grouped by milestone — bare lists milestones with
-    /// counts, a name renders that milestone's board.
-    Milestone {
-        /// Milestone name — omit for the all-milestones summary.
-        name: Option<String>,
-        /// Emit a markdown table (with a name).
-        #[arg(long)]
-        md: bool,
-        /// Show every card — no row cap (with a name).
-        #[arg(long)]
-        all: bool,
     },
     /// Import work into the ledger — TODO/FIXME comments, Jira
     /// CSV exports, GitHub issue dumps.
@@ -331,8 +290,8 @@ fn manifest() -> serde_json::Value {
             "init", "check", "migrate", "commit", "absorb",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
-            "epic", "milestone", "view", "next",
-            "status", "board", "report",
+            "view", "next",
+            "status", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
             "handoff", "resume", "interrupt", "ui", "serve",
@@ -343,8 +302,8 @@ fn manifest() -> serde_json::Value {
             "init", "check", "migrate", "commit", "absorb",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
-            "epic", "milestone", "view", "next",
-            "status", "board", "report",
+            "view", "next",
+            "status", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
             "handoff", "resume", "interrupt",
@@ -413,18 +372,6 @@ fn main() {
         Cmd::Next { flags } => next::run(flags, dir, root, json, no_commit),
         Cmd::Schema => schema::run(),
         Cmd::Status { prompt } => status::run(dir, root, prompt, json),
-        Cmd::Board {
-            md,
-            all,
-            epic,
-            milestone,
-        } => board::run(dir, root, md, all, epic, milestone, json),
-        Cmd::Epic { name, md, all } => {
-            group::run(group::Group::Epic, name, md, all, dir, root, json)
-        }
-        Cmd::Milestone { name, md, all } => {
-            group::run(group::Group::Milestone, name, md, all, dir, root, json)
-        }
         Cmd::View {
             name,
             list,

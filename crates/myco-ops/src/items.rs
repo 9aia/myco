@@ -159,16 +159,18 @@ impl<S: Store> Store for LockedStore<S> {
 /// exclusive mutation lock — every verb that writes the ledger
 /// takes this path. `mk` gets the discovered worktree and names
 /// the concrete impl (`myco`'s `ops::store_at` → `MdStore`), so
-/// this crate stays generic over [`Store`]. The lock spans
-/// discovery → mutation → the per-verb autocommit; contention
-/// fails fast (`another myco process is writing — retry`) instead
-/// of corrupting the ledger.
+/// this crate stays generic over [`Store`]; `cfg` is the same
+/// story for config (discovery reads `project_dir`). The lock
+/// spans discovery → mutation → the per-verb autocommit;
+/// contention fails fast (`another myco process is writing —
+/// retry`) instead of corrupting the ledger.
 pub fn open_with<S: Store>(
     dir: Option<&Path>,
     root: Option<&Path>,
+    cfg: crate::config::ConfigLoader,
     mk: impl FnOnce(&Path) -> Result<S, String>,
 ) -> Result<(discover::Project, LockedStore<S>), String> {
-    let proj = discover::discover(dir, root)?;
+    let proj = discover::discover(dir, root, cfg)?;
     let lock = ops::lock_worktree(&proj.worktree)?;
     let store = mk(&proj.worktree)?;
     Ok((
@@ -181,14 +183,15 @@ pub fn open_with<S: Store>(
 }
 
 /// [`open_with`] under the shared read lock — read-only verbs
-/// (`status`, `board`, `list`, `resume`, …). Readers don't block
+/// (`status`, `view`, `list`, `resume`, …). Readers don't block
 /// each other; a reader meeting a live writer fails fast.
 pub fn open_read_with<S: Store>(
     dir: Option<&Path>,
     root: Option<&Path>,
+    cfg: crate::config::ConfigLoader,
     mk: impl FnOnce(&Path) -> Result<S, String>,
 ) -> Result<(discover::Project, LockedStore<S>), String> {
-    let proj = discover::discover(dir, root)?;
+    let proj = discover::discover(dir, root, cfg)?;
     let lock = ops::lock_shared(&proj.worktree)?;
     let store = mk(&proj.worktree)?;
     Ok((
@@ -465,36 +468,87 @@ mod tests {
     #[test]
     fn open_serializes_mutating_verbs() {
         let (_d, wt) = project_dir();
-        let (_p, store) = open_with(Some(wt.as_path()), None, md_store).unwrap();
+        let (_p, store) = open_with(
+            Some(wt.as_path()),
+            None,
+            crate::config::test_loader(),
+            md_store,
+        )
+        .unwrap();
         // a second writer (even in-process — the lock is per
         // open-file-description) fails fast instead of racing
         // the load→mutate→save
-        let err = open_with(Some(wt.as_path()), None, md_store).err().unwrap();
+        let err = open_with(
+            Some(wt.as_path()),
+            None,
+            crate::config::test_loader(),
+            md_store,
+        )
+        .err()
+        .unwrap();
         assert!(err.contains("another myco process is writing"), "{err}");
         // readers fail fast while a writer holds the lock…
-        assert!(open_read_with(Some(wt.as_path()), None, md_store).is_err());
+        assert!(open_read_with(
+            Some(wt.as_path()),
+            None,
+            crate::config::test_loader(),
+            md_store
+        )
+        .is_err());
         drop(store);
         // …and everyone succeeds once it drops — a fresh writer,
         // then concurrent readers
-        let (_p, store) = open_with(Some(wt.as_path()), None, md_store).unwrap();
+        let (_p, store) = open_with(
+            Some(wt.as_path()),
+            None,
+            crate::config::test_loader(),
+            md_store,
+        )
+        .unwrap();
         drop(store);
-        let (_p2, r2) = open_read_with(Some(wt.as_path()), None, md_store).unwrap();
-        let (_p3, r3) = open_read_with(Some(wt.as_path()), None, md_store).unwrap();
+        let (_p2, r2) = open_read_with(
+            Some(wt.as_path()),
+            None,
+            crate::config::test_loader(),
+            md_store,
+        )
+        .unwrap();
+        let (_p3, r3) = open_read_with(
+            Some(wt.as_path()),
+            None,
+            crate::config::test_loader(),
+            md_store,
+        )
+        .unwrap();
         drop((r2, r3));
     }
 
     #[test]
     fn concurrent_open_fails_fast_no_dup_ids() {
         let (_d, wt) = project_dir();
-        let (_p, s1) = open_with(Some(wt.as_path()), None, md_store).unwrap();
+        let (_p, s1) = open_with(
+            Some(wt.as_path()),
+            None,
+            crate::config::test_loader(),
+            md_store,
+        )
+        .unwrap();
         let id1 = s1.alloc_id(ItemKind::Task).unwrap();
         // a racing verb can't even open — prove the failure is
         // the lock, not the store, by retrying after the drop
         let wt2 = wt.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         let racing = std::thread::spawn(move || {
-            tx.send(open_with(Some(wt2.as_path()), None, md_store).map(|_| ()))
-                .unwrap();
+            tx.send(
+                open_with(
+                    Some(wt2.as_path()),
+                    None,
+                    crate::config::test_loader(),
+                    md_store,
+                )
+                .map(|_| ()),
+            )
+            .unwrap();
         });
         let err = rx.recv().unwrap().unwrap_err();
         assert!(err.contains("another myco process"), "{err}");
@@ -502,7 +556,13 @@ mod tests {
         // after release, a fresh verb allocates the *next* id —
         // the lock is what kept two alloc_id RMWs from both
         // reading "next = id1" and handing out a duplicate
-        let (_p, s2) = open_with(Some(wt.as_path()), None, md_store).unwrap();
+        let (_p, s2) = open_with(
+            Some(wt.as_path()),
+            None,
+            crate::config::test_loader(),
+            md_store,
+        )
+        .unwrap();
         let id2 = s2.alloc_id(ItemKind::Task).unwrap();
         assert_ne!(id1, id2);
         racing.join().unwrap();

@@ -71,7 +71,7 @@ prefixes; `--epic ""` clears.
 - `--label <tag>` — `#label`, repeatable
 - `--blocks <ids>` — "this item blocks those" dependencies
 - `--epic` / `--milestone` — `[A-Za-z0-9_.-]+` grouping names, feed
-  `myco epic` / `myco milestone` / `board --epic/--milestone`
+  `myco view epic` / `myco view milestone` / `view board --epic/--milestone`
 
 ## Importing
 

@@ -13,8 +13,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use myco_config::ConfigSource;
-use myco_config_toml::TomlSource;
+use crate::config::ConfigLoader;
 
 /// The orphan branch + conventional dir name.
 pub const BRANCH: &str = "project";
@@ -99,12 +98,13 @@ fn owns_project(a: &Path, candidate: &Path) -> bool {
 /// `myco.toml` found relative to an arbitrary cwd — or the
 /// `~/.config` fallback, which would apply one `project_dir` to
 /// *every* repo — must not make repo B adopt repo A's ledger.
-fn configured_project_dir(root: &Path) -> Option<PathBuf> {
+/// The path policy is ours; `cfg` supplies the file format.
+fn configured_project_dir(root: &Path, cfg: &ConfigLoader) -> Option<PathBuf> {
     let path = std::env::var("MYCO_CONFIG")
-        .ok()
-        .unwrap_or_else(|| root.join("myco.toml").to_string_lossy().into_owned());
-    let cfg = TomlSource { path: Some(path) }.load().ok()?;
-    let rel = PathBuf::from(cfg.project_dir?);
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    let conf = cfg.load(Some(&path)).ok()?;
+    let rel = PathBuf::from(conf.project_dir?);
     let safe = !rel.as_os_str().is_empty()
         && rel
             .components()
@@ -138,15 +138,25 @@ fn canonical_dir(d: &Path) -> PathBuf {
 }
 
 /// Resolve the project for verbs that need one. `dir`/`root` are
-/// the global flags; everything else is discovery.
-pub fn discover(dir: Option<&Path>, root: Option<&Path>) -> Result<Project, String> {
+/// the global flags; `cfg` loads `myco.toml` (`project_dir`) via
+/// the front-end's impl; everything else is discovery.
+pub fn discover(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: ConfigLoader,
+) -> Result<Project, String> {
     let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
-    discover_in(&cwd, dir, root)
+    discover_in(&cwd, dir, root, cfg)
 }
 
 /// [`discover`] with an explicit cwd — the workhorse, and what
 /// tests drive (no process-global `set_current_dir` races).
-fn discover_in(cwd: &Path, dir: Option<&Path>, root: Option<&Path>) -> Result<Project, String> {
+fn discover_in(
+    cwd: &Path,
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: ConfigLoader,
+) -> Result<Project, String> {
     // --dir: an explicit worktree path — still must qualify,
     // otherwise verbs would stage/commit inside whatever repo
     // happens to contain an arbitrary dir
@@ -201,7 +211,7 @@ fn discover_in(cwd: &Path, dir: Option<&Path>, root: Option<&Path>) -> Result<Pr
     // myco.toml's `project_dir` — read from the discovered repo's
     // own config, inside the repo only
     if let Ok(root) = myco_git::repo_root(&cwd) {
-        if let Some(rel) = configured_project_dir(&root) {
+        if let Some(rel) = configured_project_dir(&root, &cfg) {
             let worktree = root.join(rel);
             if qualifies(&worktree) && owns_project(&root, &worktree) {
                 return Ok(Project { root, worktree });
@@ -283,6 +293,7 @@ pub fn worktree_path(dir: Option<&Path>, root: &Path) -> PathBuf {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::config::test_loader;
     use std::process::Command;
 
     fn git(dir: &Path, args: &[&str]) {
@@ -312,7 +323,7 @@ mod tests {
     #[test]
     fn dir_flag_resolves() {
         let d = repo_with_project();
-        let p = discover(Some(&d.path().join("project")), None).unwrap();
+        let p = discover(Some(&d.path().join("project")), None, test_loader()).unwrap();
         assert_eq!(p.worktree, d.path().join("project").canonicalize().unwrap());
         assert_eq!(p.root, d.path());
     }
@@ -320,16 +331,16 @@ mod tests {
     #[test]
     fn root_flag_resolves_and_errors() {
         let d = repo_with_project();
-        let p = discover(None, Some(d.path())).unwrap();
+        let p = discover(None, Some(d.path()), test_loader()).unwrap();
         assert_eq!(p.worktree, d.path().join("project"));
         // root without a qualifying project/ → error
         let empty = tempfile::tempdir().unwrap();
-        assert!(discover(None, Some(empty.path())).is_err());
+        assert!(discover(None, Some(empty.path()), test_loader()).is_err());
     }
 
     #[test]
     fn dir_flag_missing_is_error() {
-        assert!(discover(Some(Path::new("/definitely/not/here")), None).is_err());
+        assert!(discover(Some(Path::new("/definitely/not/here")), None, test_loader()).is_err());
     }
 
     #[test]
@@ -337,11 +348,11 @@ mod tests {
         // an arbitrary dir isn't a project worktree just because
         // it exists — the error must name the fix
         let d = tempfile::tempdir().unwrap();
-        let e = discover(Some(d.path()), None).unwrap_err();
+        let e = discover(Some(d.path()), None, test_loader()).unwrap_err();
         assert!(e.contains("myco init"), "{e}");
         // a dir holding ledger files still qualifies
         std::fs::write(d.path().join("TODO.md"), "# TODO\n").unwrap();
-        assert!(discover(Some(d.path()), None).is_ok());
+        assert!(discover(Some(d.path()), None, test_loader()).is_ok());
     }
 
     #[test]
@@ -364,7 +375,7 @@ mod tests {
         std::fs::create_dir(&sub).unwrap();
         assert!(!qualifies(&sub));
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
-            let p = discover_in(&sub, None, None).unwrap();
+            let p = discover_in(&sub, None, None, test_loader()).unwrap();
             assert_eq!(p.worktree, d.path().join("project").canonicalize().unwrap());
             assert_eq!(p.root, d.path());
         });
@@ -381,11 +392,11 @@ mod tests {
         git(&b, &["init", "-q"]);
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
             assert!(
-                discover_in(&b, None, None).is_err(),
+                discover_in(&b, None, None, test_loader()).is_err(),
                 "nested repo attached the outer repo's project/"
             );
             // …while a's own tree still resolves as before
-            let p = discover_in(a.path(), None, None).unwrap();
+            let p = discover_in(a.path(), None, None, test_loader()).unwrap();
             assert_eq!(p.worktree, a.path().join("project").canonicalize().unwrap());
             assert_eq!(p.root, a.path());
         });
@@ -413,7 +424,7 @@ mod tests {
         std::fs::write(mounted.join("TODO.md"), "# TODO — c\n").unwrap();
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
             assert!(
-                discover_in(b.path(), None, None).is_err(),
+                discover_in(b.path(), None, None, test_loader()).is_err(),
                 "attached a foreign repo's worktree"
             );
             // …and B's *own* ledger resolves fine
@@ -423,7 +434,7 @@ mod tests {
                 b.path(),
                 &["worktree", "add", own.to_str().unwrap(), "project"],
             );
-            let p = discover_in(&own, None, None).unwrap();
+            let p = discover_in(&own, None, None, test_loader()).unwrap();
             assert_eq!(p.worktree, own.canonicalize().unwrap());
             assert_eq!(p.root, b.path());
         });
@@ -444,14 +455,17 @@ mod tests {
             std::fs::write(r.join("myco.toml"), "project_dir = \"pm\"\n").unwrap();
             let sub = r.join("sub");
             std::fs::create_dir(&sub).unwrap();
-            let p = discover_in(&sub, None, None).unwrap();
+            let p = discover_in(&sub, None, None, test_loader()).unwrap();
             assert_eq!(p.worktree, r.join("pm"));
 
             // `..` and absolute project_dir values are ignored —
             // they would point discovery outside the repo
             for bad in ["project_dir = \"../pm\"", "project_dir = \"/tmp/pm\""] {
                 std::fs::write(r.join("myco.toml"), format!("{bad}\n")).unwrap();
-                assert!(discover_in(&sub, None, None).is_err(), "{bad}");
+                assert!(
+                    discover_in(&sub, None, None, test_loader()).is_err(),
+                    "{bad}"
+                );
             }
         });
     }

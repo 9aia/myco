@@ -1,5 +1,5 @@
 //! Ledger scans + counts — the shared read path for the view
-//! verbs (`status`, `board`, `report`, `index rebuild`, `org`).
+//! verbs (`status`, `view`, `report`, `index rebuild`, `org`).
 //!
 //! A [`Scan`] flattens a worktree into one item list plus the set
 //! of archived ids; [`Counts`] buckets it into the numbers every
@@ -40,7 +40,7 @@ impl Scan {
     }
 
     /// Live items with an active status — not done, not deferred.
-    /// These are the items `status`, `board`, `report`, and the
+    /// These are the items `status`, `view`, `report`, and the
     /// prompt view care about.
     pub fn active(&self) -> impl Iterator<Item = &Item> {
         self.live()

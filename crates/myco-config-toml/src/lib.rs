@@ -8,7 +8,7 @@
 //! presets always reach through.
 
 use myco_config::ConfigSource;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// File-backed config source.
 pub struct TomlSource {
@@ -19,13 +19,13 @@ pub struct TomlSource {
 /// Parse exactly one config file — no layer search, no merge.
 /// For callers that need a specific layer (e.g. `myco check`
 /// linting only the repo's own myco.toml).
-pub fn load_file(path: &PathBuf) -> Result<myco_core::Config, String> {
+pub fn load_file(path: &Path) -> Result<myco_core::Config, String> {
     let text =
         std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     toml::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
-fn parse(path: &PathBuf) -> Result<myco_core::Config, String> {
+fn parse(path: &Path) -> Result<myco_core::Config, String> {
     load_file(path)
 }
 
@@ -71,8 +71,8 @@ impl ConfigSource for TomlSource {
             );
         }
 
-        let repo_cfg = repo_layer.as_ref().map(parse).transpose()?;
-        let user_cfg = user_path.as_ref().map(parse).transpose()?;
+        let repo_cfg = repo_layer.as_deref().map(parse).transpose()?;
+        let user_cfg = user_path.as_deref().map(parse).transpose()?;
 
         // scalars: repo layer wins (today's first-match behavior);
         // views: merged, user layer wins name collisions
