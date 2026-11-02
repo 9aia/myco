@@ -6,17 +6,17 @@ machine-readable JSON Schema; `myco check` enforces it.
 
 ## Layout
 
-| path | holds |
-|---|---|
-| `meta.toml` | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
-| `TODO.md` | open-line tasks (`T-`), `##` sections, nested children |
-| `BACKLOG.md` | deferred items — same grammar, no checkbox |
-| `index.md` | free-form human index — verbatim, never rewritten |
-| `issues/` | `issue-NNNN-<slug>.md` + `issues/archive/` |
-| `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/` |
-| `plans/` | `pl-NNNN-<slug>.md` + `plans/archive/` |
-| `adrs/` | `NNNN-<slug>.md` + `adrs/archive/` |
-| `handoffs/` | `<ID>.md` append-only + `handoffs/archive/` |
+| path         | holds                                                               |
+| ------------ | ------------------------------------------------------------------- |
+| `meta.toml`  | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
+| `TODO.md`    | open-line tasks (`T-`), `##` sections, nested children              |
+| `BACKLOG.md` | deferred items — same grammar, no checkbox                          |
+| `index.md`   | free-form human index — verbatim, never rewritten                   |
+| `issues/`    | `issue-NNNN-<slug>.md` + `issues/archive/`                          |
+| `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/`                    |
+| `plans/`     | `pl-NNNN-<slug>.md` + `plans/archive/`                              |
+| `adrs/`      | `NNNN-<slug>.md` + `adrs/archive/`                                  |
+| `handoffs/`  | `<ID>.md` append-only + `handoffs/archive/`                         |
 
 ## Item ids
 
@@ -83,14 +83,14 @@ Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
 Six statuses; `item set --status` and kind verbs walk it one
 legal step at a time:
 
-| from | can go to |
-|---|---|
-| `open` | `claimed`, `in-progress`, `deferred` |
-| `claimed` | `in-progress`, `open`, `deferred` |
-| `in-progress` | `blocked`, `done`, `deferred` |
-| `blocked` | `in-progress`, `open`, `deferred` |
-| `deferred` | `open` |
-| `done` | — (terminal) |
+| from          | can go to                            |
+| ------------- | ------------------------------------ |
+| `open`        | `claimed`, `in-progress`, `deferred` |
+| `claimed`     | `in-progress`, `open`, `deferred`    |
+| `in-progress` | `blocked`, `done`, `deferred`        |
+| `blocked`     | `in-progress`, `open`, `deferred`    |
+| `deferred`    | `open`                               |
+| `done`        | — (terminal)                         |
 
 Proposal words alias the machine: `draft` = `open`, `accepted` =
 `done`, `rejected` = `deferred` — the transition still walks the
@@ -110,6 +110,7 @@ item = "T-012"
 # Handoffs — T-012
 
 ## 2026-10-29 · devin · session:cli:abc123
+
 Done: parser. Next: emitter. Open: archive semantics.
 ```
 

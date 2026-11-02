@@ -32,7 +32,7 @@ worktree physically can't leak into a code commit.
 
 ## Why a worktree (not just a branch)
 
-The ledger has to be *visible* — agents edit files, humans read
+The ledger has to be _visible_ — agents edit files, humans read
 `TODO.md` — without `git checkout` swapping the code tree. A
 worktree keeps both checked out at once.
 
@@ -41,7 +41,7 @@ worktree keeps both checked out at once.
 Every mutating verb is one atomic, conventional commit on
 `project` (`chore: add T-012`, `chore: handoff T-012`,
 `chore: resolve I-003`, …). So
-`git -C project log` *is* the history of intent — who moved what
+`git -C project log` _is_ the history of intent — who moved what
 when, replayable and greppable, with no separate audit store.
 `--no-commit` / `$MYCO_NO_COMMIT` opts out per run; `myco commit`
 squashes a batch into one.
@@ -51,8 +51,8 @@ squashes a batch into one.
 The markdown in `project/` is canonical — human-editable,
 diffable, frozen by golden fixtures. The redb index
 (`index.redb` + `repos.toml` under `$MYCO_HOME` →
-`$XDG_DATA_HOME/myco` → `~/.local/share/myco`) is a *derived
-cache* that powers `status`, `board`, `report`, and `org` without
+`$XDG_DATA_HOME/myco` → `~/.local/share/myco`) is a _derived
+cache_ that powers `status`, `board`, `report`, and `org` without
 re-parsing files. Delete it and `myco index rebuild` derives it
 back; `myco check` finds and repairs drift between the two.
 

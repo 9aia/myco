@@ -27,7 +27,7 @@ Files already on a `project` branch are normalized in place:
 - id-less items get ids
 - `[x]`/done items drop (history keeps them)
 - heading-like lines become `##` sections
-- frontmatter-less files in item dirs are *adopted* — the
+- frontmatter-less files in item dirs are _adopted_ — the
   filename's number is honored when free (`0001-foo.md` →
   `ADR-0001`); collisions take the next unclaimed number with a
   warning. Adopted files get synthesized frontmatter and the

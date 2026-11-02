@@ -1,0 +1,8 @@
+# generated — regen (docs:gen / deploy-docs.sh) owns these bytes;
+# fmt would fight the generators every cycle
+reference/cli.md
+reference/config.md
+reference/crate-api.md
+# partially generated — the crate-map table is written by
+# gen-crate-map.py between <!-- crate-map --> markers
+explanation/architecture.md

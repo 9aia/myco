@@ -105,20 +105,20 @@ myco check
 check: clean
 ```
 
-Done tasks are *removed* from `TODO.md` — the `project` branch
+Done tasks are _removed_ from `TODO.md` — the `project` branch
 history is the record. Every verb you ran was one atomic commit
 on that branch (`git -C project log --oneline` shows them all).
 
 ## Recap
 
-| you ran | myco did |
-|---|---|
-| `todo add` | alloc id, append line to `TODO.md` |
-| `item set --status` | one legal state-machine step |
-| `todo defer` / `backlog promote` | move the line TODO ↔ BACKLOG |
-| `handoff` / `resume` | append-only session notes / restart context |
-| `todo done` | `done`, then delete the line |
-| `check` | validate files, state machine, index drift |
+| you ran                          | myco did                                    |
+| -------------------------------- | ------------------------------------------- |
+| `todo add`                       | alloc id, append line to `TODO.md`          |
+| `item set --status`              | one legal state-machine step                |
+| `todo defer` / `backlog promote` | move the line TODO ↔ BACKLOG                |
+| `handoff` / `resume`             | append-only session notes / restart context |
+| `todo done`                      | `done`, then delete the line                |
+| `check`                          | validate files, state machine, index drift  |
 
 Every write went through a verb — hand-editing works too (the
 markdown is canonical), but `myco check` is the referee either

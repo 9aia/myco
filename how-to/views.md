@@ -11,10 +11,10 @@ and `[views.<name>]` tables in `myco.toml`
 ```toml
 # myco.toml
 [views.hot]
-filter  = { pri_min = "high", status = ["open", "in-progress"] }
+filter = { pri_min = "high", status = ["open", "in-progress"] }
 group_by = "owner"
-sort    = "-created"
-format  = "list"
+sort = "-created"
+format = "list"
 ```
 
 ```sh
@@ -34,7 +34,7 @@ shadowing a built-in name redefines the verb itself:
 
 ```toml
 [views.board]
-filter = { kind = ["issue"] }   # myco board is now issues-only
+filter = { kind = ["issue"] } # myco board is now issues-only
 ```
 
 A shadow warns on stderr (`view "board" shadows the built-in

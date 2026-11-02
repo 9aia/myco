@@ -27,7 +27,7 @@ myco init
 `project/` worktree, seeds `meta.toml`, `TODO.md`, `BACKLOG.md`,
 `index.md` and the item dirs (`issues/`, `proposals/`, `plans/`,
 `adrs/`, `handoffs/`), adds `project/` to `.gitignore` on your
-code branch, and writes a managed *Agent awareness* block into
+code branch, and writes a managed _Agent awareness_ block into
 `AGENTS.md`. It is idempotent — run it again and a healthy
 worktree is verified, a damaged one repaired.
 
@@ -52,17 +52,17 @@ Every mutation runs through the same ops the CLI uses, so a
 keypress that changes the ledger lands as the same atomic commit
 (`--no-commit` opts out here too).
 
-| Key | Action |
-| --- | --- |
-| `1` / `2`, `h` / `l` | switch TODO / BACKLOG tab |
-| `j` / `k`, `gg` / `G` | move, jump to first / last |
-| `Enter` | full-pane item preview (`esc` back) |
-| `a` | add an item to the active board |
-| `dd` / `Space` | mark done |
-| `D` / `p` | defer to BACKLOG / promote back to TODO |
-| `Alt+j` / `Alt+k` | reorder among siblings |
-| `E` / `R` | open the board file in `$EDITOR` / reload |
-| `q` | quit |
+| Key                   | Action                                    |
+| --------------------- | ----------------------------------------- |
+| `1` / `2`, `h` / `l`  | switch TODO / BACKLOG tab                 |
+| `j` / `k`, `gg` / `G` | move, jump to first / last                |
+| `Enter`               | full-pane item preview (`esc` back)       |
+| `a`                   | add an item to the active board           |
+| `dd` / `Space`        | mark done                                 |
+| `D` / `p`             | defer to BACKLOG / promote back to TODO   |
+| `Alt+j` / `Alt+k`     | reorder among siblings                    |
+| `E` / `R`             | open the board file in `$EDITOR` / reload |
+| `q`                   | quit                                      |
 
 The TUI is a default cargo feature — for a lean binary without
 it, install with `--no-default-features`:
