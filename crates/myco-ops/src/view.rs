@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use myco_core::{GroupAxis, ItemKind, Status, ViewFilter, ViewFormat, ViewSpec};
+use myco_core::{GroupAxis, ItemKind, Status, ViewFilter, ViewFormat, ViewSource, ViewSpec};
 
 use crate::config::ConfigLoader;
 
@@ -49,6 +49,11 @@ pub fn builtins() -> Vec<NamedView> {
         sort: vec![],
         limit: None,
         format,
+        ..ViewSpec::default()
+    };
+    let org = |mut s: ViewSpec| {
+        s.source = ViewSource::Index;
+        s
     };
     vec![
         NamedView {
@@ -75,7 +80,7 @@ pub fn builtins() -> Vec<NamedView> {
         },
         NamedView {
             name: "milestone".into(),
-            spec: spec(live, Some(GroupAxis::Milestone), ViewFormat::Board),
+            spec: spec(live.clone(), Some(GroupAxis::Milestone), ViewFormat::Board),
             origin: Origin::Builtin,
         },
         NamedView {
@@ -90,7 +95,31 @@ pub fn builtins() -> Vec<NamedView> {
                 sort: vec![],
                 limit: Some(1),
                 format: ViewFormat::List,
+                ..ViewSpec::default()
             },
+            origin: Origin::Builtin,
+        },
+        NamedView {
+            name: "org-board".into(),
+            // the index-sourced kanban — `myco org board`'s heir:
+            // lane statuses only (done has no column), cards
+            // prefixed `repo:ID` from each item's tag
+            spec: org(spec(
+                live.clone(),
+                Some(GroupAxis::Status),
+                ViewFormat::Board,
+            )),
+            origin: Origin::Builtin,
+        },
+        NamedView {
+            name: "org-status".into(),
+            // per-repo grouped list — the `org status` digest's
+            // substitute: one bucket per registered repo
+            spec: org(spec(
+                ViewFilter::default(),
+                Some(GroupAxis::Repo),
+                ViewFormat::List,
+            )),
             origin: Origin::Builtin,
         },
     ]
@@ -245,10 +274,32 @@ mod tests {
     #[test]
     fn builtins_are_valid() {
         let names: Vec<_> = builtins().iter().map(|v| v.name.clone()).collect();
-        assert_eq!(names, ["board", "open", "epic", "milestone", "next"]);
+        assert_eq!(
+            names,
+            [
+                "board",
+                "open",
+                "epic",
+                "milestone",
+                "next",
+                "org-board",
+                "org-status"
+            ]
+        );
         for v in builtins() {
             v.spec.validate().unwrap();
         }
+        let org_board = builtins()
+            .into_iter()
+            .find(|v| v.name == "org-board")
+            .unwrap();
+        assert_eq!(org_board.spec.source, ViewSource::Index);
+        let org_status = builtins()
+            .into_iter()
+            .find(|v| v.name == "org-status")
+            .unwrap();
+        assert_eq!(org_status.spec.source, ViewSource::Index);
+        assert_eq!(org_status.spec.group_by, Some(GroupAxis::Repo));
         let board = &builtins()[0].spec;
         assert_eq!(board.group_by, Some(GroupAxis::Status));
         assert_eq!(board.format, ViewFormat::Board);

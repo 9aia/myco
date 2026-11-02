@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use myco_core::{eval, GroupAxis, Item, ItemId, Status, ViewFilter, ViewGroup, ViewSpec};
+use myco_core::{eval, GroupAxis, Item, ItemId, Scoped, Status, ViewFilter, ViewGroup, ViewSpec};
 use myco_store::Store;
 use serde_json::json;
 
@@ -42,7 +42,7 @@ fn active_groups(scan: &digest::Scan) -> Vec<ViewGroup<'_>> {
 }
 
 /// One status's slice of [`active_groups`] — `[]` when empty.
-fn in_group<'a>(groups: &'a [ViewGroup<'a>], status: Status) -> &'a [&'a Item] {
+fn in_group<'a>(groups: &'a [ViewGroup<'a>], status: Status) -> &'a [Scoped<'a>] {
     groups
         .iter()
         .find(|g| g.label.as_deref() == Some(status.token()))
@@ -75,7 +75,7 @@ pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> Stri
     let evaled = active_groups(scan);
     // every bucket is already pri,id-sorted by the engine — the
     // open group used to be sorted by hand here
-    let mut groups: Vec<(&str, Vec<&Item>, usize)> = [
+    let mut groups: Vec<(&str, Vec<Scoped>, usize)> = [
         ("in-progress", Status::InProgress),
         ("blocked", Status::Blocked),
         ("claimed", Status::Claimed),
@@ -87,7 +87,7 @@ pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> Stri
 
     // render cost: repo line + per non-empty group (header +
     // shown items + marker when truncated)
-    let cost = |groups: &[(&str, Vec<&Item>, usize)]| {
+    let cost = |groups: &[(&str, Vec<Scoped>, usize)]| {
         1 + groups
             .iter()
             .map(|(_, shown, hidden)| {
@@ -123,7 +123,7 @@ pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> Stri
         out.extend(
             shown
                 .iter()
-                .map(|i| prompt_item(i, interrupted.contains(&i.id))),
+                .map(|i| prompt_item(i.item, interrupted.contains(&i.item.id))),
         );
         if *hidden > 0 {
             out.push(format!("… +{hidden} more {name}"));
@@ -140,7 +140,7 @@ pub fn digest_json(scan: &digest::Scan) -> serde_json::Value {
     let group = |s: Status| {
         in_group(&groups, s)
             .iter()
-            .map(|i| serde_json::to_value(i).unwrap_or(json!(null)))
+            .map(|i| serde_json::to_value(i.item).unwrap_or(json!(null)))
             .collect::<Vec<_>>()
     };
     json!({
@@ -216,8 +216,8 @@ pub fn run(
             for i in list {
                 println!(
                     "  {}{}",
-                    items::compact(i),
-                    if interrupted.contains(&i.id) {
+                    items::compact(i.item),
+                    if interrupted.contains(&i.item.id) {
                         " ⚡"
                     } else {
                         ""

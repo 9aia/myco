@@ -1,67 +1,36 @@
-//! `myco org status|board` — cross-repo views over the index.
+//! `myco org` — cross-repo *scaffolding*; cross-repo *views* are
+//! index-sourced `myco view` specs (`view org-board` /
+//! `view org-status`, `--source index`).
 //!
-//! Every registered repo's snapshot is checked for freshness
-//! (stored `head_commit` vs the worktree's current HEAD); a stale
-//! or missing snapshot is rebuilt on the spot — org reads never
+//! [`load_fresh`] is the shared index-universe read: every
+//! registered repo's snapshot is checked for freshness (stored
+//! `head_commit` vs the worktree's current HEAD); a stale or
+//! missing snapshot is rebuilt on the spot — index reads never
 //! serve old data silently. Repos whose worktree vanished keep
 //! their last snapshot and report an error inline.
 
-use std::collections::BTreeMap;
-
 use clap::Subcommand;
-use myco_core::Status;
 use myco_index::{Index, RepoSnapshot};
 use serde_json::json;
 
-use crate::{board, digest, indexcmd, ops};
+use crate::{indexcmd, ops};
 
 #[derive(Subcommand)]
 pub enum Cmd {
-    /// Per-repo counts + org totals + items grouped by owner.
-    Status {
-        /// Show repos with no live items too.
-        #[arg(long)]
-        all: bool,
-    },
-    /// Org kanban — repo-prefixed cards over every live item.
-    Board {
-        /// Emit a markdown table (for docs/READMEs).
-        #[arg(long)]
-        md: bool,
-        /// Show every card — no row cap.
-        #[arg(long)]
-        all: bool,
-        /// Only this repo's items (name or registered path).
-        #[arg(long)]
-        repo: Option<String>,
-    },
     /// Re-run `init` on every registered repo — refreshes the
     /// worktree scaffold and root files (.gitignore, the AGENTS.md
     /// agent-awareness block). The rollout path for new scaffolding.
     Init,
 }
 
-/// One repo's snapshot load outcome for org views.
+/// One repo's snapshot load outcome for index-sourced views.
 pub struct RepoView {
     /// Registry name — identity even when `snap` is gone.
     pub name: String,
-    /// Registered repo-root path — identity even when `snap` is gone.
-    pub path: camino::Utf8PathBuf,
     /// The snapshot (may be the last good one on rescan failure).
     pub snap: Option<RepoSnapshot>,
     /// Rescan/load error, when the fresh snapshot couldn't be had.
     pub error: Option<String>,
-    /// The snapshot was rebuilt during this read.
-    pub rebuilt: bool,
-}
-
-/// A scan-shaped adapter so `digest::counts` runs on snapshots.
-fn as_scan(s: &RepoSnapshot) -> digest::Scan {
-    digest::Scan {
-        name: s.name.clone(),
-        items: s.items.clone(),
-        archived: s.archived.clone(),
-    }
 }
 
 /// Load every registered repo's snapshot, auto-rebuilding stale
@@ -82,14 +51,12 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
         stale.iter().copied().zip(scans).collect();
     let mut out = Vec::with_capacity(repos.len());
     for (i, c) in cached.iter().enumerate() {
-        let (name, path) = (repos[i].name.clone(), repos[i].path.clone());
+        let name = repos[i].name.clone();
         if fresh(i) {
             out.push(RepoView {
                 name,
-                path,
                 snap: c.clone(),
                 error: None,
-                rebuilt: false,
             });
             continue;
         }
@@ -101,202 +68,18 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
                 index.save_snapshot(&snap).map_err(|e| e.to_string())?;
                 out.push(RepoView {
                     name,
-                    path,
                     snap: Some(snap),
                     error: None,
-                    rebuilt: true,
                 });
             }
             Err(e) => out.push(RepoView {
                 name,
-                path,
                 snap: cached[i].clone(),
                 error: Some(e),
-                rebuilt: false,
             }),
         }
     }
     Ok(out)
-}
-
-/// `owner → item refs` across all snapshots — active items only.
-fn by_owner<'a>(snaps: impl Iterator<Item = &'a RepoSnapshot>) -> BTreeMap<String, Vec<String>> {
-    let mut m: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for s in snaps {
-        for i in s
-            .live_items()
-            .filter(|i| i.status != Status::Done && i.status != Status::Deferred)
-        {
-            if let Some(o) = &i.owner {
-                m.entry(o.as_str().to_string())
-                    .or_default()
-                    .push(format!("{}:{} {}", s.name, i.id, i.title));
-            }
-        }
-    }
-    for v in m.values_mut() {
-        v.sort();
-    }
-    m
-}
-
-/// Cap on items listed per owner in `org status` — the section is
-/// a pointer to where work sits, not a full listing.
-const OWNER_CAP: usize = 8;
-
-fn status(views: &[RepoView], all: bool, json_out: bool) -> Result<i32, String> {
-    let mut total = digest::Counts::default();
-    let mut repos_json = Vec::new();
-    let mut snaps = Vec::new();
-    for v in views {
-        let Some(s) = &v.snap else {
-            repos_json.push(json!({
-                "name": v.name,
-                "path": v.path,
-                "rebuilt": v.rebuilt,
-                "error": v.error,
-            }));
-            continue;
-        };
-        snaps.push(s);
-        let c = digest::counts(&as_scan(s));
-        total.add(&c);
-        repos_json.push(json!({
-            "name": s.name,
-            "path": s.path,
-            "head_commit": s.head_commit,
-            "rebuilt": v.rebuilt,
-            "error": v.error,
-            "counts": c.to_json(),
-        }));
-    }
-    let owners = by_owner(snaps.iter().copied());
-    if json_out {
-        ops::print_json(&json!({
-            "repos": repos_json,
-            "totals": total.to_json(),
-            "owners": owners,
-        }));
-        return Ok(0);
-    }
-    let mut out = format!("org status — {} repo(s)\n", views.len());
-    let mut idle = 0usize;
-    for v in views {
-        // a repo with a clean snapshot but no live items is idle —
-        // hundreds of registered repos bury the interesting ones;
-        // errored repos always surface
-        let idle_repo = v.error.is_none()
-            && v.snap
-                .as_ref()
-                .is_some_and(|s| s.live_items().next().is_none());
-        if idle_repo && !all {
-            idle += 1;
-            continue;
-        }
-        match &v.snap {
-            Some(s) => {
-                let c = digest::counts(&as_scan(s));
-                let head = if s.head_commit.is_empty() {
-                    "gone".to_string()
-                } else {
-                    s.head_commit[..s.head_commit.len().min(7)].to_string()
-                };
-                let mut line = format!("{:<16} {}  @{head}", s.name, c.oneline());
-                if v.rebuilt {
-                    line.push_str("  (rebuilt)");
-                }
-                if let Some(e) = &v.error {
-                    line.push_str(&format!("  ⚠ {e}"));
-                }
-                out.push_str(&line);
-                out.push('\n');
-            }
-            None => out.push_str(&format!(
-                "{:<16} ⚠ {}\n",
-                v.name,
-                v.error.as_deref().unwrap_or("unavailable")
-            )),
-        }
-    }
-    if idle > 0 {
-        out.push_str(&format!("… +{idle} idle repos (`--all` to show)\n"));
-    }
-    out.push_str(&format!("totals: {}\n", total.oneline()));
-    if !owners.is_empty() {
-        out.push_str("by owner:\n");
-        for (o, items) in &owners {
-            let more = items.len().saturating_sub(OWNER_CAP);
-            let shown: Vec<&str> = items.iter().take(OWNER_CAP).map(String::as_str).collect();
-            let suffix = if more > 0 {
-                format!(", … +{more} more")
-            } else {
-                String::new()
-            };
-            out.push_str(&format!("  {o}: {}{}\n", shown.join(", "), suffix));
-        }
-    }
-    ops::print_paged(out.trim_end());
-    Ok(0)
-}
-
-fn board_view(
-    views: &[RepoView],
-    md: bool,
-    all: bool,
-    repo: Option<String>,
-    json_out: bool,
-) -> Result<i32, String> {
-    // `--repo` matches a snapshot by name or registered path
-    let wanted = |s: &RepoSnapshot| repo.as_deref().is_none_or(|r| s.name == r || s.path == r);
-    if repo.is_some() && !views.iter().any(|v| v.snap.as_ref().is_some_and(wanted)) {
-        return Err(format!(
-            "no repo {:?} in the index — `myco index list`",
-            repo.unwrap_or_default()
-        ));
-    }
-    if json_out {
-        // columns map with a `repo` tag on each item
-        let mut merged = serde_json::Map::new();
-        for (name, _) in board::COLUMNS {
-            merged.insert(name.to_string(), json!([]));
-        }
-        for v in views {
-            let Some(s) = &v.snap else { continue };
-            if !wanted(s) {
-                continue;
-            }
-            // snapshots carry no handoffs — no interrupted flag
-            let cols = board::columns_json(s.live_items(), Some(&s.name), None);
-            for (name, _) in board::COLUMNS {
-                let mut dst = merged[name].as_array().cloned().unwrap_or_default();
-                dst.extend(cols[name].as_array().cloned().unwrap_or_default());
-                merged.insert(name.to_string(), json!(dst));
-            }
-        }
-        ops::print_json(&serde_json::Value::Object(merged));
-        return Ok(0);
-    }
-    // human board: one merged column set, repo-prefixed cards
-    let tagged = views.iter().flat_map(|v| {
-        v.snap.iter().filter(|s| wanted(s)).flat_map(|s| {
-            s.live_items()
-                .map(move |i| (format!("{}:{}", s.name, i.id), i))
-        })
-    });
-    let cards = board::cards_by_column(tagged.map(|(id, i)| {
-        let label = if i.title.is_empty() {
-            id
-        } else {
-            format!("{id} {}", i.title)
-        };
-        (label, i)
-    }));
-    if cards.iter().all(Vec::is_empty) {
-        println!("org board — nothing live across {} repo(s)", views.len());
-    } else {
-        ops::print_paged(&board::render_cards(&cards, md, board::Fit::terminal(all)));
-    }
-    Ok(0)
 }
 
 /// `init` over every registered repo — per-repo outcomes, errors
@@ -360,7 +143,5 @@ pub fn run(cmd: Cmd, json_out: bool, no_commit: bool) -> Result<i32, String> {
     match cmd {
         // init rolls scaffold out — no snapshot reads
         Cmd::Init => init_all(&index, json_out, no_commit),
-        Cmd::Status { all } => status(&load_fresh(&index)?, all, json_out),
-        Cmd::Board { md, all, repo } => board_view(&load_fresh(&index)?, md, all, repo, json_out),
     }
 }

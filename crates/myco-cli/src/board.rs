@@ -1,5 +1,5 @@
-//! The board chrome — the columnar card renderer shared by
-//! `myco view` (board format) and `myco org board`.
+//! The board chrome — the columnar card renderer behind `myco
+//! view`'s board format (repo- and index-sourced alike).
 //!
 //! A status-grouped spec earns the lane chrome: capitalized lanes
 //! Backlog | Open | Claimed | In Progress | Blocked (deferred
@@ -11,15 +11,11 @@
 
 use std::collections::BTreeSet;
 
-use myco_core::{
-    eval, GroupAxis, Item, ItemId, Status, ViewFilter, ViewFormat, ViewGroup, ViewSpec,
-};
+use myco_core::{GroupAxis, Item, ItemId, Scoped, Status, ViewFormat, ViewGroup, ViewSpec};
 use serde_json::json;
 use tabled::builder::Builder;
 use tabled::settings::Style;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
-
-use crate::digest;
 
 /// Default cap on board rows for human output (`--all` lifts it) —
 /// a screenful, so a huge ledger can't bury the terminal.
@@ -259,14 +255,14 @@ pub(crate) fn card(item: &Item, prefix: Option<&str>, interrupted: bool) -> Stri
 
 /// The lane spec — the five lane statuses grouped by status;
 /// sort and limit take the engine defaults (`pri,id`, none). It
-/// matches the built-in `board` view's selection, so [`columns`]
-/// and [`columns_json`] keep their exact legacy bucketing while
-/// going through `eval`.
+/// matches the built-in `board` view's selection — tests eval
+/// through it to pin the legacy bucketing.
+#[cfg(test)]
 fn lane_spec() -> ViewSpec {
     ViewSpec {
-        filter: ViewFilter {
+        filter: myco_core::ViewFilter {
             status: COLUMNS.iter().filter_map(|(_, s)| *s).collect(),
-            ..ViewFilter::default()
+            ..Default::default()
         },
         group_by: Some(GroupAxis::Status),
         ..ViewSpec::default()
@@ -293,15 +289,15 @@ pub(crate) fn is_status_board(spec: &ViewSpec) -> bool {
 /// the five lanes in legacy order headed by their chrome titles,
 /// then any extra non-empty bucket the spec admitted (a config
 /// `board` view matching `done` earns a `done` column).
+/// Index-sourced items carry their `repo:` card prefix.
 pub(crate) fn status_cards(
     groups: &[ViewGroup],
-    prefix: Option<&str>,
     interrupted: &BTreeSet<ItemId>,
 ) -> (Vec<String>, Vec<Vec<String>>) {
-    let card_col = |items: &[&Item]| {
+    let card_col = |items: &[Scoped]| {
         items
             .iter()
-            .map(|&i| card(i, prefix, interrupted.contains(&i.id)))
+            .map(|i| card(i.item, i.repo, interrupted.contains(&i.item.id)))
             .collect::<Vec<String>>()
     };
     let mut headers = Vec::new();
@@ -374,82 +370,21 @@ pub fn render_columns(headers: &[String], columns: &[Vec<String>], md: bool, fit
     out
 }
 
-/// Render five columns of card strings — shared with `org board`,
-/// which builds mixed-repo cards itself.
-pub fn render_cards(cards: &[Vec<String>; 5], md: bool, fit: Fit) -> String {
-    let headers: Vec<String> = ["Backlog", "Open", "Claimed", "In Progress", "Blocked"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    render_columns(&headers, cards, md, fit)
-}
-
-/// Bucket `(label, item)` pairs into the five columns, sorting
-/// each by priority — org cards carry their repo prefix already.
-pub fn cards_by_column<'a>(items: impl Iterator<Item = (String, &'a Item)>) -> [Vec<String>; 5] {
-    let mut cols: [Vec<(&'a Item, String)>; 5] = Default::default();
-    for (label, i) in items {
-        if let Some(idx) = COLUMNS.iter().position(|(_, s)| *s == Some(i.status)) {
-            cols[idx].push((i, label));
-        }
-    }
-    std::array::from_fn(|c| {
-        let mut col = std::mem::take(&mut cols[c]);
-        col.sort_by(|(a, _), (b, _)| digest::pri_then_id(a, b));
-        col.into_iter().map(|(_, l)| l).collect()
-    })
-}
-
-/// Serialize one column's items — `prefix` tags each item `repo`
-/// (org boards); `interrupted` adds the `"interrupted": bool`
-/// flag (`None` omits it — org snapshots carry no handoffs).
-fn items_json(
-    items: &[&Item],
-    prefix: Option<&str>,
-    interrupted: Option<&BTreeSet<ItemId>>,
-) -> Vec<serde_json::Value> {
+/// Serialize one column's items — a tagged [`Scoped`] injects
+/// its `repo` field itself (index-source views); `interrupted`
+/// adds the `"interrupted": bool` flag (`None` omits it — index
+/// snapshots carry no handoffs).
+fn items_json(items: &[Scoped], interrupted: Option<&BTreeSet<ItemId>>) -> Vec<serde_json::Value> {
     items
         .iter()
         .map(|it| {
             let mut v = serde_json::to_value(it).unwrap_or(json!(null));
-            if let Some(obj) = v.as_object_mut() {
-                if let Some(p) = prefix {
-                    obj.insert("repo".into(), json!(p));
-                }
-                if let Some(set) = interrupted {
-                    obj.insert("interrupted".into(), json!(set.contains(&it.id)));
-                }
+            if let (Some(obj), Some(set)) = (v.as_object_mut(), interrupted) {
+                obj.insert("interrupted".into(), json!(set.contains(&it.item.id)));
             }
             v
         })
         .collect()
-}
-
-/// The `--json` columns map — column name → full items. `prefix`
-/// tags each item `repo` (org boards). `interrupted` — the set
-/// whose latest handoff is an interrupt — marks each item
-/// `"interrupted": bool`; `None` omits the flag (org board, where
-/// snapshots carry no handoffs).
-///
-/// Bucketing goes through `eval` on the lane spec — identical to
-/// the legacy shape, so org boards keep the five fixed keys
-/// (non-lane groups, e.g. `done`, stay dropped).
-pub fn columns_json<'a>(
-    items: impl Iterator<Item = &'a Item>,
-    prefix: Option<&str>,
-    interrupted: Option<&BTreeSet<myco_core::ItemId>>,
-) -> serde_json::Value {
-    let groups = eval(items, &lane_spec());
-    let mut map = serde_json::Map::new();
-    for g in &groups {
-        if let Some(i) = lane_index(g.label.as_deref()) {
-            map.insert(
-                COLUMNS[i].0.to_string(),
-                json!(items_json(&g.items, prefix, interrupted)),
-            );
-        }
-    }
-    json!(map)
 }
 
 /// Columns-map JSON from eval'd groups — the five lanes under
@@ -458,7 +393,7 @@ pub fn columns_json<'a>(
 /// `done` key — the spec asked for it).
 pub(crate) fn groups_json(
     groups: &[ViewGroup],
-    interrupted: &BTreeSet<ItemId>,
+    interrupted: Option<&BTreeSet<ItemId>>,
 ) -> serde_json::Value {
     let mut map = serde_json::Map::new();
     for g in groups {
@@ -466,15 +401,12 @@ pub(crate) fn groups_json(
             Some(i) => {
                 map.insert(
                     COLUMNS[i].0.to_string(),
-                    json!(items_json(&g.items, None, Some(interrupted))),
+                    json!(items_json(&g.items, interrupted)),
                 );
             }
             None if !g.items.is_empty() => {
                 if let Some(label) = &g.label {
-                    map.insert(
-                        label.clone(),
-                        json!(items_json(&g.items, None, Some(interrupted))),
-                    );
+                    map.insert(label.clone(), json!(items_json(&g.items, interrupted)));
                 }
             }
             None => {}
@@ -487,7 +419,7 @@ pub(crate) fn groups_json(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use myco_core::{ItemId, ItemKind, Priority};
+    use myco_core::{eval, ItemId, ItemKind, Priority};
 
     fn items() -> Vec<Item> {
         vec![
@@ -502,10 +434,16 @@ mod tests {
     }
 
     /// Render through the same path `view`'s board format takes
-    /// for a status-grouped spec — eval + lane chrome.
-    fn render_lanes(items: &[Item], prefix: Option<&str>, md: bool, fit: Fit) -> String {
-        let groups = eval(items.iter(), &lane_spec());
-        let (headers, cards) = status_cards(&groups, prefix, &BTreeSet::new());
+    /// for a status-grouped spec — eval + lane chrome. `repo`
+    /// tags every item like an index-sourced universe does.
+    fn render_lanes(items: &[Item], repo: Option<&str>, md: bool, fit: Fit) -> String {
+        let groups = match repo {
+            Some(r) => {
+                myco_core::eval_scoped(items.iter().map(|i| Scoped::tagged(r, i)), &lane_spec())
+            }
+            None => eval(items.iter(), &lane_spec()),
+        };
+        let (headers, cards) = status_cards(&groups, &BTreeSet::new());
         render_columns(&headers, &cards, md, fit)
     }
 
@@ -646,9 +584,12 @@ mod tests {
     }
 
     #[test]
-    fn columns_json_map() {
+    fn groups_json_map() {
         let v = items();
-        let j = columns_json(v.iter(), Some("myco"), None);
+        // index-sourced shape — tagged items carry `repo` through
+        let tagged = v.iter().map(|i| Scoped::tagged("myco", i));
+        let groups = myco_core::eval_scoped(tagged, &lane_spec());
+        let j = groups_json(&groups, None);
         assert_eq!(j["open"].as_array().unwrap().len(), 2);
         assert_eq!(j["open"][0]["id"], "T-003");
         assert_eq!(j["open"][0]["repo"], "myco");
@@ -656,10 +597,12 @@ mod tests {
         assert!(j["backlog"].as_array().unwrap().len() == 1);
         // no interrupted set → no flag at all
         assert!(j["open"][0].get("interrupted").is_none());
-        // with the set → per-item flag
+        // with the set → per-item flag (repo source: no `repo` key)
         let set = BTreeSet::from([ItemId::new(ItemKind::Task, 3)]);
-        let j = columns_json(v.iter(), None, Some(&set));
+        let groups = eval(v.iter(), &lane_spec());
+        let j = groups_json(&groups, Some(&set));
         assert_eq!(j["open"][0]["interrupted"], true);
         assert_eq!(j["open"][1]["interrupted"], false);
+        assert!(j["open"][0].get("repo").is_none());
     }
 }

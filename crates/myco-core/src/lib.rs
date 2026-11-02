@@ -29,8 +29,9 @@ pub use meta::{NextCounters, ProjectMeta, Registry};
 pub use priority::{ParsePriorityError, Priority};
 pub use status::{InvalidTransition, ParseStatusError, Status};
 pub use view::{
-    eval, GroupAxis, ParseGroupAxisError, ParseSortKeyError, ParseViewFormatError, SortField,
-    SortKey, ViewFilter, ViewFormat, ViewGroup, ViewSpec, UNGROUPED,
+    eval, eval_scoped, GroupAxis, ParseGroupAxisError, ParseSortKeyError, ParseViewFormatError,
+    ParseViewSourceError, Scoped, SortField, SortKey, ViewFilter, ViewFormat, ViewGroup,
+    ViewSource, ViewSpec, UNGROUPED,
 };
 pub use walk::{status_path, targets, walk_descendants_to, walk_to};
 

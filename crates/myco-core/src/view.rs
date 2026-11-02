@@ -16,6 +16,53 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Actor, Item, ItemKind, Priority, Status};
 
+/// Where a view's item universe comes from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum ViewSource {
+    /// This repo's `project/` worktree (the default).
+    #[default]
+    Repo,
+    /// The union of every index-registered repo's snapshot —
+    /// the cross-repo "org" universe; items carry a repo tag
+    /// driving `group_by = "repo"` and `repo:ID` card prefixes.
+    Index,
+}
+
+/// Failure to parse a [`ViewSource`] name.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("invalid source {0:?} — expected repo|index")]
+pub struct ParseViewSourceError(pub String);
+
+impl ViewSource {
+    /// The config/flag name.
+    pub fn name(self) -> &'static str {
+        match self {
+            ViewSource::Repo => "repo",
+            ViewSource::Index => "index",
+        }
+    }
+
+    /// Default-source check — `serde(skip_serializing_if)` hook
+    /// keeping `repo` out of emitted specs.
+    pub fn is_default(&self) -> bool {
+        *self == ViewSource::Repo
+    }
+}
+
+impl FromStr for ViewSource {
+    type Err = ParseViewSourceError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "repo" => Ok(ViewSource::Repo),
+            "index" => Ok(ViewSource::Index),
+            _ => Err(ParseViewSourceError(s.to_string())),
+        }
+    }
+}
+
 /// A named view: what to show and how to render it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -24,6 +71,10 @@ pub struct ViewSpec {
     /// Item selection — absent fields match everything.
     #[serde(default)]
     pub filter: ViewFilter,
+    /// Universe — `repo` (default) or `index` (every registered
+    /// repo's snapshot unioned; items are repo-tagged).
+    #[serde(default, skip_serializing_if = "ViewSource::is_default")]
+    pub source: ViewSource,
     /// Grouping axis; `board` defaults this to `status`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group_by: Option<GroupAxis>,
@@ -101,6 +152,9 @@ pub enum GroupAxis {
     Epic,
     /// Milestone buckets, alphabetical.
     Milestone,
+    /// Source-repo buckets, alphabetical — the index-universe
+    /// axis; untagged (repo-sourced) items land in `ungrouped`.
+    Repo,
 }
 
 /// The renderer a view selects.
@@ -231,6 +285,59 @@ fn de_opt_priority<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Prio
         .transpose()
 }
 
+/// One evaluated item — `repo` tags index-sourced universes
+/// (`source = "index"`) with the name of the repo each item's
+/// snapshot came from; `None` for a repo universe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Scoped<'a> {
+    /// The item.
+    pub item: &'a Item,
+    /// Source-repo name (index-sourced universes only).
+    pub repo: Option<&'a str>,
+}
+
+impl<'a> Scoped<'a> {
+    /// Untagged — an item from the repo's own worktree.
+    pub fn new(item: &'a Item) -> Self {
+        Scoped { item, repo: None }
+    }
+
+    /// Tagged with the item's source repo — the index universe.
+    pub fn tagged(repo: &'a str, item: &'a Item) -> Self {
+        Scoped {
+            item,
+            repo: Some(repo),
+        }
+    }
+}
+
+impl std::ops::Deref for Scoped<'_> {
+    type Target = Item;
+
+    fn deref(&self) -> &Item {
+        self.item
+    }
+}
+
+impl serde::Serialize for Scoped<'_> {
+    /// The item's own object plus `"repo"` when tagged — the
+    /// shape `org` views always emitted per item.
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Flat<'a> {
+            #[serde(flatten)]
+            item: &'a Item,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            repo: Option<&'a str>,
+        }
+        Flat {
+            item: self.item,
+            repo: self.repo,
+        }
+        .serialize(s)
+    }
+}
+
 /// One bucket of an evaluated view — `label` is the axis value
 /// (`"in-progress"`, `"high"`, `"ungrouped"`); `None` for an
 /// ungrouped (`list`) result.
@@ -239,7 +346,7 @@ pub struct ViewGroup<'a> {
     /// Group label; `None` when the spec has no group axis.
     pub label: Option<String>,
     /// Matched items in sort order.
-    pub items: Vec<&'a Item>,
+    pub items: Vec<Scoped<'a>>,
 }
 
 /// The label `group_by = "ungrouped"` items land under — always
@@ -250,7 +357,8 @@ impl GroupAxis {
     /// Bucket key for ordering + label for display. `None` puts
     /// the item in the [`UNGROUPED`] bucket (only reachable for
     /// optional-field axes).
-    fn key_label(self, item: &Item) -> (GroupKey, String) {
+    fn key_label(self, scoped: &Scoped) -> (GroupKey, String) {
+        let item = scoped.item;
         match self {
             GroupAxis::Status => (
                 GroupKey::Finite(item.status as usize),
@@ -274,6 +382,7 @@ impl GroupAxis {
             },
             GroupAxis::Epic => named_or_ungrouped(item.epic.as_deref()),
             GroupAxis::Milestone => named_or_ungrouped(item.milestone.as_deref()),
+            GroupAxis::Repo => named_or_ungrouped(scoped.repo),
         }
     }
 }
@@ -291,18 +400,19 @@ fn kind_name(k: ItemKind) -> &'static str {
 
 /// Failure to parse a [`GroupAxis`] name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("invalid group axis {0:?} — expected status|priority|kind|owner|epic|milestone")]
+#[error("invalid group axis {0:?} — expected status|priority|kind|owner|epic|milestone|repo")]
 pub struct ParseGroupAxisError(pub String);
 
 impl GroupAxis {
     /// All axes, for help/error text.
-    pub const ALL: [GroupAxis; 6] = [
+    pub const ALL: [GroupAxis; 7] = [
         GroupAxis::Status,
         GroupAxis::Priority,
         GroupAxis::Kind,
         GroupAxis::Owner,
         GroupAxis::Epic,
         GroupAxis::Milestone,
+        GroupAxis::Repo,
     ];
 
     /// The config/flag name.
@@ -314,6 +424,7 @@ impl GroupAxis {
             GroupAxis::Owner => "owner",
             GroupAxis::Epic => "epic",
             GroupAxis::Milestone => "milestone",
+            GroupAxis::Repo => "repo",
         }
     }
 }
@@ -478,37 +589,49 @@ fn key_cmp(field: SortField, a: &Item, b: &Item, desc: bool) -> Ordering {
     }
 }
 
-fn sort_items(items: &mut [&Item], keys: &[SortKey]) {
+fn sort_items(items: &mut [Scoped], keys: &[SortKey]) {
     items.sort_by(|a, b| {
         keys.iter()
-            .map(|k| key_cmp(k.field, a, b, k.desc))
+            .map(|k| key_cmp(k.field, a.item, b.item, k.desc))
             .find(|o| *o != Ordering::Equal)
             .unwrap_or(Ordering::Equal)
     });
 }
 
-/// Evaluate a spec over items — filter, bucket, sort each bucket,
-/// truncate. Finite axes (status/priority/kind) yield every
-/// canonical bucket even when empty; renderers decide whether to
-/// show them. Named axes yield observed values only; [`UNGROUPED`]
-/// trails when reached.
+/// Evaluate a spec over repo-sourced items — the
+/// [`ViewSource::Repo`] universe. Every [`Scoped`] comes back
+/// untagged (`repo: None`); [`eval_scoped`] is the tagged form.
 pub fn eval<'a, I>(items: I, spec: &ViewSpec) -> Vec<ViewGroup<'a>>
 where
     I: IntoIterator<Item = &'a Item>,
 {
-    let filtered: Vec<&Item> = items
+    eval_scoped(items.into_iter().map(Scoped::new), spec)
+}
+
+/// Evaluate a spec over [`Scoped`] items — the
+/// [`ViewSource::Index`] universe feeds items tagged with their
+/// source repo. Filter, bucket, sort each bucket, truncate.
+/// Finite axes (status/priority/kind) yield every canonical
+/// bucket even when empty; renderers decide whether to show
+/// them. Named axes yield observed values only; [`UNGROUPED`]
+/// trails when reached.
+pub fn eval_scoped<'a, I>(items: I, spec: &ViewSpec) -> Vec<ViewGroup<'a>>
+where
+    I: IntoIterator<Item = Scoped<'a>>,
+{
+    let filtered: Vec<Scoped> = items
         .into_iter()
-        .filter(|i| spec.filter.matches(i))
+        .filter(|s| spec.filter.matches(s.item))
         .collect();
     let keys = spec.effective_sort();
 
-    let mut groups: Vec<(GroupKey, String, Vec<&Item>)> = match spec.effective_group_by() {
+    let mut groups: Vec<(GroupKey, String, Vec<Scoped>)> = match spec.effective_group_by() {
         None => filtered
             .is_empty()
             .then(Vec::new)
             .unwrap_or_else(|| vec![(GroupKey::Finite(0), String::new(), filtered)]),
         Some(axis) => {
-            let mut buckets: BTreeMap<GroupKey, (String, Vec<&Item>)> = match axis {
+            let mut buckets: BTreeMap<GroupKey, (String, Vec<Scoped>)> = match axis {
                 GroupAxis::Status => Status::ALL
                     .iter()
                     .map(|s| {
@@ -537,10 +660,12 @@ where
                         )
                     })
                     .collect(),
-                GroupAxis::Owner | GroupAxis::Epic | GroupAxis::Milestone => BTreeMap::new(),
+                GroupAxis::Owner | GroupAxis::Epic | GroupAxis::Milestone | GroupAxis::Repo => {
+                    BTreeMap::new()
+                }
             };
             for item in filtered {
-                let (key, label) = axis.key_label(item);
+                let (key, label) = axis.key_label(&item);
                 let entry = buckets.entry(key).or_insert_with(|| (label, Vec::new()));
                 entry.1.push(item);
             }
@@ -763,5 +888,50 @@ format = "board"
             toml::from_str(r#"filter = { pri_min = "med", pri_max = "crit" }"#).unwrap();
         assert_eq!(spec.filter.pri_min, Some(Priority::Medium));
         assert_eq!(spec.filter.pri_max, Some(Priority::Critical));
+    }
+
+    #[test]
+    fn source_parses_and_skips_default() {
+        let spec: ViewSpec = toml::from_str(r#"source = "index""#).unwrap();
+        assert_eq!(spec.source, ViewSource::Index);
+        assert!(toml::to_string(&spec).unwrap().contains("index"));
+        // repo is the default — never emitted
+        let spec = ViewSpec::default();
+        assert_eq!(spec.source, ViewSource::Repo);
+        assert!(!toml::to_string(&spec).unwrap().contains("source"));
+        assert!("index".parse::<ViewSource>().unwrap() == ViewSource::Index);
+        assert!("wat".parse::<ViewSource>().is_err());
+    }
+
+    #[test]
+    fn repo_axis_groups_by_tag() {
+        let v = items();
+        let spec: ViewSpec = toml::from_str(r#"group_by = "repo""#).unwrap();
+        let tagged = v
+            .iter()
+            .enumerate()
+            .map(|(i, it)| Scoped::tagged(if i % 2 == 0 { "a" } else { "b" }, it));
+        let g = eval_scoped(tagged, &spec);
+        let labels: Vec<_> = g.iter().map(|g| g.label.as_deref().unwrap()).collect();
+        assert_eq!(labels, ["a", "b"]);
+        assert_eq!(g[0].items.len(), 3);
+        // tags survive eval — renderers get the repo prefix
+        assert_eq!(g[0].items[0].repo, Some("a"));
+        // a repo-source universe (untagged) groups under `ungrouped`
+        let g = eval(&v, &spec);
+        let labels: Vec<_> = g.iter().map(|g| g.label.as_deref().unwrap()).collect();
+        assert_eq!(labels, [UNGROUPED]);
+        assert_eq!(g[0].items.len(), 5);
+    }
+
+    #[test]
+    fn scoped_serializes_the_item_plus_repo() {
+        let v = items();
+        let untagged = serde_json::to_value(Scoped::new(&v[0])).unwrap();
+        assert!(untagged.get("repo").is_none());
+        assert_eq!(untagged["id"], "T-001");
+        let tagged = serde_json::to_value(Scoped::tagged("myco", &v[0])).unwrap();
+        assert_eq!(tagged["repo"], "myco");
+        assert_eq!(tagged["id"], "T-001");
     }
 }

@@ -18,7 +18,8 @@ use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
 use myco_core::{
-    eval, Actor, GroupAxis, ItemId, ItemKind, Priority, SortKey, Status, ViewFormat, ViewSpec,
+    eval, eval_scoped, Actor, GroupAxis, ItemId, ItemKind, Priority, Scoped, SortKey, Status,
+    ViewFormat, ViewSource, ViewSpec,
 };
 use myco_ops::view::Origin;
 use serde::Deserialize;
@@ -344,6 +345,7 @@ struct ViewParams {
 #[serde(deny_unknown_fields)]
 struct SpecPatch {
     filter: Option<FilterPatch>,
+    source: Option<ViewSource>,
     group_by: Option<GroupAxis>,
     sort: Option<Vec<SortKey>>,
     limit: Option<u32>,
@@ -413,6 +415,9 @@ impl SpecPatch {
             if let Some(v) = p.superseded {
                 f.superseded = Some(v);
             }
+        }
+        if let Some(s) = self.source {
+            base.source = s;
         }
         if let Some(g) = self.group_by {
             base.group_by = Some(g);
@@ -649,13 +654,51 @@ impl Server {
                             patch.apply(&mut spec);
                         }
                         spec.validate().map_err(Fail::Verb)?;
-                        let scan = digest::scan(&store).map_err(Fail::Verb)?;
-                        // the universe: top-level items only —
-                        // children ride with their parent
-                        let universe = scan.items.iter().filter(|i| !scan.archived.contains(&i.id));
-                        let groups = eval(universe, &spec);
-                        let interrupted =
-                            continuity::interrupted_set(&store, scan.live()).map_err(Fail::Verb)?;
+                        let mut warnings = warnings;
+                        // the universe owners — `groups` borrows
+                        // item refs out of them
+                        let (interrupted, scan, views) = match spec.source {
+                            ViewSource::Repo => {
+                                let s = digest::scan(&store).map_err(Fail::Verb)?;
+                                (
+                                    continuity::interrupted_set(&store, s.live())
+                                        .map_err(Fail::Verb)?,
+                                    Some(s),
+                                    Vec::new(),
+                                )
+                            }
+                            // `source = "index"` unions the
+                            // registered repos' snapshots,
+                            // repo-tagged; snapshots carry no
+                            // handoffs — the set stays empty
+                            ViewSource::Index => {
+                                let (v, repo_warnings) =
+                                    crate::view::index_universe().map_err(Fail::Verb)?;
+                                warnings.extend(repo_warnings);
+                                (std::collections::BTreeSet::new(), None, v)
+                            }
+                        };
+                        // top-level items only — children ride
+                        // with their parent
+                        let groups = match spec.source {
+                            ViewSource::Repo => eval(
+                                scan.iter().flat_map(|s| {
+                                    s.items.iter().filter(|i| !s.archived.contains(&i.id))
+                                }),
+                                &spec,
+                            ),
+                            ViewSource::Index => eval_scoped(
+                                views.iter().flat_map(|v| {
+                                    v.snap.iter().flat_map(|s| {
+                                        s.items
+                                            .iter()
+                                            .filter(|i| !s.archived.contains(&i.id))
+                                            .map(move |i| Scoped::tagged(s.name.as_str(), i))
+                                    })
+                                }),
+                                &spec,
+                            ),
+                        };
                         Ok(json!({
                             "view": name,
                             "spec": spec,
@@ -1076,7 +1119,18 @@ mod tests {
                 .iter()
                 .map(|x| x["name"].as_str().unwrap())
                 .collect();
-            assert_eq!(names, ["board", "open", "epic", "milestone", "next"]);
+            assert_eq!(
+                names,
+                [
+                    "board",
+                    "open",
+                    "epic",
+                    "milestone",
+                    "next",
+                    "org-board",
+                    "org-status"
+                ]
+            );
             assert_eq!(v["views"][0]["origin"], "builtin");
             assert!(v["views"][0]["spec"].is_object());
             assert_eq!(v["warnings"], json!([]));

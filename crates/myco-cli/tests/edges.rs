@@ -1023,15 +1023,14 @@ fn index_rebuild_failures_and_gone_worktree() {
     let out = run_env(d.path(), &["index", "rebuild"], &env);
     assert_eq!(code(&out), 2, "{out:?}");
     assert!(stderr(&out).contains("rebuild(s) failed"), "{out:?}");
-    // org status: the repo errored — error kept with its snapshot
-    let out = run_env(d.path(), &["org", "status", "--json"], &env);
+    // org view: the repo errored — warning on stderr, last-good
+    // snapshot still contributes its items
+    let out = run_env(d.path(), &["view", "org-status", "--json"], &env);
     assert_eq!(code(&out), 0, "{out:?}");
-    let out = run_env(d.path(), &["org", "status"], &env);
+    assert!(stderr(&out).contains("warning"), "{out:?}");
+    let out = run_env(d.path(), &["view", "org-status"], &env);
     assert_eq!(code(&out), 0, "{out:?}");
-    assert!(
-        String::from_utf8_lossy(&out.stdout).contains('⚠'),
-        "{out:?}"
-    );
+    assert!(stderr(&out).contains("warning"), "{out:?}");
     // a registered repo never scanned → (None, _) stale arm
     std::fs::write(
         home.path().join("repos.toml"),
@@ -1075,6 +1074,7 @@ fn index_rebuild_failures_and_gone_worktree() {
 #[test]
 fn org_status_and_board() {
     let (d, _wt) = project();
+    let name = d.path().file_name().unwrap().to_string_lossy().to_string();
     let home = tempfile::tempdir().unwrap();
     let env = [("MYCO_HOME", home.path().to_str().unwrap())];
     let root = d.path().to_str().unwrap();
@@ -1087,27 +1087,41 @@ fn org_status_and_board() {
         0
     );
     assert_eq!(code(&run_env(d.path(), &["index", "add", root], &env)), 0);
-    // a hand-registered repo with no snapshot → error/None arms in
-    // org status (json + human "unavailable" rows)
+    // a hand-registered repo with no snapshot → warns, contributes
+    // nothing to the view
     std::fs::write(
         home.path().join("repos.toml"),
         format!("[[repo]]\npath = \"{}\"\nname = \"mine\"\n\n[[repo]]\npath = \"/nonexistent/ghost\"\nname = \"ghost\"\n", d.path().canonicalize().unwrap().display()),
     )
     .unwrap();
-    // a new worktree commit makes the snapshot stale → org status
-    // rebuilds → the human run FIRST gets the "(rebuilt)" arm
+    // a new worktree commit makes the snapshot stale → the index
+    // read rebuilds it on the spot
     assert_eq!(code(&run(d.path(), &["todo", "add", "task two"])), 0);
-    let out = run_env(d.path(), &["org", "status"], &env);
+    let out = run_env(d.path(), &["view", "org-status"], &env);
     assert_eq!(code(&out), 0, "{out:?}");
     let s = String::from_utf8_lossy(&out.stdout);
-    assert!(s.contains("org status — 2 repo(s)"), "{s}");
-    assert!(s.contains("totals:"), "{s}");
-    assert!(s.contains("devin"), "{s}");
-    assert!(s.contains('⚠'), "{s}");
-    // json
-    let out = run_env(d.path(), &["org", "status", "--json"], &env);
+    assert!(s.contains(&name), "{s}");
+    assert!(s.contains("T-002"), "{s}");
+    // the ghost repo's rescan failure is a warning, not a failure
+    assert!(stderr(&out).contains("ghost"), "{out:?}");
+    // json — repo-tagged items under the repo bucket
+    let out = run_env(d.path(), &["view", "org-status", "--json"], &env);
     assert_eq!(code(&out), 0);
-    assert!(String::from_utf8_lossy(&out.stdout).contains("rebuilt"));
+    let v = json(&out);
+    let mine = v["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["label"] == name)
+        .unwrap_or_else(|| panic!("no {name} group: {v}"));
+    assert!(
+        mine["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["id"] == "T-002" && i["repo"] == name),
+        "{mine}"
+    );
     // a bare `- [ ] T-009` line has an empty title → card is the
     // bare id; commit it so the snapshot stales + rebuilds
     let todo = _wt.join("TODO.md");
@@ -1117,13 +1131,13 @@ fn org_status_and_board() {
     git(&_wt, &["add", "-A"]);
     git(&_wt, &["commit", "-qm", "chore: add T-009"]);
     // org board human (with cards) + md + json
-    let out = run_env(d.path(), &["org", "board"], &env);
+    let out = run_env(d.path(), &["view", "org-board"], &env);
     assert_eq!(code(&out), 0, "{out:?}");
     let s = String::from_utf8_lossy(&out.stdout);
-    assert!(s.contains("T-001"), "{s}");
-    let out = run_env(d.path(), &["org", "board", "--md"], &env);
+    assert!(s.contains(&format!("{name}:T-001")), "{s}");
+    let out = run_env(d.path(), &["view", "org-board", "--md"], &env);
     assert_eq!(code(&out), 0);
-    let out = run_env(d.path(), &["org", "board", "--json"], &env);
+    let out = run_env(d.path(), &["view", "org-board", "--json"], &env);
     assert_eq!(code(&out), 0);
     // an org board with nothing live
     let (d2, _wt2) = project();
@@ -1137,10 +1151,10 @@ fn org_status_and_board() {
         )),
         0
     );
-    let out = run_env(d2.path(), &["org", "board"], &env2);
+    let out = run_env(d2.path(), &["view", "org-board"], &env2);
     assert_eq!(code(&out), 0, "{out:?}");
     assert!(
-        String::from_utf8_lossy(&out.stdout).contains("nothing live"),
+        String::from_utf8_lossy(&out.stdout).contains("empty view"),
         "{out:?}"
     );
 }

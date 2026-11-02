@@ -109,23 +109,6 @@ pub struct Counts {
 }
 
 impl Counts {
-    /// Fold another repo's counts in — org totals.
-    pub fn add(&mut self, o: &Counts) {
-        self.tasks_open += o.tasks_open;
-        self.tasks_claimed += o.tasks_claimed;
-        self.tasks_in_progress += o.tasks_in_progress;
-        self.tasks_blocked += o.tasks_blocked;
-        self.backlog += o.backlog;
-        self.issues.open += o.issues.open;
-        self.issues.resolved += o.issues.resolved;
-        self.proposals.open += o.proposals.open;
-        self.proposals.resolved += o.proposals.resolved;
-        self.adrs.open += o.adrs.open;
-        self.adrs.resolved += o.adrs.resolved;
-        self.plans.open += o.plans.open;
-        self.plans.resolved += o.plans.resolved;
-    }
-
     /// `{open}o` or `{open}o/{resolved}r` — the compact per-kind
     /// fragment used by `--prompt` and org lines.
     fn or_short(c: OpenResolved) -> String {
@@ -208,6 +191,7 @@ pub fn counts(scan: &Scan) -> Counts {
 }
 
 /// Sort key for view lists — critical first, then id.
+#[cfg(test)]
 pub fn pri_then_id(a: &Item, b: &Item) -> std::cmp::Ordering {
     b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id))
 }
@@ -296,12 +280,6 @@ mod tests {
         let j = c.to_json();
         assert_eq!(j["tasks"]["in-progress"], 1);
         assert_eq!(j["issues"]["resolved"], 2);
-        // add folds totals
-        let mut total = Counts::default();
-        total.add(&c);
-        total.add(&c);
-        assert_eq!(total.tasks_open, 2);
-        assert_eq!(total.issues.resolved, 4);
     }
 
     #[test]

@@ -202,9 +202,11 @@ enum Cmd {
         prompt: bool,
     },
     /// Declarative views — named presets (`[views.<name>]` in
-    /// config + built-ins `board|open|epic|milestone`) or an
-    /// ad-hoc spec from flags. `myco view board` is the kanban;
-    /// bare `myco view` lists views.
+    /// config + built-ins `board|open|epic|milestone`, plus
+    /// index-sourced `org-board|org-status` for cross-repo) or
+    /// an ad-hoc spec from flags (`--source index` unions the
+    /// registered repos' snapshots). `myco view board` is the
+    /// kanban; bare `myco view` lists views.
     View {
         /// View name — builtin preset or config view.
         name: Option<String>,
@@ -233,7 +235,9 @@ enum Cmd {
         #[command(subcommand)]
         cmd: indexcmd::Cmd,
     },
-    /// Cross-repo views over the index (auto-rebuilds stale repos).
+    /// Cross-repo scaffolding — re-run `init` on every registered
+    /// repo. Cross-repo *views* are `myco view org-board|org-status`
+    /// (index-sourced).
     Org {
         #[command(subcommand)]
         cmd: org::Cmd,
@@ -293,7 +297,7 @@ fn manifest() -> serde_json::Value {
             "view", "next",
             "status", "report",
             "index add", "index remove", "index list", "index rebuild",
-            "org status", "org board", "org init",
+            "org init",
             "handoff", "resume", "interrupt", "ui", "serve",
             "batch",
         ],
@@ -305,7 +309,7 @@ fn manifest() -> serde_json::Value {
             "view", "next",
             "status", "report",
             "index add", "index remove", "index list", "index rebuild",
-            "org status", "org board", "org init",
+            "org init",
             "handoff", "resume", "interrupt",
             "ui", "serve",
             "batch",

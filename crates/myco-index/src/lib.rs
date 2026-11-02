@@ -1,5 +1,5 @@
 //! Index port — the derived, disposable cache that powers
-//! `myco org` views.
+//! index-sourced `myco view` (the `org-*` presets).
 //!
 //! Markdown in `project/` stays canonical; a [`RepoSnapshot`] is a
 //! frozen scan of one repo's ledger keyed by the project-branch

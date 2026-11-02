@@ -66,7 +66,7 @@ unset fields keep the spec's value. `--format list|board`;
 <name>` opens the TUI with that view's *filter* narrowing every
 board (sort/group/format don't map onto columns).
 
-## Cross-repo — `index` + `org`
+## Cross-repo — `index` + `view --source index`
 
 The index is a disposable derived cache (redb under
 `~/.local/share/myco`, `$MYCO_HOME` overrides) — rebuild freely, the
@@ -78,15 +78,21 @@ myco index list                # registered repos + snapshot freshness
 myco index rebuild [<path>]    # re-scan one or all
 myco index remove <path>       # unregister
 
-myco org status                # per-repo counts + totals + by-owner
-                               #   (idle repos hidden; --all shows them)
-myco org board                 # org kanban, repo-prefixed cards
-myco org board --repo thal     # one repo's cards only
+myco view org-status           # per-repo grouped list (the old
+                               #   `org status` digest's substitute)
+myco view org-board            # org kanban, `repo:ID`-prefixed cards
+myco view org-board --kind task          # any filter flag applies
+myco view --source index --group-by status --format board   # ad-hoc org
 ```
 
-`org` views auto-rebuild stale snapshots — register each repo once
-with `index add`, then `org status` is the cheap org-wide answer to
-"what am I working on everywhere".
+`source = "index"` views auto-rebuild stale snapshots — register each
+repo once with `index add`, then `view org-status` is the cheap
+org-wide answer to "what am I working on everywhere". Index-sourced
+items carry a `repo` tag: `group_by = "repo"` buckets by it, cards
+prefix `repo:ID`, JSON items gain a `"repo"` field. Snapshots have no
+handoffs — the `⚡`/`interrupted` flag is repo-source only.
+`org init` (re-scaffold every registered repo) is the only `org`
+subcommand left.
 
 ## When which
 
@@ -96,4 +102,6 @@ with `index add`, then `org status` is the cheap org-wide answer to
   `view board --milestone <name>`.
 - A filter/group you'll reuse → `[views.<name>]` + `myco view <name>`;
   one-off slices → `myco view --status … --group-by …`.
-- Multiple repos in play → `index add` once per repo, then `org`.
+- Multiple repos in play → `index add` once per repo, then
+  `view org-status` / `view org-board` (or any spec with
+  `--source index`).

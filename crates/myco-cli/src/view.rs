@@ -8,13 +8,13 @@ use std::path::PathBuf;
 
 use clap::Args;
 use myco_core::{
-    eval, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, SortKey, Status, ViewFilter,
-    ViewFormat, ViewGroup, ViewSpec,
+    eval, eval_scoped, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, Scoped, SortKey, Status,
+    ViewFilter, ViewFormat, ViewGroup, ViewSource, ViewSpec,
 };
 use myco_ops::view::{NamedView, Origin};
 use serde_json::json;
 
-use crate::{board, continuity, digest, items, ops};
+use crate::{board, continuity, digest, indexcmd, items, ops, org};
 
 /// The filter flags — each maps onto the same `ViewFilter`
 /// field `filter = { … }` uses. Shared by `view` (merged over
@@ -132,7 +132,11 @@ impl FilterFlags {
 pub struct ViewFlags {
     #[command(flatten)]
     pub(crate) filter: FilterFlags,
-    /// Group axis — status|priority|kind|owner|epic|milestone.
+    /// Item universe — repo (default) reads this worktree; index
+    /// unions every registered repo's snapshot (org views).
+    #[arg(long)]
+    source: Option<ViewSource>,
+    /// Group axis — status|priority|kind|owner|epic|milestone|repo.
     #[arg(long)]
     group_by: Option<GroupAxis>,
     /// Sort keys — `pri,id,-created`; `-` flips a key's default
@@ -152,6 +156,9 @@ impl ViewFlags {
     /// named spec's value.
     fn apply(&self, spec: &mut ViewSpec) {
         self.filter.apply(&mut spec.filter);
+        if let Some(s) = self.source {
+            spec.source = s;
+        }
         if let Some(g) = self.group_by {
             spec.group_by = Some(g);
         }
@@ -169,6 +176,7 @@ impl ViewFlags {
     /// Any flag set? Bare `myco view` (no name, no flags) lists.
     fn any_set(&self) -> bool {
         self.filter.any_set()
+            || self.source.is_some()
             || self.group_by.is_some()
             || !self.sort.is_empty()
             || self.limit.is_some()
@@ -230,6 +238,9 @@ fn spec_digest(s: &ViewSpec) -> String {
     } else {
         format!("filter:{{{}}}", parts.join(" "))
     };
+    if !s.source.is_default() {
+        out.push_str(&format!(" source:{}", s.source.name()));
+    }
     if let Some(g) = s.group_by {
         out.push_str(&format!(" group_by:{}", g.name()));
     }
@@ -275,24 +286,30 @@ fn list_views(views: &[NamedView], json_out: bool) {
 }
 
 /// `list` — compact lines; `<label> (n)` headers when the spec
-/// groups; children ride indented under their parent.
+/// groups; children ride indented under their parent. A
+/// `repo:…` tag prefixes index-sourced items.
 pub(crate) fn render_list(groups: &[ViewGroup], interrupted: &BTreeSet<ItemId>) -> String {
     fn push_item(
         out: &mut String,
         item: &Item,
         depth: usize,
         base: &str,
+        repo: Option<&str>,
         interrupted: &BTreeSet<ItemId>,
     ) {
         out.push_str(base);
         out.push_str(&"  ".repeat(depth));
+        if let Some(r) = repo {
+            out.push_str(r);
+            out.push(':');
+        }
         out.push_str(&items::compact(item));
         if interrupted.contains(&item.id) {
             out.push_str(" ⚡");
         }
         out.push('\n');
         for c in &item.children {
-            push_item(out, c, depth + 1, base, interrupted);
+            push_item(out, c, depth + 1, base, repo, interrupted);
         }
     }
     let mut out = String::new();
@@ -305,7 +322,7 @@ pub(crate) fn render_list(groups: &[ViewGroup], interrupted: &BTreeSet<ItemId>) 
         }
         let base = if g.label.is_some() { "  " } else { "" };
         for i in &g.items {
-            push_item(&mut out, i, 0, base, interrupted);
+            push_item(&mut out, i.item, 0, base, i.repo, interrupted);
         }
     }
     out.trim_end_matches('\n').to_string()
@@ -323,7 +340,7 @@ pub(crate) fn render_board(
     all: bool,
 ) -> String {
     if board::is_status_board(spec) {
-        let (headers, cards) = board::status_cards(groups, None, interrupted);
+        let (headers, cards) = board::status_cards(groups, interrupted);
         return board::render_columns(&headers, &cards, md, board::Fit::terminal(all));
     }
     let headers: Vec<String> = groups
@@ -335,7 +352,7 @@ pub(crate) fn render_board(
         .map(|g| {
             g.items
                 .iter()
-                .map(|i| board::card(i, None, interrupted.contains(&i.id)))
+                .map(|i| board::card(i.item, i.repo, interrupted.contains(&i.item.id)))
                 .collect()
         })
         .collect();
@@ -397,9 +414,27 @@ pub(crate) fn view_json(
     })
 }
 
+/// The index-sourced universe — every registered repo's
+/// snapshot, freshness-checked + rebuilt by [`org::load_fresh`],
+/// items tagged with their repo's name. Rescan failures warn on
+/// stderr and contribute their last-good snapshot (or nothing).
+pub(crate) fn index_universe() -> Result<(Vec<org::RepoView>, Vec<String>), String> {
+    let index = indexcmd::open_index()?;
+    let views = org::load_fresh(&index)?;
+    let warnings = views
+        .iter()
+        .filter_map(|v| v.error.as_ref().map(|e| format!("{}: {e}", v.name)))
+        .collect();
+    Ok((views, warnings))
+}
+
 /// The `view` verb — `NAME` resolves builtin presets then config
 /// views; no NAME builds the spec from flags alone; bare `myco
 /// view` (or `--list`) enumerates the defined views.
+/// `spec.source` picks the universe: `repo` reads this
+/// worktree's ledger, `index` unions the registered repos'
+/// snapshots (the `org-*` presets — `myco org status|board`'s
+/// heirs).
 pub fn run(
     name: Option<String>,
     flags: ViewFlags,
@@ -408,17 +443,27 @@ pub fn run(
     root: Option<PathBuf>,
     json_out: bool,
 ) -> Result<i32, String> {
-    let (proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
+    // The config root for named-view resolution — repo discovery
+    // when it works, else `--root`/cwd: an index-sourced view
+    // needs no store, so discovery failure isn't fatal (yet).
+    let opened = items::open_read(dir.as_deref(), root.as_deref());
+    let cfg_root = opened
+        .as_ref()
+        .map(|(p, _)| p.root.clone())
+        .ok()
+        .or_else(|| root.clone())
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
 
     if out.list || (name.is_none() && !flags.any_set()) {
-        let (views, _) = myco_ops::view::named_views_lenient(&proj.root, ops::CONFIG)?;
+        let (views, _) = myco_ops::view::named_views_lenient(&cfg_root, ops::CONFIG)?;
         list_views(&views, json_out);
         return Ok(0);
     }
 
     let (mut spec, warnings) = match &name {
         Some(n) => {
-            let (v, w) = myco_ops::view::resolve_lenient(&proj.root, n, ops::CONFIG)?;
+            let (v, w) = myco_ops::view::resolve_lenient(&cfg_root, n, ops::CONFIG)?;
             (v.spec, w)
         }
         None => (ViewSpec::default(), Vec::new()),
@@ -427,16 +472,59 @@ pub fn run(
     spec.validate()?;
     warn(&warnings);
 
-    // the universe: top-level items only — children ride with
-    // their parent (they can't match a filter on their own)
-    let scan = digest::scan(&store)?;
-    let universe = scan.items.iter().filter(|i| !scan.archived.contains(&i.id));
-    let groups = eval(universe, &spec);
-    let interrupted = continuity::interrupted_set(&store, scan.live())?;
+    // The universe owners — `groups` borrows item refs out of
+    // them, so they must outlive it.
+    let (interrupted, empty_name, scan, views) = match spec.source {
+        ViewSource::Repo => {
+            let (_proj, store) = opened?;
+            let s = digest::scan(&store)?;
+            (
+                continuity::interrupted_set(&store, s.live())?,
+                s.name.clone(),
+                Some(s),
+                Vec::new(),
+            )
+        }
+        ViewSource::Index => {
+            let (v, repo_warnings) = index_universe()?;
+            warn(&repo_warnings);
+            // snapshots carry no handoffs — the interrupted set
+            // is empty, not failed
+            (
+                BTreeSet::new(),
+                name.clone().unwrap_or_else(|| "index".into()),
+                None,
+                v,
+            )
+        }
+    };
+    // top-level items only — children ride with their parent
+    // (they can't match a filter on their own)
+    let groups = match spec.source {
+        ViewSource::Repo => eval(
+            scan.iter()
+                .flat_map(|s| s.items.iter().filter(|i| !s.archived.contains(&i.id))),
+            &spec,
+        ),
+        ViewSource::Index => eval_scoped(
+            views.iter().flat_map(|v| {
+                v.snap.iter().flat_map(|s| {
+                    s.items
+                        .iter()
+                        .filter(|i| !s.archived.contains(&i.id))
+                        .map(move |i| Scoped::tagged(s.name.as_str(), i))
+                })
+            }),
+            &spec,
+        ),
+    };
 
     if json_out {
         let payload = if board::is_status_board(&spec) {
-            board::groups_json(&groups, &interrupted)
+            // index snapshots carry no handoffs — omit the flag
+            // entirely rather than emitting `false` everywhere
+            let set = (spec.source == ViewSource::Repo).then_some(&interrupted);
+            board::groups_json(&groups, set)
         } else {
             view_json(name.as_deref(), &spec, &groups, &interrupted)
         };
@@ -446,7 +534,7 @@ pub fn run(
 
     let rendered = render_groups(&spec, &groups, &interrupted, out.md, out.all);
     if groups.iter().all(|g| g.items.is_empty()) {
-        println!("{}: empty view — no items match", scan.name);
+        println!("{empty_name}: empty view — no items match");
     } else {
         ops::print_paged(&rendered);
     }

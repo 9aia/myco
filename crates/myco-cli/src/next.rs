@@ -35,6 +35,7 @@ pub struct NextFlags {
 
 /// The default `next` spec — the builtin `next` view (open
 /// tasks+issues, top item only), before config shadows/flags.
+#[cfg(test)]
 pub(crate) fn base_spec() -> ViewSpec {
     myco_ops::view::builtins()
         .into_iter()
@@ -71,8 +72,7 @@ pub(crate) fn pick<'a>(scan: &'a digest::Scan, spec: &ViewSpec) -> Option<&'a It
     let universe = scan.items.iter().filter(|i| !scan.archived.contains(&i.id));
     eval(universe, spec)
         .iter()
-        .find_map(|g| g.items.first())
-        .copied()
+        .find_map(|g| g.items.first().map(|s| s.item))
 }
 
 /// Who a `--claim` assigns — `--owner`'s single actor (under

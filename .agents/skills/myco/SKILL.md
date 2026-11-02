@@ -53,7 +53,7 @@ myco <verb> --help     # every verb, self-documenting
 | Pick the top item | `myco next [--claim]` — open task/issue by `pri,id`; filter flags shared with `view` |
 | Views | `myco view [name]` (`board`/`open`/`epic`/`milestone` presets + `--epic`/`--milestone`/`--status`/`--group-by`/`--sort` flags) · `myco report` · `myco ui` (interactive TUI) |
 | Served surface | `myco serve` (JSON-RPC 2.0 on stdio, for pipe-holding embedders) · `myco batch` (one-shot: NDJSON requests stdin/`--file` → NDJSON responses) |
-| Cross-repo | `myco index add <repo>` · `myco org status` |
+| Cross-repo | `myco index add <repo>` · `myco view org-status` · `myco view org-board` |
 | Housekeeping | `myco init` · `check` · `migrate` · `commit` · `org init` |
 
 ## The daily loop

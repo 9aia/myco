@@ -323,21 +323,34 @@ fn org_status_and_board_across_repos() {
         assert_eq!(code(&out), 0, "{out:?}");
     }
     let (na, nb) = (name_of(a.path()), name_of(b.path()));
-    let out = run(a.path(), &["org", "status", "--json"], Some(home.path()));
+    // org-status — the index-sourced, repo-grouped list view
+    let out = run(
+        a.path(),
+        &["view", "org-status", "--json"],
+        Some(home.path()),
+    );
     assert_eq!(code(&out), 0, "{out:?}");
     let v = json(&out);
-    assert_eq!(v["repos"].as_array().unwrap().len(), 2);
-    assert_eq!(v["totals"]["tasks"]["open"], 4); // 2 per repo
-    assert_eq!(v["totals"]["backlog"], 2);
-    assert_eq!(v["totals"]["issues"]["open"], 2);
-    // owner grouping: devin owns I-001 in both repos
-    let owners = &v["owners"]["devin"].as_array().unwrap();
-    assert_eq!(owners.len(), 2, "{owners:?}");
-    assert!(owners[0].as_str().unwrap().contains("I-001"));
+    assert_eq!(v["view"], "org-status");
+    assert_eq!(v["spec"]["source"], "index");
+    assert_eq!(v["spec"]["group_by"], "repo");
+    let groups = v["groups"].as_array().unwrap();
+    // one bucket per repo, named by the repo tag
+    let labels: std::collections::BTreeSet<&str> =
+        groups.iter().filter_map(|g| g["label"].as_str()).collect();
+    let mut want = vec![na.clone(), nb.clone()];
+    want.sort();
+    assert_eq!(labels.iter().copied().collect::<Vec<_>>(), want);
+    // each repo seeded 4 live items (2 tasks + 1 issue + 1 backlog)
+    for g in groups {
+        assert_eq!(g["items"].as_array().unwrap().len(), 4, "{g}");
+        // every item carries its repo tag
+        assert_eq!(g["items"][0]["repo"], g["label"]);
+    }
     // org board — repo-prefixed cards (2 tasks + 1 issue open each)
     let v = json(&run(
         a.path(),
-        &["org", "board", "--json"],
+        &["view", "org-board", "--json"],
         Some(home.path()),
     ));
     assert_eq!(v["open"].as_array().unwrap().len(), 6);
@@ -347,26 +360,29 @@ fn org_status_and_board_across_repos() {
         .iter()
         .map(|i| i["repo"].as_str().unwrap())
         .collect();
-    let mut want = vec![na.clone(), nb.clone()];
-    want.sort();
     assert_eq!(repos.iter().copied().collect::<Vec<_>>(), want);
+    // snapshots carry no handoffs — no interrupted flag on items
+    assert!(v["open"][0].get("interrupted").is_none());
     // human org board mentions repo prefixes
-    let out = run(a.path(), &["org", "board"], Some(home.path()));
+    let out = run(a.path(), &["view", "org-board"], Some(home.path()));
     let s = String::from_utf8_lossy(&out.stdout);
     assert!(s.contains(&format!("{na}:T-")), "{s}");
     assert!(s.contains(&format!("{nb}:T-")), "{s}");
-    // org status auto-rebuilds a stale repo
+    // index reads auto-rebuild stale snapshots — a fresh commit
+    // shows up in the next org view
     ok(a.path(), &["todo", "add", "fresh work"]);
-    let out = run(a.path(), &["org", "status", "--json"], Some(home.path()));
-    let v = json(&out);
-    let rebuilt: Vec<&Value> = v["repos"]
+    let v = json(&run(
+        a.path(),
+        &["view", "org-status", "--json"],
+        Some(home.path()),
+    ));
+    let total: usize = v["groups"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|r| r["rebuilt"] == true)
-        .collect();
-    assert_eq!(rebuilt.len(), 1, "{v}");
-    assert_eq!(v["totals"]["tasks"]["open"], 5);
+        .map(|g| g["items"].as_array().unwrap().len())
+        .sum();
+    assert_eq!(total, 9, "{v}");
 }
 
 #[test]
@@ -402,15 +418,26 @@ fn index_add_accepts_worktree_and_rebuild_all() {
 fn org_empty_index() {
     let home = tempfile::tempdir().unwrap();
     let d = seeded();
-    let out = run(d.path(), &["org", "status", "--json"], Some(home.path()));
+    let out = run(
+        d.path(),
+        &["view", "org-status", "--json"],
+        Some(home.path()),
+    );
     assert_eq!(code(&out), 0);
     let v = json(&out);
-    assert_eq!(v["repos"].as_array().unwrap().len(), 0);
-    assert_eq!(v["totals"]["tasks"]["open"], 0);
+    assert_eq!(v["groups"].as_array().unwrap().len(), 0);
+    assert_eq!(v["interrupted"], serde_json::json!([]));
+    // human form reports the empty view, exit 0
+    let out = run(d.path(), &["view", "org-status"], Some(home.path()));
+    assert_eq!(code(&out), 0);
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("empty view"),
+        "{out:?}"
+    );
 }
 
 #[test]
-fn org_status_error_entry_identifies_the_repo() {
+fn org_view_error_warns_and_identifies_the_repo() {
     let home = tempfile::tempdir().unwrap();
     let d = seeded();
     let canon = d.path().canonicalize().unwrap();
@@ -420,23 +447,21 @@ fn org_status_error_entry_identifies_the_repo() {
         Some(home.path()),
     );
     assert_eq!(code(&out), 0, "{out:?}");
-    // no snapshot + a vanished worktree → an error entry, and it
-    // must still say *which* repo failed (name + path, not a
-    // bare {"error": …})
+    // no snapshot + a vanished worktree → the repo contributes
+    // nothing, and the read must still say *which* repo failed —
+    // a stderr warning naming it, not a silent skip
     std::fs::remove_file(home.path().join("index.redb")).unwrap();
     std::fs::remove_dir_all(d.path().join("project")).unwrap();
-    let out = run(d.path(), &["org", "status", "--json"], Some(home.path()));
+    let out = run(
+        d.path(),
+        &["view", "org-status", "--json"],
+        Some(home.path()),
+    );
     assert_eq!(code(&out), 0, "{out:?}");
     let v = json(&out);
-    let repo = &v["repos"].as_array().unwrap()[0];
-    assert_eq!(repo["name"], name_of(d.path()), "{repo}");
-    assert_eq!(
-        repo["path"].as_str().unwrap(),
-        canon.to_string_lossy(),
-        "{repo}"
-    );
-    assert!(
-        repo["error"].as_str().unwrap().contains("worktree"),
-        "{repo}"
-    );
+    assert!(v["groups"].as_array().unwrap().is_empty(), "{v}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("warning"), "{stderr}");
+    assert!(stderr.contains(&name_of(d.path())), "{stderr}");
+    assert!(stderr.contains("worktree"), "{stderr}");
 }
