@@ -9,7 +9,6 @@ use std::path::Path;
 
 use myco_core::{Item, ItemFile, ItemId, ItemKind, Status};
 use myco_store::Store;
-use myco_store_md::MdStore;
 use serde_json::json;
 
 use crate::discover;
@@ -27,7 +26,7 @@ pub fn compact(item: &Item) -> String {
 }
 
 /// Load both ledger docs through the store.
-pub fn load_ledger(store: &MdStore) -> Result<Ledger, String> {
+pub fn load_ledger(store: &impl Store) -> Result<Ledger, String> {
     Ok(Ledger::new(
         store.todo().map_err(|e| e.to_string())?,
         store.backlog().map_err(|e| e.to_string())?,
@@ -35,7 +34,7 @@ pub fn load_ledger(store: &MdStore) -> Result<Ledger, String> {
 }
 
 /// Write both ledger docs back through the store.
-pub fn save_ledger(store: &MdStore, ledger: &Ledger) -> Result<(), String> {
+pub fn save_ledger(store: &impl Store, ledger: &Ledger) -> Result<(), String> {
     store.save_todo(&ledger.todo).map_err(|e| e.to_string())?;
     store
         .save_backlog(&ledger.backlog)
@@ -45,7 +44,7 @@ pub fn save_ledger(store: &MdStore, ledger: &Ledger) -> Result<(), String> {
 /// Load a file-backed item for mutation. Archived items are
 /// refused — `save_item` writes to the live dir, so editing one
 /// would silently un-archive it.
-pub fn item_for_edit(store: &MdStore, id: ItemId) -> Result<ItemFile, String> {
+pub fn item_for_edit(store: &impl Store, id: ItemId) -> Result<ItemFile, String> {
     if store.is_archived(id).map_err(|e| e.to_string())? {
         return Err(format!("{id} is archived — mutating it is refused"));
     }
@@ -58,26 +57,27 @@ pub fn today() -> time::Date {
 }
 
 /// A store handle holding the worktree lock — exclusive from
-/// [`open`] (mutating verbs), shared from [`open_read`]. The lock
-/// releases when this drops. Derefs to [`MdStore`], so `&locked`
-/// coerces to `&MdStore` at every call site.
-pub struct LockedStore {
-    store: MdStore,
+/// [`open_with`] (mutating verbs), shared from [`open_read_with`].
+/// The lock releases when this drops. Derefs to the inner store,
+/// so `&locked` coerces to `&S` at every call site. Generic over
+/// the store — the front-end (composition root) names the impl.
+pub struct LockedStore<S> {
+    store: S,
     _lock: Option<ops::WorktreeLock>,
 }
 
-impl LockedStore {
+impl<S> LockedStore<S> {
     /// A store holding no lock — for tests and callers that
     /// guarantee a single writer by construction.
-    pub fn unlocked(store: MdStore) -> Self {
+    pub fn unlocked(store: S) -> Self {
         LockedStore { store, _lock: None }
     }
 }
 
-impl std::ops::Deref for LockedStore {
-    type Target = MdStore;
+impl<S> std::ops::Deref for LockedStore<S> {
+    type Target = S;
 
-    fn deref(&self) -> &MdStore {
+    fn deref(&self) -> &S {
         &self.store
     }
 }
@@ -85,7 +85,7 @@ impl std::ops::Deref for LockedStore {
 /// `LockedStore` is a full [`Store`] — pure delegation, so
 /// `&locked` satisfies `&impl Store` bounds (generic params don't
 /// deref-coerce).
-impl Store for LockedStore {
+impl<S: Store> Store for LockedStore<S> {
     fn meta(&self) -> Result<myco_core::ProjectMeta, myco_store::Error> {
         self.store.meta()
     }
@@ -131,6 +131,9 @@ impl Store for LockedStore {
     fn is_archived(&self, id: ItemId) -> Result<bool, myco_store::Error> {
         self.store.is_archived(id)
     }
+    fn item_path(&self, item: &Item) -> Result<Option<String>, myco_store::Error> {
+        self.store.item_path(item)
+    }
     fn index_md(&self) -> Result<String, myco_store::Error> {
         self.store.index_md()
     }
@@ -152,18 +155,22 @@ impl Store for LockedStore {
     }
 }
 
-/// Resolve the project + open the store under the exclusive
-/// mutation lock — every verb that writes the ledger takes this
-/// path. The lock spans discovery → mutation → the per-verb
-/// autocommit; contention fails fast (`another myco process is
-/// writing — retry`) instead of corrupting the ledger.
-pub fn open(
+/// Resolve the project + open the store `mk` builds under the
+/// exclusive mutation lock — every verb that writes the ledger
+/// takes this path. `mk` gets the discovered worktree and names
+/// the concrete impl (`myco`'s `ops::store_at` → `MdStore`), so
+/// this crate stays generic over [`Store`]. The lock spans
+/// discovery → mutation → the per-verb autocommit; contention
+/// fails fast (`another myco process is writing — retry`) instead
+/// of corrupting the ledger.
+pub fn open_with<S: Store>(
     dir: Option<&Path>,
     root: Option<&Path>,
-) -> Result<(discover::Project, LockedStore), String> {
+    mk: impl FnOnce(&Path) -> Result<S, String>,
+) -> Result<(discover::Project, LockedStore<S>), String> {
     let proj = discover::discover(dir, root)?;
     let lock = ops::lock_worktree(&proj.worktree)?;
-    let store = ops::store_at(&proj.worktree)?;
+    let store = mk(&proj.worktree)?;
     Ok((
         proj,
         LockedStore {
@@ -173,16 +180,17 @@ pub fn open(
     ))
 }
 
-/// Resolve + open under the shared read lock — read-only verbs
+/// [`open_with`] under the shared read lock — read-only verbs
 /// (`status`, `board`, `list`, `resume`, …). Readers don't block
 /// each other; a reader meeting a live writer fails fast.
-pub fn open_read(
+pub fn open_read_with<S: Store>(
     dir: Option<&Path>,
     root: Option<&Path>,
-) -> Result<(discover::Project, LockedStore), String> {
+    mk: impl FnOnce(&Path) -> Result<S, String>,
+) -> Result<(discover::Project, LockedStore<S>), String> {
     let proj = discover::discover(dir, root)?;
     let lock = ops::lock_shared(&proj.worktree)?;
-    let store = ops::store_at(&proj.worktree)?;
+    let store = mk(&proj.worktree)?;
     Ok((
         proj,
         LockedStore {
@@ -306,7 +314,7 @@ pub struct NewItem<'a> {
 /// `template` → `save_item` → commit + report.
 pub fn new_file(
     proj: &discover::Project,
-    store: &MdStore,
+    store: &impl Store,
     spec: &NewItem<'_>,
 ) -> Result<i32, String> {
     let id = store.alloc_id(spec.kind).map_err(|e| e.to_string())?;
@@ -318,7 +326,7 @@ pub fn new_file(
         .unwrap_or_else(|| (spec.template)(&item));
     let file = ItemFile::new(item.clone()).body(body);
     store.save_item(&file).map_err(|e| e.to_string())?;
-    let rel = item_rel_path(&item);
+    let rel = item_rel_path(store, &item)?;
     let committed = commit(
         &proj.worktree,
         &format!("chore: new {} {id}", spec.word),
@@ -337,7 +345,7 @@ pub fn new_file(
 /// `(item, archived)` pairs. Non-CLI front-ends (`myco serve`)
 /// shape it themselves — [`marked_json`] is the list shape.
 pub fn query_files(
-    store: &MdStore,
+    store: &impl Store,
     kind: ItemKind,
     include_archived: bool,
     filter: &Filter,
@@ -379,7 +387,7 @@ pub fn marked_json(items: &[(Item, bool)]) -> serde_json::Value {
 /// The shared `<kind> list` — live item files, plus `archive/`
 /// entries when `include_archived`.
 pub fn list_files(
-    store: &MdStore,
+    store: &impl Store,
     kind: ItemKind,
     include_archived: bool,
     filter: &Filter,
@@ -394,19 +402,22 @@ pub fn list_files(
     print_list(&items, false)
 }
 
-/// `<dir>/<filename>` for a file-backed item.
-pub fn item_rel_path(item: &Item) -> String {
-    let dir = myco_store_md::item_dir(item.id.kind()).unwrap_or("");
-    let name =
-        myco_store_md::item_filename(&item.id, &item.title).unwrap_or_else(|| item.id.to_string());
-    format!("{dir}/{name}")
+/// `<dir>/<filename>` for a file-backed item — the store impl's
+/// own naming grammar ([`Store::item_path`], archive scope
+/// included), falling back to the bare id for kinds with no file
+/// form.
+pub fn item_rel_path(store: &impl Store, item: &Item) -> Result<String, String> {
+    Ok(store
+        .item_path(item)
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|| item.id.to_string()))
 }
 
 /// Locate an item anywhere in the ledger — TODO.md, BACKLOG.md, or
 /// an item file (live or `archive/`). Returns the item, its
 /// location label, and the body for file-backed items.
 pub fn find_item(
-    store: &MdStore,
+    store: &impl Store,
     id: ItemId,
 ) -> Result<Option<(Item, String, Option<String>)>, String> {
     let ledger = load_ledger(store)?;
@@ -418,12 +429,7 @@ pub fn find_item(
     }
     match store.item(id) {
         Ok(f) => {
-            let mut loc = item_rel_path(&f.meta);
-            if store.is_archived(id).map_err(|e| e.to_string())? {
-                if let Some((d, n)) = loc.split_once('/') {
-                    loc = format!("{d}/archive/{n}");
-                }
-            }
+            let loc = item_rel_path(store, &f.meta)?;
             Ok(Some((f.meta.clone(), loc, Some(f.body))))
         }
         Err(myco_store::Error::NotFound { .. }) => Ok(None),
@@ -436,6 +442,15 @@ pub fn find_item(
 mod tests {
     use super::*;
     use myco_core::ItemKind;
+    use myco_store_md::MdStore;
+
+    /// `MdStore` rooted at a worktree path — the tests name the
+    /// impl, like the CLI's `ops::store_at` does.
+    fn md_store(wt: &Path) -> Result<MdStore, String> {
+        let root = camino::Utf8PathBuf::from_path_buf(wt.to_path_buf())
+            .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
+        Ok(MdStore::new(root))
+    }
 
     /// A plain `project/` dir that qualifies via `TODO.md` — the
     /// no-repo fallback lock path.
@@ -450,35 +465,35 @@ mod tests {
     #[test]
     fn open_serializes_mutating_verbs() {
         let (_d, wt) = project_dir();
-        let (_p, store) = open(Some(wt.as_path()), None).unwrap();
+        let (_p, store) = open_with(Some(wt.as_path()), None, md_store).unwrap();
         // a second writer (even in-process — the lock is per
         // open-file-description) fails fast instead of racing
         // the load→mutate→save
-        let err = open(Some(wt.as_path()), None).err().unwrap();
+        let err = open_with(Some(wt.as_path()), None, md_store).err().unwrap();
         assert!(err.contains("another myco process is writing"), "{err}");
         // readers fail fast while a writer holds the lock…
-        assert!(open_read(Some(wt.as_path()), None).is_err());
+        assert!(open_read_with(Some(wt.as_path()), None, md_store).is_err());
         drop(store);
         // …and everyone succeeds once it drops — a fresh writer,
         // then concurrent readers
-        let (_p, store) = open(Some(wt.as_path()), None).unwrap();
+        let (_p, store) = open_with(Some(wt.as_path()), None, md_store).unwrap();
         drop(store);
-        let (_p2, r2) = open_read(Some(wt.as_path()), None).unwrap();
-        let (_p3, r3) = open_read(Some(wt.as_path()), None).unwrap();
+        let (_p2, r2) = open_read_with(Some(wt.as_path()), None, md_store).unwrap();
+        let (_p3, r3) = open_read_with(Some(wt.as_path()), None, md_store).unwrap();
         drop((r2, r3));
     }
 
     #[test]
     fn concurrent_open_fails_fast_no_dup_ids() {
         let (_d, wt) = project_dir();
-        let (_p, s1) = open(Some(wt.as_path()), None).unwrap();
+        let (_p, s1) = open_with(Some(wt.as_path()), None, md_store).unwrap();
         let id1 = s1.alloc_id(ItemKind::Task).unwrap();
         // a racing verb can't even open — prove the failure is
         // the lock, not the store, by retrying after the drop
         let wt2 = wt.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         let racing = std::thread::spawn(move || {
-            tx.send(open(Some(wt2.as_path()), None).map(|_| ()))
+            tx.send(open_with(Some(wt2.as_path()), None, md_store).map(|_| ()))
                 .unwrap();
         });
         let err = rx.recv().unwrap().unwrap_err();
@@ -487,7 +502,7 @@ mod tests {
         // after release, a fresh verb allocates the *next* id —
         // the lock is what kept two alloc_id RMWs from both
         // reading "next = id1" and handing out a duplicate
-        let (_p, s2) = open(Some(wt.as_path()), None).unwrap();
+        let (_p, s2) = open_with(Some(wt.as_path()), None, md_store).unwrap();
         let id2 = s2.alloc_id(ItemKind::Task).unwrap();
         assert_ne!(id1, id2);
         racing.join().unwrap();

@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use myco_core::{eval, GroupAxis, Item, ItemId, Status, ViewFilter, ViewGroup, ViewSpec};
+use myco_store::Store;
 use serde_json::json;
 
 use crate::{digest, items, ops};
@@ -154,7 +155,7 @@ pub fn digest_json(scan: &digest::Scan) -> serde_json::Value {
 
 /// The status digest + `interrupted` id list — the `--json`
 /// payload, shared with `myco serve`.
-pub fn status_json(store: &myco_store_md::MdStore) -> Result<serde_json::Value, String> {
+pub fn status_json(store: &impl Store) -> Result<serde_json::Value, String> {
     let scan = digest::scan(store)?;
     let interrupted = crate::continuity::interrupted_set(store, scan.live())?;
     let mut v = digest_json(&scan);
@@ -167,7 +168,7 @@ pub fn status_json(store: &myco_store_md::MdStore) -> Result<serde_json::Value, 
 
 /// The `--prompt` block payload — `{"prompt": "<block>"}` for
 /// `myco serve`, where the digest isn't a useful shape.
-pub fn prompt_json(store: &myco_store_md::MdStore) -> Result<serde_json::Value, String> {
+pub fn prompt_json(store: &impl Store) -> Result<serde_json::Value, String> {
     let scan = digest::scan(store)?;
     let interrupted = crate::continuity::interrupted_set(store, scan.live())?;
     Ok(json!({"prompt": prompt_block(&scan, &interrupted)}))

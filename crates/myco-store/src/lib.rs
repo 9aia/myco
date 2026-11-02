@@ -8,7 +8,7 @@
 
 use std::collections::BTreeSet;
 
-use myco_core::{BacklogDoc, HandoffEntry, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
+use myco_core::{BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
 
 /// Project-state persistence.
 pub trait Store {
@@ -71,6 +71,14 @@ pub trait Store {
     /// addressable by [`Store::item`] but mutating verbs refuse
     /// them (they'd silently un-archive otherwise).
     fn is_archived(&self, id: ItemId) -> Result<bool, Error>;
+
+    /// `item`'s path relative to the store root, in the impl's own
+    /// naming grammar (`issues/issue-0003-x.md`) — including the
+    /// archive scope (`issues/archive/…`) when the item is
+    /// archived, so `myco` never hardcodes the file spec.
+    /// `Ok(None)` for kinds the impl doesn't file-back (tasks live
+    /// in TODO.md/BACKLOG.md).
+    fn item_path(&self, item: &Item) -> Result<Option<String>, Error>;
 
     /// `index.md` verbatim — generated views land later; today it's
     /// a raw passthrough ([`Error::NotFound`] when absent).

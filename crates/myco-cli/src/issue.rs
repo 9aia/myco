@@ -116,8 +116,10 @@ pub fn run(
                     file.meta.status
                 ));
             }
-            let rel = items::item_rel_path(&file.meta).replacen('/', "/archive/", 1);
             store.archive_item(id).map_err(|e| e.to_string())?;
+            // asked after the move so the impl reports the
+            // archive-scope path itself
+            let rel = items::item_rel_path(&store, &file.meta)?;
             let committed =
                 items::commit(&proj.worktree, &format!("chore: archive {id}"), no_commit)?;
             items::report(

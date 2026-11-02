@@ -10,7 +10,6 @@ use std::collections::BTreeSet;
 
 use myco_core::{Item, ItemId, ItemKind, Status};
 use myco_store::Store;
-use myco_store_md::MdStore;
 
 /// File-backed kinds, in ledger order.
 pub const FILE_KINDS: [ItemKind; 4] = [
@@ -55,7 +54,7 @@ impl Scan {
 }
 
 /// Scan a worktree's whole ledger through the store.
-pub fn scan(store: &MdStore) -> Result<Scan, String> {
+pub fn scan(store: &impl Store) -> Result<Scan, String> {
     let name = store.meta().map_err(|e| e.to_string())?.name;
     let mut items = Vec::new();
     items.extend(store.todo().map_err(|e| e.to_string())?.items().cloned());
@@ -218,6 +217,7 @@ pub fn pri_then_id(a: &Item, b: &Item) -> std::cmp::Ordering {
 mod tests {
     use super::*;
     use myco_core::{ItemFile, ItemId, Priority};
+    use myco_store_md::MdStore;
 
     fn t(n: u32, s: Status) -> Item {
         Item::new(ItemId::new(ItemKind::Task, n), format!("t{n}")).status(s)

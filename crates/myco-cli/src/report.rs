@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use myco_core::{date, Item, Status};
+use myco_store::Store;
 use serde_json::json;
 
 use crate::{digest, items, ops};
@@ -134,7 +135,7 @@ fn stale_claims<'a>(
 /// where the project-branch history lives (velocity reads the
 /// git log).
 pub fn report_json(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     worktree: &std::path::Path,
 ) -> Result<serde_json::Value, String> {
     let scan = digest::scan(store)?;

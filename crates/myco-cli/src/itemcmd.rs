@@ -242,7 +242,7 @@ struct ShowData {
 
 /// Load one id anywhere in the ledger — TODO/BACKLOG line or
 /// item file, live or archived.
-fn show_data(store: &myco_store_md::MdStore, id: ItemId) -> Result<ShowData, String> {
+fn show_data(store: &impl Store, id: ItemId) -> Result<ShowData, String> {
     match items::find_item(store, id)? {
         Some((item, location, body)) => {
             let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
@@ -290,10 +290,7 @@ fn show_value(d: &ShowData) -> serde_json::Value {
 
 /// The `item show` payload — `{item, location, handoffs,
 /// interrupted, body}` — the `myco serve` method surface.
-pub(crate) fn show_json(
-    store: &myco_store_md::MdStore,
-    id: ItemId,
-) -> Result<serde_json::Value, String> {
+pub(crate) fn show_json(store: &impl Store, id: ItemId) -> Result<serde_json::Value, String> {
     Ok(show_value(&show_data(store, id)?))
 }
 
@@ -301,7 +298,7 @@ pub(crate) fn show_json(
 /// the classic block + bare payload; multi-id repeats the block
 /// in argument order (a bad id reports to stderr, exit 1) and
 /// `--json` becomes the `[{id, ok, payload|error}]` array.
-fn show(store: &myco_store_md::MdStore, ids: &[ItemId], json_out: bool) -> Result<i32, String> {
+fn show(store: &impl Store, ids: &[ItemId], json_out: bool) -> Result<i32, String> {
     if ids.len() == 1 {
         let d = show_data(store, ids[0])?;
         if json_out {
@@ -363,7 +360,7 @@ fn put_back(
 /// Returns the post-mutation item (`None` when done removed a task
 /// line) and a location label for reporting.
 pub(crate) fn mutate_item(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     id: ItemId,
     flags: &SetFlags,
 ) -> Result<(Option<Item>, String), String> {
@@ -429,7 +426,7 @@ pub(crate) fn mutate_item(
         apply_set(&mut file.meta, flags)?;
         let item = file.meta.clone();
         store.save_item(&file).map_err(|e| e.to_string())?;
-        let location = items::item_rel_path(&item);
+        let location = items::item_rel_path(store, &item)?;
         Ok((Some(item), location))
     }
 }

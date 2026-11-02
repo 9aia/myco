@@ -9,20 +9,11 @@
 
 use std::path::{Path, PathBuf};
 
-use camino::Utf8PathBuf;
 use myco_core::{BacklogDoc, ProjectMeta, TodoDoc};
 use myco_store::{Error as StoreError, Store};
-use myco_store_md::MdStore;
 
 /// Dirs `myco init` / `check --fix` scaffold (with `.gitkeep`).
 const SCAFFOLD_DIRS: [&str; 5] = ["issues", "proposals", "adrs", "plans", "handoffs"];
-
-/// `MdStore` rooted at a worktree path.
-pub fn store_at(worktree: &Path) -> Result<MdStore, String> {
-    let root = Utf8PathBuf::from_path_buf(worktree.to_path_buf())
-        .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
-    Ok(MdStore::new(root))
-}
 
 /// Name of the lock file — inside the repo's shared git dir
 /// (`<main>/.git/myco.lock`) so it never lands in a ledger commit
@@ -114,10 +105,11 @@ pub fn index_template(name: &str) -> String {
 }
 
 /// Create every missing scaffold piece in the worktree; existing
-/// files are never overwritten. Returns the rel paths created.
-pub fn scaffold(store: &MdStore, name: &str) -> Result<Vec<String>, StoreError> {
+/// files are never overwritten. `root` is the store's worktree
+/// dir (the `.gitkeep` sweep is raw fs — the port has no "list
+/// dir" verb). Returns the rel paths created.
+pub fn scaffold(store: &impl Store, root: &Path, name: &str) -> Result<Vec<String>, StoreError> {
     let mut created = Vec::new();
-    let root = store.root();
     let missing = |rel: &str| !root.join(rel).exists();
     if missing("meta.toml") {
         store.save_meta(&ProjectMeta::new(name))?;

@@ -4,9 +4,34 @@
 //! layer itself is re-exported so call sites read `items::X` for
 //! either.
 
+use std::path::Path;
+
 use myco_core::{Item, ItemId, NewItemMeta};
+use myco_store_md::MdStore;
 
 pub use myco_ops::items::*;
+
+/// The store the CLI's verbs share — `myco_ops`'s lock-holding
+/// handle specialized to `MdStore` (the composition root names
+/// the impl).
+pub type LockedStore = myco_ops::items::LockedStore<MdStore>;
+
+/// [`myco_ops::items::open_with`] wired to `MdStore` — verb call
+/// sites stay two-arg.
+pub fn open(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+) -> Result<(myco_ops::discover::Project, LockedStore), String> {
+    myco_ops::items::open_with(dir, root, crate::ops::store_at)
+}
+
+/// [`myco_ops::items::open_read_with`] wired to `MdStore`.
+pub fn open_read(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+) -> Result<(myco_ops::discover::Project, LockedStore), String> {
+    myco_ops::items::open_read_with(dir, root, crate::ops::store_at)
+}
 
 /// `--pri/--owner/--label/--blocks/--epic/--milestone` — the
 /// metadata flags shared by every `add`/`new` verb.

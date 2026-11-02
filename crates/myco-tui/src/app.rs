@@ -20,6 +20,15 @@ use myco_store::Store;
 use myco_store_md::MdStore;
 use ratatui::layout::Rect;
 
+/// `MdStore` rooted at a worktree path — the TUI names the impl
+/// (`myco-ops` is generic over [`Store`]; each front-end wires
+/// its own store factory).
+fn store_at(worktree: &Path) -> Result<MdStore, String> {
+    let root = camino::Utf8PathBuf::from_path_buf(worktree.to_path_buf())
+        .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
+    Ok(MdStore::new(root))
+}
+
 /// Which ledger doc the board tab shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Board {
@@ -143,10 +152,10 @@ impl Model {
         // with this scope: holding any lock for the session would
         // block every other myco invocation while the board is open.
         let (proj, ledger) = {
-            let (proj, store) = items::open_read(dir, root)?;
+            let (proj, store) = items::open_read_with(dir, root, store_at)?;
             (proj, items::load_ledger(&store)?)
         };
-        let store = ops::store_at(&proj.worktree)?;
+        let store = store_at(&proj.worktree)?;
         let view_spec = match &view {
             Some(name) => Some(myco_ops::view::resolve(&proj.root, name)?.0.spec),
             None => None,
@@ -364,7 +373,8 @@ impl Model {
             Board::Backlog => Some(self.proj.worktree.join("BACKLOG.md")),
             Board::Files => self
                 .selected()
-                .map(|i| self.proj.worktree.join(items::item_rel_path(i))),
+                .and_then(|i| items::item_rel_path(&self.store, i).ok())
+                .map(|p| self.proj.worktree.join(p)),
         }
     }
 

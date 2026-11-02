@@ -13,10 +13,10 @@ myco-store.workspace = true
 myco-store-md.workspace = true
 ratatui.workspace = true
 crossterm.workspace = true
+camino.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-camino.workspace = true
 
 [lints]
 workspace = true

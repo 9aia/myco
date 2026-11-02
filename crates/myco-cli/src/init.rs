@@ -96,7 +96,7 @@ pub fn ensure(
     // scaffold via canonical emit — never overwrites
     let store = ops::store_at(&worktree)?;
     let name = repo_name(&root);
-    let files_created = ops::scaffold(&store, &name).map_err(|e| e.to_string())?;
+    let files_created = ops::scaffold(&store, &worktree, &name).map_err(|e| e.to_string())?;
     if ops::autocommit(&worktree, "chore: init project ledger", enabled)? {
         committed = true;
     }

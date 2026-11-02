@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use myco_core::{BacklogDoc, HandoffEntry, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
+use myco_core::{BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
 use myco_store::{Error, HandoffFile, Store};
 
 use crate::{backlog, handoff, itemfile, meta, todo};
@@ -300,6 +300,21 @@ impl Store for MdStore {
             .item_paths(id.kind(), true)?
             .into_iter()
             .any(|(i, _)| i == id))
+    }
+
+    fn item_path(&self, item: &Item) -> Result<Option<String>, Error> {
+        let Some(dir) = itemfile::item_dir(item.id.kind()) else {
+            return Ok(None);
+        };
+        let Some(name) = itemfile::item_filename(&item.id, &item.title) else {
+            return Ok(None);
+        };
+        let rel = if self.is_archived(item.id)? {
+            format!("{dir}/{ARCHIVE_DIR}/{name}")
+        } else {
+            format!("{dir}/{name}")
+        };
+        Ok(Some(rel))
     }
 
     fn index_md(&self) -> Result<String, Error> {

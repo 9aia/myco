@@ -536,7 +536,7 @@ fn migrate_project(
     }
 
     // fill any remaining scaffold gaps (dirs, index, docs)
-    let created = ops::scaffold(&store, &meta.name).map_err(|e| e.to_string())?;
+    let created = ops::scaffold(&store, wt, &meta.name).map_err(|e| e.to_string())?;
 
     let enabled = ops::commits_enabled(no_commit);
     let msg = format!(

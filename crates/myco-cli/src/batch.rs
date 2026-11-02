@@ -72,7 +72,7 @@ mod tests {
         std::fs::create_dir(&wt).unwrap();
         let store =
             myco_store_md::MdStore::new(camino::Utf8PathBuf::from_path_buf(wt.clone()).unwrap());
-        crate::ops::scaffold(&store, "p").unwrap();
+        crate::ops::scaffold(&store, &wt, "p").unwrap();
         let s = Server::new(Some(wt), Some(d.path().to_path_buf()), no_commit);
         (d, s)
     }

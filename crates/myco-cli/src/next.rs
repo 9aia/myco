@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 use myco_core::{eval, Actor, Item, ItemKind, SortKey, Status, ViewFilter, ViewSpec};
+use myco_store::Store;
 use serde_json::json;
 
 use crate::{continuity, digest, itemcmd, items, ops, view};
@@ -88,7 +89,7 @@ fn claim_owner(flags: &NextFlags) -> Result<Actor, String> {
 
 /// The one-line human output — `items::compact` + the `⚡`
 /// interrupted marker, same as a `list`-format view row.
-fn line(store: &myco_store_md::MdStore, item: &Item) -> Result<String, String> {
+fn line(store: &impl Store, item: &Item) -> Result<String, String> {
     let mut out = items::compact(item);
     if continuity::is_interrupted(store, item.id)? {
         out.push_str(" ⚡");

@@ -169,7 +169,7 @@ fn deduped(notes: &[String], marker: &str) -> bool {
 /// skipped_done, archived, ids)` — `skipped_done` counts `Done`
 /// rows dropped for lacking `--include-done`.
 fn import_issues(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     notes: &[String],
     rows: &[ImportRow],
     include_done: bool,
@@ -394,7 +394,7 @@ struct CommentSpec {
 
 fn comments(
     proj: &Project,
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     spec: CommentSpec,
     json_out: bool,
     no_commit: bool,
@@ -713,7 +713,7 @@ fn jira_row(row: &BTreeMap<String, Vec<String>>) -> Option<ImportRow> {
 
 fn jira(
     proj: &Project,
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     file: &Path,
     include_done: bool,
     json_out: bool,
@@ -942,7 +942,7 @@ fn github_row(row: &BTreeMap<String, Vec<String>>) -> Option<ImportRow> {
 
 fn github(
     proj: &Project,
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     file: &Path,
     include_done: bool,
     json_out: bool,

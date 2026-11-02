@@ -86,7 +86,7 @@ fn read_note(note: &str) -> Result<String, String> {
 /// worktree-relative path (the file lands wherever it already
 /// lived). Caller commits.
 pub fn record_handoff(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     worktree: &std::path::Path,
     id: ItemId,
     note: String,
@@ -159,7 +159,7 @@ pub fn handoff(
 /// included) and appends the `interrupted` marker entry. Caller
 /// commits — one commit covers both writes.
 pub fn interrupt_item(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     id: ItemId,
     note: Option<&str>,
     actor: Option<Actor>,
@@ -290,11 +290,7 @@ struct ResumeData {
 
 /// Gather the resume context — the item, `blocks:` dep titles,
 /// the latest handoff entries, the open checklist.
-fn resume_data(
-    store: &myco_store_md::MdStore,
-    id: ItemId,
-    last: Option<usize>,
-) -> Result<ResumeData, String> {
+fn resume_data(store: &impl Store, id: ItemId, last: Option<usize>) -> Result<ResumeData, String> {
     let Some((item, location, body)) = items::find_item(store, id)? else {
         return Err(format!("{id}: no such item"));
     };
@@ -343,7 +339,7 @@ fn resume_value(d: &ResumeData) -> serde_json::Value {
 /// handoffs[], open_checklist}` — shared by `--json` and
 /// `myco serve`.
 pub fn resume_json(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     id: ItemId,
     last: Option<usize>,
 ) -> Result<serde_json::Value, String> {

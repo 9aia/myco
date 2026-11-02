@@ -898,7 +898,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let root = camino::Utf8PathBuf::from_path_buf(d.path().to_path_buf()).unwrap();
         let store = myco_store_md::MdStore::new(root);
-        crate::ops::scaffold(&store, "p").unwrap();
+        crate::ops::scaffold(&store, d.path(), "p").unwrap();
         let s = Server::new(Some(d.path().to_path_buf()), None, true);
         (d, s)
     }
@@ -912,7 +912,7 @@ mod tests {
         std::fs::create_dir(&wt).unwrap();
         let root = camino::Utf8PathBuf::from_path_buf(wt.clone()).unwrap();
         let store = myco_store_md::MdStore::new(root);
-        crate::ops::scaffold(&store, "p").unwrap();
+        crate::ops::scaffold(&store, &wt, "p").unwrap();
         let s = Server::new(Some(wt), Some(d.path().to_path_buf()), true);
         (d, s)
     }

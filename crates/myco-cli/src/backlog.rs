@@ -38,7 +38,7 @@ pub enum Cmd {
 /// The `backlog add` mutation — allocs a T-id straight into
 /// BACKLOG.md (backlog items are born deferred). Caller commits.
 pub fn add_item(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     title: &str,
     section: Option<&str>,
     meta: &myco_core::NewItemMeta,
@@ -57,7 +57,7 @@ pub fn add_item(
 
 /// The `backlog promote` mutation — `deferred → open`, moves the
 /// line (subtree included) into TODO.md. Caller commits.
-pub fn promote_item(store: &myco_store_md::MdStore, id: ItemId) -> Result<Item, String> {
+pub fn promote_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
     items::require_kind(id, ItemKind::Task, "backlog promote")?;
     let mut ledger = items::load_ledger(store)?;
     let loc = ledger

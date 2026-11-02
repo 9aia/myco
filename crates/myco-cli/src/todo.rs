@@ -53,7 +53,7 @@ pub enum Cmd {
 /// allocated so failed adds don't burn ids. Returns the new item
 /// plus the doc it landed in. Caller commits.
 pub fn add_item(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     title: &str,
     section: Option<&str>,
     parent: Option<ItemId>,
@@ -108,7 +108,7 @@ pub fn add_item(
 
 /// The `todo done` mutation — walks to `done`, removes the line
 /// (subtree included). Caller commits. Returns the removed item.
-pub fn done_item(store: &myco_store_md::MdStore, id: ItemId) -> Result<Item, String> {
+pub fn done_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
     items::require_kind(id, ItemKind::Task, "todo done")?;
     let mut ledger = items::load_ledger(store)?;
     let loc = ledger
@@ -131,7 +131,7 @@ pub fn done_item(store: &myco_store_md::MdStore, id: ItemId) -> Result<Item, Str
 
 /// The `todo defer` mutation — walks to `deferred`, moves the
 /// line (subtree included) into BACKLOG.md. Caller commits.
-pub fn defer_item(store: &myco_store_md::MdStore, id: ItemId) -> Result<Item, String> {
+pub fn defer_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
     items::require_kind(id, ItemKind::Task, "todo defer")?;
     let mut ledger = items::load_ledger(store)?;
     let loc = ledger
@@ -155,7 +155,7 @@ pub fn defer_item(store: &myco_store_md::MdStore, id: ItemId) -> Result<Item, St
 /// The `todo list`/`backlog list` read — filtered items in tree
 /// order, depth flattened away (`myco serve` returns it raw).
 pub fn list_items(
-    store: &myco_store_md::MdStore,
+    store: &impl Store,
     backlog: bool,
     filter: &items::Filter,
 ) -> Result<Vec<Item>, String> {
@@ -236,7 +236,7 @@ pub fn run(
 }
 
 /// All items in one doc, cloned out (shared by the list verbs).
-pub fn doc_items(store: &myco_store_md::MdStore, backlog: bool) -> Result<Vec<Item>, String> {
+pub fn doc_items(store: &impl Store, backlog: bool) -> Result<Vec<Item>, String> {
     let doc_items = if backlog {
         store.backlog().map(|d| d.items().cloned().collect())
     } else {
