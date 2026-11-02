@@ -35,6 +35,7 @@ mod issue;
 mod itemcmd;
 mod items;
 mod migrate;
+mod next;
 mod ops;
 mod org;
 mod plan;
@@ -184,6 +185,15 @@ enum Cmd {
         #[arg(long)]
         last: Option<usize>,
     },
+    /// The single highest-priority open item — "what should I
+    /// work on" (a `view` eval with limit 1: open tasks+issues,
+    /// `pri,id`; the filter flags merge over that default).
+    /// `--claim` mutates it to `claimed` + an owner in one
+    /// commit.
+    Next {
+        #[command(flatten)]
+        flags: next::NextFlags,
+    },
     /// Cheap digest of the work ledger. `--prompt` = token-sized.
     Status {
         /// Render for an agent prompt (minimal tokens).
@@ -319,7 +329,7 @@ fn manifest() -> serde_json::Value {
             "init", "check", "migrate", "commit", "absorb",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
-            "epic", "milestone", "view",
+            "epic", "milestone", "view", "next",
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
@@ -331,7 +341,7 @@ fn manifest() -> serde_json::Value {
             "init", "check", "migrate", "commit", "absorb",
             "todo", "backlog", "issue", "proposal", "plan", "adr",
             "item show", "item set",
-            "epic", "milestone", "view",
+            "epic", "milestone", "view", "next",
             "status", "board", "report",
             "index add", "index remove", "index list", "index rebuild",
             "org status", "org board", "org init",
@@ -398,6 +408,7 @@ fn main() {
             no_commit,
         ),
         Cmd::Resume { id, last } => continuity::resume(id, last, dir, root, json),
+        Cmd::Next { flags } => next::run(flags, dir, root, json, no_commit),
         Cmd::Schema => schema::run(),
         Cmd::Status { prompt } => status::run(dir, root, prompt, json),
         Cmd::Board {

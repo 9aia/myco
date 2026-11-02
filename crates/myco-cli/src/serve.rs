@@ -25,7 +25,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
-    backlog, board, check, continuity, digest, itemcmd, items, report, schema, status, todo, view,
+    backlog, board, check, continuity, digest, itemcmd, items, next, report, schema, status, todo,
+    view,
 };
 
 // ---------------------------------------------------------------- wire
@@ -323,6 +324,15 @@ struct InterruptParams {
     session: Option<String>,
 }
 
+/// `next` — `{spec}` is a partial spec merged over the verb's
+/// default (open tasks+issues, `pri,id`); `limit` is pinned at
+/// 1 — the method *is* the single top item. `{"item": null}`
+/// when the backlog is clear.
+#[derive(Deserialize)]
+struct NextParams {
+    spec: Option<SpecPatch>,
+}
+
 /// `view` — `{name}` resolves a named view (builtin preset or
 /// `[views]` config); `{spec}` is a partial spec merged over it
 /// (each set field replaces — `myco view`'s flag-merge on the
@@ -463,6 +473,7 @@ const METHODS: &[&str] = &[
     "status",
     "board",
     "view",
+    "next",
     "item.show",
     "item.set",
     "todo.list",
@@ -686,6 +697,18 @@ impl Server {
                         }))
                     }
                 }
+            }
+            "next" => {
+                let p: NextParams = parse_params(params)?;
+                let (_proj, store) = self.open_read()?;
+                let mut spec = next::base_spec();
+                if let Some(patch) = &p.spec {
+                    patch.apply(&mut spec);
+                }
+                spec.limit = Some(1);
+                spec.validate().map_err(Fail::Verb)?;
+                let scan = digest::scan(&store).map_err(Fail::Verb)?;
+                Ok(json!({"item": next::pick(&scan, &spec)}))
             }
             "item.show" => {
                 let p: IdParams = parse_params(params)?;

@@ -8,80 +8,67 @@ use std::path::PathBuf;
 
 use clap::Args;
 use myco_core::{
-    eval, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, SortKey, Status, ViewFormat,
-    ViewGroup, ViewSpec,
+    eval, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, SortKey, Status, ViewFilter,
+    ViewFormat, ViewGroup, ViewSpec,
 };
 use myco_ops::view::{NamedView, Origin};
 use serde_json::json;
 
 use crate::{board, continuity, digest, items, ops};
 
-/// The ad-hoc spec flags — each maps onto the same `ViewSpec`
-/// fields `[views]` uses; with NAME they merge over the named
-/// spec (a set flag replaces that field, unset fields keep the
-/// named spec's value).
+/// The filter flags — each maps onto the same `ViewFilter`
+/// field `filter = { … }` uses. Shared by `view` (merged over
+/// the named spec's filter) and `next` (merged over its
+/// open-item default): a set flag replaces that field, unset
+/// fields keep the base spec's value.
 #[derive(Debug, Default, Args)]
-pub struct ViewFlags {
+pub struct FilterFlags {
     /// Item kinds — task|issue|proposal|adr|plan
     /// (repeatable/comma-separated).
     #[arg(long, value_delimiter = ',')]
-    kind: Vec<ItemKind>,
+    pub(crate) kind: Vec<ItemKind>,
     /// Statuses — open|claimed|in-progress|blocked|done|deferred
     /// (repeatable/comma-separated).
     #[arg(long, value_delimiter = ',')]
-    status: Vec<Status>,
+    pub(crate) status: Vec<Status>,
     /// Inclusive lower severity bound — low|med|high|crit.
     #[arg(long)]
-    pri_min: Option<Priority>,
+    pub(crate) pri_min: Option<Priority>,
     /// Inclusive upper severity bound.
     #[arg(long)]
-    pri_max: Option<Priority>,
+    pub(crate) pri_max: Option<Priority>,
     /// `#`-less label — item carries any of these
     /// (repeatable/comma-separated).
     #[arg(long, value_delimiter = ',')]
-    label: Vec<String>,
+    pub(crate) label: Vec<String>,
     /// Owner actor — item's owner is any of these
     /// (repeatable/comma-separated).
     #[arg(long, value_delimiter = ',')]
-    owner: Vec<Actor>,
+    pub(crate) owner: Vec<Actor>,
     /// Items with an owner.
     #[arg(long, conflicts_with = "unclaimed")]
-    claimed: bool,
+    pub(crate) claimed: bool,
     /// Items with no owner.
     #[arg(long)]
-    unclaimed: bool,
+    pub(crate) unclaimed: bool,
     /// Items in this epic.
     #[arg(long)]
-    epic: Option<String>,
+    pub(crate) epic: Option<String>,
     /// Items in this milestone.
     #[arg(long)]
-    milestone: Option<String>,
+    pub(crate) milestone: Option<String>,
     /// Items not superseded by another (ADRs).
     #[arg(long, conflicts_with = "superseded")]
-    live_only: bool,
+    pub(crate) live_only: bool,
     /// Items superseded by another (ADRs).
     #[arg(long)]
-    superseded: bool,
-    /// Group axis — status|priority|kind|owner|epic|milestone.
-    #[arg(long)]
-    group_by: Option<GroupAxis>,
-    /// Sort keys — `pri,id,-created`; `-` flips a key's default
-    /// direction.
-    #[arg(long, value_delimiter = ',')]
-    sort: Vec<SortKey>,
-    /// Keep the first N items after sorting.
-    #[arg(long, value_name = "N")]
-    limit: Option<u32>,
-    /// Renderer — list|board.
-    #[arg(long)]
-    format: Option<ViewFormat>,
+    pub(crate) superseded: bool,
 }
 
-impl ViewFlags {
-    /// Fold every set flag over `spec`; unset fields keep the
-    /// named spec's value.
-    fn apply(&self, spec: &mut ViewSpec) {
-        let f = &mut spec.filter;
+impl FilterFlags {
+    /// Fold every set flag into `f`; unset fields keep the
+    /// base filter's value.
+    pub(crate) fn apply(&self, f: &mut ViewFilter) {
         if !self.kind.is_empty() {
             f.kind = self.kind.clone();
         }
@@ -118,6 +105,53 @@ impl ViewFlags {
         if self.superseded {
             f.superseded = Some(true);
         }
+    }
+
+    /// Any flag set?
+    pub(crate) fn any_set(&self) -> bool {
+        !self.kind.is_empty()
+            || !self.status.is_empty()
+            || self.pri_min.is_some()
+            || self.pri_max.is_some()
+            || !self.label.is_empty()
+            || !self.owner.is_empty()
+            || self.claimed
+            || self.unclaimed
+            || self.epic.is_some()
+            || self.milestone.is_some()
+            || self.live_only
+            || self.superseded
+    }
+}
+
+/// The ad-hoc spec flags — [`FilterFlags`] plus the
+/// group/sort/limit/format spec fields; with NAME they merge
+/// over the named spec (a set flag replaces that field, unset
+/// fields keep the named spec's value).
+#[derive(Debug, Default, Args)]
+pub struct ViewFlags {
+    #[command(flatten)]
+    pub(crate) filter: FilterFlags,
+    /// Group axis — status|priority|kind|owner|epic|milestone.
+    #[arg(long)]
+    group_by: Option<GroupAxis>,
+    /// Sort keys — `pri,id,-created`; `-` flips a key's default
+    /// direction.
+    #[arg(long, value_delimiter = ',')]
+    sort: Vec<SortKey>,
+    /// Keep the first N items after sorting.
+    #[arg(long, value_name = "N")]
+    limit: Option<u32>,
+    /// Renderer — list|board.
+    #[arg(long)]
+    format: Option<ViewFormat>,
+}
+
+impl ViewFlags {
+    /// Fold every set flag over `spec`; unset fields keep the
+    /// named spec's value.
+    fn apply(&self, spec: &mut ViewSpec) {
+        self.filter.apply(&mut spec.filter);
         if let Some(g) = self.group_by {
             spec.group_by = Some(g);
         }
@@ -134,18 +168,7 @@ impl ViewFlags {
 
     /// Any flag set? Bare `myco view` (no name, no flags) lists.
     fn any_set(&self) -> bool {
-        !self.kind.is_empty()
-            || !self.status.is_empty()
-            || self.pri_min.is_some()
-            || self.pri_max.is_some()
-            || !self.label.is_empty()
-            || !self.owner.is_empty()
-            || self.claimed
-            || self.unclaimed
-            || self.epic.is_some()
-            || self.milestone.is_some()
-            || self.live_only
-            || self.superseded
+        self.filter.any_set()
             || self.group_by.is_some()
             || !self.sort.is_empty()
             || self.limit.is_some()

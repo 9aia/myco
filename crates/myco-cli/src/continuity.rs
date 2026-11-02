@@ -22,8 +22,9 @@ use serde_json::json;
 
 use crate::{items, ops};
 
-/// `--actor` fallback — the local CLI wrote it.
-const DEFAULT_ACTOR: &str = "cli";
+/// `--actor` fallback — the local CLI wrote it. Also `next
+/// --claim`'s owner default.
+pub(crate) const DEFAULT_ACTOR: &str = "cli";
 
 /// Handoff entries shown by default (`--last` overrides).
 const DEFAULT_LAST: usize = 10;
