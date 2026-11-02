@@ -248,7 +248,7 @@ fn board_view(
 ) -> Result<i32, String> {
     // `--repo` matches a snapshot by name or registered path
     let wanted = |s: &RepoSnapshot| repo.as_deref().is_none_or(|r| s.name == r || s.path == r);
-    if repo.is_some() && !views.iter().any(|v| v.snap.as_ref().is_some_and(&wanted)) {
+    if repo.is_some() && !views.iter().any(|v| v.snap.as_ref().is_some_and(wanted)) {
         return Err(format!(
             "no repo {:?} in the index — `myco index list`",
             repo.unwrap_or_default()
