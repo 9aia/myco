@@ -35,8 +35,8 @@ by that metadata, one column per group with `ungrouped` trailing.
 The filter flags scope any view — `myco view board --epic v2` is
 one epic's lanes.
 
-A config view shadowing a built-in name redefines `myco view
-<name>` itself:
+A config view shadowing a built-in name redefines `myco view <name>`
+itself:
 
 ```toml
 [views.board]
@@ -52,7 +52,7 @@ interrupted}` payload instead of the five-lane map. Specs that
 admit non-lane buckets (e.g. `done`) surface them as extra
 columns/keys — nothing matched is silently dropped.
 
-Layering is repo `<` user `<` flags: a `[views]` table merges
+Layering is repo &lt; user &lt; flags: a `[views]` table merges
 across config layers; scalar fields stay first-match.
 
 ## Over the wire
