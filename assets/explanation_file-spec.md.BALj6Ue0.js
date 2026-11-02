@@ -25,4 +25,5 @@ import{_ as s,o as d,c as t,a0 as o}from"./chunks/framework.OED5XGjC.js";const k
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-light-font-weight:bold;--shiki-dark:#79B8FF;--shiki-dark-font-weight:bold;"># Handoffs — T-012</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#005CC5;--shiki-light-font-weight:bold;--shiki-dark:#79B8FF;--shiki-dark-font-weight:bold;">## 2026-10-29 · devin · session:cli:abc123</span></span>
+<span class="line"></span>
 <span class="line"><span style="--shiki-light:#24292E;--shiki-dark:#E1E4E8;">Done: parser. Next: emitter. Open: archive semantics.</span></span></code></pre></div><p>Append-only: every <code>myco handoff</code> is one <code>##</code> entry + one commit; entries are never rewritten. When an item&#39;s file goes away, its handoff file is orphaned — <code>myco check</code> reports it and <code>check --fix</code> moves it to <code>handoffs/archive/</code>, where <code>resume</code> still finds it.</p>`,21)])])}const m=s(a,[["render",i]]);export{k as __pageData,m as default};

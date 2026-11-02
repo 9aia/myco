@@ -55,17 +55,17 @@ Every mutation runs through the same ops the CLI uses, so a
 keypress that changes the ledger lands as the same atomic commit
 (`--no-commit` opts out here too).
 
-| Key | Action |
-| --- | --- |
-| `1` / `2`, `h` / `l` | switch TODO / BACKLOG tab |
-| `j` / `k`, `gg` / `G` | move, jump to first / last |
-| `Enter` | full-pane item preview (`esc` back) |
-| `a` | add an item to the active board |
-| `dd` / `Space` | mark done |
-| `D` / `p` | defer to BACKLOG / promote back to TODO |
-| `Alt+j` / `Alt+k` | reorder among siblings |
-| `E` / `R` | open the board file in `$EDITOR` / reload |
-| `q` | quit |
+| Key                   | Action                                    |
+| --------------------- | ----------------------------------------- |
+| `1` / `2`, `h` / `l`  | switch TODO / BACKLOG tab                 |
+| `j` / `k`, `gg` / `G` | move, jump to first / last                |
+| `Enter`               | full-pane item preview (`esc` back)       |
+| `a`                   | add an item to the active board           |
+| `dd` / `Space`        | mark done                                 |
+| `D` / `p`             | defer to BACKLOG / promote back to TODO   |
+| `Alt+j` / `Alt+k`     | reorder among siblings                    |
+| `E` / `R`             | open the board file in `$EDITOR` / reload |
+| `q`                   | quit                                      |
 
 The TUI is a default cargo feature — for a lean binary without
 it, install with `--no-default-features`:

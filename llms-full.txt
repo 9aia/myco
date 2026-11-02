@@ -114,14 +114,14 @@ on that branch (`git -C project log --oneline` shows them all).
 
 ## Recap
 
-| you ran | myco did |
-|---|---|
-| `todo add` | alloc id, append line to `TODO.md` |
-| `item set --status` | one legal state-machine step |
-| `todo defer` / `backlog promote` | move the line TODO ↔ BACKLOG |
-| `handoff` / `resume` | append-only session notes / restart context |
-| `todo done` | `done`, then delete the line |
-| `check` | validate files, state machine, index drift |
+| you ran                          | myco did                                    |
+| -------------------------------- | ------------------------------------------- |
+| `todo add`                       | alloc id, append line to `TODO.md`          |
+| `item set --status`              | one legal state-machine step                |
+| `todo defer` / `backlog promote` | move the line TODO ↔ BACKLOG                |
+| `handoff` / `resume`             | append-only session notes / restart context |
+| `todo done`                      | `done`, then delete the line                |
+| `check`                          | validate files, state machine, index drift  |
 
 Every write went through a verb — hand-editing works too (the
 markdown is canonical), but `myco check` is the referee either
@@ -148,16 +148,16 @@ myco init
 
 ## What it creates
 
-| path | what |
-|---|---|
-| `project/` | git worktree on the orphan `project` branch |
-| `project/meta.toml` | repo name + per-kind id counters (`[next]`) |
-| `project/TODO.md` | active tasks |
-| `project/BACKLOG.md` | deferred items |
-| `project/index.md` | human-readable ledger index |
-| `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs |
-| `.gitignore` += `project/` | keeps the worktree out of code commits |
-| `AGENTS.md` | gains a marker-delimited, myco-managed *Agent awareness* block |
+| path                                                            | what                                                           |
+| --------------------------------------------------------------- | -------------------------------------------------------------- |
+| `project/`                                                      | git worktree on the orphan `project` branch                    |
+| `project/meta.toml`                                             | repo name + per-kind id counters (`[next]`)                    |
+| `project/TODO.md`                                               | active tasks                                                   |
+| `project/BACKLOG.md`                                            | deferred items                                                 |
+| `project/index.md`                                              | human-readable ledger index                                    |
+| `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs                                          |
+| `.gitignore` += `project/`                                      | keeps the worktree out of code commits                         |
+| `AGENTS.md`                                                     | gains a marker-delimited, myco-managed *Agent awareness* block |
 
 `init` commits the scaffold on the `project` branch — your code
 branch only gains the `.gitignore` line and the `AGENTS.md`
@@ -416,6 +416,7 @@ item = "T-012"
 # Handoffs — T-012
 
 ## 2026-10-29 · devin · session:cli:abc123
+
 Done: store layer landed. Next: wire verbs. Open: archive semantics for ADRs.
 ```
 
@@ -560,10 +561,10 @@ and `[views.<name>]` tables in `myco.toml`
 ```toml
 # myco.toml
 [views.hot]
-filter  = { pri_min = "high", status = ["open", "in-progress"] }
+filter = { pri_min = "high", status = ["open", "in-progress"] }
 group_by = "owner"
-sort    = "-created"
-format  = "list"
+sort = "-created"
+format = "list"
 ```
 
 ```sh
@@ -583,7 +584,7 @@ shadowing a built-in name redefines the verb itself:
 
 ```toml
 [views.board]
-filter = { kind = ["issue"] }   # myco board is now issues-only
+filter = { kind = ["issue"] } # myco board is now issues-only
 ```
 
 A shadow warns on stderr (`view "board" shadows the built-in
@@ -1705,17 +1706,17 @@ machine-readable JSON Schema; `myco check` enforces it.
 
 ## Layout
 
-| path | holds |
-|---|---|
-| `meta.toml` | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
-| `TODO.md` | open-line tasks (`T-`), `##` sections, nested children |
-| `BACKLOG.md` | deferred items — same grammar, no checkbox |
-| `index.md` | free-form human index — verbatim, never rewritten |
-| `issues/` | `issue-NNNN-<slug>.md` + `issues/archive/` |
-| `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/` |
-| `plans/` | `pl-NNNN-<slug>.md` + `plans/archive/` |
-| `adrs/` | `NNNN-<slug>.md` + `adrs/archive/` |
-| `handoffs/` | `<ID>.md` append-only + `handoffs/archive/` |
+| path         | holds                                                               |
+| ------------ | ------------------------------------------------------------------- |
+| `meta.toml`  | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
+| `TODO.md`    | open-line tasks (`T-`), `##` sections, nested children              |
+| `BACKLOG.md` | deferred items — same grammar, no checkbox                          |
+| `index.md`   | free-form human index — verbatim, never rewritten                   |
+| `issues/`    | `issue-NNNN-<slug>.md` + `issues/archive/`                          |
+| `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/`                    |
+| `plans/`     | `pl-NNNN-<slug>.md` + `plans/archive/`                              |
+| `adrs/`      | `NNNN-<slug>.md` + `adrs/archive/`                                  |
+| `handoffs/`  | `<ID>.md` append-only + `handoffs/archive/`                         |
 
 ## Item ids
 
@@ -1782,14 +1783,14 @@ Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
 Six statuses; `item set --status` and kind verbs walk it one
 legal step at a time:
 
-| from | can go to |
-|---|---|
-| `open` | `claimed`, `in-progress`, `deferred` |
-| `claimed` | `in-progress`, `open`, `deferred` |
-| `in-progress` | `blocked`, `done`, `deferred` |
-| `blocked` | `in-progress`, `open`, `deferred` |
-| `deferred` | `open` |
-| `done` | — (terminal) |
+| from          | can go to                            |
+| ------------- | ------------------------------------ |
+| `open`        | `claimed`, `in-progress`, `deferred` |
+| `claimed`     | `in-progress`, `open`, `deferred`    |
+| `in-progress` | `blocked`, `done`, `deferred`        |
+| `blocked`     | `in-progress`, `open`, `deferred`    |
+| `deferred`    | `open`                               |
+| `done`        | — (terminal)                         |
 
 Proposal words alias the machine: `draft` = `open`, `accepted` =
 `done`, `rejected` = `deferred` — the transition still walks the
@@ -1809,6 +1810,7 @@ item = "T-012"
 # Handoffs — T-012
 
 ## 2026-10-29 · devin · session:cli:abc123
+
 Done: parser. Next: emitter. Open: archive semantics.
 ```
 
@@ -1997,17 +1999,17 @@ Every mutation runs through the same ops the CLI uses, so a
 keypress that changes the ledger lands as the same atomic commit
 (`--no-commit` opts out here too).
 
-| Key | Action |
-| --- | --- |
-| `1` / `2`, `h` / `l` | switch TODO / BACKLOG tab |
-| `j` / `k`, `gg` / `G` | move, jump to first / last |
-| `Enter` | full-pane item preview (`esc` back) |
-| `a` | add an item to the active board |
-| `dd` / `Space` | mark done |
-| `D` / `p` | defer to BACKLOG / promote back to TODO |
-| `Alt+j` / `Alt+k` | reorder among siblings |
-| `E` / `R` | open the board file in `$EDITOR` / reload |
-| `q` | quit |
+| Key                   | Action                                    |
+| --------------------- | ----------------------------------------- |
+| `1` / `2`, `h` / `l`  | switch TODO / BACKLOG tab                 |
+| `j` / `k`, `gg` / `G` | move, jump to first / last                |
+| `Enter`               | full-pane item preview (`esc` back)       |
+| `a`                   | add an item to the active board           |
+| `dd` / `Space`        | mark done                                 |
+| `D` / `p`             | defer to BACKLOG / promote back to TODO   |
+| `Alt+j` / `Alt+k`     | reorder among siblings                    |
+| `E` / `R`             | open the board file in `$EDITOR` / reload |
+| `q`                   | quit                                      |
 
 The TUI is a default cargo feature — for a lean binary without
 it, install with `--no-default-features`:

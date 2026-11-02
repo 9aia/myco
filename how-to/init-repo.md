@@ -13,16 +13,16 @@ myco init
 
 ## What it creates
 
-| path | what |
-|---|---|
-| `project/` | git worktree on the orphan `project` branch |
-| `project/meta.toml` | repo name + per-kind id counters (`[next]`) |
-| `project/TODO.md` | active tasks |
-| `project/BACKLOG.md` | deferred items |
-| `project/index.md` | human-readable ledger index |
-| `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs |
-| `.gitignore` += `project/` | keeps the worktree out of code commits |
-| `AGENTS.md` | gains a marker-delimited, myco-managed *Agent awareness* block |
+| path                                                            | what                                                           |
+| --------------------------------------------------------------- | -------------------------------------------------------------- |
+| `project/`                                                      | git worktree on the orphan `project` branch                    |
+| `project/meta.toml`                                             | repo name + per-kind id counters (`[next]`)                    |
+| `project/TODO.md`                                               | active tasks                                                   |
+| `project/BACKLOG.md`                                            | deferred items                                                 |
+| `project/index.md`                                              | human-readable ledger index                                    |
+| `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs                                          |
+| `.gitignore` += `project/`                                      | keeps the worktree out of code commits                         |
+| `AGENTS.md`                                                     | gains a marker-delimited, myco-managed *Agent awareness* block |
 
 `init` commits the scaffold on the `project` branch — your code
 branch only gains the `.gitignore` line and the `AGENTS.md`

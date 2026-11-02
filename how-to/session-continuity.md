@@ -50,6 +50,7 @@ item = "T-012"
 # Handoffs — T-012
 
 ## 2026-10-29 · devin · session:cli:abc123
+
 Done: store layer landed. Next: wire verbs. Open: archive semantics for ADRs.
 ```
 
