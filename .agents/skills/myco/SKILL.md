@@ -49,7 +49,8 @@ myco <verb> --help     # every verb, self-documenting
 | Inspect / mutate any item | `myco item show T-NNN` · `myco item set T-NNN …` |
 | Session end (resumable state) | `myco handoff T-NNN --note "done/next/open"` |
 | Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
-| Restart work on an item | `myco resume T-NNN` |
+| Restart work on an item | `myco resume T-NNN` (`item show`/`resume` take 1..n ids) |
+| Pick the top item | `myco next [--claim]` — open task/issue by `pri,id`; filter flags shared with `view` |
 | Views | `myco board` · `report` · `epic` · `milestone` · `view [name]` (presets + `--status`/`--group-by`/`--sort` flags) · `ui` (interactive TUI) |
 | Served surface | `myco serve` (JSON-RPC 2.0 on stdio, for pipe-holding embedders) · `myco batch` (one-shot: NDJSON requests stdin/`--file` → NDJSON responses) |
 | Cross-repo | `myco index add <repo>` · `myco org status` |
