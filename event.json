@@ -1,1 +1,1 @@
-{"id":"","ws":"devin","actor":"luis","ts":1793671635,"op":{"op":"claim","glob":"crates/myco-store-md/**","ttl_secs":3600}}
+{"id":"","ws":"devin","actor":"luis","ts":1793671635,"op":{"op":"claim","glob":"crates/myco-core/**","ttl_secs":3600}}
