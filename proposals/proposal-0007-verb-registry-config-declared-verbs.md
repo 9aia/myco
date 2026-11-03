@@ -7,7 +7,9 @@ owner = "devin"
 priority = "medium"
 +++
 
-Status: **draft** · Created: 2026-11-02
+Status: **implemented** · Created: 2026-11-02 · The decision
+outlived the work: one registry is now **ADR-0004**, and the table
+lives in `crates/myco-cli/src/registry.rs`.
 
 ## Goal & Overview
 
