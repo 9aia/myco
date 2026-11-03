@@ -1,7 +1,7 @@
 +++
 id = "I-025"
 title = "Org-level myco ui — interactive cross-repo board"
-status = "open"
+status = "in-progress"
 created = "2026-10-31"
 owner = "devin"
 priority = "medium"
