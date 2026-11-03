@@ -24,9 +24,11 @@ file impl; `myco-git` and `myco-shell` shell out; `myco`
   percentage). The floor is not set yet because it must come from a
   real run — arm it once: run the report, then
   `echo <lines>% > scripts/coverage-floor`, and only ever raise it.
-  Needs `llvm-tools-preview` (`rustup component add
-  llvm-tools-preview`); without it the coverage step says so and
-  skips rather than failing the gate for a missing tool.
+  A distro Rust (Arch `rust`, Debian `rustc`) ships no
+  `llvm-tools-preview`; use the system LLVM instead, which
+  `scripts/ci.sh` picks up automatically when
+  `llvm-cov`/`llvm-profdata` are on PATH (Arch: `pacman -S llvm`;
+  the LLVM major must match `rustc -vV`).
 - Keep the binary dependency-light and sync; no async runtime.
 - Commits: conventional prefixes (`feat:`/`fix:`/`refactor:`/`docs:`/`chore:`).
 - Never commit secrets — `myco.toml` takes names of env vars, not values.

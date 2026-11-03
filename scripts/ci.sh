@@ -25,6 +25,17 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target/gate}"
 cargo xtask check
 cargo xtask test
 
+# cargo-llvm-cov looks for `llvm-cov`/`llvm-profdata` inside a rustup
+# sysroot. A distro Rust (Arch's `rust`, Debian's `rustc`) ships none,
+# so point it at the system LLVM instead — it works whenever the LLVM
+# major matches rustc's (`rustc -vV`). Arch: `pacman -S llvm`.
+if [ -z "${LLVM_COV:-}" ] && command -v llvm-cov >/dev/null 2>&1; then
+  export LLVM_COV="$(command -v llvm-cov)"
+  if command -v llvm-profdata >/dev/null 2>&1; then
+    export LLVM_PROFDATA="$(command -v llvm-profdata)"
+  fi
+fi
+
 # Coverage floor — P-001's quality bar, enforced as "never regress"
 # rather than a distant aspiration. `xtask coverage` passes args
 # through to llvm-cov, so the floor is one number to raise over
