@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Error"],"struct":["RepoEntry","RepoSnapshot"],"trait":["Index"]};
+window.SIDEBAR_ITEMS = {"enum":["Error"],"mod":["links"],"struct":["RepoEntry","RepoSnapshot"],"trait":["Index"]};

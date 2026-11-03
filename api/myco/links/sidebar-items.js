@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["extract_file","handoff_id","item_kind","push_item"]};

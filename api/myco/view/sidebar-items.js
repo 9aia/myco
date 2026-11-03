@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["list_views","render_board","render_groups","render_list","run","spec_digest","view_json","warn"],"struct":["FilterFlags","Out","ViewFlags"]};
+window.SIDEBAR_ITEMS = {"fn":["index_universe","list_views","render_board","render_groups","render_list","run","spec_digest","view_json","warn"],"struct":["FilterFlags","Out","ViewFlags"]};

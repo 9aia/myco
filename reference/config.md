@@ -8,7 +8,8 @@ url: /myco/reference/config.md
 | field | type | required | notes |
 |---|---|---|---|
 | `project_dir` | `string` | optional | Path to the project worktree, relative to the repo root. |
-| `views` | `map` | optional | Named declarative views — the one section that *merges* across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the higher-precedence layer wins a name collision. |
+| `views` | `map` | optional | Named declarative views — merged across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the *user* layer wins a name collision. |
+| `verbs` | `std::collections::BTreeMap<String, ConfigVerb>` | optional | Config-declared verbs (P-007) — merged like `views`, but the *repo* layer wins collisions (repo verbs are shared surface, personal verbs don't override them). Builtins win over both at resolution. |
 
 ## Constraints
 

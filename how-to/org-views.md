@@ -4,7 +4,9 @@ url: /myco/how-to/org-views.md
 # See work across repos
 
 `myco index` registers repos into a machine-wide cache;
-`myco org` renders cross-repo views over it.
+index-sourced `myco view` specs render cross-repo views over it.
+The org is just a view over the index universe — every filter,
+grouping, and format the view engine has applies to it.
 
 ## The index
 
@@ -28,8 +30,8 @@ myco index list                       # repos + snapshot freshness
 ```
 
 `add` takes an initial snapshot. Snapshots go stale as ledgers
-change — `list` marks them `stale`; `org` verbs auto-rebuild
-stale entries, or rebuild explicitly:
+change — `list` marks them `stale`; index-sourced views
+auto-rebuild stale entries on read, or rebuild explicitly:
 
 ```sh
 myco index rebuild                    # all registered repos
@@ -37,52 +39,62 @@ myco index rebuild ~/GitHub/9aia/sepia
 myco index remove ~/GitHub/9aia/sepia # unregister + drop snapshot
 ```
 
-## Org views
+## Org views — `view --source index`
+
+Two built-in presets run on the index universe:
 
 ```sh
-myco org status
+myco view org-status                  # per-repo grouped list
+myco view org-board                   # org kanban — repo-prefixed cards
+myco view org-board --all             # every card — no row cap
+myco view org-board --md              # markdown table for docs/READMEs
 ```
 
-```text
-org status — 21 repo(s)
-bupha            tasks 7o/0c/0ip/0b backlog 15 issues 0o p 0o pl 0o adr 2o  @ad8b625
-sepia            tasks 2o/0c/0ip/0b backlog 4 issues 0o p 0o pl 1o adr 0o  @8cbc633
-...
-totals: tasks 167o/0c/1ip/0b backlog 326 issues 1o p 5o pl 7o/1r adr 59o
-```
+`org-status` is one `label (n)` bucket per registered repo — the
+old `org status` digest's substitute. `org-board` merges every
+repo's live items into the five lanes; cards are prefixed with
+the repo name (`thal:T-118 …`) so one board spans the whole org.
 
-Per-repo counts (`o`pen / `c`laimed / `i`n-`p`rogress /
-`b`locked), the snapshot commit, org totals, then items grouped
-by owner. A rebuilt repo is marked `(rebuilt)`. Repos with no
-live items are folded into a `… +N idle repos` footer —
-`myco org status --all` lists them too; repos whose snapshot
-failed always surface.
+Under the hood both are plain view specs with `source = "index"`
+— the same thing works ad-hoc or in your own `[views]` config:
 
 ```sh
-myco org board                # org kanban — repo-prefixed cards over every live item
-myco org board --repo sepia   # one repo only (name or registered path)
-myco org board --all          # every card — no row cap
-myco org board --md           # markdown table for docs/READMEs
+myco view --source index --group-by status --format board   # = org-board
+myco view --source index --group-by owner                   # who has what, org-wide
+myco view org-board --kind issue --label bug                # filters still apply
+myco view org-status --status open,claimed                  # active items only
 ```
 
-Cards are prefixed with the repo name (`thal:T-118 …`) so one
-board spans the whole org.
+```toml
+# ~/.config/myco/myco.toml — a personal org preset
+[views.hot-org]
+source = "index"
+filter = { pri_min = "high" }
+group_by = "repo"
+```
+
+Items in an index-sourced view carry their repo tag: `group_by = "repo"` buckets by it, cards and list lines prefix `repo:ID`,
+and `--json` items gain a `"repo"` field. Snapshots hold no
+handoff state, so the `⚡` interrupted marker (and the
+`"interrupted"` JSON flag) is repo-source only. A repo whose
+worktree vanished keeps contributing its last snapshot and the
+read warns on stderr.
 
 ## Board output
 
-Human boards — `org board` and `view`'s board format (`view
-board`, `view epic`, …) — are fitted to the terminal: sized to its
+Human boards — `view`'s board format (`view board`, `view epic`,
+`view org-board`, …) — are fitted to the terminal: sized to its
 width (`$MYCO_WIDTH` overrides; 100 columns when piped) and
 capped at a screenful of rows (~25) with a `… +N more` footer —
 `--all` lifts the cap. `--md` and `--json` are unbounded. Output
 is ANSI-colored on a tty: `NO_COLOR` disables color,
 `CLICOLOR_FORCE`/`FORCE_COLOR` force it on.
 
-On a tty the long views — boards, `org status`, `index list` —
-page through `$MYCO_PAGER`, else `$PAGER`, else `less -FRSX`
-(the `-F` means a single screenful still exits instantly). An
-empty `MYCO_PAGER`/`PAGER` disables paging; piped output always
-prints directly.
+On a tty the long views — boards, `index list` — page through
+`$MYCO_PAGER`, else `$PAGER`, else `less -FRSX` (the `-F` means a
+single screenful still exits instantly). An empty
+`MYCO_PAGER`/`PAGER` disables paging; piped output always prints
+directly.
 
 For a fully interactive single-repo board — TODO/BACKLOG tabs,
 item preview, done/defer/promote by key — see

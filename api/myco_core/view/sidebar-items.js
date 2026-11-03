@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["UNGROUPED"],"enum":["GroupAxis","SortField","ViewFormat"],"fn":["eval"],"struct":["ParseGroupAxisError","ParseSortKeyError","ParseViewFormatError","SortKey","ViewFilter","ViewGroup","ViewSpec"]};
+window.SIDEBAR_ITEMS = {"constant":["UNGROUPED"],"enum":["GroupAxis","SortField","ViewFormat","ViewSource"],"fn":["eval","eval_scoped"],"struct":["ParseGroupAxisError","ParseSortKeyError","ParseViewFormatError","ParseViewSourceError","Scoped","SortKey","ViewFilter","ViewGroup","ViewSpec"]};
