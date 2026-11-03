@@ -12,42 +12,32 @@
 //! forward-compat); body = free-form markdown (verbatim; kind
 //! templates are `myco-template`'s job).
 
-use myco_core::{date, Actor, Item, ItemFile, ItemId, ItemKind, Priority, Status};
+use myco_core::{date, Actor, Item, ItemFile, ItemId, KindSpec, Priority, Status, Storage};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use crate::error::{EmitError, ParseError};
 use crate::{line, mdx};
 
-/// The `project/` subdirectory a file-backed kind lives in.
-/// [`ItemKind::Task`] has no files (`None`).
-pub fn item_dir(kind: ItemKind) -> Option<&'static str> {
-    match kind {
-        ItemKind::Task => None,
-        ItemKind::Issue => Some("issues"),
-        ItemKind::Proposal => Some("proposals"),
-        ItemKind::Adr => Some("adrs"),
-        ItemKind::Plan => Some("plans"),
-    }
+/// The `project/` subdirectory a file-backed kind lives in —
+/// the spec's `dir` (`issues`, `spikes`); `doc`-storage kinds
+/// have no files (`None`).
+pub fn item_dir(spec: &KindSpec) -> Option<String> {
+    (spec.storage == Storage::Dir).then(|| spec.dir_name())
 }
 
 /// Filename prefix before the number — `issue`, `proposal`, `pl`,
-/// or empty for ADRs (`adrs/0004-slug.md`).
-fn file_prefix(kind: ItemKind) -> Option<&'static str> {
-    match kind {
-        ItemKind::Task => None,
-        ItemKind::Issue => Some("issue"),
-        ItemKind::Proposal => Some("proposal"),
-        ItemKind::Adr => Some(""),
-        ItemKind::Plan => Some("pl"),
-    }
+/// the spec's `file_prefix` for user kinds, or empty for ADRs
+/// (`adrs/0004-slug.md`).
+fn file_prefix(spec: &KindSpec) -> Option<String> {
+    (spec.storage == Storage::Dir).then(|| spec.file_prefix())
 }
 
 /// Canonical filename for an item — `issue-0003-memory-leak.md`,
 /// `0004-hybrid-store.md`. Slug = `slug::slugify(title)`,
 /// `"untitled"` when the title slugifies to nothing.
-pub fn item_filename(id: &ItemId, title: &str) -> Option<String> {
-    let prefix = file_prefix(id.kind())?;
+pub fn item_filename(spec: &KindSpec, id: &ItemId, title: &str) -> Option<String> {
+    let prefix = file_prefix(spec)?;
     let slug = {
         let s = slug::slugify(title);
         if s.is_empty() {
@@ -64,28 +54,27 @@ pub fn item_filename(id: &ItemId, title: &str) -> Option<String> {
 }
 
 /// `issues/issue-0003-x.md` → `I-003`; `None` when the filename
-/// doesn't fit the kind's pattern.
-pub fn parse_item_filename(kind: ItemKind, filename: &str) -> Option<ItemId> {
-    let prefix = file_prefix(kind)?;
+/// doesn't fit the kind's pattern. The number must fit `u32` —
+/// the same bound [`ItemId`]'s own parse applies, so anything
+/// [`item_filename`] can emit parses back (id numbers are `u32`,
+/// i.e. up to 10 digits).
+pub fn parse_item_filename(spec: &KindSpec, filename: &str) -> Option<ItemId> {
+    let prefix = file_prefix(spec)?;
     let stem = filename.strip_suffix(".md")?;
     let rest = if prefix.is_empty() {
         stem
     } else {
-        stem.strip_prefix(prefix)?.strip_prefix('-')?
+        stem.strip_prefix(prefix.as_str())?.strip_prefix('-')?
     };
     let (digits, slug) = rest.split_once('-')?;
-    if digits.is_empty()
-        || digits.len() > 9
-        || !digits.bytes().all(|b| b.is_ascii_digit())
-        || slug.is_empty()
-    {
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) || slug.is_empty() {
         return None;
     }
     let number: u32 = digits.parse().ok()?;
     if number == 0 {
         return None;
     }
-    Some(ItemId::new(kind, number))
+    Some(ItemId::new(spec.id_kind(), number))
 }
 
 /// Deepest line the `frontmatter_id` probe will read — real
@@ -135,9 +124,10 @@ struct FrontmatterIn {
     id: String,
     title: String,
     status: Status,
+    #[serde(default, deserialize_with = "de_opt_created")]
     created: Option<String>,
     owner: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_opt_priority")]
     priority: Option<Priority>,
     #[serde(default)]
     labels: Vec<String>,
@@ -148,6 +138,32 @@ struct FrontmatterIn {
     supersedes: Option<String>,
     epic: Option<String>,
     milestone: Option<String>,
+}
+
+/// `priority` reads like the line grammar — `low|med|high|crit`
+/// and the full names emit writes — via [`Priority`]'s `FromStr`
+/// (lenient read, strict canonical write). Deriving `Priority`
+/// would accept full names only.
+fn de_opt_priority<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Priority>, D::Error> {
+    Option::<String>::deserialize(d)?
+        .map(|s| s.parse().map_err(serde::de::Error::custom))
+        .transpose()
+}
+
+/// `created` accepts both the quoted string emit writes
+/// (`created = "2026-02-01"`) and a bare TOML date
+/// (`created = 2026-02-01`) — hand-edited files use the native
+/// form. Either way the value lands as text for [`date::parse`]
+/// to validate.
+fn de_opt_created<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    match Option::<toml::Value>::deserialize(d)? {
+        None => Ok(None),
+        Some(toml::Value::String(s)) => Ok(Some(s)),
+        Some(toml::Value::Datetime(dt)) => Ok(Some(dt.to_string())),
+        Some(v) => Err(serde::de::Error::custom(format!(
+            "expected a `YYYY-MM-DD` date, got {v}"
+        ))),
+    }
 }
 
 /// Emit shape — field order IS the frontmatter key order.
@@ -177,14 +193,11 @@ struct FrontmatterOut<'a> {
     milestone: Option<&'a str>,
 }
 
-/// Parse an item file's source. `expected_kind` comes from the
-/// directory the file was found in — a mismatch (`P-002` inside
-/// `issues/`) is an error.
-pub fn parse_item_file(
-    src: &str,
-    expected_kind: ItemKind,
-    path: &str,
-) -> Result<ItemFile, ParseError> {
+/// Parse an item file's source. `spec` declares the kind the
+/// directory the file was found in belongs to — an id whose
+/// prefix isn't the spec's (`P-002` inside `issues/`) is an
+/// error.
+pub fn parse_item_file(src: &str, spec: &KindSpec, path: &str) -> Result<ItemFile, ParseError> {
     let src = mdx::normalize(src);
     let at = |off: usize, len: usize, m: String| ParseError::at(path, src.clone(), off, len, m);
     let whole = |m: &str| ParseError::whole_file(path, src.clone(), m);
@@ -220,10 +233,10 @@ pub fn parse_item_file(
         .id
         .parse()
         .map_err(|e: myco_core::ParseItemIdError| fm_err(e.to_string()))?;
-    if id.kind() != expected_kind {
+    if id.kind() != spec.id_kind() {
         return Err(fm_err(format!(
             "id {id} doesn't belong in this file (expected a {} id)",
-            expected_kind.prefix()
+            spec.name
         )));
     }
     // filename ↔ frontmatter: a canonical filename's number must
@@ -236,7 +249,7 @@ pub fn parse_item_file(
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(path);
-    if let Some(fname_id) = parse_item_filename(expected_kind, basename) {
+    if let Some(fname_id) = parse_item_filename(spec, basename) {
         if fname_id != id {
             return Err(fm_err(format!(
                 "filename says {fname_id} but frontmatter id is {id}"
@@ -296,12 +309,16 @@ pub fn parse_item_file(
     }
     item.epic = fm.epic;
     item.milestone = fm.milestone;
-    // body: everything after the closing fence + one blank line
-    let mut body = &src[fence_end..];
-    body = body.strip_prefix('\n').unwrap_or(body);
+    if item.blocks.contains(&id) || item.supersedes == Some(id) || item.superseded_by == Some(id) {
+        return Err(fm_err(format!("{id} can't block or supersede itself")));
+    }
+    // body: everything after the closing fence, canonicalized —
+    // leading blank lines go, the first content line's own
+    // indentation survives (an indented code block stays a code
+    // block)
     let file = ItemFile {
         meta: item,
-        body: body.trim().to_string(),
+        body: myco_core::canonical_body(&src[fence_end..]).to_string(),
     };
     // parse-safe: the body must be markdown the parser accepts
     if !file.body.is_empty() {
@@ -341,12 +358,21 @@ pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
         milestone: file.meta.milestone.as_deref(),
     };
     let toml = toml::to_string(&fm).map_err(|e| EmitError::new("item file", e.to_string()))?;
+    if file.body != myco_core::canonical_body(&file.body) {
+        // a body parse can't reproduce byte-for-byte would emit
+        // then read back as a different model — non-canonical
+        // bodies are the caller's bug, not content to reshape
+        return Err(EmitError::new(
+            "item file",
+            "body isn't canonical — leading blank lines or trailing whitespace",
+        ));
+    }
     let mut out = String::from("+++\n");
     out.push_str(&toml);
     out.push_str("+++\n");
     if !file.body.is_empty() {
         out.push('\n');
-        out.push_str(file.body.trim_end());
+        out.push_str(&file.body);
         out.push('\n');
     }
     Ok(out)
@@ -356,42 +382,68 @@ pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use myco_core::{ItemKind, KindTable};
+
+    /// The prelude spec for a builtin kind — tests name it by
+    /// its const, the store resolves the spec.
+    fn spec(kind: ItemKind) -> KindSpec {
+        KindTable::prelude().spec_of(kind).unwrap().clone()
+    }
 
     const ISSUE: &str = "+++\nid = \"I-003\"\ntitle = \"Memory leak\"\nstatus = \"in-progress\"\ncreated = \"2026-02-01\"\nowner = \"devin\"\npriority = \"high\"\nlabels = [\"index\", \"perf\"]\nblocks = [\"T-010\"]\nnote = \"resumed\"\n+++\n\n## Description\n\nBody text.\n";
 
     #[test]
     fn filename_mapping() {
         assert_eq!(
-            item_filename(&ItemId::new(ItemKind::Issue, 3), "Memory leak!"),
+            item_filename(
+                &spec(ItemKind::Issue),
+                &ItemId::new(ItemKind::Issue, 3),
+                "Memory leak!"
+            ),
             Some("issue-0003-memory-leak.md".into())
         );
         assert_eq!(
-            item_filename(&ItemId::new(ItemKind::Adr, 4), "Hybrid store"),
+            item_filename(
+                &spec(ItemKind::Adr),
+                &ItemId::new(ItemKind::Adr, 4),
+                "Hybrid store"
+            ),
             Some("0004-hybrid-store.md".into())
         );
         assert_eq!(
-            item_filename(&ItemId::new(ItemKind::Plan, 2), "v2 phases"),
+            item_filename(
+                &spec(ItemKind::Plan),
+                &ItemId::new(ItemKind::Plan, 2),
+                "v2 phases"
+            ),
             Some("pl-0002-v2-phases.md".into())
         );
         assert_eq!(
-            item_filename(&ItemId::new(ItemKind::Proposal, 7), ""),
+            item_filename(
+                &spec(ItemKind::Proposal),
+                &ItemId::new(ItemKind::Proposal, 7),
+                ""
+            ),
             Some("proposal-0007-untitled.md".into())
         );
-        assert_eq!(item_filename(&ItemId::new(ItemKind::Task, 1), "x"), None);
+        assert_eq!(
+            item_filename(&spec(ItemKind::Task), &ItemId::new(ItemKind::Task, 1), "x"),
+            None
+        );
     }
 
     #[test]
     fn filename_parse() {
         assert_eq!(
-            parse_item_filename(ItemKind::Issue, "issue-0003-memory-leak.md"),
+            parse_item_filename(&spec(ItemKind::Issue), "issue-0003-memory-leak.md"),
             Some(ItemId::new(ItemKind::Issue, 3))
         );
         assert_eq!(
-            parse_item_filename(ItemKind::Adr, "0004-hybrid.md"),
+            parse_item_filename(&spec(ItemKind::Adr), "0004-hybrid.md"),
             Some(ItemId::new(ItemKind::Adr, 4))
         );
         assert_eq!(
-            parse_item_filename(ItemKind::Plan, "pl-0002-x.md"),
+            parse_item_filename(&spec(ItemKind::Plan), "pl-0002-x.md"),
             Some(ItemId::new(ItemKind::Plan, 2))
         );
         for (kind, name) in [
@@ -405,15 +457,32 @@ mod tests {
             (ItemKind::Adr, "adr-0004-x.md"),
             (ItemKind::Adr, "0004.md"),
             (ItemKind::Issue, "issue-0003x-y.md"),
+            // past u32 the number can't name an item
+            (ItemKind::Issue, "issue-99999999999-x.md"),
         ] {
-            assert_eq!(parse_item_filename(kind, name), None, "{name}");
+            assert_eq!(parse_item_filename(&spec(kind), name), None, "{name}");
         }
+        // the number bound is u32 — same as ItemId's own parse —
+        // so every filename item_filename can emit parses back
+        // (the old 9-digit cap rejected 10-digit u32s, I-021)
+        assert_eq!(
+            parse_item_filename(&spec(ItemKind::Issue), "issue-4294967295-x.md"),
+            Some(ItemId::new(ItemKind::Issue, u32::MAX))
+        );
+        assert_eq!(
+            parse_item_filename(&spec(ItemKind::Issue), "issue-0000000003-x.md"),
+            Some(ItemId::new(ItemKind::Issue, 3))
+        );
     }
 
     #[test]
     fn roundtrip() {
-        let file =
-            parse_item_file(ISSUE, ItemKind::Issue, "issues/issue-0003-memory-leak.md").unwrap();
+        let file = parse_item_file(
+            ISSUE,
+            &spec(ItemKind::Issue),
+            "issues/issue-0003-memory-leak.md",
+        )
+        .unwrap();
         assert_eq!(file.meta.id, ItemId::new(ItemKind::Issue, 3));
         assert_eq!(file.meta.status, Status::InProgress);
         assert_eq!(file.meta.priority, Priority::High);
@@ -428,19 +497,19 @@ mod tests {
     #[test]
     fn supersede_keys_roundtrip() {
         let src = "+++\nid = \"ADR-0002\"\ntitle = \"old\"\nstatus = \"done\"\npriority = \"medium\"\nsuperseded_by = \"ADR-0003\"\nsupersedes = \"ADR-0001\"\n+++\n";
-        let file = parse_item_file(src, ItemKind::Adr, "adrs/0002-old.md").unwrap();
+        let file = parse_item_file(src, &spec(ItemKind::Adr), "adrs/0002-old.md").unwrap();
         assert_eq!(file.meta.superseded_by, Some(ItemId::new(ItemKind::Adr, 3)));
         assert_eq!(file.meta.supersedes, Some(ItemId::new(ItemKind::Adr, 1)));
         assert_eq!(emit_item_file(&file).unwrap(), src);
         // bad id values are frontmatter errors
         let bad = "+++\nid = \"ADR-0001\"\ntitle = \"x\"\nstatus = \"open\"\nsuperseded_by = \"nope\"\n+++\n";
-        assert!(parse_item_file(bad, ItemKind::Adr, "x.md").is_err());
+        assert!(parse_item_file(bad, &spec(ItemKind::Adr), "x.md").is_err());
     }
 
     #[test]
     fn epic_milestone_roundtrip() {
         let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\nepic = \"v2\"\nmilestone = \"1.0\"\n+++\n";
-        let file = parse_item_file(src, ItemKind::Issue, "issues/issue-0001-x.md").unwrap();
+        let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/issue-0001-x.md").unwrap();
         assert_eq!(file.meta.epic.as_deref(), Some("v2"));
         assert_eq!(file.meta.milestone.as_deref(), Some("1.0"));
         assert_eq!(emit_item_file(&file).unwrap(), src);
@@ -448,7 +517,7 @@ mod tests {
         for bad in ["epic = \"has space\"", "milestone = \"a/b\""] {
             let s = format!("+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\n{bad}\n+++\n");
             assert!(
-                parse_item_file(&s, ItemKind::Issue, "x.md").is_err(),
+                parse_item_file(&s, &spec(ItemKind::Issue), "x.md").is_err(),
                 "{bad}"
             );
         }
@@ -481,16 +550,81 @@ mod tests {
     }
 
     #[test]
+    fn frontmatter_accepts_short_forms() {
+        // `pri:`-token shorthand and a bare TOML date — the shapes
+        // a hand-edit naturally produces — read as their canonical
+        // values (I-021); emit still writes the strict forms
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"med\"\ncreated = 2026-02-01\n+++\n";
+        let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").unwrap();
+        assert_eq!(file.meta.priority, Priority::Medium);
+        assert_eq!(file.meta.created, Some(date::parse("2026-02-01").unwrap()));
+        let out = emit_item_file(&file).unwrap();
+        assert!(out.contains("priority = \"medium\""));
+        assert!(out.contains("created = \"2026-02-01\""));
+        // a datetime-with-time is still a bad `YYYY-MM-DD` date
+        let bad = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\ncreated = 2026-02-01T10:00:00Z\n+++\n";
+        assert!(parse_item_file(bad, &spec(ItemKind::Issue), "x.md").is_err());
+        // …and a wrong-typed value errors, not silently coerces
+        let bad = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\ncreated = 42\n+++\n";
+        assert!(parse_item_file(bad, &spec(ItemKind::Issue), "x.md").is_err());
+    }
+
+    #[test]
+    fn self_reference_rejected() {
+        // an item can't block or supersede itself — frontmatter
+        // and line grammar reject it alike (I-021)
+        for src in [
+            "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\nblocks = [\"I-001\"]\n+++\n",
+            "+++\nid = \"ADR-001\"\ntitle = \"x\"\nstatus = \"open\"\nsupersedes = \"ADR-001\"\n+++\n",
+            "+++\nid = \"ADR-001\"\ntitle = \"x\"\nstatus = \"open\"\nsuperseded_by = \"ADR-001\"\n+++\n",
+        ] {
+            let kind = if src.contains("ADR") {
+                ItemKind::Adr
+            } else {
+                ItemKind::Issue
+            };
+            assert!(
+                parse_item_file(src, &spec(kind), "x.md").is_err(),
+                "{src:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn body_keeps_leading_indented_code() {
+        // a body that opens with an indented code block must not
+        // lose its indent to `trim()` — that would demote it to a
+        // paragraph on read (I-021)
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\n+++\n\n    fn main() {}\n\npara\n";
+        let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").unwrap();
+        assert_eq!(file.body, "    fn main() {}\n\npara");
+        assert_eq!(emit_item_file(&file).unwrap(), src);
+    }
+
+    #[test]
+    fn emit_rejects_noncanonical_body() {
+        // a hand-built body parse can't reproduce byte-for-byte —
+        // emit used to silently `trim_end`, breaking the
+        // `parse(emit(m)) == m` fixed point (I-021)
+        let good = ItemFile::new(Item::new(ItemId::new(ItemKind::Issue, 1), "x"));
+        for body in ["  body  ", "\n\nbody", "body\n\n"] {
+            let mut f = good.clone();
+            f.body = body.into();
+            assert!(emit_item_file(&f).is_err(), "{body:?}");
+        }
+    }
+
+    #[test]
     fn minimal_frontmatter() {
         let src = "+++\nid = \"P-002\"\ntitle = \"t\"\nstatus = \"open\"\n+++\n";
-        let file = parse_item_file(src, ItemKind::Proposal, "proposals/x.md").unwrap();
+        let file = parse_item_file(src, &spec(ItemKind::Proposal), "proposals/x.md").unwrap();
         assert_eq!(file.meta.priority, Priority::Medium);
         assert!(file.body.is_empty());
         let out = emit_item_file(&file).unwrap();
         assert!(out.contains("priority = \"medium\""));
         assert!(!out.contains("owner"));
         assert_eq!(
-            parse_item_file(&out, ItemKind::Proposal, "p.md").unwrap(),
+            parse_item_file(&out, &spec(ItemKind::Proposal), "p.md").unwrap(),
             file
         );
     }
@@ -534,7 +668,7 @@ mod tests {
                 "unknown key ok?",
             ),
         ] {
-            let r = parse_item_file(src, ItemKind::Issue, "issues/x.md");
+            let r = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md");
             assert!(r.is_err() == (why != "unknown key ok?"), "{why}: {src:?}");
         }
     }
@@ -545,17 +679,17 @@ mod tests {
         // reserve 3 while the file holds 9; that's corruption, not
         // a rename waiting to happen
         let src = "+++\nid = \"I-009\"\ntitle = \"x\"\nstatus = \"open\"\n+++\n";
-        assert!(parse_item_file(src, ItemKind::Issue, "issues/issue-0003-x.md").is_err());
+        assert!(parse_item_file(src, &spec(ItemKind::Issue), "issues/issue-0003-x.md").is_err());
         // agreement parses; a name carrying no number isn't checked
         let src = "+++\nid = \"I-003\"\ntitle = \"x\"\nstatus = \"open\"\n+++\n";
-        assert!(parse_item_file(src, ItemKind::Issue, "issues/issue-0003-x.md").is_ok());
-        assert!(parse_item_file(src, ItemKind::Issue, "issues/x.md").is_ok());
+        assert!(parse_item_file(src, &spec(ItemKind::Issue), "issues/issue-0003-x.md").is_ok());
+        assert!(parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").is_ok());
         // kind mismatch stays a kind error (checked first)
         let src = "+++\nid = \"P-002\"\ntitle = \"x\"\nstatus = \"open\"\n+++\n";
-        assert!(parse_item_file(src, ItemKind::Issue, "issues/issue-0002-x.md").is_err());
+        assert!(parse_item_file(src, &spec(ItemKind::Issue), "issues/issue-0002-x.md").is_err());
         // but parses under its own kind even inside issues/ — the
         // filename's `issue` prefix claims no proposal number
-        assert!(parse_item_file(src, ItemKind::Proposal, "issues/issue-0002-x.md").is_ok());
+        assert!(parse_item_file(src, &spec(ItemKind::Proposal), "issues/issue-0002-x.md").is_ok());
     }
 
     #[test]
@@ -591,14 +725,14 @@ mod tests {
         // forward-compat: files written by a newer myco still load
         let src =
             "+++\nid = \"I-001\"\ntitle = \"t\"\nstatus = \"open\"\nfuture = 42\n+++\n\nbody\n";
-        let file = parse_item_file(src, ItemKind::Issue, "issues/x.md").unwrap();
+        let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").unwrap();
         assert_eq!(file.body, "body");
     }
 
     #[test]
     fn crlf_body_and_crlf_file() {
         let src = ISSUE.replace('\n', "\r\n");
-        let file = parse_item_file(&src, ItemKind::Issue, "x.md").unwrap();
+        let file = parse_item_file(&src, &spec(ItemKind::Issue), "x.md").unwrap();
         assert_eq!(file.body, "## Description\n\nBody text.");
     }
 }

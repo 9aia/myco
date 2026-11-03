@@ -93,6 +93,11 @@ impl ConfigSource for TomlSource {
         for cfg in [&user_cfg, &repo_cfg].into_iter().flatten() {
             merged.verbs.extend(cfg.verbs.clone());
         }
+        // kinds: merged like verbs — user entries first, repo
+        // shadows them by name at table construction (P-008)
+        for cfg in [&user_cfg, &repo_cfg].into_iter().flatten() {
+            merged.kinds.extend(cfg.kinds.clone());
+        }
         Ok(merged)
     }
 }
@@ -257,10 +262,7 @@ mod tests {
                 std::env::set_current_dir(cwd).unwrap();
                 assert_eq!(cfg.views.len(), 3);
                 // user layer wins the collision
-                assert_eq!(
-                    cfg.views["shared"].filter.kind,
-                    vec![myco_core::ItemKind::Task]
-                );
+                assert_eq!(cfg.views["shared"].filter.kind, vec!["task".to_string()]);
                 assert!(cfg.views.contains_key("repo_only"));
                 assert!(cfg.views.contains_key("user_only"));
             },

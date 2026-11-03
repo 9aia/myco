@@ -104,11 +104,16 @@ mod tests {
         // counters (they'd restart at 1 and reissue done ids)
         for src in [
             "name = \"x\"\n\n[netx]\nt = 9\n",
-            "name = \"x\"\n\n[next]\ntx = 9\n",
             "name = \"x\"\nnamme = \"y\"\n",
         ] {
             assert!(parse_meta(src).is_err(), "{src:?}");
         }
+        // unknown *counter* keys ride `extra` (P-008: they may be
+        // user-kind counters — meta parses without the table); a
+        // typo'd builtin lands there too, which check flags as a
+        // counter that shadows nothing declared
+        let m = parse_meta("name = \"x\"\n\n[next]\ntx = 9\n").unwrap();
+        assert_eq!(m.next.extra.get("tx"), Some(&9));
     }
 
     #[test]

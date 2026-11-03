@@ -65,7 +65,7 @@ pub fn repo_at(path: &Path) -> Result<discover::Project, String> {
 
 /// Scan a repo's worktree into a snapshot.
 pub fn scan_repo(proj: &discover::Project) -> Result<RepoSnapshot, String> {
-    let store = ops::store_at(&proj.worktree)?;
+    let store = ops::store_at(&proj.worktree, myco_core::kind::prelude_table())?;
     let scan = digest::scan(&store)?;
     let path = Utf8PathBuf::from_path_buf(proj.root.clone())
         .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
@@ -136,7 +136,7 @@ pub fn scan_one(entry: &RepoEntry) -> Result<RepoSnapshot, String> {
     if !discover::qualifies(wt.as_std_path()) {
         return Err(format!("{wt}: not a myco project worktree"));
     }
-    let store = ops::store_at(wt.as_std_path())?;
+    let store = ops::store_at(wt.as_std_path(), myco_core::kind::prelude_table())?;
     let scan = digest::scan(&store)?;
     Ok(RepoSnapshot {
         path: entry.path.clone(),
@@ -159,7 +159,9 @@ fn sync_links(
     repo: &str,
     wt: &Utf8Path,
 ) -> Result<myco_ops::links::SyncReport, String> {
-    myco_ops::links::sync(index, repo, wt, links::extract_file)
+    myco_ops::links::sync(index, repo, wt, |rel, src| {
+        links::extract_file(rel, src, myco_core::kind::prelude_table())
+    })
 }
 
 /// The registered entry matching `path`, else a "not registered"

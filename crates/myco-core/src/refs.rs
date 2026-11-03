@@ -20,7 +20,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::{Item, ItemId};
+use crate::{Item, ItemId, KindTable};
 
 /// The most body text one extract scans — 64 KiB. The cap applies
 /// to the byte window, not to items: a file is still scanned
@@ -169,7 +169,12 @@ impl Edge {
 /// Pure and deterministic: same input, same edge set. Dedup'd —
 /// mentioning `T-001` ten times is one edge. Mentioning `id`
 /// itself yields nothing (a self-mention isn't a link).
-pub fn extract(body: &str, meta: Option<&Item>, id: ItemId) -> BTreeSet<Edge> {
+///
+/// `kinds` gates the *prose* scan: since P-008 any `[A-Z]`-prefixed
+/// token is a grammatical id, so a mention only counts when its
+/// prefix is a declared kind — `WIP-1` in prose stays prose.
+/// Frontmatter edges are declared data and never filtered.
+pub fn extract(body: &str, meta: Option<&Item>, id: ItemId, kinds: &KindTable) -> BTreeSet<Edge> {
     let mut edges = BTreeSet::new();
     if let Some(m) = meta {
         for b in &m.blocks {
@@ -183,7 +188,7 @@ pub fn extract(body: &str, meta: Option<&Item>, id: ItemId) -> BTreeSet<Edge> {
         }
     }
     for dst in mentions(body) {
-        if dst != id {
+        if dst != id && kinds.spec_of(dst.kind()).is_some() {
             edges.insert(Edge::new(id, dst, EdgeKind::References));
         }
     }
@@ -191,12 +196,15 @@ pub fn extract(body: &str, meta: Option<&Item>, id: ItemId) -> BTreeSet<Edge> {
 }
 
 /// `X-NNN` id tokens in `text` — `T-001`, `I-003`, `P-002`,
-/// `ADR-0004`, `PL-001`. Deliberately not markdown-aware: a token
-/// in a code fence counts the same as one in prose (v1
-/// deliberately over-counts rather than teaching the scanner the
-/// grammar). Sorted, dedup'd, bounded by [`MAX_SCAN_BYTES`] /
-/// [`MAX_MENTIONS`]; malformed candidates (`T-0`, `XT-001`,
-/// overflow numbers) fall through [`ItemId`]'s own parser.
+/// `ADR-0004`, `PL-001`, plus any ≤3-char uppercase prefix a
+/// user kind might declare (P-008 — the scan is grammar-level;
+/// [`extract`] drops undeclared prefixes via the kind table).
+/// Deliberately not markdown-aware: a token in a code fence
+/// counts the same as one in prose (v1 deliberately over-counts
+/// rather than teaching the scanner the grammar). Sorted,
+/// dedup'd, bounded by [`MAX_SCAN_BYTES`] / [`MAX_MENTIONS`];
+/// malformed candidates (`T-0`, overflow numbers) fall through
+/// [`ItemId`]'s own parser.
 pub fn mentions(text: &str) -> Vec<ItemId> {
     let b = &text.as_bytes()[..text.len().min(MAX_SCAN_BYTES)];
     let mut out = BTreeSet::new();
@@ -240,7 +248,11 @@ pub fn mentions(text: &str) -> Vec<ItemId> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::ItemKind;
+    use crate::{ItemKind, KindTable};
+
+    fn kinds() -> KindTable {
+        KindTable::prelude()
+    }
 
     fn t(n: u32) -> ItemId {
         ItemId::new(ItemKind::Task, n)
@@ -269,7 +281,7 @@ mod tests {
             .blocks(i(3))
             .supersedes(ItemId::new(ItemKind::Adr, 1))
             .superseded_by(ItemId::new(ItemKind::Adr, 9));
-        let edges = extract("", Some(&meta), t(1));
+        let edges = extract("", Some(&meta), t(1), &kinds());
         assert_eq!(
             edges,
             BTreeSet::from([
@@ -284,7 +296,12 @@ mod tests {
     #[test]
     fn extract_mentions_dedups_and_drops_self() {
         // no meta — the handoff-file shape
-        let edges = extract("see T-001, T-001 again, also I-003 and I-003", None, t(2));
+        let edges = extract(
+            "see T-001, T-001 again, also I-003 and I-003",
+            None,
+            t(2),
+            &kinds(),
+        );
         assert_eq!(
             edges,
             BTreeSet::from([
@@ -293,7 +310,7 @@ mod tests {
             ])
         );
         // own id in prose is not an edge
-        let edges = extract("T-002 (that's me) relates to T-001", None, t(2));
+        let edges = extract("T-002 (that's me) relates to T-001", None, t(2), &kinds());
         assert_eq!(
             edges,
             BTreeSet::from([Edge::new(t(2), t(1), EdgeKind::References)])
@@ -315,14 +332,39 @@ mod tests {
         );
         // code-fence tokens count the same as prose (v1 rule)
         assert_eq!(mentions("```\nT-007\n```"), [t(7)]);
-        // glued to a word — not a token
-        assert!(mentions("XT-001 NOT-002 FOOADR-0001").is_empty());
+        // the scanner's own bound: prefix runs past 3 chars are
+        // never candidates — `FOOADR-0001` can't yield `ADR-0001`
+        assert!(mentions("FOOADR-0001").is_empty());
+        // short foreign prefixes parse (grammar-level leniency,
+        // P-008) — `extract` drops them via the kind table
+        let foreign = mentions("XT-001 NOT-002");
+        assert_eq!(foreign.len(), 2);
+        assert!(extract("XT-001 NOT-002", None, t(2), &kinds()).is_empty());
+        // a declared user kind's mentions DO become edges
+        let spike = toml::from_str::<crate::KindSpec>(
+            "name = \"xt\"\nprefix = \"XT\"\nstorage = \"doc\"\n",
+        )
+        .unwrap();
+        let kinds2 = KindTable::new(vec![spike]).unwrap();
+        let edges = extract("see XT-001", None, t(2), &kinds2);
+        assert_eq!(
+            edges,
+            BTreeSet::from([Edge::new(
+                t(2),
+                "XT-001".parse().unwrap(),
+                EdgeKind::References
+            )])
+        );
         // longer tokens we don't own — `T-001x`, `T-001-2`
         assert!(mentions("T-001x T-001-2").is_empty());
         // but a real mention after a separator still lands
         assert_eq!(mentions("WELL-T-005,"), [t(5)]);
-        // zero / overflow / bad kinds rejected by ItemId's parser
-        assert!(mentions("T-0 T-00 X-001 T-99999999999999999999").is_empty());
+        // zero / overflow / malformed rejected by ItemId's parser —
+        // `X-001` itself parses now (grammar leniency)
+        assert!(
+            mentions("T-0 T-00 X-001 T-99999999999999999999").contains(&"X-001".parse().unwrap())
+        );
+        assert!(mentions("T-0 T-00 T-99999999999999999999").is_empty());
         // punctuation boundaries are fine
         assert_eq!(mentions("(T-004), [I-009]."), [t(4), i(9)]);
     }

@@ -164,7 +164,9 @@ pub fn parse_handoff_file(
     for (i, e) in entries.iter_mut().enumerate() {
         let start = bounds[i].1;
         let end = bounds.get(i + 1).map_or(body.len(), |b| b.0);
-        e.note = body[start..end].trim().to_string();
+        // canonical form — leading blank lines go, but a note that
+        // opens with an indented code block keeps its indent
+        e.note = myco_core::canonical_body(&body[start..end]).to_string();
     }
     Ok((item, entries))
 }
@@ -239,11 +241,18 @@ pub fn emit_entry(entry: &HandoffEntry) -> Result<String, EmitError> {
     // heading wouldn't read back as a single text run (heading
     // context: a trailing ` #`-run would be an ATX closer)
     let head = mdx::heading(&head);
-    let note = entry.note.trim();
-    if note.is_empty() {
+    if entry.note != myco_core::canonical_body(&entry.note) {
+        // a note parse can't reproduce byte-for-byte would come
+        // back as a different entry — non-canonical notes are the
+        // caller's bug, not content to reshape
+        return Err(err(
+            "note isn't canonical — leading blank lines or trailing whitespace",
+        ));
+    }
+    if entry.note.is_empty() {
         return Ok(format!("## {head}\n"));
     }
-    Ok(format!("## {head}\n{note}\n"))
+    Ok(format!("## {head}\n{}\n", entry.note))
 }
 
 /// Canonical `handoffs/<ID>.md` — header + entries in file order.
@@ -300,7 +309,20 @@ mod tests {
             parse_handoff_filename("T-1.md"),
             Some(ItemId::new(ItemKind::Task, 1))
         );
-        for bad in ["T-001.txt", "T-001", "x.md", ".md", "archive"] {
+        // the bound is u32 — same as ItemId::parse and item
+        // filenames (I-021)
+        assert_eq!(
+            parse_handoff_filename("T-4294967295.md"),
+            Some(ItemId::new(ItemKind::Task, u32::MAX))
+        );
+        for bad in [
+            "T-001.txt",
+            "T-001",
+            "x.md",
+            ".md",
+            "archive",
+            "T-99999999999.md",
+        ] {
             assert_eq!(parse_handoff_filename(bad), None, "{bad}");
         }
     }
@@ -357,8 +379,35 @@ mod tests {
         assert!(emit_entry(&e).is_err());
         // `#`/list content in the note is fine
         let mut e = entry();
-        e.note = "# ok heading\n\n- item\n\n### deeper ok\n".into();
+        e.note = "# ok heading\n\n- item\n\n### deeper ok".into();
         assert!(emit_entry(&e).is_ok());
+    }
+
+    #[test]
+    fn notes_keep_leading_indented_code() {
+        // a note that opens with an indented code block must not
+        // lose its indent to `trim()` — it would read back as a
+        // paragraph (I-021)
+        let src = "+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## 2026-01-01 · devin\n    diff --git a b\n\nthen prose\n";
+        let (_, entries) = parse_handoff_file(src, "handoffs/T-001.md").unwrap();
+        assert_eq!(entries[0].note, "    diff --git a b\n\nthen prose");
+    }
+
+    #[test]
+    fn emit_rejects_noncanonical_note() {
+        // a whitespace-only or edge-padded note can't survive
+        // emit→parse byte-for-byte — emit used to silently trim,
+        // breaking the fixed point (I-021)
+        for note in ["   ", "  note  ", "\n\nnote", "note\n\n"] {
+            let mut e = entry();
+            e.note = note.into();
+            assert!(emit_entry(&e).is_err(), "{note:?}");
+        }
+        // a canonical note (leading indented code included) emits
+        let mut e = entry();
+        e.note = "    code\n\nprose".into();
+        let out = emit_entry(&e).unwrap();
+        assert!(out.contains("    code\n\nprose\n"), "{out:?}");
     }
 
     #[test]

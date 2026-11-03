@@ -15,8 +15,8 @@
 //!
 //! Items nest: a `-`/`[ ]` list indented under an item is its
 //! `children` (canonical emit = 2 spaces per level; arbitrary
-//! depth, one level recommended). Child lines carry the same
-//! grammar — full items, not prose.
+//! depth up to [`MAX_ITEM_DEPTH`], one level recommended). Child
+//! lines carry the same grammar — full items, not prose.
 
 use markdown::mdast::Node;
 use myco_core::{
@@ -24,6 +24,12 @@ use myco_core::{
 };
 
 use crate::error::EmitError;
+
+/// Deepest item nesting the docs accept — the spec says arbitrary
+/// depth, but parse and emit walk the tree recursively, so past
+/// this bound it's an error, not a stack overflow. 64 is far past
+/// any real `TODO.md`/`BACKLOG.md` nesting.
+pub(crate) const MAX_ITEM_DEPTH: usize = 64;
 
 /// Per-document defaults for line parse/emit.
 pub(crate) struct LineSpec {
@@ -188,6 +194,9 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
         }
     }
 
+    if item.blocks.contains(&id) {
+        return Err(bad(format!("{id} can't block itself")));
+    }
     item.status = status.unwrap_or(spec.default_status);
     item.priority = priority.unwrap_or_default();
     item.owner = owner;
@@ -233,6 +242,12 @@ pub(crate) fn check_item(item: &Item, file: &'static str) -> Result<(), EmitErro
         if note.contains('·') || note.contains('\n') || note.contains('\r') {
             return Err(err("note contains `·` or a newline"));
         }
+    }
+    if item.blocks.contains(&item.id)
+        || item.supersedes == Some(item.id)
+        || item.superseded_by == Some(item.id)
+    {
+        return Err(err("self-reference — can't block or supersede itself"));
     }
     Ok(())
 }
@@ -348,6 +363,7 @@ mod tests {
             ("T-001 t · blocks:T-1,,T-2", "empty id"),
             ("T-001 t · blocks:XYZ", "bad block id"),
             ("T-001 t · blocks:T-1 · blocks:T-2", "dup blocks"),
+            ("T-001 t · blocks:T-1,T-2", "blocks itself"),
             ("T-001 t · epic:", "empty epic"),
             ("T-001 t · epic:has space", "bad epic name"),
             ("T-001 t · epic:a · epic:b", "dup epic"),
@@ -418,6 +434,17 @@ mod tests {
         i.note = Some(" trailing ".into());
         assert!(text(&i, &TODO).is_err());
         i.note = Some("two\nlines".into());
+        assert!(text(&i, &TODO).is_err());
+        // self-references — an item can't block or supersede
+        // itself, however the model got built (I-021)
+        i.note = None;
+        i.blocks.insert(ItemId::new(ItemKind::Task, 1));
+        assert!(text(&i, &TODO).is_err());
+        i.blocks.clear();
+        i.supersedes = Some(ItemId::new(ItemKind::Task, 1));
+        assert!(text(&i, &TODO).is_err());
+        i.supersedes = None;
+        i.superseded_by = Some(ItemId::new(ItemKind::Task, 1));
         assert!(text(&i, &TODO).is_err());
     }
 }

@@ -176,6 +176,8 @@ fn convert_item(doc: &mut LegacyDoc, li: &markdown::mdast::ListItem) {
 
 /// Flatten an inline/block node to plain text — `Text`/`InlineCode`
 /// values, everything else via children; soft breaks become spaces.
+/// Explicit-stack walk — a deeply nested legacy doc can't overflow
+/// the call stack.
 fn flat_text(node: &Node) -> String {
     let mut out = String::new();
     flat_into(node, &mut out);
@@ -183,15 +185,27 @@ fn flat_text(node: &Node) -> String {
 }
 
 fn flat_into(node: &Node, out: &mut String) {
-    match node {
-        Node::Text(t) => out.push_str(&t.value),
-        Node::InlineCode(c) => out.push_str(&c.value),
-        Node::Break(_) | Node::Delete(_) => {}
-        _ => {
-            if let Some(children) = node.children() {
-                for c in children {
-                    flat_into(c, out);
-                    out.push(' ');
+    // (node, is-child-separator): a `true` frame just emits the
+    // inter-child space the recursive version did after each child
+    let mut stack = vec![(node, false)];
+    while let Some((node, sep)) = stack.pop() {
+        if sep {
+            out.push(' ');
+            continue;
+        }
+        match node {
+            Node::Text(t) => out.push_str(&t.value),
+            Node::InlineCode(c) => out.push_str(&c.value),
+            Node::Break(_) | Node::Delete(_) => {}
+            _ => {
+                if let Some(children) = node.children() {
+                    // pop order = child then its trailing space —
+                    // the recursive version emitted a space after
+                    // every child (including the last)
+                    for c in children.iter().rev() {
+                        stack.push((node, true));
+                        stack.push((c, false));
+                    }
                 }
             }
         }

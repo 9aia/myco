@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use myco_core::{
-    eval, eval_scoped, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, Scoped, SortKey, Status,
+    eval, eval_scoped, Actor, GroupAxis, Item, ItemId, Priority, Scoped, SortKey, Status,
     ViewFilter, ViewFormat, ViewGroup, ViewSource, ViewSpec,
 };
 use myco_ops::view::{NamedView, Origin};
@@ -23,7 +23,7 @@ use crate::{board, continuity, digest, indexcmd, items, ops, org};
 /// fields keep the base spec's value.
 #[derive(Debug, Default)]
 pub(crate) struct FilterPatch {
-    pub(crate) kind: Vec<ItemKind>,
+    pub(crate) kind: Vec<String>,
     pub(crate) status: Vec<Status>,
     pub(crate) pri_min: Option<Priority>,
     pub(crate) pri_max: Option<Priority>,
@@ -41,7 +41,7 @@ pub(crate) struct FilterPatch {
 /// flag set.
 pub(crate) fn filter_args(a: &Args) -> Result<FilterPatch, String> {
     Ok(FilterPatch {
-        kind: a.many_parsed("kind")?,
+        kind: a.many("kind"),
         status: a.many_parsed("status")?,
         pri_min: a.parsed("pri_min")?,
         pri_max: a.parsed("pri_max")?,
@@ -177,7 +177,7 @@ impl SpecPatchCli {
 fn spec_digest(s: &ViewSpec) -> String {
     let f = &s.filter;
     let mut parts = Vec::new();
-    let names = |v: &[ItemKind]| v.iter().map(|k| k.name()).collect::<Vec<_>>().join(",");
+    let names = |v: &[String]| v.join(",");
     if !f.kind.is_empty() {
         parts.push(format!("kind=[{}]", names(&f.kind)));
     }
@@ -484,15 +484,17 @@ fn run(
 
     // The universe owners — `groups` borrows item refs out of
     // them, so they must outlive it.
-    let (interrupted, empty_name, scan, views) = match spec.source {
+    let (interrupted, empty_name, scan, views, kinds) = match spec.source {
         ViewSource::Repo => {
             let (_proj, store) = opened?;
             let s = digest::scan(&store)?;
+            let kinds = myco_store::Store::kinds(&store).clone();
             (
                 continuity::interrupted_set(&store, s.live())?,
                 s.name.clone(),
                 Some(s),
                 Vec::new(),
+                kinds,
             )
         }
         ViewSource::Index => {
@@ -505,6 +507,7 @@ fn run(
                 name.clone().unwrap_or_else(|| "index".into()),
                 None,
                 v,
+                myco_core::KindTable::prelude(),
             )
         }
     };
@@ -515,6 +518,7 @@ fn run(
             scan.iter()
                 .flat_map(|s| s.items.iter().filter(|i| !s.archived.contains(&i.id))),
             &spec,
+            &kinds,
         ),
         ViewSource::Index => eval_scoped(
             views.iter().flat_map(|v| {
@@ -526,6 +530,7 @@ fn run(
                 })
             }),
             &spec,
+            &kinds,
         ),
     };
 
@@ -555,6 +560,7 @@ fn run(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use myco_core::ItemKind;
 
     #[test]
     fn repo_config_shadow_redefines_the_named_board() {
@@ -582,7 +588,7 @@ mod tests {
                     myco_ops::view::resolve_lenient(dir.path(), "board", ops::CONFIG).unwrap();
                 assert_eq!(warnings.len(), 1);
                 let spec = v.spec;
-                assert_eq!(spec.filter.kind, vec![ItemKind::Issue]);
+                assert_eq!(spec.filter.kind, vec!["issue".to_string()]);
                 // the shadowed spec isn't a status-axis board →
                 // the generic renderers/json, not the lane chrome
                 assert!(!board::is_status_board(&spec));
@@ -603,7 +609,7 @@ mod tests {
                     Item::new(ItemId::new(ItemKind::Task, 1), "t"),
                     Item::new(ItemId::new(ItemKind::Issue, 1), "i"),
                 ];
-                let ids: Vec<String> = eval(&items, &spec)
+                let ids: Vec<String> = eval(&items, &spec, myco_core::kind::prelude_table())
                     .iter()
                     .flat_map(|g| g.items.iter().map(|i| i.id.to_string()))
                     .collect();

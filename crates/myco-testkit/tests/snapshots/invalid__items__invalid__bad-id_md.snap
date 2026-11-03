@@ -2,4 +2,4 @@
 source: crates/myco-testkit/tests/invalid.rs
 expression: err.to_string()
 ---
-items/invalid/bad-id.md:2:1: invalid item id "X-001" — expected <prefix>-<number> like T-012 or ADR-0004
+items/invalid/bad-id.md:2:1: id X-001 doesn't belong in this file (expected a issue id)

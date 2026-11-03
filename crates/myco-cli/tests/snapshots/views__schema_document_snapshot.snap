@@ -96,27 +96,27 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "kinds": {
       "ADR": {
         "counter": "adr",
-        "kind": "Adr",
+        "kind": "adr",
         "width": 4
       },
       "I": {
         "counter": "i",
-        "kind": "Issue",
+        "kind": "issue",
         "width": 3
       },
       "P": {
         "counter": "p",
-        "kind": "Proposal",
+        "kind": "proposal",
         "width": 3
       },
       "PL": {
         "counter": "pl",
-        "kind": "Plan",
+        "kind": "plan",
         "width": 3
       },
       "T": {
         "counter": "t",
-        "kind": "Task",
+        "kind": "task",
         "width": 3
       }
     },
@@ -208,8 +208,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "type": "array"
             },
             "created": {
-              "default": null,
-              "description": "`created:` — `YYYY-MM-DD` when known.",
+              "description": "`created:` — `YYYY-MM-DD` when known. Absent (not `null`)\nin JSON — every other `Option` field skips the same way.",
               "type": [
                 "string",
                 "null"
@@ -519,8 +518,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
           "type": "array"
         },
         "created": {
-          "default": null,
-          "description": "`created:` — `YYYY-MM-DD` when known.",
+          "description": "`created:` — `YYYY-MM-DD` when known. Absent (not `null`)\nin JSON — every other `Option` field skips the same way.",
           "type": [
             "string",
             "null"
@@ -631,8 +629,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "type": "array"
             },
             "created": {
-              "default": null,
-              "description": "`created:` — `YYYY-MM-DD` when known.",
+              "description": "`created:` — `YYYY-MM-DD` when known. Absent (not `null`)\nin JSON — every other `Option` field skips the same way.",
               "type": [
                 "string",
                 "null"
@@ -789,7 +786,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "description": "One `issues|proposals|adrs|plans/*.md` file — TOML frontmatter\nin `+++` fences + a free-form markdown body.",
       "properties": {
         "body": {
-          "description": "Markdown body, verbatim (normalized: trimmed). Kind-specific\nsection templates are `myco-template`'s job, not the store's.",
+          "description": "Markdown body, verbatim (normalized via [`canonical_body`]).\nKind-specific section templates are `myco-template`'s job,\nnot the store's.",
           "type": "string"
         },
         "meta": {
@@ -811,40 +808,17 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     },
     "ItemKind": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "description": "The kind of work item an [`ItemId`] addresses.",
-      "oneOf": [
-        {
-          "const": "task",
-          "description": "`T-NNN` — tasks live in `TODO.md` / `BACKLOG.md`, no file.",
-          "type": "string"
-        },
-        {
-          "const": "issue",
-          "description": "`I-NNN` — one file each under `issues/`.",
-          "type": "string"
-        },
-        {
-          "const": "proposal",
-          "description": "`P-NNN` — one file each under `proposals/`.",
-          "type": "string"
-        },
-        {
-          "const": "adr",
-          "description": "`ADR-NNNN` — one file each under `adrs/`.",
-          "type": "string"
-        },
-        {
-          "const": "plan",
-          "description": "`PL-NNN` — one file each under `plans/`.",
-          "type": "string"
-        }
-      ],
-      "title": "ItemKind"
+      "title": "ItemKind",
+      "type": "string"
     },
     "NextCounters": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit; *unknown* keys are rejected — a typo (`tx = 9`)\nmust surface, not silently reset the counter to 1 and reissue\nids.",
+      "additionalProperties": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit. Builtin kinds keep their fixed keys (`t`, `i`, …);\nuser kinds (P-008) land in `extra` keyed by lowercase prefix\n(`s = 4`). Unknown keys ride `extra` too — the kind table, not\nserde, decides whether a key names a real kind (a typo'd\ncounter can't reissue ids anyway: `observe` floors every\ncounter above the ids on disk).",
       "properties": {
         "adr": {
           "default": 1,
@@ -915,8 +889,12 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "ProjectMeta": {
       "$defs": {
         "NextCounters": {
-          "additionalProperties": false,
-          "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit; *unknown* keys are rejected — a typo (`tx = 9`)\nmust surface, not silently reset the counter to 1 and reissue\nids.",
+          "additionalProperties": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "description": "Per-kind next-counters — `meta.toml`'s `[next]` table.\nMissing keys default to 1 so a partial `[next]` survives a\nhand-edit. Builtin kinds keep their fixed keys (`t`, `i`, …);\nuser kinds (P-008) land in `extra` keyed by lowercase prefix\n(`s = 4`). Unknown keys ride `extra` too — the kind table, not\nserde, decides whether a key names a real kind (a typo'd\ncounter can't reissue ids anyway: `observe` floors every\ncounter above the ids on disk).",
           "properties": {
             "adr": {
               "default": 1,
@@ -1004,8 +982,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "type": "array"
             },
             "created": {
-              "default": null,
-              "description": "`created:` — `YYYY-MM-DD` when known.",
+              "description": "`created:` — `YYYY-MM-DD` when known. Absent (not `null`)\nin JSON — every other `Option` field skips the same way.",
               "type": [
                 "string",
                 "null"
@@ -1240,8 +1217,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "type": "array"
             },
             "created": {
-              "default": null,
-              "description": "`created:` — `YYYY-MM-DD` when known.",
+              "description": "`created:` — `YYYY-MM-DD` when known. Absent (not `null`)\nin JSON — every other `Option` field skips the same way.",
               "type": [
                 "string",
                 "null"

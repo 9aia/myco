@@ -9,6 +9,7 @@
 //! serve old data silently. Repos whose worktree vanished keep
 //! their last snapshot and report an error inline.
 
+use camino::Utf8PathBuf;
 use myco_index::{Index, RepoSnapshot};
 use serde_json::json;
 
@@ -19,6 +20,10 @@ use crate::{indexcmd, ops};
 pub struct RepoView {
     /// Registry name — identity even when `snap` is gone.
     pub name: String,
+    /// The registered `project/` worktree — where a mutation on
+    /// this repo's items opens a store (index-sourced boards
+    /// write per repo).
+    pub worktree: Utf8PathBuf,
     /// The snapshot (may be the last good one on rescan failure).
     pub snap: Option<RepoSnapshot>,
     /// Rescan/load error, when the fresh snapshot couldn't be had.
@@ -44,9 +49,11 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
     let mut out = Vec::with_capacity(repos.len());
     for (i, c) in cached.iter().enumerate() {
         let name = repos[i].name.clone();
+        let worktree = repos[i].worktree_path();
         if fresh(i) {
             out.push(RepoView {
                 name,
+                worktree,
                 snap: c.clone(),
                 error: None,
             });
@@ -60,12 +67,14 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
                 index.save_snapshot(&snap).map_err(|e| e.to_string())?;
                 out.push(RepoView {
                     name,
+                    worktree,
                     snap: Some(snap),
                     error: None,
                 });
             }
             Err(e) => out.push(RepoView {
                 name,
+                worktree,
                 snap: cached[i].clone(),
                 error: Some(e),
             }),

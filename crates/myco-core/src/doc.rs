@@ -88,8 +88,9 @@ pub struct ItemFile {
     /// Frontmatter (`id`, `title`, `status`, `created`, `owner`,
     /// `priority`, `labels`, `blocks`, `note`).
     pub meta: Item,
-    /// Markdown body, verbatim (normalized: trimmed). Kind-specific
-    /// section templates are `myco-template`'s job, not the store's.
+    /// Markdown body, verbatim (normalized via [`canonical_body`]).
+    /// Kind-specific section templates are `myco-template`'s job,
+    /// not the store's.
     pub body: String,
 }
 
@@ -102,11 +103,31 @@ impl ItemFile {
         }
     }
 
-    /// Builder-style body setter — the body is stored trimmed.
+    /// Builder-style body setter — stored in canonical form (see
+    /// [`canonical_body`]).
     pub fn body(mut self, body: impl Into<String>) -> Self {
-        self.body = body.into().trim().to_string();
+        let body = body.into();
+        self.body = canonical_body(&body).to_string();
         self
     }
+}
+
+/// Canonical form of a free-text block — an item-file body, a
+/// handoff note: no leading blank lines, no trailing whitespace.
+/// Leading whitespace on the *first content line* survives — a
+/// full `trim()` would mangle a body that opens with an indented
+/// code block into a paragraph.
+pub fn canonical_body(s: &str) -> &str {
+    let s = s.trim_end();
+    let mut start = 0;
+    for line in s.split_inclusive('\n') {
+        if line.trim().is_empty() {
+            start += line.len();
+        } else {
+            break;
+        }
+    }
+    &s[start..]
 }
 
 #[cfg(test)]
@@ -148,9 +169,27 @@ mod tests {
     }
 
     #[test]
-    fn item_file_body_trims() {
-        let f = ItemFile::new(t(1)).body("\n\n  hello \n");
+    fn item_file_body_canonicalizes() {
+        let f = ItemFile::new(t(1)).body("\n\nhello \n");
         assert_eq!(f.body, "hello");
         assert_eq!(ItemFile::new(t(1)).body, "");
+        // leading blank lines go, but the first content line's
+        // own indentation stays — an indented code block must not
+        // be mangled into a paragraph (I-021)
+        let f = ItemFile::new(t(1)).body("\n\n    code()\n\nrest\n\n");
+        assert_eq!(f.body, "    code()\n\nrest");
+        // whitespace-only collapses to empty
+        assert_eq!(ItemFile::new(t(1)).body("  \n \n").body, "");
+    }
+
+    #[test]
+    fn canonical_body_edges() {
+        assert_eq!(canonical_body(""), "");
+        assert_eq!(canonical_body("   \n\n  "), "");
+        assert_eq!(canonical_body("a\nb  \n\n"), "a\nb");
+        assert_eq!(canonical_body("\n \n\nx"), "x");
+        // inner whitespace is verbatim — only the edges move
+        assert_eq!(canonical_body("a\n\n   b\n"), "a\n\n   b");
+        assert_eq!(canonical_body("x"), "x");
     }
 }

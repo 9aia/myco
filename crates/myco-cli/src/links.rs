@@ -8,7 +8,7 @@
 //! same read side.
 
 use camino::Utf8Path;
-use myco_core::{refs, Edge, Item, ItemId, ItemKind};
+use myco_core::{refs, Edge, Item, ItemId};
 use myco_store_md::{
     item_dir, parse_backlog, parse_handoff_file, parse_handoff_filename, parse_item_file,
     parse_todo, HANDOFFS_DIR,
@@ -25,19 +25,23 @@ use myco_store_md::{
 ///   `supersedes:`/`superseded_by:` + body mentions.
 /// - anything else (`index.md`, notes) — zero edges; the file is
 ///   still fingerprinted so `sweep` tracks it.
-pub fn extract_file(rel: &Utf8Path, src: &str) -> Result<Vec<Edge>, String> {
+pub fn extract_file(
+    rel: &Utf8Path,
+    src: &str,
+    kinds: &myco_core::KindTable,
+) -> Result<Vec<Edge>, String> {
     let mut edges = Vec::new();
     match rel.as_str() {
         "TODO.md" => {
             let doc = parse_todo(src).map_err(|e| format!("{rel}: {e}"))?;
             for i in doc.items() {
-                push_item(&mut edges, i);
+                push_item(&mut edges, i, kinds);
             }
         }
         "BACKLOG.md" => {
             let doc = parse_backlog(src).map_err(|e| format!("{rel}: {e}"))?;
             for i in doc.items() {
-                push_item(&mut edges, i);
+                push_item(&mut edges, i, kinds);
             }
         }
         _ => {
@@ -50,11 +54,11 @@ pub fn extract_file(rel: &Utf8Path, src: &str) -> Result<Vec<Edge>, String> {
                     .map(|e| e.note.as_str())
                     .collect::<Vec<_>>()
                     .join("\n");
-                edges.extend(refs::extract(&notes, None, id));
-            } else if let Some(kind) = item_kind(rel) {
+                edges.extend(refs::extract(&notes, None, id, kinds));
+            } else if let Some(spec) = item_spec(rel, kinds) {
                 let f =
-                    parse_item_file(src, kind, rel.as_str()).map_err(|e| format!("{rel}: {e}"))?;
-                edges.extend(refs::extract(&f.body, Some(&f.meta), f.meta.id));
+                    parse_item_file(src, spec, rel.as_str()).map_err(|e| format!("{rel}: {e}"))?;
+                edges.extend(refs::extract(&f.body, Some(&f.meta), f.meta.id, kinds));
             }
         }
     }
@@ -63,9 +67,9 @@ pub fn extract_file(rel: &Utf8Path, src: &str) -> Result<Vec<Edge>, String> {
 
 /// One ledger item's edges — the whole subtree, since children
 /// are full items.
-fn push_item(edges: &mut Vec<Edge>, item: &Item) {
+fn push_item(edges: &mut Vec<Edge>, item: &Item, kinds: &myco_core::KindTable) {
     for i in item.subtree() {
-        edges.extend(refs::extract(&i.title, Some(i), i.id));
+        edges.extend(refs::extract(&i.title, Some(i), i.id, kinds));
     }
 }
 
@@ -78,25 +82,23 @@ fn handoff_id(rel: &Utf8Path) -> Option<ItemId> {
     parse_handoff_filename(rel.file_name()?)
 }
 
-/// The item kind a path's first component names — covers both
+/// The kind spec a path's first component names — covers both
 /// `<dir>/x.md` and `<dir>/archive/x.md`.
-fn item_kind(rel: &Utf8Path) -> Option<ItemKind> {
+fn item_spec<'a>(
+    rel: &Utf8Path,
+    kinds: &'a myco_core::KindTable,
+) -> Option<&'a myco_core::KindSpec> {
     let dir = rel.components().next()?.as_str();
-    [
-        ItemKind::Issue,
-        ItemKind::Proposal,
-        ItemKind::Plan,
-        ItemKind::Adr,
-    ]
-    .into_iter()
-    .find(|k| item_dir(*k) == Some(dir))
+    kinds
+        .file_backed()
+        .find(|s| item_dir(s).as_deref() == Some(dir))
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use myco_core::EdgeKind;
+    use myco_core::{EdgeKind, ItemKind};
 
     fn tid(n: u32) -> ItemId {
         ItemId::new(ItemKind::Task, n)
@@ -105,7 +107,12 @@ mod tests {
     #[test]
     fn todo_items_contribute_blocks_and_mentions() {
         let src = "# TODO — x\n\n- [ ] T-001 alpha\n- [ ] T-002 beta, see T-001 · blocks:T-003\n- [ ] T-003 gamma\n";
-        let edges = extract_file(Utf8Path::new("TODO.md"), src).unwrap();
+        let edges = extract_file(
+            Utf8Path::new("TODO.md"),
+            src,
+            myco_core::kind::prelude_table(),
+        )
+        .unwrap();
         assert!(
             edges.contains(&Edge::new(tid(2), tid(1), EdgeKind::References)),
             "{edges:?}"
@@ -119,7 +126,12 @@ mod tests {
     #[test]
     fn handoff_file_is_a_self_edge_plus_mentions() {
         let src = "+++\nitem = \"T-001\"\n+++\n\n# Handoffs — T-001\n\n## 2026-10-29 · devin\nDone: x. Next: I-003.\n";
-        let edges = extract_file(Utf8Path::new("handoffs/T-001.md"), src).unwrap();
+        let edges = extract_file(
+            Utf8Path::new("handoffs/T-001.md"),
+            src,
+            myco_core::kind::prelude_table(),
+        )
+        .unwrap();
         assert!(edges.contains(&Edge::handoff(tid(1))), "{edges:?}");
         assert!(
             edges.contains(&Edge::new(
@@ -134,7 +146,12 @@ mod tests {
     #[test]
     fn item_file_edges_come_from_meta_and_body() {
         let src = "+++\nid = \"I-003\"\ntitle = \"leak\"\nstatus = \"open\"\ncreated = \"2026-01-01\"\n+++\n\n# I-003 leak\n\nRelated to T-007.\n";
-        let edges = extract_file(Utf8Path::new("issues/issue-0003-leak.md"), src).unwrap();
+        let edges = extract_file(
+            Utf8Path::new("issues/issue-0003-leak.md"),
+            src,
+            myco_core::kind::prelude_table(),
+        )
+        .unwrap();
         assert!(
             edges.contains(&Edge::new(
                 ItemId::new(ItemKind::Issue, 3),
@@ -144,17 +161,37 @@ mod tests {
             "{edges:?}"
         );
         // archive scope classifies the same
-        let edges = extract_file(Utf8Path::new("issues/archive/issue-0003-leak.md"), src).unwrap();
+        let edges = extract_file(
+            Utf8Path::new("issues/archive/issue-0003-leak.md"),
+            src,
+            myco_core::kind::prelude_table(),
+        )
+        .unwrap();
         assert!(!edges.is_empty());
     }
 
     #[test]
     fn unrecognized_files_yield_no_edges() {
-        assert!(extract_file(Utf8Path::new("index.md"), "# index\nT-001").is_ok());
-        let edges = extract_file(Utf8Path::new("index.md"), "# index\nT-001").unwrap();
+        assert!(extract_file(
+            Utf8Path::new("index.md"),
+            "# index\nT-001",
+            myco_core::kind::prelude_table()
+        )
+        .is_ok());
+        let edges = extract_file(
+            Utf8Path::new("index.md"),
+            "# index\nT-001",
+            myco_core::kind::prelude_table(),
+        )
+        .unwrap();
         assert!(edges.is_empty());
         // a T-NNN filename outside handoffs/ is not a handoff edge
-        let edges = extract_file(Utf8Path::new("notes/T-001.md"), "hi").unwrap();
+        let edges = extract_file(
+            Utf8Path::new("notes/T-001.md"),
+            "hi",
+            myco_core::kind::prelude_table(),
+        )
+        .unwrap();
         assert!(edges.is_empty());
     }
 }

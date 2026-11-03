@@ -10,11 +10,15 @@
 //! read under the lock means the TUI never saves a stale
 //! startup-snapshot ledger over a concurrent writer's changes.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use myco_core::Ledger;
-use myco_core::{refs, Edge, EdgeKind, Item, ItemFile, ItemId, ItemKind, Status, ViewSpec};
+use myco_core::{
+    eval_scoped, refs, Edge, EdgeKind, Item, ItemFile, ItemId, ItemKind, Scoped, Status,
+    ViewFormat, ViewSource, ViewSpec,
+};
 use myco_ops::{discover, items, ops};
 use myco_store::Store;
 use myco_store_md::MdStore;
@@ -23,10 +27,10 @@ use ratatui::layout::Rect;
 /// `MdStore` rooted at a worktree path — the TUI names the impl
 /// (`myco-ops` is generic over [`Store`]; each front-end wires
 /// its own store factory).
-fn store_at(worktree: &Path) -> Result<MdStore, String> {
+fn store_at(worktree: &Path, kinds: &myco_core::KindTable) -> Result<MdStore, String> {
     let root = camino::Utf8PathBuf::from_path_buf(worktree.to_path_buf())
         .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
-    Ok(MdStore::new(root))
+    Ok(MdStore::with_kinds(root, kinds.clone()))
 }
 
 /// Layered TOML — `Some(path)` pins the repo layer, `None` runs
@@ -92,23 +96,62 @@ pub enum Mode {
     Help,
 }
 
+/// One registered repo's slice of the index universe — what an
+/// index-sourced view (`--view org-*`) loads instead of the repo
+/// store. `worktree` is where a mutation on this repo's items
+/// opens its own store.
+#[derive(Debug, Clone)]
+pub struct OrgRepo {
+    /// Registry name — the `repo:` row prefix.
+    pub name: String,
+    /// The registered `project/` worktree.
+    pub worktree: PathBuf,
+    /// Top-level items in the ledger (any status, live + archived).
+    pub items: Vec<Item>,
+    /// Ids that live under `archive/` — filtered out of rows.
+    pub archived: BTreeSet<ItemId>,
+    /// Rescan/load error, when the fresh snapshot couldn't be had
+    /// (the last-good items still load).
+    pub error: Option<String>,
+}
+
+/// Loads the index universe — injected by the composition root
+/// (`myco ui` wires the redb index here; the TUI itself is
+/// impl-free). Called at open and on every reload (`:w`/`R`).
+pub type OrgLoader = Box<dyn FnMut() -> Result<Vec<OrgRepo>, String>>;
+
 /// A flattened display row — section headers aren't selectable.
 #[derive(Debug, Clone)]
 pub enum Row {
     /// `## <section>` header line.
     Header(String),
-    /// An item line; `depth` indents children under their parent.
-    Item { item: Box<Item>, depth: usize },
+    /// An item line; `depth` indents children under their parent,
+    /// `repo` tags index-sourced items with their owning repo.
+    Item {
+        item: Box<Item>,
+        depth: usize,
+        repo: Option<String>,
+    },
 }
 
 /// The whole TUI state.
 pub struct Model {
-    proj: discover::Project,
-    /// Unlocked read handle. Mutations don't go through this field
-    /// alone — `mutate` wraps them in `ops::lock_worktree` + a fresh
+    /// The repo `myco ui` launched in — `None` when discovery
+    /// found no project (only index-sourced views open then).
+    proj: Option<discover::Project>,
+    /// Unlocked read handle on the launch repo. Mutations don't
+    /// go through this field alone — `mutate` opens the target
+    /// repo's store under `ops::lock_worktree` + a fresh
     /// `load_ledger`, so writes are serialized and never stale.
-    store: MdStore,
+    /// `None` in index mode or when discovery failed.
+    store: Option<MdStore>,
     ledger: Ledger,
+    /// The index universe — `Some` when the resolved view is
+    /// `source = "index"`: rows, links, and mutations address
+    /// repo slices, not `store`/`ledger`.
+    orgs: Option<Vec<OrgRepo>>,
+    /// Reloads `orgs` (`:w`/`R`, post-editor).
+    org_loader: Option<OrgLoader>,
     no_commit: bool,
     /// Active tab.
     pub board: Board,
@@ -161,33 +204,69 @@ pub struct Model {
 }
 
 impl Model {
-    /// Discovery + first ledger load. `dir`/`root` override like the
-    /// CLI globals; `view` names a declarative view (builtin preset
-    /// or `[views.<name>]` config) whose filter narrows the item
-    /// source on every board.
+    /// Discovery + first load. `dir`/`root` override like the CLI
+    /// globals; `view` names a declarative view (builtin preset or
+    /// `[views.<name>]` config). A `source = "index"` spec (`org-*`)
+    /// swaps the repo store for the index universe via `org_loader`
+    /// — and opens even when discovery found no project.
     pub fn open(
         dir: Option<&Path>,
         root: Option<&Path>,
         no_commit: bool,
         view: Option<String>,
+        org_loader: Option<OrgLoader>,
     ) -> Result<Self, String> {
-        // Shared read lock for the initial load only — a live writer
-        // fails us fast rather than rendering mid-mutation. It drops
-        // with this scope: holding any lock for the session would
-        // block every other myco invocation while the board is open.
-        let (proj, ledger) = {
-            let (proj, store) = items::open_read_with(dir, root, CONFIG, store_at)?;
-            (proj, items::load_ledger(&store)?)
-        };
-        let store = store_at(&proj.worktree)?;
+        // The view resolves first — its source picks the universe.
+        // Discovery here is only for the config root, so a repo-less
+        // launch still reaches an index-sourced spec.
+        let proj = discover::discover(dir, root, CONFIG).ok();
+        let cfg_root = proj
+            .as_ref()
+            .map(|p| p.root.clone())
+            .or_else(|| root.map(Path::to_path_buf))
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
         let view_spec = match &view {
-            Some(name) => Some(myco_ops::view::resolve(&proj.root, name, CONFIG)?.0.spec),
+            Some(name) => Some(myco_ops::view::resolve(&cfg_root, name, CONFIG)?.0.spec),
             None => None,
+        };
+        let index_sourced = view_spec
+            .as_ref()
+            .is_some_and(|v| v.source == ViewSource::Index);
+        let mut org_loader = org_loader;
+        let (proj, store, ledger, orgs) = if index_sourced {
+            let Some(loader) = org_loader.as_mut() else {
+                return Err("index-sourced view — this front-end has no index".into());
+            };
+            let orgs = loader()?;
+            (
+                proj,
+                None,
+                Ledger::new(
+                    myco_core::TodoDoc::new(""),
+                    myco_core::BacklogDoc::default(),
+                ),
+                Some(orgs),
+            )
+        } else {
+            // Shared read lock for the initial load only — a live
+            // writer fails us fast rather than rendering
+            // mid-mutation. It drops with this scope: holding any
+            // lock for the session would block every other myco
+            // invocation while the board is open.
+            let (proj, ledger) = {
+                let (p, store) = items::open_read_with(dir, root, CONFIG, store_at)?;
+                (p, items::load_ledger(&store)?)
+            };
+            let store = store_at(&proj.worktree, myco_core::kind::prelude_table())?;
+            (Some(proj), Some(store), ledger, None)
         };
         let mut m = Model {
             proj,
             store,
             ledger,
+            orgs,
+            org_loader,
             no_commit,
             board: Board::Todo,
             rows: Vec::new(),
@@ -215,19 +294,52 @@ impl Model {
         if let Some(name) = &view {
             m.status = format!("view: {name}");
         }
+        match &m.orgs {
+            Some(orgs) if orgs.is_empty() => {
+                m.status = "index: no repos registered — `myco index add <path>`".into();
+            }
+            Some(orgs) => {
+                let errs: Vec<String> = orgs
+                    .iter()
+                    .filter_map(|o| o.error.as_ref().map(|e| format!("{}: {e}", o.name)))
+                    .collect();
+                if !errs.is_empty() {
+                    m.status = format!("index: {}", errs.join("; "));
+                }
+            }
+            None => {}
+        }
         Ok(m)
+    }
+
+    /// The kind table the open store resolves against — the
+    /// prelude when nothing's loaded.
+    fn kinds(&self) -> &myco_core::KindTable {
+        match &self.store {
+            Some(s) => s.kinds(),
+            None => myco_core::kind::prelude_table(),
+        }
     }
 
     /// `--view` narrows the item source — top-level only; children
     /// ride with a matching parent.
     fn view_matches(&self, item: &Item) -> bool {
-        self.view.as_ref().is_none_or(|v| v.filter.matches(item))
+        self.view
+            .as_ref()
+            .is_none_or(|v| v.filter.matches(item, self.kinds()))
     }
 
     /// Pull file-backed items for the `Files` board. Per-kind read
     /// errors land in the status bar — a broken item file degrades
-    /// the board instead of vanishing silently.
+    /// the board instead of vanishing silently. Index boards skip
+    /// this — their `Files` tab reads snapshot metas, not files.
     fn load_files(&mut self) {
+        let Some(store) = &self.store else {
+            return;
+        };
+        if self.orgs.is_some() {
+            return;
+        }
         self.files.clear();
         let mut errs = Vec::new();
         for kind in [
@@ -236,21 +348,25 @@ impl Model {
             ItemKind::Plan,
             ItemKind::Adr,
         ] {
-            match self.store.list_items(kind) {
+            match store.list_items(kind) {
                 Ok(mut v) => self.files.append(&mut v),
                 Err(e) => errs.push(format!(
                     "{}: {e}",
-                    myco_store_md::item_dir(kind).unwrap_or("?")
+                    store
+                        .kinds()
+                        .spec_of(kind)
+                        .map(|s| s.dir_name())
+                        .unwrap_or_else(|| "?".into())
                 )),
             }
         }
         // handoff files feed the link graph — the id comes from
         // the filename, the mention input from the entry notes
         self.handoffs.clear();
-        match self.store.list_handoff_files() {
+        match store.list_handoff_files() {
             Ok(hs) => {
                 for h in hs {
-                    match self.store.read_handoffs(h.id) {
+                    match store.read_handoffs(h.id) {
                         Ok(entries) => self.handoffs.push((
                             h.id,
                             entries
@@ -270,26 +386,36 @@ impl Model {
         }
     }
 
+    /// Every loaded top-level item — the ledger docs in repo mode,
+    /// the unioned repo slices on an index board. Children stay
+    /// nested under their parents (callers flatten with
+    /// `Item::subtree`).
+    fn top_items(&self) -> Box<dyn Iterator<Item = &Item> + '_> {
+        match &self.orgs {
+            Some(orgs) => Box::new(orgs.iter().flat_map(|o| o.items.iter())),
+            None => Box::new(self.ledger.todo.items().chain(self.ledger.backlog.items())),
+        }
+    }
+
     /// Rebuild the in-memory edge set from what's loaded — ledger
     /// item titles/metas, file bodies/metas, handoff files. Pure:
     /// no store hits, so `rebuild_rows` can call it freely.
     fn rebuild_links(&mut self) {
         let mut edges = std::collections::BTreeSet::new();
-        for i in self
-            .ledger
-            .todo
-            .items()
-            .chain(self.ledger.backlog.items())
-            .flat_map(Item::subtree)
-        {
-            edges.extend(refs::extract(&i.title, Some(i), i.id));
+        for i in self.top_items().flat_map(Item::subtree) {
+            edges.extend(refs::extract(&i.title, Some(i), i.id, self.kinds()));
         }
         for f in &self.files {
-            edges.extend(refs::extract(&f.body, Some(&f.meta), f.meta.id));
+            edges.extend(refs::extract(
+                &f.body,
+                Some(&f.meta),
+                f.meta.id,
+                self.kinds(),
+            ));
         }
         for (id, notes) in &self.handoffs {
             edges.insert(Edge::handoff(*id));
-            edges.extend(refs::extract(notes, None, *id));
+            edges.extend(refs::extract(notes, None, *id, self.kinds()));
         }
         self.links = edges.into_iter().collect();
     }
@@ -312,89 +438,107 @@ impl Model {
     }
 
     /// Title for `id` when it's loaded — the related list
-    /// annotates neighbors with it.
+    /// annotates neighbors with it. On an index board the first
+    /// repo's match wins (ids aren't unique across repos).
     pub fn item_title(&self, id: ItemId) -> Option<&str> {
         if let Some(f) = self.files.iter().find(|f| f.meta.id == id) {
             return Some(f.meta.title.as_str());
         }
-        for s in self
-            .ledger
-            .todo
-            .sections
-            .iter()
-            .chain(&self.ledger.backlog.sections)
-        {
-            if let Some(i) = s.items.iter().flat_map(Item::subtree).find(|i| i.id == id) {
-                return Some(i.title.as_str());
-            }
-        }
-        None
+        self.top_items()
+            .flat_map(Item::subtree)
+            .find(|i| i.id == id)
+            .map(|i| i.title.as_str())
     }
 
     /// Body of a file-backed item (preview on the `Files` board).
-    pub fn file_body(&self, id: ItemId) -> Option<&str> {
+    /// Repo mode reads the loaded `files`; an index board reads
+    /// the file lazily through the owning repo's store.
+    pub fn file_body(&self, id: ItemId) -> Option<String> {
+        if let Some(orgs) = &self.orgs {
+            let repo = self.selected_repo()?;
+            let org = orgs.iter().find(|o| o.name == repo)?;
+            return store_at(&org.worktree, myco_core::kind::prelude_table())
+                .ok()
+                .and_then(|s| s.item(id).ok().map(|f| f.body));
+        }
         self.files
             .iter()
             .find(|f| f.meta.id == id)
-            .map(|f| f.body.as_str())
+            .map(|f| f.body.clone())
     }
 
     /// Reload the ledger docs *and* the file-backed items from disk
-    /// (`R`, post-editor). The cursor tries to stay on the same id.
+    /// (`R`, post-editor); an index board re-runs the loader —
+    /// `load_fresh` rescans every repo whose project HEAD moved.
+    /// The cursor tries to stay on the same id.
     pub fn reload(&mut self) {
         let sel_id = self.selected_id();
+        let sel_repo = self.selected_repo().map(str::to_owned);
         let at = self.sel;
-        match items::load_ledger(&self.store) {
-            Ok(ledger) => self.ledger = ledger,
-            Err(e) => self.status = format!("reload: {e}"),
+        if let Some(orgs) = &mut self.orgs {
+            if let Some(loader) = &mut self.org_loader {
+                match loader() {
+                    Ok(fresh) => *orgs = fresh,
+                    Err(e) => self.status = format!("reload: {e}"),
+                }
+            }
+        } else if let Some(store) = &self.store {
+            match items::load_ledger(store) {
+                Ok(ledger) => self.ledger = ledger,
+                Err(e) => self.status = format!("reload: {e}"),
+            }
         }
         self.load_files();
         self.rebuild_rows();
-        self.reselect(sel_id, at);
+        self.reselect(sel_id, sel_repo.as_deref(), at);
     }
 
     /// Flatten the active board's sections into rows.
     fn rebuild_rows(&mut self) {
         self.rebuild_links();
         self.rows.clear();
-        match self.board {
-            Board::Files => {
-                for (kind, label) in [
-                    (ItemKind::Issue, "issues"),
-                    (ItemKind::Proposal, "proposals"),
-                    (ItemKind::Plan, "plans"),
-                    (ItemKind::Adr, "adrs"),
-                ] {
-                    let group: Vec<Item> = self
-                        .files
-                        .iter()
-                        .filter(|f| f.meta.id.kind() == kind && self.view_matches(&f.meta))
-                        .map(|f| f.meta.clone())
-                        .collect();
-                    if group.is_empty() {
-                        continue;
+        if self.orgs.is_some() {
+            self.rebuild_org_rows();
+        } else {
+            match self.board {
+                Board::Files => {
+                    for (kind, label) in [
+                        (ItemKind::Issue, "issues"),
+                        (ItemKind::Proposal, "proposals"),
+                        (ItemKind::Plan, "plans"),
+                        (ItemKind::Adr, "adrs"),
+                    ] {
+                        let group: Vec<Item> = self
+                            .files
+                            .iter()
+                            .filter(|f| f.meta.id.kind() == kind && self.view_matches(&f.meta))
+                            .map(|f| f.meta.clone())
+                            .collect();
+                        if group.is_empty() {
+                            continue;
+                        }
+                        self.rows.push(Row::Header(label.to_string()));
+                        push_items(&group, 0, None, &mut self.rows);
                     }
-                    self.rows.push(Row::Header(label.to_string()));
-                    push_items(&group, 0, &mut self.rows);
                 }
-            }
-            _ => {
-                let sections = match self.board {
-                    Board::Todo => &self.ledger.todo.sections,
-                    Board::Backlog => &self.ledger.backlog.sections,
-                    Board::Files => unreachable!(),
-                };
-                for s in sections {
-                    if let Some(name) = &s.name {
-                        self.rows.push(Row::Header(name.clone()));
+                _ => {
+                    let sections = match self.board {
+                        Board::Todo => &self.ledger.todo.sections,
+                        Board::Backlog => &self.ledger.backlog.sections,
+                        Board::Files => unreachable!(),
+                    };
+                    for s in sections {
+                        if let Some(name) = &s.name {
+                            self.rows.push(Row::Header(name.clone()));
+                        }
+                        let items: Vec<Item> = s
+                            .items
+                            .iter()
+                            .filter(|i| self.view_matches(i))
+                            .cloned()
+                            .collect();
+                        push_items(&items, 0, None, &mut self.rows);
                     }
-                    let items: Vec<Item> = s
-                        .items
-                        .iter()
-                        .filter(|i| self.view_matches(i))
-                        .cloned()
-                        .collect();
-                    push_items(&items, 0, &mut self.rows);
                 }
             }
         }
@@ -402,17 +546,90 @@ impl Model {
         self.sel = self.first_item_row().unwrap_or(0);
     }
 
+    /// Index-mode rows: union the loaded repo slices for this tab,
+    /// run the spec through `eval_scoped` (`filter → group → sort →
+    /// limit`), flatten groups to rows. `format` pins to `list` so
+    /// a board-format spec doesn't invent a status axis the row
+    /// list has no columns for; `group_by` (e.g. `repo` on
+    /// `org-status`) still yields `##` headers. Rescan failures
+    /// surface as header lines above the groups.
+    fn rebuild_org_rows(&mut self) {
+        let Some(orgs) = &self.orgs else {
+            return;
+        };
+        let board = self.board;
+        // rescan errors are rows, not just status — they persist
+        // past the first status-bar overwrite
+        for o in orgs {
+            if let Some(e) = &o.error {
+                self.rows.push(Row::Header(format!("{}: {e}", o.name)));
+            }
+        }
+        let scoped: Vec<Scoped> = orgs
+            .iter()
+            .flat_map(|o| {
+                o.items
+                    .iter()
+                    .filter(|i| !o.archived.contains(&i.id) && tab_match(board, i))
+                    .map(move |i| Scoped::tagged(o.name.as_str(), i))
+            })
+            .collect();
+        let mut spec = self.view.clone().unwrap_or_default();
+        spec.format = ViewFormat::List;
+        let groups = eval_scoped(scoped, &spec, self.kinds());
+        if self.board == Board::Files && spec.group_by.is_none() {
+            // mirror the repo-mode FILES board — kind headers in
+            // declaration order, eval's sort preserved within each
+            let items: Vec<Scoped> = groups
+                .iter()
+                .flat_map(|g| g.items.iter().copied())
+                .collect();
+            for (kind, label) in [
+                (ItemKind::Issue, "issues"),
+                (ItemKind::Proposal, "proposals"),
+                (ItemKind::Plan, "plans"),
+                (ItemKind::Adr, "adrs"),
+            ] {
+                let group: Vec<Scoped> = items
+                    .iter()
+                    .copied()
+                    .filter(|s| s.id.kind() == kind)
+                    .collect();
+                if group.is_empty() {
+                    continue;
+                }
+                self.rows.push(Row::Header(label.to_string()));
+                for s in group {
+                    push_scoped(s, 0, &mut self.rows);
+                }
+            }
+        } else {
+            for g in &groups {
+                if g.items.is_empty() {
+                    continue;
+                }
+                if let Some(l) = &g.label {
+                    self.rows.push(Row::Header(l.clone()));
+                }
+                for s in &g.items {
+                    push_scoped(*s, 0, &mut self.rows);
+                }
+            }
+        }
+    }
+
     /// `/` filter — keep only item rows matching the query
-    /// (title/id/labels, case-insensitive); headers drop out.
+    /// (title/id/labels/repo, case-insensitive); headers drop out.
     fn apply_filter(&mut self) {
         if self.filter.is_empty() {
             return;
         }
         let q = self.filter.to_lowercase();
         self.rows.retain(|r| {
-            matches!(r, Row::Item { item, .. }
+            matches!(r, Row::Item { item, repo, .. }
                 if item.title.to_lowercase().contains(&q)
                     || item.id.to_string().to_lowercase().contains(&q)
+                    || repo.as_deref().is_some_and(|s| s.to_lowercase().contains(&q))
                     || item.labels.iter().any(|l| l.to_lowercase().contains(&q)))
         });
     }
@@ -420,13 +637,15 @@ impl Model {
     /// After a mutation/reload: land the cursor back on `id`, or on
     /// the item row nearest `from` — the removed/done item's old
     /// slot — rather than teleporting to the top of the board.
-    fn reselect(&mut self, id: Option<ItemId>, from: usize) {
+    /// `repo` scopes the id match to one repo slice — ids aren't
+    /// unique across an index board.
+    fn reselect(&mut self, id: Option<ItemId>, repo: Option<&str>, from: usize) {
         if let Some(id) = id {
-            if let Some(i) = self
-                .rows
-                .iter()
-                .position(|r| matches!(r, Row::Item { item, .. } if item.id == id))
-            {
+            if let Some(i) = self.rows.iter().position(|r| {
+                matches!(r, Row::Item { item, repo: r_repo, .. }
+                    if item.id == id
+                        && repo.is_none_or(|name| r_repo.as_deref() == Some(name)))
+            }) {
                 self.sel = i;
                 return;
             }
@@ -473,17 +692,49 @@ impl Model {
         }
     }
 
+    /// The repo tag on the row under the cursor — `Some` only on
+    /// index-sourced boards.
+    pub fn selected_repo(&self) -> Option<&str> {
+        match self.rows.get(self.sel) {
+            Some(Row::Item { repo, .. }) => repo.as_deref(),
+            _ => None,
+        }
+    }
+
     /// The file `E` opens — the board doc, or the selected item's
     /// file on the `Files` board (`None` when nothing is selected
-    /// there — `E` on an empty Files board has no target).
+    /// there — `E` on an empty Files board has no target). On an
+    /// index board the selected row's owning repo supplies the
+    /// worktree.
     fn board_path(&self) -> Option<PathBuf> {
+        if let Some(orgs) = &self.orgs {
+            let repo = self.selected_repo()?;
+            let wt = &orgs.iter().find(|o| o.name == repo)?.worktree;
+            return match self.board {
+                Board::Todo => Some(wt.join("TODO.md")),
+                Board::Backlog => Some(wt.join("BACKLOG.md")),
+                Board::Files => self
+                    .selected()
+                    .and_then(|i| {
+                        store_at(wt, myco_core::kind::prelude_table())
+                            .and_then(|s| items::item_rel_path(&s, i))
+                            .ok()
+                    })
+                    .map(|p| wt.join(p)),
+            };
+        }
+        let proj = self.proj.as_ref()?;
         match self.board {
-            Board::Todo => Some(self.proj.worktree.join("TODO.md")),
-            Board::Backlog => Some(self.proj.worktree.join("BACKLOG.md")),
+            Board::Todo => Some(proj.worktree.join("TODO.md")),
+            Board::Backlog => Some(proj.worktree.join("BACKLOG.md")),
             Board::Files => self
                 .selected()
-                .and_then(|i| items::item_rel_path(&self.store, i).ok())
-                .map(|p| self.proj.worktree.join(p)),
+                .and_then(|i| {
+                    self.store
+                        .as_ref()
+                        .and_then(|s| items::item_rel_path(s, i).ok())
+                })
+                .map(|p| proj.worktree.join(p)),
         }
     }
 
@@ -538,7 +789,9 @@ impl Model {
             KeyCode::Char('p') => self.mutate(|m| m.promote_selected()),
             KeyCode::Char(' ') => self.mutate(|m| m.done_selected()),
             KeyCode::Char('a') => {
-                if self.board == Board::Files {
+                if self.orgs.is_some() {
+                    self.status = "add writes one repo — run `myco ui` inside it".into();
+                } else if self.board == Board::Files {
                     self.status = "add is a TODO/BACKLOG op — `myco <kind> new` for files".into();
                 } else {
                     self.mode = Mode::Add;
@@ -585,11 +838,65 @@ impl Model {
         }
     }
 
-    /// Exclusive worktree lock for one mutation span — the fresh
-    /// `load_ledger` each caller does under it is what keeps a
-    /// long-lived TUI from clobbering concurrent CLI/agent writes.
-    fn lock(&self) -> Result<ops::WorktreeLock, String> {
-        ops::lock_worktree(&self.proj.worktree)
+    /// The `(repo, worktree, store)` a mutation writes through —
+    /// the launch repo's worktree in repo mode; the selected row's
+    /// owning repo on an index board (`repo:ID` is the tag). The
+    /// store is fresh every call, so a long-lived board never holds
+    /// a stale handle.
+    fn target(&self) -> Result<(Option<String>, PathBuf, MdStore), String> {
+        if let Some(orgs) = &self.orgs {
+            let name = self
+                .selected_repo()
+                .ok_or_else(|| "no repo item under the cursor".to_string())?;
+            let org = orgs
+                .iter()
+                .find(|o| o.name == name)
+                .ok_or_else(|| format!("{name}: repo not in the index"))?;
+            let wt = org.worktree.clone();
+            Ok((
+                Some(name.to_string()),
+                wt.clone(),
+                store_at(&wt, myco_core::kind::prelude_table())?,
+            ))
+        } else {
+            let proj = self
+                .proj
+                .as_ref()
+                .ok_or_else(|| "no project worktree".to_string())?;
+            Ok((
+                None,
+                proj.worktree.clone(),
+                store_at(&proj.worktree, myco_core::kind::prelude_table())?,
+            ))
+        }
+    }
+
+    /// Swap in the ledger a mutation just saved — `self.ledger`
+    /// wholesale in repo mode; on an index board only the owning
+    /// repo's task slice changes (file-kind items aren't ledger
+    /// docs, so they ride untouched).
+    fn apply_ledger(&mut self, repo: Option<&str>, ledger: Ledger) {
+        match (repo, self.orgs.as_mut()) {
+            (Some(name), Some(orgs)) => {
+                if let Some(o) = orgs.iter_mut().find(|o| o.name == name) {
+                    let mut items: Vec<Item> = ledger
+                        .todo
+                        .sections
+                        .iter()
+                        .chain(&ledger.backlog.sections)
+                        .flat_map(|s| s.items.clone())
+                        .collect();
+                    items.extend(
+                        o.items
+                            .iter()
+                            .filter(|i| i.id.kind() != ItemKind::Task)
+                            .cloned(),
+                    );
+                    o.items = items;
+                }
+            }
+            _ => self.ledger = ledger,
+        }
     }
 
     /// Preview mode: `esc`/`enter`/`q` back to the board;
@@ -702,7 +1009,7 @@ impl Model {
             .iter()
             .any(|r| matches!(r, Row::Item { item, .. } if item.id == id))
         {
-            self.reselect(Some(id), self.sel);
+            self.reselect(Some(id), None, self.sel);
         } else {
             self.status = format!("{id}: not on this board");
         }
@@ -869,8 +1176,9 @@ impl Model {
         let Some(id) = self.selected_id() else {
             return Ok(());
         };
-        let _lock = self.lock()?;
-        let mut ledger = items::load_ledger(&self.store)?;
+        let (repo, wt, store) = self.target()?;
+        let _lock = ops::lock_worktree(&wt)?;
+        let mut ledger = items::load_ledger(&store)?;
         let loc = ledger
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
@@ -882,17 +1190,13 @@ impl Model {
             .take(&loc)
             .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Done)?;
-        items::save_ledger(&self.store, &ledger)?;
-        items::commit(
-            &self.proj.worktree,
-            &format!("chore: done {id}"),
-            self.no_commit,
-        )?;
-        self.ledger = ledger;
+        items::save_ledger(&store, &ledger)?;
+        items::commit(&wt, &format!("chore: done {id}"), self.no_commit)?;
+        self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("done {id} — {}", item.title);
         let at = self.sel;
         self.rebuild_rows();
-        self.reselect(None, at);
+        self.reselect(None, repo.as_deref(), at);
         Ok(())
     }
 
@@ -901,8 +1205,9 @@ impl Model {
         let Some(id) = self.selected_id() else {
             return Ok(());
         };
-        let _lock = self.lock()?;
-        let mut ledger = items::load_ledger(&self.store)?;
+        let (repo, wt, store) = self.target()?;
+        let _lock = ops::lock_worktree(&wt)?;
+        let mut ledger = items::load_ledger(&store)?;
         let loc = ledger
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
@@ -916,17 +1221,13 @@ impl Model {
         items::walk_to(&mut item, Status::Deferred)?;
         items::walk_descendants_to(&mut item, Status::Deferred)?;
         ledger.put_backlog(item, None);
-        items::save_ledger(&self.store, &ledger)?;
-        items::commit(
-            &self.proj.worktree,
-            &format!("chore: defer {id}"),
-            self.no_commit,
-        )?;
-        self.ledger = ledger;
+        items::save_ledger(&store, &ledger)?;
+        items::commit(&wt, &format!("chore: defer {id}"), self.no_commit)?;
+        self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("deferred {id} → BACKLOG.md");
         let at = self.sel;
         self.rebuild_rows();
-        self.reselect(None, at);
+        self.reselect(None, repo.as_deref(), at);
         Ok(())
     }
 
@@ -935,8 +1236,9 @@ impl Model {
         let Some(id) = self.selected_id() else {
             return Ok(());
         };
-        let _lock = self.lock()?;
-        let mut ledger = items::load_ledger(&self.store)?;
+        let (repo, wt, store) = self.target()?;
+        let _lock = ops::lock_worktree(&wt)?;
+        let mut ledger = items::load_ledger(&store)?;
         let loc = ledger
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
@@ -950,16 +1252,12 @@ impl Model {
         items::walk_to(&mut item, Status::Open)?;
         items::walk_descendants_to(&mut item, Status::Open)?;
         ledger.put_todo(item, None);
-        items::save_ledger(&self.store, &ledger)?;
-        items::commit(
-            &self.proj.worktree,
-            &format!("chore: promote {id}"),
-            self.no_commit,
-        )?;
-        self.ledger = ledger;
+        items::save_ledger(&store, &ledger)?;
+        items::commit(&wt, &format!("chore: promote {id}"), self.no_commit)?;
+        self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("promoted {id} → TODO.md");
         self.rebuild_rows();
-        self.reselect(Some(id), self.sel);
+        self.reselect(Some(id), repo.as_deref(), self.sel);
         Ok(())
     }
 
@@ -968,35 +1266,32 @@ impl Model {
         let Some(id) = self.selected_id() else {
             return Ok(());
         };
-        let _lock = self.lock()?;
-        let mut ledger = items::load_ledger(&self.store)?;
+        let (repo, wt, store) = self.target()?;
+        let _lock = ops::lock_worktree(&wt)?;
+        let mut ledger = items::load_ledger(&store)?;
         let Some(mut loc) = ledger.locate(id) else {
             return Err(format!("{id}: no such task"));
         };
         if !ledger.move_within(&mut loc, delta) {
             return Ok(());
         }
-        items::save_ledger(&self.store, &ledger)?;
-        items::commit(
-            &self.proj.worktree,
-            &format!("chore: reorder {id}"),
-            self.no_commit,
-        )?;
-        self.ledger = ledger;
+        items::save_ledger(&store, &ledger)?;
+        items::commit(&wt, &format!("chore: reorder {id}"), self.no_commit)?;
+        self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("reordered {id}");
         self.rebuild_rows();
-        self.reselect(Some(id), self.sel);
+        self.reselect(Some(id), repo.as_deref(), self.sel);
         Ok(())
     }
 
     /// `a` Enter — `todo add`/`backlog add` for the active board.
+    /// Repo mode only — the `a` key refuses on index boards (the
+    /// universe writes per repo; which repo is ambiguous there).
     fn add_item(&mut self, title: &str) -> Result<(), String> {
-        let _lock = self.lock()?;
-        let mut ledger = items::load_ledger(&self.store)?;
-        let id = self
-            .store
-            .alloc_id(ItemKind::Task)
-            .map_err(|e| e.to_string())?;
+        let (repo, wt, store) = self.target()?;
+        let _lock = ops::lock_worktree(&wt)?;
+        let mut ledger = items::load_ledger(&store)?;
+        let id = store.alloc_id(ItemKind::Task).map_err(|e| e.to_string())?;
         let item = match self.board {
             Board::Todo => Item::new(id, title).created(items::today()),
             _ => Item::new(id, title)
@@ -1007,16 +1302,12 @@ impl Model {
             Board::Todo => ledger.put_todo(item.clone(), None),
             _ => ledger.put_backlog(item.clone(), None),
         }
-        items::save_ledger(&self.store, &ledger)?;
-        items::commit(
-            &self.proj.worktree,
-            &format!("chore: add {id}"),
-            self.no_commit,
-        )?;
-        self.ledger = ledger;
+        items::save_ledger(&store, &ledger)?;
+        items::commit(&wt, &format!("chore: add {id}"), self.no_commit)?;
+        self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("added {}", items::compact(&item));
         self.rebuild_rows();
-        self.reselect(Some(id), self.sel);
+        self.reselect(Some(id), repo.as_deref(), self.sel);
         Ok(())
     }
 }
@@ -1045,6 +1336,20 @@ fn session_path(root: &Path) -> PathBuf {
 }
 
 impl Model {
+    /// What the session file is keyed on — the repo root in repo
+    /// mode; all index boards share one `index` key (the launch
+    /// repo doesn't own the view).
+    fn session_key(&self) -> PathBuf {
+        match &self.orgs {
+            Some(_) => PathBuf::from("index"),
+            None => self
+                .proj
+                .as_ref()
+                .map(|p| p.root.clone())
+                .unwrap_or_else(|| PathBuf::from("index")),
+        }
+    }
+
     /// Persist board + selected item for the next launch (`q`).
     pub fn save_session(&self) {
         let board = match self.board {
@@ -1056,7 +1361,7 @@ impl Model {
             .selected_id()
             .map(|i| i.to_string())
             .unwrap_or_default();
-        let p = session_path(&self.proj.root);
+        let p = session_path(&self.session_key());
         if let Some(parent) = p.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -1065,7 +1370,7 @@ impl Model {
 
     /// Reopen on the last board + item (best effort).
     fn restore_session(&mut self) {
-        let Ok(src) = std::fs::read_to_string(session_path(&self.proj.root)) else {
+        let Ok(src) = std::fs::read_to_string(session_path(&self.session_key())) else {
             return;
         };
         let get = |key: &str| {
@@ -1080,19 +1385,37 @@ impl Model {
         };
         self.rebuild_rows();
         if let Some(id) = get("item").and_then(|s| s.parse::<ItemId>().ok()) {
-            self.reselect(Some(id), 0);
+            self.reselect(Some(id), None, 0);
         }
     }
 }
 
-fn push_items(items: &[Item], depth: usize, rows: &mut Vec<Row>) {
+/// Which tab an index-universe item lands on — tasks split
+/// live/deferred onto TODO/BACKLOG; file kinds go to FILES.
+fn tab_match(board: Board, i: &Item) -> bool {
+    match board {
+        Board::Todo => i.id.kind() == ItemKind::Task && i.status != Status::Deferred,
+        Board::Backlog => i.id.kind() == ItemKind::Task && i.status == Status::Deferred,
+        Board::Files => i.id.kind() != ItemKind::Task,
+    }
+}
+
+fn push_items(items: &[Item], depth: usize, repo: Option<&str>, rows: &mut Vec<Row>) {
     for item in items {
         rows.push(Row::Item {
             item: Box::new(item.clone()),
             depth,
+            repo: repo.map(str::to_owned),
         });
-        push_items(&item.children, depth + 1, rows);
+        push_items(&item.children, depth + 1, repo, rows);
     }
+}
+
+/// One evaluated row's item + its children — `repo` tags every
+/// descendant (children live in the parent's ledger).
+fn push_scoped(s: Scoped, depth: usize, rows: &mut Vec<Row>) {
+    let repo = s.repo;
+    push_items(std::slice::from_ref(s.item), depth, repo, rows);
 }
 
 #[cfg(test)]
@@ -1110,6 +1433,12 @@ mod tests {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
     }
 
+    /// The model's read store — the repo-mode fixtures always
+    /// have one.
+    fn store(m: &Model) -> &MdStore {
+        m.store.as_ref().unwrap()
+    }
+
     /// A model over a temp `project/` dir — `no_commit` keeps git
     /// out of the loop (autocommit short-circuits). The populated
     /// ledger is saved to disk too: mutations re-read under the
@@ -1123,12 +1452,14 @@ mod tests {
         populate(&mut ledger);
         items::save_ledger(&store, &ledger).unwrap();
         let mut m = Model {
-            proj: discover::Project {
+            proj: Some(discover::Project {
                 root: dir.path().to_path_buf(),
                 worktree,
-            },
-            store,
+            }),
+            store: Some(store),
             ledger,
+            orgs: None,
+            org_loader: None,
             no_commit: true,
             board: Board::Todo,
             rows: Vec::new(),
@@ -1165,8 +1496,8 @@ mod tests {
             });
         });
         assert!(matches!(m.rows[0], Row::Header(_)));
-        assert!(matches!(m.rows[1], Row::Item { ref item, depth: 0 } if item.id.number() == 1));
-        assert!(matches!(m.rows[3], Row::Item { ref item, depth: 1 } if item.id.number() == 4));
+        assert!(matches!(m.rows[1], Row::Item { ref item, depth: 0, .. } if item.id.number() == 1));
+        assert!(matches!(m.rows[3], Row::Item { ref item, depth: 1, .. } if item.id.number() == 4));
         // cursor lands on the first item, not the header
         assert_eq!(m.sel, 1);
         assert_eq!(m.selected().unwrap().id.number(), 1);
@@ -1412,9 +1743,9 @@ mod tests {
     fn colon_w_reloads_from_disk() {
         let mut m = model(|l| l.put_todo(t(1), None));
         // another writer lands a task while the board is open
-        let mut other = items::load_ledger(&m.store).unwrap();
+        let mut other = items::load_ledger(store(&m)).unwrap();
         other.put_todo(t(2), None);
-        items::save_ledger(&m.store, &other).unwrap();
+        items::save_ledger(store(&m), &other).unwrap();
         assert_eq!(m.rows.len(), 1);
         assert!(!cmd(&mut m, "w"));
         assert_eq!(m.mode, Mode::Normal);
@@ -1476,7 +1807,7 @@ mod tests {
     /// kinds) into the model's worktree.
     fn save_issue(m: &Model, n: u32, title: &str) {
         let item = Item::new(ItemId::new(ItemKind::Issue, n), title);
-        m.store
+        store(m)
             .save_item(&ItemFile::new(item).body("body"))
             .unwrap();
     }
@@ -1508,7 +1839,7 @@ mod tests {
         assert!(m.status.contains("add is a TODO/BACKLOG op"));
         assert_eq!(m.mode, Mode::Normal);
         // nothing was written — the issue file is untouched
-        let f = m.store.item(ItemId::new(ItemKind::Issue, 1)).unwrap();
+        let f = store(&m).item(ItemId::new(ItemKind::Issue, 1)).unwrap();
         assert_eq!(f.meta.title, "the issue");
     }
 
@@ -1543,19 +1874,23 @@ mod tests {
         let mut m = model(|l| l.put_todo(t(1), None));
         // corrupt the ledger on disk — the mutation's fresh
         // re-read fails, but the board keeps running
-        std::fs::write(m.proj.worktree.join("TODO.md"), "garbage\n").unwrap();
+        std::fs::write(
+            m.proj.as_ref().unwrap().worktree.join("TODO.md"),
+            "garbage\n",
+        )
+        .unwrap();
         assert!(!m.key(key(' ')));
         assert!(!m.status.is_empty());
         assert_eq!(m.mode, Mode::Normal);
         // …and it recovers once the ledger does
-        let mut fixed = items::load_ledger(&m.store).unwrap_or_else(|_| {
+        let mut fixed = items::load_ledger(store(&m)).unwrap_or_else(|_| {
             Ledger::new(
                 myco_core::TodoDoc::new("x"),
                 myco_core::BacklogDoc::default(),
             )
         });
         fixed.put_todo(t(1), None);
-        items::save_ledger(&m.store, &fixed).unwrap();
+        items::save_ledger(store(&m), &fixed).unwrap();
         m.key(key(' '));
         assert!(m.status.starts_with("done T-001"), "{}", m.status);
         assert!(m.selected().is_none());
@@ -1566,11 +1901,11 @@ mod tests {
         let mut m = model(|l| l.put_todo(t(1), None));
         // a CLI/agent lands T-2 while the board is open — the
         // stale-startup-snapshot clobber would lose it
-        let mut other = items::load_ledger(&m.store).unwrap();
+        let mut other = items::load_ledger(store(&m)).unwrap();
         other.put_todo(t(2), None);
-        items::save_ledger(&m.store, &other).unwrap();
+        items::save_ledger(store(&m), &other).unwrap();
         m.key(key(' ')); // done T-1
-        let disk = items::load_ledger(&m.store).unwrap();
+        let disk = items::load_ledger(store(&m)).unwrap();
         assert!(disk.locate(ItemId::new(ItemKind::Task, 1)).is_none());
         assert!(disk.locate(ItemId::new(ItemKind::Task, 2)).is_some());
         // and the in-memory board reflects the fresh ledger too
@@ -1634,7 +1969,7 @@ mod tests {
         );
         // file items contribute too — an issue body mention
         let issue = Item::new(ItemId::new(ItemKind::Issue, 1), "the issue");
-        m.store
+        store(&m)
             .save_item(&ItemFile::new(issue).body("see T-001"))
             .unwrap();
         m.load_files();
@@ -1643,7 +1978,7 @@ mod tests {
             .related(ItemId::new(ItemKind::Task, 1))
             .contains(&(EdgeKind::ReferencedBy, ItemId::new(ItemKind::Issue, 1))));
         // and a handoff file is a self-edge
-        m.store
+        store(&m)
             .append_handoff(
                 ItemId::new(ItemKind::Task, 1),
                 &myco_core::HandoffEntry {
@@ -1688,5 +2023,257 @@ mod tests {
         m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert_eq!(m.mode, Mode::Preview);
         assert_eq!(m.preview_scroll, 0);
+    }
+
+    // ---- index-mode (`source = "index"` views) ------------------
+
+    use myco_core::{BacklogDoc, GroupAxis, TodoDoc};
+
+    /// A repo slice with a fake worktree — for boards that never
+    /// mutate, the path is inert.
+    fn org(name: &str, items: Vec<Item>) -> OrgRepo {
+        OrgRepo {
+            name: name.into(),
+            worktree: PathBuf::from(format!("/nope/{name}/project")),
+            items,
+            archived: BTreeSet::new(),
+            error: None,
+        }
+    }
+
+    type OrgCell = std::rc::Rc<std::cell::RefCell<Vec<OrgRepo>>>;
+
+    /// An index-mode model — the returned cell feeds the loader
+    /// closure, so tests can swap the universe under `reload`.
+    fn index_model(group_by: Option<GroupAxis>, orgs: Vec<OrgRepo>) -> (Model, OrgCell) {
+        let cell = std::rc::Rc::new(std::cell::RefCell::new(orgs));
+        let src = cell.clone();
+        let mut m = Model {
+            proj: None,
+            store: None,
+            ledger: Ledger::new(TodoDoc::new(""), BacklogDoc::default()),
+            orgs: Some(cell.borrow().clone()),
+            org_loader: Some(Box::new(move || Ok(src.borrow().clone()))),
+            no_commit: true,
+            board: Board::Todo,
+            rows: Vec::new(),
+            sel: 0,
+            mode: Mode::Normal,
+            input: String::new(),
+            filter: String::new(),
+            view: Some(ViewSpec {
+                source: ViewSource::Index,
+                group_by,
+                ..ViewSpec::default()
+            }),
+            cmdline: String::new(),
+            show_ids: true,
+            status: String::new(),
+            pending_editor: None,
+            files: Vec::new(),
+            handoffs: Vec::new(),
+            links: Vec::new(),
+            preview_scroll: 0,
+            pending: None,
+            board_area: Rect::default(),
+            viewport_top: 0,
+            tabs_area: None,
+        };
+        m.rebuild_rows();
+        (m, cell)
+    }
+
+    /// `(id, repo)` of every item row, in display order.
+    fn row_tags(m: &Model) -> Vec<(String, Option<String>)> {
+        m.rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { item, repo, .. } => Some((item.id.to_string(), repo.clone())),
+                Row::Header(_) => None,
+            })
+            .collect()
+    }
+
+    fn tag(id: &str, repo: &str) -> (String, Option<String>) {
+        (id.to_string(), Some(repo.to_string()))
+    }
+
+    /// Header lines, in display order.
+    fn headers(m: &Model) -> Vec<String> {
+        m.rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Header(h) => Some(h.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A real `project/` dir seeded via the store — the owning
+    /// repo mutations write through to. Caller `forget`s it.
+    fn repo_worktree(
+        name: &str,
+        populate: impl FnOnce(&mut Ledger),
+    ) -> (tempfile::TempDir, OrgRepo) {
+        let dir = tempfile::tempdir().unwrap();
+        let wt = dir.path().join("project");
+        std::fs::create_dir_all(&wt).unwrap();
+        let store = MdStore::new(Utf8PathBuf::from_path_buf(wt.clone()).unwrap());
+        let mut ledger = items::load_ledger(&store).unwrap();
+        populate(&mut ledger);
+        items::save_ledger(&store, &ledger).unwrap();
+        (
+            dir,
+            OrgRepo {
+                name: name.into(),
+                worktree: wt,
+                items: ledger
+                    .todo
+                    .items()
+                    .chain(ledger.backlog.items())
+                    .cloned()
+                    .collect(),
+                archived: BTreeSet::new(),
+                error: None,
+            },
+        )
+    }
+
+    #[test]
+    fn index_rows_carry_repo_and_partition_tabs() {
+        let (mut m, _c) = index_model(
+            None,
+            vec![
+                org("a", vec![t(1)]),
+                org(
+                    "b",
+                    vec![
+                        t(7),
+                        t(3).status(Status::Deferred),
+                        Item::new(ItemId::new(ItemKind::Issue, 2), "bug"),
+                    ],
+                ),
+            ],
+        );
+        // TODO tab: live tasks only, `pri,id` order, repo-tagged
+        assert_eq!(row_tags(&m), vec![tag("T-001", "a"), tag("T-007", "b")]);
+        assert_eq!(m.selected_repo(), Some("a"));
+        // BACKLOG: deferred tasks
+        m.key(key('2'));
+        assert_eq!(row_tags(&m), vec![tag("T-003", "b")]);
+        // FILES: non-task kinds get kind headers like repo mode
+        m.key(key('3'));
+        assert_eq!(headers(&m), vec!["issues"]);
+        assert_eq!(row_tags(&m), vec![tag("I-002", "b")]);
+    }
+
+    #[test]
+    fn index_group_by_axes_make_headers() {
+        // org-status's axis — one `##` per repo
+        let (m, _c) = index_model(
+            Some(GroupAxis::Repo),
+            vec![org("b", vec![t(2)]), org("a", vec![t(1)])],
+        );
+        assert_eq!(headers(&m), vec!["a", "b"]);
+        // org-board's axis — status buckets; empty lanes drop out
+        let (m, _c) = index_model(
+            Some(GroupAxis::Status),
+            vec![org("a", vec![t(1), t(2).status(Status::InProgress)])],
+        );
+        assert_eq!(headers(&m), vec!["open", "in-progress"]);
+    }
+
+    #[test]
+    fn index_mutation_writes_the_owning_repo() {
+        let (dir, a) = repo_worktree("a", |l| l.put_todo(t(1), None));
+        let wt = a.worktree.clone();
+        std::mem::forget(dir); // the worktree must outlive the test
+        let (mut m, _c) = index_model(None, vec![a, org("b", vec![t(7)])]);
+        // `dd` on a's T-001 → the task leaves a's ledger on disk;
+        // b's fake path is never touched
+        m.key(key(' '));
+        assert!(m.status.starts_with("done T-001"), "{}", m.status);
+        assert_eq!(row_tags(&m), vec![tag("T-007", "b")]);
+        let store = MdStore::new(Utf8PathBuf::from_path_buf(wt).unwrap());
+        let disk = items::load_ledger(&store).unwrap();
+        assert!(disk.locate(ItemId::new(ItemKind::Task, 1)).is_none());
+    }
+
+    #[test]
+    fn index_mutation_hits_disk_and_splices_the_slice() {
+        let (dir, a) = repo_worktree("a", |l| {
+            l.put_todo(t(1), None);
+            l.put_todo(t(2), None);
+        });
+        let wt = a.worktree.clone();
+        std::mem::forget(dir);
+        let (mut m, _c) = index_model(None, vec![a]);
+        // defer T-1 → a's BACKLOG.md on disk
+        m.key(key('D'));
+        assert!(m.status.contains("deferred T-001"), "{}", m.status);
+        let store = MdStore::new(Utf8PathBuf::from_path_buf(wt).unwrap());
+        let disk = items::load_ledger(&store).unwrap();
+        assert!(disk.locate(ItemId::new(ItemKind::Task, 1)).unwrap().backlog);
+        // the slice spliced: T-1 lives on the BACKLOG tab now
+        assert_eq!(row_tags(&m), vec![tag("T-002", "a")]);
+        m.key(key('2'));
+        assert_eq!(row_tags(&m), vec![tag("T-001", "a")]);
+    }
+
+    #[test]
+    fn index_reload_re_runs_the_loader() {
+        let (mut m, cell) = index_model(None, vec![org("a", vec![t(1)])]);
+        assert_eq!(m.rows.len(), 1);
+        cell.borrow_mut()[0].items.push(t(2));
+        assert!(!cmd(&mut m, "w"));
+        assert_eq!(row_tags(&m), vec![tag("T-001", "a"), tag("T-002", "a")]);
+    }
+
+    #[test]
+    fn index_add_is_refused() {
+        let (mut m, _c) = index_model(None, vec![org("a", vec![t(1)])]);
+        m.key(key('a'));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.status.contains("inside it"), "{}", m.status);
+    }
+
+    #[test]
+    fn index_filter_matches_repo_names() {
+        let (mut m, _c) = index_model(
+            None,
+            vec![org("alpha", vec![t(1)]), org("beta", vec![t(2)])],
+        );
+        m.key(key('/'));
+        for c in "bet".chars() {
+            m.key(key(c));
+        }
+        assert_eq!(row_tags(&m), vec![tag("T-002", "beta")]);
+    }
+
+    #[test]
+    fn index_repo_errors_surface_as_headers() {
+        let mut o = org("a", vec![]);
+        o.error = Some("rescan failed".into());
+        let (m, _c) = index_model(None, vec![o]);
+        assert_eq!(headers(&m), vec!["a: rescan failed"]);
+    }
+
+    #[test]
+    fn index_files_board_reads_body_lazily() {
+        let (dir, mut a) = repo_worktree("a", |_| {});
+        // seed an issue file into a's real worktree
+        let store = MdStore::new(Utf8PathBuf::from_path_buf(a.worktree.clone()).unwrap());
+        let issue =
+            ItemFile::new(Item::new(ItemId::new(ItemKind::Issue, 5), "the issue")).body("the body");
+        store.save_item(&issue).unwrap();
+        a.items.push(issue.meta.clone());
+        std::mem::forget(dir);
+        let (mut m, _c) = index_model(None, vec![a]);
+        m.key(key('3'));
+        assert_eq!(m.selected().unwrap().id, ItemId::new(ItemKind::Issue, 5));
+        assert_eq!(
+            m.file_body(ItemId::new(ItemKind::Issue, 5)).as_deref(),
+            Some("the body")
+        );
     }
 }

@@ -1,5 +1,12 @@
 //! myco-tui — interactive board TUI for a repo's `project/`
-//! worktree.
+//! worktree, or for the cross-repo index universe when `--view`
+//! names a `source = "index"` spec (`org-*`).
+//!
+//! Index boards: the crate stays index-impl free — the caller
+//! injects an [`OrgLoader`] that yields each registered repo's
+//! slice (`myco ui` wires the redb `load_fresh`). Rows render
+//! `repo:ID`; a task verb on a row opens *that* repo's store
+//! under the same lock→mutate→commit discipline.
 //!
 //! A thin front-end over `myco-ops`: every mutation goes through the
 //! same ledger ops the CLI verbs use, so writes and commits are
@@ -14,6 +21,8 @@
 
 mod app;
 mod render;
+
+pub use app::{OrgLoader, OrgRepo};
 
 use std::io::{self, Stdout};
 use std::path::Path;
@@ -53,14 +62,17 @@ fn install_panic_hook() {
 /// Launch the TUI. `dir`/`root` are the same discovery overrides the
 /// CLI takes; `no_commit` suppresses the per-mutation commit. `view`
 /// names a declarative view (builtin preset or `[views.<name>]`
-/// config entry) whose filter narrows every board's item source.
+/// config entry) whose filter narrows every board's item source; a
+/// `source = "index"` view swaps the repo store for `org`'s
+/// cross-repo universe (required then — `myco ui` supplies it).
 pub fn run(
     dir: Option<&Path>,
     root: Option<&Path>,
     no_commit: bool,
     view: Option<String>,
+    org: Option<OrgLoader>,
 ) -> Result<(), String> {
-    let mut model = app::Model::open(dir, root, no_commit, view)?;
+    let mut model = app::Model::open(dir, root, no_commit, view, org)?;
     enable_raw_mode().map_err(|e| format!("raw mode: {e}"))?;
     // Guard first — raw mode is on from here, so every fallible
     // step below (alt screen, terminal init) must restore on `?`.

@@ -4,7 +4,10 @@
 use std::collections::BTreeSet;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use myco_core::{BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
+use myco_core::{
+    BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, KindSpec, KindTable, ProjectMeta,
+    TodoDoc,
+};
 use myco_store::{Error, HandoffFile, Store};
 
 use crate::{backlog, handoff, itemfile, meta, todo};
@@ -16,12 +19,30 @@ const ARCHIVE_DIR: &str = "archive";
 /// A `project/` worktree on disk.
 pub struct MdStore {
     root: Utf8PathBuf,
+    /// The kind table — which prefixes map to dirs/files.
+    /// `[[kinds]]` (P-008) is injected by the caller; absent
+    /// config it's the prelude (today's five kinds).
+    kinds: KindTable,
 }
 
 impl MdStore {
-    /// Store rooted at the `project/` worktree dir.
+    /// Store rooted at the `project/` worktree dir, prelude
+    /// kinds — the zero-config constructor.
     pub fn new(root: impl Into<Utf8PathBuf>) -> Self {
-        MdStore { root: root.into() }
+        MdStore {
+            root: root.into(),
+            kinds: KindTable::prelude(),
+        }
+    }
+
+    /// Store rooted at `root` resolving item layout through a
+    /// declared kind table (P-008) — `project/` stores pass the
+    /// repo's `[[kinds]]`-resolved table.
+    pub fn with_kinds(root: impl Into<Utf8PathBuf>, kinds: KindTable) -> Self {
+        MdStore {
+            root: root.into(),
+            kinds,
+        }
     }
 
     /// The worktree root.
@@ -59,10 +80,23 @@ impl MdStore {
         kind: ItemKind,
         archived: bool,
     ) -> Result<Vec<(ItemId, Utf8PathBuf)>, Error> {
-        let Some(dir) = itemfile::item_dir(kind) else {
+        let Some(spec) = self.kinds.spec_of(kind) else {
             return Ok(Vec::new());
         };
-        let mut dir = self.path(dir);
+        self.spec_item_paths(spec, archived)
+    }
+
+    /// Item files under a spec's dir → `(id, path)` pairs,
+    /// sorted by id.
+    fn spec_item_paths(
+        &self,
+        spec: &KindSpec,
+        archived: bool,
+    ) -> Result<Vec<(ItemId, Utf8PathBuf)>, Error> {
+        let Some(dir) = itemfile::item_dir(spec) else {
+            return Ok(Vec::new());
+        };
+        let mut dir = self.path(&dir);
         if archived {
             dir = dir.join(ARCHIVE_DIR);
         }
@@ -78,7 +112,7 @@ impl MdStore {
             let Some(name) = name.to_str() else {
                 continue;
             };
-            if let Some(id) = itemfile::parse_item_filename(kind, name) {
+            if let Some(id) = itemfile::parse_item_filename(spec, name) {
                 // name.to_str() succeeded → dir.join(name) is utf8 too
                 out.push((id, dir.join(name)));
             }
@@ -96,9 +130,23 @@ impl MdStore {
                 .strip_prefix(&self.root)
                 .map_or_else(|_| path.as_str(), |r| r.as_str());
             let src = self.read(rel)?;
-            out.push(itemfile::parse_item_file(&src, kind, rel)?);
+            // item_paths only yields files for declared specs —
+            // the lookup can't actually miss here
+            let Some(spec) = self.kinds.spec_of(kind) else {
+                continue;
+            };
+            out.push(itemfile::parse_item_file(&src, spec, rel)?);
         }
         Ok(out)
+    }
+
+    /// The `<dir>` segment for an id's kind in error text —
+    /// `"<none>"` for undeclared/doc kinds (no dir exists).
+    fn kind_dir_label(&self, kind: ItemKind) -> String {
+        self.kinds
+            .spec_of(kind)
+            .and_then(itemfile::item_dir)
+            .unwrap_or_else(|| "<none>".into())
     }
 
     /// The id a filename claims, cross-checked against the file's
@@ -124,6 +172,10 @@ impl MdStore {
 }
 
 impl Store for MdStore {
+    fn kinds(&self) -> &KindTable {
+        &self.kinds
+    }
+
     fn meta(&self) -> Result<ProjectMeta, Error> {
         match self.read("meta.toml") {
             Ok(src) => Ok(meta::parse_meta(&src)?),
@@ -154,15 +206,10 @@ impl Store for MdStore {
         ids.extend(todo.items().flat_map(|i| i.subtree()).map(|i| i.id));
         let backlog = self.backlog()?;
         ids.extend(backlog.items().flat_map(|i| i.subtree()).map(|i| i.id));
-        for kind in [
-            ItemKind::Issue,
-            ItemKind::Proposal,
-            ItemKind::Adr,
-            ItemKind::Plan,
-        ] {
+        for spec in self.kinds.file_backed() {
             // archived ids stay reserved — ids are never reused
             for archived in [false, true] {
-                for (id, path) in self.item_paths(kind, archived)? {
+                for (id, path) in self.spec_item_paths(spec, archived)? {
                     ids.insert(self.check_filename_id(id, &path)?);
                 }
             }
@@ -204,7 +251,7 @@ impl Store for MdStore {
             .filter(|(i, _)| *i == id);
         let Some((_, path)) = hits.next() else {
             return Err(Error::NotFound {
-                path: format!("{}/{id}", itemfile::item_dir(id.kind()).unwrap_or("<none>")),
+                path: format!("{}/{id}", self.kind_dir_label(id.kind())),
             });
         };
         if hits.next().is_some() {
@@ -214,16 +261,31 @@ impl Store for MdStore {
             .strip_prefix(&self.root)
             .map_or_else(|_| path.as_str(), |r| r.as_str());
         let src = self.read(rel)?;
-        Ok(itemfile::parse_item_file(&src, id.kind(), rel)?)
+        // a file that was scanned exists under a declared spec
+        let Some(spec) = self.kinds.spec_of(id.kind()) else {
+            return Err(Error::NotFound {
+                path: format!("{}/{id}", self.kind_dir_label(id.kind())),
+            });
+        };
+        Ok(itemfile::parse_item_file(&src, spec, rel)?)
     }
 
     fn save_item(&self, file: &ItemFile) -> Result<(), Error> {
-        let dir = itemfile::item_dir(file.meta.id.kind()).ok_or_else(|| {
-            Error::Invalid("tasks aren't file items — they live in TODO.md/BACKLOG.md".into())
+        let Some(spec) = self.kinds.spec_of(file.meta.id.kind()) else {
+            return Err(Error::Invalid(format!(
+                "{} isn't a declared kind — file items need a [[kinds]] entry",
+                file.meta.id.kind().prefix()
+            )));
+        };
+        let dir = itemfile::item_dir(spec).ok_or_else(|| {
+            Error::Invalid(format!(
+                "{} items aren't file items — they live in TODO.md/BACKLOG.md",
+                spec.name
+            ))
         })?;
-        let filename = itemfile::item_filename(&file.meta.id, &file.meta.title)
+        let filename = itemfile::item_filename(spec, &file.meta.id, &file.meta.title)
             .ok_or_else(|| Error::Invalid("not a file-backed item kind".into()))?;
-        let dir_path = self.path(dir);
+        let dir_path = self.path(&dir);
         std::fs::create_dir_all(&dir_path).map_err(Error::Io)?;
         let target = dir_path.join(&filename);
         // rename: an existing file for the same id under a different
@@ -259,7 +321,7 @@ impl Store for MdStore {
             .find(|(i, _)| *i == id)
         else {
             return Err(Error::NotFound {
-                path: format!("{}/{id}", itemfile::item_dir(id.kind()).unwrap_or("<none>")),
+                path: format!("{}/{id}", self.kind_dir_label(id.kind())),
             });
         };
         std::fs::remove_file(&path).map_err(Error::Io)
@@ -283,7 +345,7 @@ impl Store for MdStore {
                 return Err(Error::Invalid(format!("{id} is already archived")));
             }
             return Err(Error::NotFound {
-                path: format!("{}/{id}", itemfile::item_dir(id.kind()).unwrap_or("<none>")),
+                path: format!("{}/{id}", self.kind_dir_label(id.kind())),
             });
         };
         let name = path.file_name().unwrap_or_default();
@@ -303,10 +365,13 @@ impl Store for MdStore {
     }
 
     fn item_path(&self, item: &Item) -> Result<Option<String>, Error> {
-        let Some(dir) = itemfile::item_dir(item.id.kind()) else {
+        let Some(spec) = self.kinds.spec_of(item.id.kind()) else {
             return Ok(None);
         };
-        let Some(name) = itemfile::item_filename(&item.id, &item.title) else {
+        let Some(dir) = itemfile::item_dir(spec) else {
+            return Ok(None);
+        };
+        let Some(name) = itemfile::item_filename(spec, &item.id, &item.title) else {
             return Ok(None);
         };
         let rel = if self.is_archived(item.id)? {

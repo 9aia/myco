@@ -80,24 +80,27 @@ pub fn walk_descendants_to(item: &mut Item, to: Status) -> Result<(), String> {
 }
 
 /// Pass 1 — every descendant must reach `to` before any move.
+/// Iterative — a deep tree must not overflow the call stack.
 fn check_descendants(item: &Item, to: Status) -> Result<(), String> {
-    for c in &item.children {
+    let mut stack: Vec<&Item> = item.children.iter().collect();
+    while let Some(c) = stack.pop() {
         if c.status != to {
             status_path(c.id, c.status, to)?;
         }
-        check_descendants(c, to)?;
+        stack.extend(c.children.iter());
     }
     Ok(())
 }
 
 /// Pass 2 — apply; `check_descendants` already proved each walk.
 fn apply_descendants(item: &mut Item, to: Status) {
-    for c in &mut item.children {
+    let mut stack: Vec<&mut Item> = item.children.iter_mut().collect();
+    while let Some(c) = stack.pop() {
         if c.status != to {
             // prevalidated — walk_to can only fail via status_path
             let _ = walk_to(c, to);
         }
-        apply_descendants(c, to);
+        stack.extend(c.children.iter_mut());
     }
 }
 

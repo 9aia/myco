@@ -68,11 +68,12 @@ fn item_emit() {
     ] {
         for f in fixtures_under(dir) {
             let src = fixture(&f);
-            let file = parse_item_file(&src, kind, &f).unwrap_or_else(|e| panic!("{f}: {e}"));
+            let spec = myco_core::kind::prelude_table().spec_of(kind).unwrap();
+            let file = parse_item_file(&src, spec, &f).unwrap_or_else(|e| panic!("{f}: {e}"));
             let out = emit_item_file(&file).unwrap_or_else(|e| panic!("{f}: {e}"));
             insta::assert_snapshot!(snap_name(&f), out);
             assert_eq!(
-                emit_item_file(&parse_item_file(&out, kind, &f).unwrap()).unwrap(),
+                emit_item_file(&parse_item_file(&out, spec, &f).unwrap()).unwrap(),
                 out,
                 "{f}"
             );

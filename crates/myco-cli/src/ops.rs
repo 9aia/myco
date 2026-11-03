@@ -4,11 +4,15 @@
 //! composition root (this crate) names the impl.
 pub use myco_ops::ops::*;
 
-/// `MdStore` rooted at a worktree path.
-pub fn store_at(worktree: &std::path::Path) -> Result<myco_store_md::MdStore, String> {
+/// `MdStore` rooted at a worktree path, resolving item layout
+/// through the repo's kind table (`[[kinds]]`, P-008).
+pub fn store_at(
+    worktree: &std::path::Path,
+    kinds: &myco_core::KindTable,
+) -> Result<myco_store_md::MdStore, String> {
     let root = camino::Utf8PathBuf::from_path_buf(worktree.to_path_buf())
         .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
-    Ok(myco_store_md::MdStore::new(root))
+    Ok(myco_store_md::MdStore::with_kinds(root, kinds.clone()))
 }
 
 /// Layered TOML — `Some(path)` pins the repo layer, `None` runs

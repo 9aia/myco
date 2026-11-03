@@ -438,10 +438,12 @@ mod tests {
     /// tags every item like an index-sourced universe does.
     fn render_lanes(items: &[Item], repo: Option<&str>, md: bool, fit: Fit) -> String {
         let groups = match repo {
-            Some(r) => {
-                myco_core::eval_scoped(items.iter().map(|i| Scoped::tagged(r, i)), &lane_spec())
-            }
-            None => eval(items.iter(), &lane_spec()),
+            Some(r) => myco_core::eval_scoped(
+                items.iter().map(|i| Scoped::tagged(r, i)),
+                &lane_spec(),
+                myco_core::kind::prelude_table(),
+            ),
+            None => eval(items.iter(), &lane_spec(), myco_core::kind::prelude_table()),
         };
         let (headers, cards) = status_cards(&groups, &BTreeSet::new());
         render_columns(&headers, &cards, md, fit)
@@ -450,7 +452,7 @@ mod tests {
     #[test]
     fn columns_bucket_and_sort() {
         let v = items();
-        let groups = eval(v.iter(), &lane_spec());
+        let groups = eval(v.iter(), &lane_spec(), myco_core::kind::prelude_table());
         let col = |label: &str| {
             groups
                 .iter()
@@ -588,7 +590,7 @@ mod tests {
         let v = items();
         // index-sourced shape — tagged items carry `repo` through
         let tagged = v.iter().map(|i| Scoped::tagged("myco", i));
-        let groups = myco_core::eval_scoped(tagged, &lane_spec());
+        let groups = myco_core::eval_scoped(tagged, &lane_spec(), myco_core::kind::prelude_table());
         let j = groups_json(&groups, None);
         assert_eq!(j["open"].as_array().unwrap().len(), 2);
         assert_eq!(j["open"][0]["id"], "T-003");
@@ -599,7 +601,7 @@ mod tests {
         assert!(j["open"][0].get("interrupted").is_none());
         // with the set → per-item flag (repo source: no `repo` key)
         let set = BTreeSet::from([ItemId::new(ItemKind::Task, 3)]);
-        let groups = eval(v.iter(), &lane_spec());
+        let groups = eval(v.iter(), &lane_spec(), myco_core::kind::prelude_table());
         let j = groups_json(&groups, Some(&set));
         assert_eq!(j["open"][0]["interrupted"], true);
         assert_eq!(j["open"][1]["interrupted"], false);

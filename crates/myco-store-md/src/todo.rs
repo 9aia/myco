@@ -94,15 +94,24 @@ fn parse_list(
     for item in &list.children {
         // list children are ListItem by construction; skip anything else
         if let Node::ListItem(li) = item {
-            section.items.push(parse_li(src, item, li)?);
+            section.items.push(parse_li(src, item, li, 0)?);
         }
     }
     Ok(())
 }
 
 /// One `- [ ] T-NNN …` list item → an [`Item`]; a nested `-` list
-/// under it parses recursively into `children`.
-fn parse_li(src: &str, node: &Node, li: &markdown::mdast::ListItem) -> Result<Item, ParseError> {
+/// under it parses recursively into `children` (bounded by
+/// [`line::MAX_ITEM_DEPTH`]).
+fn parse_li(
+    src: &str,
+    node: &Node,
+    li: &markdown::mdast::ListItem,
+    depth: usize,
+) -> Result<Item, ParseError> {
+    if depth > line::MAX_ITEM_DEPTH {
+        return Err(err(src, node, "items nested too deep"));
+    }
     match li.checked {
         Some(true) => {
             return Err(err(
@@ -140,7 +149,7 @@ fn parse_li(src: &str, node: &Node, li: &markdown::mdast::ListItem) -> Result<It
     if let Some(list) = nested {
         for child in &list.children {
             if let Node::ListItem(cli) = child {
-                parsed.children.push(parse_li(src, child, cli)?);
+                parsed.children.push(parse_li(src, child, cli, depth + 1)?);
             }
         }
     }
@@ -165,7 +174,7 @@ pub fn emit_todo(doc: &TodoDoc) -> Result<String, EmitError> {
     out.push('\n');
     for (i, section) in doc.sections.iter().enumerate() {
         for item in &section.items {
-            check_subtree(item)?;
+            check_subtree(item, 0)?;
         }
         out.push('\n');
         match &section.name {
@@ -201,8 +210,15 @@ pub fn emit_todo(doc: &TodoDoc) -> Result<String, EmitError> {
 
 /// [`line::check_item`] + the no-done/no-deferred rules, applied
 /// to a whole subtree — children follow the same grammar as
-/// their parents.
-fn check_subtree(item: &Item) -> Result<(), EmitError> {
+/// their parents. Depth matches the parse-side cap so emit can't
+/// write a file parse would reject (or overflow the stack on).
+fn check_subtree(item: &Item, depth: usize) -> Result<(), EmitError> {
+    if depth > line::MAX_ITEM_DEPTH {
+        return Err(EmitError::new(
+            FILE,
+            format!("item {} nested too deep", item.id),
+        ));
+    }
     line::check_item(item, FILE)?;
     match item.status {
         Status::Done => {
@@ -220,7 +236,7 @@ fn check_subtree(item: &Item) -> Result<(), EmitError> {
         _ => {}
     }
     for c in &item.children {
-        check_subtree(c)?;
+        check_subtree(c, depth + 1)?;
     }
     Ok(())
 }
@@ -503,6 +519,28 @@ mod tests {
     }
 
     #[test]
+    fn nesting_depth_is_capped() {
+        // past MAX_ITEM_DEPTH parse errors instead of recursing
+        // into a stack overflow; emit enforces the same bound so
+        // it can't write a file parse would reject (I-021)
+        let mut src = String::from("# TODO — x\n\n");
+        for d in 0..=line::MAX_ITEM_DEPTH + 2 {
+            src.push_str(&"  ".repeat(d));
+            src.push_str("- [ ] T-001 t\n");
+        }
+        assert!(parse_todo(&src).is_err());
+        // …and a model nested the same way can't emit
+        let mut item = Item::new(ItemId::new(ItemKind::Task, 1), "t");
+        for _ in 0..line::MAX_ITEM_DEPTH + 2 {
+            item = Item::new(ItemId::new(ItemKind::Task, 1), "t").child(item);
+        }
+        let mut doc = TodoDoc::new("x");
+        doc.sections.push(Section::named("s"));
+        doc.sections[0].items.push(item);
+        assert!(emit_todo(&doc).is_err());
+    }
+
+    #[test]
     fn nested_non_line_item_errors() {
         // a nested done item — parse_li's status check rejects it
         // and the error propagates out of the nested-children loop
@@ -542,7 +580,7 @@ mod tests {
             ],
         };
         let node = Node::ListItem(li.clone());
-        let item = parse_li("", &node, &li).unwrap();
+        let item = parse_li("", &node, &li, 0).unwrap();
         assert_eq!(item.id.number(), 1);
         assert!(item.children.is_empty());
     }

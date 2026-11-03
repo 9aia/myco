@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use camino::Utf8PathBuf;
-use myco_core::{Item, ItemId, ItemKind, ProjectMeta};
+use myco_core::{Item, ItemId, ProjectMeta};
 use myco_store_md::{self, frontmatter_id, ParseError};
 use serde_json::json;
 
@@ -312,14 +312,6 @@ fn transform_file(
     }
 }
 
-/// `file/kind` pairs — which file-backed kinds live in which dirs.
-const FILE_KINDS: [ItemKind; 4] = [
-    ItemKind::Issue,
-    ItemKind::Proposal,
-    ItemKind::Adr,
-    ItemKind::Plan,
-];
-
 // ---------- dangling-ref: prose `PREFIX-NNNN` mentions ----------
 
 /// `<KIND>-<digits>` tokens in prose — a hand-rolled scanner (one
@@ -522,7 +514,17 @@ struct Located {
     loc: String,
 }
 
+/// `analyze` over the prelude table — the shape tests and
+/// table-free callers want.
+#[cfg(test)]
 fn analyze(wt: &Path) -> Analysis {
+    analyze_with(wt, myco_core::kind::prelude_table())
+}
+
+/// `analyze` resolved against `kinds` — `[[kinds]]` (P-008) makes
+/// the file-spec vocabulary data: dir scans, filename grammar,
+/// and "is this kind declared" all read the table.
+fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
     let mut a = Analysis::default();
     let mut items: Vec<Located> = Vec::new();
     let mut ids: BTreeMap<ItemId, Vec<String>> = BTreeMap::new();
@@ -774,15 +776,14 @@ fn analyze(wt: &Path) -> Analysis {
     }
 
     // --- item dirs --------------------------------------------------
-    // FILE_KINDS is all file-backed, so item_dir never yields None
-    for (kind, dir_name) in FILE_KINDS
-        .into_iter()
-        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
-    {
-        let dir = wt.join(dir_name);
+    // file_backed is all `dir` storage, so item_dir never yields None
+    for spec in kinds.file_backed() {
+        let kind = spec.id_kind();
+        let dir_name = spec.dir_name();
+        let dir = wt.join(&dir_name);
         if !dir.is_dir() {
             a.findings.push(Finding::at(
-                dir_name,
+                &dir_name,
                 "missing-file",
                 format!("{dir_name}/ missing — `myco init` creates it"),
                 true,
@@ -826,10 +827,10 @@ fn analyze(wt: &Path) -> Analysis {
                 }
                 Read::Missing => continue,
             };
-            match myco_store_md::parse_item_file(&src, kind, &rel) {
+            match myco_store_md::parse_item_file(&src, spec, &rel) {
                 Ok(file) => {
                     let id = file.meta.id;
-                    let canonical = myco_store_md::item_filename(&id, &file.meta.title)
+                    let canonical = myco_store_md::item_filename(spec, &id, &file.meta.title)
                         .map(|f| format!("{dir_name}/{f}"));
                     let target = canonical.clone().unwrap_or_else(|| rel.clone());
                     if canonical.as_deref() != Some(rel.as_str()) {
@@ -904,15 +905,19 @@ fn analyze(wt: &Path) -> Analysis {
                     let moved = frontmatter_id(&src)
                         .filter(|id| id.kind() != kind)
                         .and_then(|id| {
-                            myco_store_md::parse_item_file(&src, id.kind(), &rel)
+                            let spec2 = kinds.spec_of(id.kind())?;
+                            myco_store_md::parse_item_file(&src, spec2, &rel)
                                 .ok()
                                 .map(|f| (id, f))
                         });
                     match moved {
                         Some((id, file)) => {
-                            // parsed under id.kind() → file-backed
-                            let dir2 = myco_store_md::item_dir(id.kind()).unwrap_or("");
-                            let to = myco_store_md::item_filename(&id, &file.meta.title)
+                            // parsed under its own spec → file-backed
+                            let Some(spec2) = kinds.spec_of(id.kind()) else {
+                                continue;
+                            };
+                            let dir2 = myco_store_md::item_dir(spec2).unwrap_or_default();
+                            let to = myco_store_md::item_filename(spec2, &id, &file.meta.title)
                                 .map(|f| format!("{dir2}/{f}"))
                                 .unwrap_or_else(|| rel.clone());
                             a.findings.push(Finding::at(
@@ -951,11 +956,9 @@ fn analyze(wt: &Path) -> Analysis {
     // archived item files keep their ids — a handoff for an
     // archived item isn't orphaned (filenames only; cold storage
     // isn't parsed or normalized)
-    for (kind, dir_name) in FILE_KINDS
-        .into_iter()
-        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
-    {
-        let adir = wt.join(dir_name).join("archive");
+    for spec in kinds.file_backed() {
+        let dir_name = spec.dir_name();
+        let adir = wt.join(&dir_name).join("archive");
         let names: Vec<String> = match std::fs::read_dir(&adir) {
             Ok(rd) => rd
                 .flatten()
@@ -965,7 +968,7 @@ fn analyze(wt: &Path) -> Analysis {
             Err(_) => Vec::new(),
         };
         for name in names {
-            if let Some(id) = myco_store_md::parse_item_filename(kind, &name) {
+            if let Some(id) = myco_store_md::parse_item_filename(spec, &name) {
                 ids.entry(id)
                     .or_default()
                     .push(format!("{dir_name}/archive/{name}"));
@@ -1179,9 +1182,11 @@ fn analyze(wt: &Path) -> Analysis {
             nf.meta.id = w;
             // `w` is a file kind and emit can't fail on a file that
             // parsed — the renumber always has a destination
-            let to = myco_store_md::item_dir(w.kind())
-                .and_then(|d| {
-                    myco_store_md::item_filename(&w, &nf.meta.title).map(|f| format!("{d}/{f}"))
+            let to = kinds
+                .spec_of(w.kind())
+                .and_then(|s| {
+                    let d = myco_store_md::item_dir(s)?;
+                    myco_store_md::item_filename(s, &w, &nf.meta.title).map(|f| format!("{d}/{f}"))
                 })
                 .unwrap_or_else(|| cand.rel.clone());
             let text = myco_store_md::emit_item_file(&nf).unwrap_or_default();
@@ -1246,9 +1251,11 @@ fn analyze(wt: &Path) -> Analysis {
                     // write at the canonical target (it may be a
                     // renumber winner or a filename-fix mover)
                     let to = renames.get(&l.loc).cloned().unwrap_or_else(|| {
-                        myco_store_md::item_dir(l.item.id.kind())
-                            .and_then(|d| {
-                                myco_store_md::item_filename(&l.item.id, &l.item.title)
+                        kinds
+                            .spec_of(l.item.id.kind())
+                            .and_then(|s| {
+                                let d = myco_store_md::item_dir(s)?;
+                                myco_store_md::item_filename(s, &l.item.id, &l.item.title)
                                     .map(|f| format!("{d}/{f}"))
                             })
                             .unwrap_or_else(|| l.loc.clone())
@@ -1292,10 +1299,27 @@ fn analyze(wt: &Path) -> Analysis {
     if meta_ok {
         let mut reg = meta.registry();
         reg.observe_all(ids.keys().copied());
+        // undeclared-kind items — an id whose prefix no [[kinds]]
+        // entry owns can't be allocated, filed, or filtered
+        // sanely; declare it or fix the prefix
+        for (id, rels) in &ids {
+            if kinds.spec_of(id.kind()).is_none() {
+                a.findings.push(Finding::at(
+                    &rels[0],
+                    "unknown-kind",
+                    format!(
+                        "{id} uses undeclared kind prefix {:?} — add a [[kinds]] entry or fix the id",
+                        id.kind().prefix()
+                    ),
+                    false,
+                ));
+            }
+        }
         let reconciled = reg.counters();
         if reconciled != meta.next {
-            let lagging: Vec<String> = ItemKind::ALL
-                .into_iter()
+            let lagging: Vec<String> = kinds
+                .iter()
+                .map(|s| s.id_kind())
                 .filter(|k| reconciled.get(*k) != meta.next.get(*k))
                 .map(|k| {
                     format!(
@@ -1389,7 +1413,7 @@ fn agents_md_finding(state: crate::agentmd::State) -> Option<Finding> {
 /// without running a fix pass. Served by `myco serve` (the
 /// verdict rides in `ok`; there's no exit code on the wire).
 pub fn check_json(proj: &Project) -> Result<serde_json::Value, String> {
-    let mut analysis = analyze(&proj.worktree);
+    let mut analysis = analyze_with(&proj.worktree, &repo_kinds(&proj.root));
     let agents_md = crate::agentmd::block_state(&proj.root);
     if let Some(f) = agents_md_finding(agents_md) {
         analysis.findings.push(f);
@@ -1451,6 +1475,39 @@ fn verb_findings(root: &std::path::Path) -> Vec<Finding> {
     }
 }
 
+/// `[[kinds]]` for a repo — the repo-layer myco.toml (or
+/// `$MYCO_CONFIG`), prelude on absence; a broken config resolves
+/// to the prelude here and reports through [`kind_findings`].
+fn repo_kinds(root: &std::path::Path) -> myco_core::KindTable {
+    let path = std::env::var("MYCO_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    ops::CONFIG
+        .load(Some(&path))
+        .ok()
+        .and_then(|c| c.kind_table().ok())
+        .unwrap_or_else(myco_core::KindTable::prelude)
+}
+
+/// `[[kinds]]` lint — an invalid kind table is a finding
+/// (unfixable — the repair is editing myco.toml). Repo layer
+/// only, like `view_findings`/`verb_findings`.
+fn kind_findings(root: &std::path::Path) -> Vec<Finding> {
+    let path = std::env::var("MYCO_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    if !path.exists() {
+        return Vec::new();
+    }
+    match ops::CONFIG.load(Some(&path)) {
+        Err(_) => Vec::new(), // reported by the config finding
+        Ok(cfg) => match cfg.kind_table() {
+            Err(e) => vec![Finding::at("myco.toml", "kinds-invalid", e, false)],
+            Ok(_) => Vec::new(),
+        },
+    }
+}
+
 /// The `check` verb. Exit 1 with findings, 0 when clean.
 pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
     let (fix, json_out, no_commit) = (a.flag("fix"), ctx.json, ctx.no_commit);
@@ -1470,7 +1527,8 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
     } else {
         ops::lock_shared(wt)?
     };
-    let mut analysis = analyze(wt);
+    let kinds = repo_kinds(&proj.root);
+    let mut analysis = analyze_with(wt, &kinds);
     let mut fixes_applied = 0usize;
     if fix {
         // a fix can unlock another (strip done → the file parses →
@@ -1480,7 +1538,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
                 break;
             }
             fixes_applied += apply_fixes(wt, &analysis.fixes)?;
-            analysis = analyze(wt);
+            analysis = analyze_with(wt, &kinds);
         }
     }
     // config layer: `[views]` specs in the repo/user myco.toml —
@@ -1488,6 +1546,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
     // loads config, so it surfaces here too
     analysis.findings.extend(view_findings(&proj.root));
     analysis.findings.extend(verb_findings(&proj.root));
+    analysis.findings.extend(kind_findings(&proj.root));
     // root-side: the managed AGENTS.md block lives on the checked-
     // out branch, not in the worktree — validated/repaired against
     // proj.root separately.
@@ -1561,6 +1620,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use myco_core::ItemKind;
 
     #[test]
     fn done_line_detection() {

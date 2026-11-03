@@ -152,9 +152,17 @@ fn draw_board(f: &mut Frame, m: &mut Model, area: Rect) {
                 )],
                 row_w,
             ))),
-            Row::Item { item, depth } => {
+            Row::Item { item, depth, repo } => {
                 let indent = "  ".repeat(*depth);
                 let mut spans = vec![Span::raw(indent)];
+                // index-sourced items carry `repo:ID` — the same
+                // tag `myco view` cards emit
+                if let Some(r) = repo {
+                    spans.push(Span::styled(format!("{r}:"), Style::default().fg(MUTED)));
+                    if !m.show_ids {
+                        spans.push(Span::raw(" "));
+                    }
+                }
                 if m.show_ids {
                     spans.push(Span::styled(
                         item.id.to_string(),
@@ -209,6 +217,12 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
             Span::raw(item.priority.token().to_string()),
         ]),
     ];
+    if let Some(r) = m.selected_repo() {
+        lines.push(Line::from(vec![
+            Span::styled("repo   ", Style::default().fg(MUTED)),
+            Span::raw(r.to_string()),
+        ]));
+    }
     if let Some(o) = &item.owner {
         lines.push(Line::from(vec![
             Span::styled("owner  ", Style::default().fg(MUTED)),

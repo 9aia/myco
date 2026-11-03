@@ -175,22 +175,25 @@ pub(crate) fn normalize(src: &str) -> String {
 /// Empty when `src` doesn't parse (callers scan unwhitelisted —
 /// a stale ref inside a broken fence is still worth flagging).
 pub fn code_spans(src: &str) -> Vec<(usize, usize)> {
-    fn walk(node: &Node, out: &mut Vec<(usize, usize)>) {
+    // explicit-stack walk — a deeply nested doc can't overflow
+    // the call stack
+    let mut out = Vec::new();
+    let Ok(ast) = parse(src) else {
+        return out;
+    };
+    let mut stack = vec![&ast];
+    while let Some(node) = stack.pop() {
         if matches!(node, Node::Code(_) | Node::InlineCode(_)) {
             if let Some(p) = node.position() {
                 out.push((p.start.offset, p.end.offset));
             }
-            return; // code nodes can't nest scannable prose
+            continue; // code nodes can't nest scannable prose
         }
         if let Some(children) = node.children() {
-            for c in children {
-                walk(c, out);
-            }
+            // reversed so the pop order is document order —
+            // the span list stays sorted
+            stack.extend(children.iter().rev());
         }
-    }
-    let mut out = Vec::new();
-    if let Ok(ast) = parse(src) {
-        walk(&ast, &mut out);
     }
     out
 }

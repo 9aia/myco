@@ -54,6 +54,7 @@ pub fn h_resolve(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     items::walk_to(&mut file.meta, Status::Done)?;
     if let Some(res) = a.opt("resolution") {
         templates::append_to_section(&mut file.body, "## Resolution", res);
+        file.body = myco_core::canonical_body(&file.body).to_string();
     }
     let item = file.meta.clone();
     store.save_item(&file).map_err(|e| e.to_string())?;
@@ -111,6 +112,7 @@ pub fn h_comment(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         a.text("text")?
     );
     templates::append_to_section(&mut file.body, "## Comments", &line);
+    file.body = myco_core::canonical_body(&file.body).to_string();
     store.save_item(&file).map_err(|e| e.to_string())?;
     let committed = items::commit(
         &proj.worktree,

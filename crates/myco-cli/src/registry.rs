@@ -1506,11 +1506,11 @@ pub static VERBS: &[Verb] = &[
     #[cfg(feature = "tui")]
     Verb {
         name: "ui",
-        about: "Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use.",
+        about: "Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = \"index\"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.",
         params: &[&[opt(
             "view",
             Val::Str,
-            "Open with a named view's filter narrowing every board.",
+            "Open with a named view's filter narrowing every board; index-sourced views load the cross-repo universe.",
         )
         .vname("NAME")]],
         kind_lock: None,

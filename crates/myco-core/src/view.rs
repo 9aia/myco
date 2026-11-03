@@ -14,7 +14,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Actor, Item, ItemKind, Priority, Status};
+use crate::{Actor, Item, ItemKind, KindTable, Priority, Status};
 
 /// Where a view's item universe comes from.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,9 +94,12 @@ pub struct ViewSpec {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct ViewFilter {
-    /// `kind` — serde names (`task|issue|proposal|adr|plan`).
+    /// `kind` — kind names or id prefixes (`task`, `issue`,
+    /// `spike`, `S`). Kept as tokens, not a closed kind set —
+    /// user kinds (P-008) resolve through the [`KindTable`] at
+    /// eval time.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub kind: Vec<ItemKind>,
+    pub kind: Vec<String>,
     /// `status` — status tokens.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub status: Vec<Status>,
@@ -356,8 +359,9 @@ pub const UNGROUPED: &str = "ungrouped";
 impl GroupAxis {
     /// Bucket key for ordering + label for display. `None` puts
     /// the item in the [`UNGROUPED`] bucket (only reachable for
-    /// optional-field axes).
-    fn key_label(self, scoped: &Scoped) -> (GroupKey, String) {
+    /// optional-field axes). `kinds` resolves the `kind` axis —
+    /// declared order and names live in the table.
+    fn key_label(self, scoped: &Scoped, kinds: &KindTable) -> (GroupKey, String) {
         let item = scoped.item;
         match self {
             GroupAxis::Status => (
@@ -369,10 +373,15 @@ impl GroupAxis {
                 GroupKey::Finite(usize::MAX - item.priority as usize),
                 item.priority.name().to_string(),
             ),
-            GroupAxis::Kind => (
-                GroupKey::Finite(item.id.kind() as usize),
-                kind_name(item.id.kind()).to_string(),
-            ),
+            GroupAxis::Kind => match kinds.position(item.id.kind()) {
+                Some(pos) => (GroupKey::Finite(pos), kinds.name_of(item.id.kind())),
+                // undeclared-prefix item — a named bucket after
+                // the declared kinds
+                None => (
+                    GroupKey::Named(item.id.kind().prefix().to_string()),
+                    item.id.kind().prefix().to_string(),
+                ),
+            },
             GroupAxis::Owner => match &item.owner {
                 Some(o) => (
                     GroupKey::Named(o.as_str().to_string()),
@@ -392,10 +401,6 @@ fn named_or_ungrouped(v: Option<&str>) -> (GroupKey, String) {
         Some(s) => (GroupKey::Named(s.to_string()), s.to_string()),
         None => (GroupKey::Ungrouped, UNGROUPED.to_string()),
     }
-}
-
-fn kind_name(k: ItemKind) -> &'static str {
-    k.name()
 }
 
 /// Failure to parse a [`GroupAxis`] name.
@@ -477,10 +482,21 @@ enum GroupKey {
 }
 
 impl ViewFilter {
+    /// Does `token` name this item's kind? Resolution order:
+    /// declared name → declared prefix → a raw prefix compare, so
+    /// `kind = ["X"]` still selects undeclared-prefix items.
+    fn kind_matches(&self, token: &str, item: &Item, kinds: &KindTable) -> bool {
+        match kinds.resolve(token) {
+            Some(spec) => spec.id_kind() == item.id.kind(),
+            None => token == item.id.kind().prefix(),
+        }
+    }
+
     /// All fields ANDed; each list ORs internally. An all-default
-    /// filter matches everything.
-    pub fn matches(&self, item: &Item) -> bool {
-        (self.kind.is_empty() || self.kind.contains(&item.id.kind()))
+    /// filter matches everything. `kinds` resolves `kind` tokens
+    /// — names and prefixes both accepted.
+    pub fn matches(&self, item: &Item, kinds: &KindTable) -> bool {
+        (self.kind.is_empty() || self.kind.iter().any(|t| self.kind_matches(t, item, kinds)))
             && (self.status.is_empty() || self.status.contains(&item.status))
             && self.pri_min.is_none_or(|p| item.priority >= p)
             && self.pri_max.is_none_or(|p| item.priority <= p)
@@ -516,6 +532,18 @@ impl ViewSpec {
                     lo.name(),
                     hi.name()
                 ));
+            }
+        }
+        Ok(())
+    }
+
+    /// `kind` filter tokens must resolve to a declared kind or a
+    /// grammatically valid prefix — `kind = ["tsak"]` is a typo
+    /// to surface at resolution, not a silent empty view.
+    pub fn validate_kinds(&self, kinds: &KindTable) -> Result<(), String> {
+        for t in &self.filter.kind {
+            if kinds.resolve(t).is_none() && ItemKind::from_prefix(t).is_none() {
+                return Err(format!("unknown kind {t:?} in view filter"));
             }
         }
         Ok(())
@@ -601,11 +629,12 @@ fn sort_items(items: &mut [Scoped], keys: &[SortKey]) {
 /// Evaluate a spec over repo-sourced items — the
 /// [`ViewSource::Repo`] universe. Every [`Scoped`] comes back
 /// untagged (`repo: None`); [`eval_scoped`] is the tagged form.
-pub fn eval<'a, I>(items: I, spec: &ViewSpec) -> Vec<ViewGroup<'a>>
+/// `kinds` resolves the spec's `kind` filter and group axis.
+pub fn eval<'a, I>(items: I, spec: &ViewSpec, kinds: &KindTable) -> Vec<ViewGroup<'a>>
 where
     I: IntoIterator<Item = &'a Item>,
 {
-    eval_scoped(items.into_iter().map(Scoped::new), spec)
+    eval_scoped(items.into_iter().map(Scoped::new), spec, kinds)
 }
 
 /// Evaluate a spec over [`Scoped`] items — the
@@ -615,13 +644,13 @@ where
 /// bucket even when empty; renderers decide whether to show
 /// them. Named axes yield observed values only; [`UNGROUPED`]
 /// trails when reached.
-pub fn eval_scoped<'a, I>(items: I, spec: &ViewSpec) -> Vec<ViewGroup<'a>>
+pub fn eval_scoped<'a, I>(items: I, spec: &ViewSpec, kinds: &KindTable) -> Vec<ViewGroup<'a>>
 where
     I: IntoIterator<Item = Scoped<'a>>,
 {
     let filtered: Vec<Scoped> = items
         .into_iter()
-        .filter(|s| spec.filter.matches(s.item))
+        .filter(|s| spec.filter.matches(s.item, kinds))
         .collect();
     let keys = spec.effective_sort();
 
@@ -651,21 +680,17 @@ where
                         )
                     })
                     .collect(),
-                GroupAxis::Kind => ItemKind::ALL
+                GroupAxis::Kind => kinds
                     .iter()
-                    .map(|k| {
-                        (
-                            GroupKey::Finite(*k as usize),
-                            (kind_name(*k).to_string(), vec![]),
-                        )
-                    })
+                    .enumerate()
+                    .map(|(i, spec)| (GroupKey::Finite(i), (spec.name.clone(), vec![])))
                     .collect(),
                 GroupAxis::Owner | GroupAxis::Epic | GroupAxis::Milestone | GroupAxis::Repo => {
                     BTreeMap::new()
                 }
             };
             for item in filtered {
-                let (key, label) = axis.key_label(&item);
+                let (key, label) = axis.key_label(&item, kinds);
                 let entry = buckets.entry(key).or_insert_with(|| (label, Vec::new()));
                 entry.1.push(item);
             }
@@ -713,6 +738,10 @@ mod tests {
         Item::new(ItemId::new(ItemKind::Task, n), title)
     }
 
+    fn table() -> KindTable {
+        KindTable::prelude()
+    }
+
     fn items() -> Vec<Item> {
         vec![
             t(1, "a").priority(Priority::Low).epic("v2"),
@@ -738,7 +767,7 @@ mod tests {
     #[test]
     fn default_spec_passes_all_in_pri_order() {
         let v = items();
-        let g = eval(&v, &ViewSpec::default());
+        let g = eval(&v, &ViewSpec::default(), &table());
         assert_eq!(g.len(), 1);
         assert_eq!(g[0].label, None);
         // crit, high, then the two meds by id, then low
@@ -752,7 +781,7 @@ mod tests {
             toml::from_str(r#"filter = { status = ["open", "in-progress"], pri_min = "high" }"#)
                 .unwrap();
         spec.validate().unwrap();
-        assert_eq!(flat_ids(&eval(&v, &spec)), ["T-002", "I-001"]);
+        assert_eq!(flat_ids(&eval(&v, &spec, &table())), ["T-002", "I-001"]);
     }
 
     #[test]
@@ -760,7 +789,7 @@ mod tests {
         let v = items();
         let spec: ViewSpec = toml::from_str(r#"filter = { claimed = false }"#).unwrap();
         assert_eq!(
-            flat_ids(&eval(&v, &spec)),
+            flat_ids(&eval(&v, &spec, &table())),
             ["T-002", "I-001", "T-004", "T-001"]
         );
         // claimed + owner is a spec error, not a silent empty set
@@ -783,7 +812,7 @@ mod tests {
     fn group_by_status_yields_all_columns() {
         let v = items();
         let spec: ViewSpec = toml::from_str(r#"group_by = "status""#).unwrap();
-        let g = eval(&v, &spec);
+        let g = eval(&v, &spec, &table());
         let labels: Vec<_> = g.iter().map(|g| g.label.as_deref().unwrap()).collect();
         assert_eq!(
             labels,
@@ -805,7 +834,7 @@ mod tests {
     fn named_axis_buckets_and_ungrouped_last() {
         let v = items();
         let spec: ViewSpec = toml::from_str(r#"group_by = "epic""#).unwrap();
-        let g = eval(&v, &spec);
+        let g = eval(&v, &spec, &table());
         let labels: Vec<_> = g.iter().map(|g| g.label.as_deref().unwrap()).collect();
         assert_eq!(labels, ["v2", UNGROUPED]);
         assert_eq!(g[1].items.len(), 4);
@@ -822,13 +851,13 @@ mod tests {
             .created(crate::date::parse("2026-03-01").unwrap());
         let spec: ViewSpec = toml::from_str(r#"sort = ["-created"]"#).unwrap();
         assert_eq!(
-            flat_ids(&eval(&v, &spec)),
+            flat_ids(&eval(&v, &spec, &table())),
             ["T-003", "T-001", "T-002", "T-004", "I-001"]
         );
         // ascending: created asc, but absent dates trail
         let spec: ViewSpec = toml::from_str(r#"sort = ["created"]"#).unwrap();
         assert_eq!(
-            flat_ids(&eval(&v, &spec)),
+            flat_ids(&eval(&v, &spec, &table())),
             ["T-001", "T-003", "T-002", "T-004", "I-001"]
         );
     }
@@ -837,7 +866,7 @@ mod tests {
     fn limit_truncates_across_groups() {
         let v = items();
         let spec: ViewSpec = toml::from_str("group_by = \"status\"\nlimit = 2\n").unwrap();
-        let g = eval(&v, &spec);
+        let g = eval(&v, &spec, &table());
         // open bucket sorted crit,high then cut
         assert_eq!(flat_ids(&g), ["T-002", "I-001"]);
     }
@@ -911,14 +940,14 @@ format = "board"
             .iter()
             .enumerate()
             .map(|(i, it)| Scoped::tagged(if i % 2 == 0 { "a" } else { "b" }, it));
-        let g = eval_scoped(tagged, &spec);
+        let g = eval_scoped(tagged, &spec, &table());
         let labels: Vec<_> = g.iter().map(|g| g.label.as_deref().unwrap()).collect();
         assert_eq!(labels, ["a", "b"]);
         assert_eq!(g[0].items.len(), 3);
         // tags survive eval — renderers get the repo prefix
         assert_eq!(g[0].items[0].repo, Some("a"));
         // a repo-source universe (untagged) groups under `ungrouped`
-        let g = eval(&v, &spec);
+        let g = eval(&v, &spec, &table());
         let labels: Vec<_> = g.iter().map(|g| g.label.as_deref().unwrap()).collect();
         assert_eq!(labels, [UNGROUPED]);
         assert_eq!(g[0].items.len(), 5);

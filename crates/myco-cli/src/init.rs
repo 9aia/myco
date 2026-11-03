@@ -32,9 +32,69 @@ pub struct InitOutcome {
     pub gitignore_updated: bool,
     /// `AGENTS.md` gained/refreshed the managed block this run.
     pub agents_md_updated: bool,
+    /// `myco.toml` was seeded with the commented `[[kinds]]`
+    /// prelude this run.
+    pub myco_toml_seeded: bool,
     /// A commit was made (worktree scaffold or root files).
     pub committed: bool,
 }
+
+/// `myco.toml` seeded at init — the prelude spelled out in
+/// comments (P-008: `[[kinds]]` is optional config, and this is
+/// exactly what runs with none). Uncomment lines to restate a
+/// builtin, or append entries to declare new kinds.
+const MYCO_TOML_SEED: &str = r#"# myco project config — every section optional.
+#
+# [[kinds]] — the item-kind table. The block below spells out the
+# compiled-in prelude exactly as it runs with no config; uncomment
+# a block to restate it, or append entries to declare new kinds
+# (a declared `prefix` makes `<PREFIX>-NNN` a real id).
+#
+# [[kinds]]
+# name = "task"
+# prefix = "T"
+# storage = "doc"              # doc-backed — lives in the task ledgers
+# done_state = "done"
+# zero_pad = 3
+#
+# [[kinds]]
+# name = "issue"
+# prefix = "I"
+# storage = "dir"              # issues/issue-NNNN-<slug>.md
+# dir = "issues"
+# file_prefix = "issue"
+# done_state = "done"
+# resolve_verb = true          # `issue resolve` walks open → done
+# zero_pad = 3
+#
+# [[kinds]]
+# name = "proposal"
+# prefix = "P"
+# storage = "dir"              # proposals/proposal-NNNN-<slug>.md
+# dir = "proposals"
+# file_prefix = "proposal"
+# done_state = "done"
+# zero_pad = 3
+#
+# [[kinds]]
+# name = "adr"
+# prefix = "ADR"
+# storage = "dir"              # adrs/NNNN-<slug>.md
+# dir = "adrs"
+# file_prefix = ""
+# done_state = "done"
+# supersede = true             # `supersedes:` frontmatter means something
+# zero_pad = 4
+#
+# [[kinds]]
+# name = "plan"
+# prefix = "PL"
+# storage = "dir"              # plans/pl-NNNN-<slug>.md
+# dir = "plans"
+# file_prefix = "pl"
+# done_state = "done"
+# zero_pad = 3
+"#;
 
 /// Ensure the project branch + worktree + scaffold exist. Safe to
 /// call from any verb that wants a worktree to land on.
@@ -94,7 +154,7 @@ pub fn ensure(
     }
 
     // scaffold via canonical emit — never overwrites
-    let store = ops::store_at(&worktree)?;
+    let store = ops::store_at(&worktree, myco_core::kind::prelude_table())?;
     let name = repo_name(&root);
     let files_created = ops::scaffold(&store, &worktree, &name).map_err(|e| e.to_string())?;
     if ops::autocommit(&worktree, "chore: init project ledger", enabled)? {
@@ -127,14 +187,40 @@ pub fn ensure(
         committed = true;
     }
 
+    // myco.toml — the commented [[kinds]] prelude, only when the
+    // file is absent (a user's own config is never touched)
+    let myco_toml_seeded = seed_myco_toml(&root)?;
+    if myco_toml_seeded
+        && ops::commit_paths(
+            &root,
+            "chore: seed myco.toml kinds prelude",
+            &["myco.toml"],
+            enabled,
+        )?
+    {
+        committed = true;
+    }
+
     Ok(InitOutcome {
         root,
         worktree,
         files_created,
         gitignore_updated,
         agents_md_updated,
+        myco_toml_seeded,
         committed,
     })
+}
+
+/// Write `<root>/myco.toml` with the commented `[[kinds]]`
+/// prelude — `false` when the file already exists.
+fn seed_myco_toml(root: &Path) -> Result<bool, String> {
+    let path = root.join("myco.toml");
+    if path.exists() {
+        return Ok(false);
+    }
+    std::fs::write(&path, MYCO_TOML_SEED).map_err(|e| format!("myco.toml: {e}"))?;
+    Ok(true)
 }
 
 /// Repo name for `meta.toml`/titles — the repo dir's basename.
@@ -180,6 +266,7 @@ pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, 
             "files_created": out.files_created,
             "gitignore_updated": out.gitignore_updated,
             "agents_md_updated": out.agents_md_updated,
+            "myco_toml_seeded": out.myco_toml_seeded,
             "committed": out.committed,
         }));
     } else {
@@ -201,6 +288,9 @@ pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, 
         }
         if out.agents_md_updated {
             println!("  AGENTS.md += agent-awareness block");
+        }
+        if out.myco_toml_seeded {
+            println!("  myco.toml seeded (commented [[kinds]] prelude)");
         }
         if !out.committed {
             println!("  (no commits — nothing changed or --no-commit)");

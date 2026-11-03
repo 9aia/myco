@@ -2,7 +2,6 @@
 //! locations — the `myco check` contract.
 #![allow(clippy::unwrap_used)]
 
-use myco_core::ItemKind;
 use myco_store_md::{parse_backlog, parse_handoff_file, parse_item_file, parse_meta, parse_todo};
 use myco_testkit::{fixture, fixtures_under};
 
@@ -31,7 +30,8 @@ fn item_invalid() {
     for f in fixtures_under("items/invalid") {
         let src = fixture(&f);
         // kind mismatch is exercised by asking for Issue files
-        let err = parse_item_file(&src, ItemKind::Issue, &f).unwrap_err();
+        let spec = myco_core::kind::prelude_table().by_name("issue").unwrap();
+        let err = parse_item_file(&src, spec, &f).unwrap_err();
         insta::assert_snapshot!(f.replace('/', "__").replace('.', "_"), err.to_string());
     }
 }

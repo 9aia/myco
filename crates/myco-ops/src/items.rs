@@ -86,6 +86,10 @@ impl<S> std::ops::Deref for LockedStore<S> {
 /// `&locked` satisfies `&impl Store` bounds (generic params don't
 /// deref-coerce).
 impl<S: Store> Store for LockedStore<S> {
+    fn kinds(&self) -> &myco_core::KindTable {
+        self.store.kinds()
+    }
+
     fn meta(&self) -> Result<myco_core::ProjectMeta, myco_store::Error> {
         self.store.meta()
     }
@@ -168,11 +172,12 @@ pub fn open_with<S: Store>(
     dir: Option<&Path>,
     root: Option<&Path>,
     cfg: crate::config::ConfigLoader,
-    mk: impl FnOnce(&Path) -> Result<S, String>,
+    mk: impl FnOnce(&Path, &myco_core::KindTable) -> Result<S, String>,
 ) -> Result<(discover::Project, LockedStore<S>), String> {
     let proj = discover::discover(dir, root, cfg)?;
+    let kinds = crate::config::kinds_for(&proj.root, cfg);
     let lock = ops::lock_worktree(&proj.worktree)?;
-    let store = mk(&proj.worktree)?;
+    let store = mk(&proj.worktree, &kinds)?;
     Ok((
         proj,
         LockedStore {
@@ -189,11 +194,12 @@ pub fn open_read_with<S: Store>(
     dir: Option<&Path>,
     root: Option<&Path>,
     cfg: crate::config::ConfigLoader,
-    mk: impl FnOnce(&Path) -> Result<S, String>,
+    mk: impl FnOnce(&Path, &myco_core::KindTable) -> Result<S, String>,
 ) -> Result<(discover::Project, LockedStore<S>), String> {
     let proj = discover::discover(dir, root, cfg)?;
+    let kinds = crate::config::kinds_for(&proj.root, cfg);
     let lock = ops::lock_shared(&proj.worktree)?;
-    let store = mk(&proj.worktree)?;
+    let store = mk(&proj.worktree, &kinds)?;
     Ok((
         proj,
         LockedStore {
@@ -449,7 +455,7 @@ mod tests {
 
     /// `MdStore` rooted at a worktree path — the tests name the
     /// impl, like the CLI's `ops::store_at` does.
-    fn md_store(wt: &Path) -> Result<MdStore, String> {
+    fn md_store(wt: &Path, _kinds: &myco_core::KindTable) -> Result<MdStore, String> {
         let root = camino::Utf8PathBuf::from_path_buf(wt.to_path_buf())
             .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
         Ok(MdStore::new(root))

@@ -28,15 +28,34 @@ where
     Ok(n)
 }
 
+/// A user-kind `[next]` counter — same `nonzero` rule as the
+/// builtin keys.
+fn nonzero_map<'de, D>(d: D) -> Result<std::collections::BTreeMap<String, u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let m = <std::collections::BTreeMap<String, u32> as serde::Deserialize>::deserialize(d)?;
+    for (k, n) in &m {
+        if *n == 0 {
+            return Err(serde::de::Error::custom(format!(
+                "counter {k} must be ≥ 1 — 0 mints an unrepresentable `*-000` id"
+            )));
+        }
+    }
+    Ok(m)
+}
+
 /// Per-kind next-counters — `meta.toml`'s `[next]` table.
 /// Missing keys default to 1 so a partial `[next]` survives a
-/// hand-edit; *unknown* keys are rejected — a typo (`tx = 9`)
-/// must surface, not silently reset the counter to 1 and reissue
-/// ids.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// hand-edit. Builtin kinds keep their fixed keys (`t`, `i`, …);
+/// user kinds (P-008) land in `extra` keyed by lowercase prefix
+/// (`s = 4`). Unknown keys ride `extra` too — the kind table, not
+/// serde, decides whether a key names a real kind (a typo'd
+/// counter can't reissue ids anyway: `observe` floors every
+/// counter above the ids on disk).
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct NextCounters {
     /// Next `T-NNN`.
     #[serde(default = "one", deserialize_with = "nonzero")]
@@ -53,28 +72,42 @@ pub struct NextCounters {
     /// Next `PL-NNN`.
     #[serde(default = "one", deserialize_with = "nonzero")]
     pub pl: u32,
+    /// User-kind counters — `[next]` keys beyond the five fixed
+    /// ones, keyed by the kind's `counter_key` (lowercase prefix).
+    #[serde(
+        default,
+        flatten,
+        deserialize_with = "nonzero_map",
+        skip_serializing_if = "std::collections::BTreeMap::is_empty"
+    )]
+    pub extra: std::collections::BTreeMap<String, u32>,
 }
 
 impl NextCounters {
-    /// Counter for `kind`.
+    /// Counter for `kind` — builtin key or the `extra` map
+    /// (absent keys read as 1, matching the missing-key default).
     pub fn get(&self, kind: ItemKind) -> u32 {
-        match kind {
-            ItemKind::Task => self.t,
-            ItemKind::Issue => self.i,
-            ItemKind::Proposal => self.p,
-            ItemKind::Adr => self.adr,
-            ItemKind::Plan => self.pl,
+        match kind.builtin_index() {
+            Some(0) => self.t,
+            Some(1) => self.i,
+            Some(2) => self.p,
+            Some(3) => self.adr,
+            Some(4) => self.pl,
+            _ => self.extra.get(&kind.counter_key()).copied().unwrap_or(1),
         }
     }
 
     /// Set counter for `kind`.
     pub fn set(&mut self, kind: ItemKind, n: u32) {
-        match kind {
-            ItemKind::Task => self.t = n,
-            ItemKind::Issue => self.i = n,
-            ItemKind::Proposal => self.p = n,
-            ItemKind::Adr => self.adr = n,
-            ItemKind::Plan => self.pl = n,
+        match kind.builtin_index() {
+            Some(0) => self.t = n,
+            Some(1) => self.i = n,
+            Some(2) => self.p = n,
+            Some(3) => self.adr = n,
+            Some(4) => self.pl = n,
+            _ => {
+                self.extra.insert(kind.counter_key(), n);
+            }
         }
     }
 }
@@ -88,6 +121,7 @@ impl Default for NextCounters {
             p: 1,
             adr: 1,
             pl: 1,
+            extra: std::collections::BTreeMap::new(),
         }
     }
 }
@@ -121,7 +155,7 @@ impl ProjectMeta {
     /// A [`Registry`] seeded from these counters.
     pub fn registry(&self) -> Registry {
         Registry {
-            counters: self.next,
+            counters: self.next.clone(),
         }
     }
 }
@@ -168,7 +202,7 @@ impl Registry {
 
     /// The counters to write back to `meta.toml`.
     pub fn counters(&self) -> NextCounters {
-        self.counters
+        self.counters.clone()
     }
 }
 
@@ -238,20 +272,44 @@ mod tests {
     }
 
     #[test]
-    fn unknown_keys_are_rejected() {
-        // a typo'd key must surface — silently defaulting a
-        // misspelled counter resets ids to 1 and reissues done ids
-        assert!(serde_json::from_value::<NextCounters>(serde_json::json!({"tx": 9})).is_err());
+    fn unknown_keys_land_in_extra() {
+        // P-008: `[next]` is open — user-kind counters and typo'd
+        // keys alike land in `extra`; the *table* name typo stays
+        // fatal (it would drop every real counter, not just one)
+        let n = serde_json::from_value::<NextCounters>(serde_json::json!({"tx": 9})).unwrap();
+        assert_eq!(n.extra["tx"], 9);
+        assert_eq!(n.t, 1);
         assert!(serde_json::from_value::<ProjectMeta>(serde_json::json!({
             "name": "x",
             "netx": {"t": 9}
         }))
         .is_err());
-        assert!(serde_json::from_value::<ProjectMeta>(serde_json::json!({
+        let meta = serde_json::from_value::<ProjectMeta>(serde_json::json!({
             "name": "x",
-            "next": {"t": 9, "tx": 1}
+            "next": {"t": 9, "s": 4}
         }))
-        .is_err());
+        .unwrap();
+        assert_eq!(meta.next.t, 9);
+        // a user kind reads/writes its counter through extra
+        let s = ItemKind::from_prefix("S").unwrap();
+        assert_eq!(meta.next.get(s), 4);
+    }
+
+    #[test]
+    fn user_kind_counters_alloc() {
+        let s = ItemKind::for_spec("S", 4).unwrap();
+        let mut r = Registry::default();
+        assert_eq!(r.alloc(s).to_string(), "S-0001");
+        assert_eq!(r.alloc(s).to_string(), "S-0002");
+        let c = r.counters();
+        assert_eq!(c.extra["s"], 3);
+        // serde round-trips the extra key
+        let back: NextCounters = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        assert_eq!(back, c);
+        // and observe floors it like any counter
+        let mut r2 = Registry { counters: back };
+        r2.observe_all([ItemId::new(s, 40)]);
+        assert_eq!(r2.alloc(s).to_string(), "S-0041");
     }
 
     #[test]

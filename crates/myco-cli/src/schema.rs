@@ -41,7 +41,7 @@ pub fn document() -> serde_json::Value {
         .map(|k| {
             (
                 k.prefix().to_string(),
-                json!({"kind": format!("{k:?}"), "width": k.width(), "counter": k.counter_key()}),
+                json!({"kind": k.name(), "width": k.width(), "counter": k.counter_key()}),
             )
         })
         .collect();
@@ -67,9 +67,9 @@ pub fn document() -> serde_json::Value {
         "ids": {
             "shape": "<prefix>-<number>, zero-padded per kind",
             "kinds": kind_ids,
-            "file_backed": ItemKind::ALL.iter()
-                .filter(|k| myco_store_md::item_dir(**k).is_some())
-                .map(|k| k.prefix())
+            "file_backed": myco_core::kind::prelude_table()
+                .file_backed()
+                .map(|s| s.prefix.as_str())
                 .collect::<Vec<_>>(),
         },
         "files": {

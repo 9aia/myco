@@ -12,6 +12,7 @@ pub mod doc;
 pub mod handoff;
 pub mod id;
 pub mod item;
+pub mod kind;
 pub mod ledger;
 pub mod meta;
 pub mod priority;
@@ -21,10 +22,11 @@ pub mod view;
 pub mod walk;
 
 pub use actor::{is_valid_actor, Actor, ParseActorError};
-pub use doc::{BacklogDoc, ItemFile, Section, TodoDoc};
+pub use doc::{canonical_body, BacklogDoc, ItemFile, Section, TodoDoc};
 pub use handoff::{is_valid_session, HandoffEntry};
 pub use id::{require_kind, ItemId, ItemKind, ParseItemIdError, ParseItemKindError};
 pub use item::{is_valid_group_name, is_valid_label, tree_view, Item, ItemMeta, NewItemMeta};
+pub use kind::{KindSpec, KindTable, Storage};
 pub use ledger::{Ledger, TaskLoc};
 pub use meta::{NextCounters, ProjectMeta, Registry};
 pub use priority::{ParsePriorityError, Priority};
@@ -164,6 +166,22 @@ pub struct Config {
     /// over both at resolution.
     #[serde(default)]
     pub verbs: std::collections::BTreeMap<String, ConfigVerb>,
+    /// `[[kinds]]` — user item kinds layered over the prelude
+    /// (P-008). A prelude name *shadows* that spec (prefix stays
+    /// locked); new names extend the table. Merged like verbs:
+    /// the repo layer wins a name collision — a repo's kind
+    /// vocabulary is shared surface.
+    #[serde(default)]
+    pub kinds: Vec<KindSpec>,
+}
+
+impl Config {
+    /// The resolved kind table — prelude + this config's
+    /// `[[kinds]]`. Missing `kinds` = the prelude alone, so
+    /// zero-config is today's five kinds.
+    pub fn kind_table(&self) -> Result<KindTable, String> {
+        KindTable::new(self.kinds.clone())
+    }
 }
 
 #[cfg(test)]

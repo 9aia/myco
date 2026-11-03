@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use myco_core::{GroupAxis, ItemKind, Status, ViewFilter, ViewFormat, ViewSource, ViewSpec};
+use myco_core::{GroupAxis, Status, ViewFilter, ViewFormat, ViewSource, ViewSpec};
 
 use crate::config::ConfigLoader;
 
@@ -87,7 +87,7 @@ pub fn builtins() -> Vec<NamedView> {
             name: "next".into(),
             spec: ViewSpec {
                 filter: ViewFilter {
-                    kind: vec![ItemKind::Task, ItemKind::Issue],
+                    kind: vec!["task".into(), "issue".into()],
                     status: vec![Status::Open],
                     ..ViewFilter::default()
                 },
@@ -269,7 +269,6 @@ fn resolve_in(
 mod tests {
     use super::*;
     use crate::config::test_loader;
-    use myco_core::ItemKind;
 
     #[test]
     fn builtins_are_valid() {
@@ -321,7 +320,7 @@ mod tests {
             // config's board replaces the builtin
             let board = views.iter().find(|v| v.name == "board").unwrap();
             assert_eq!(board.origin, Origin::Config);
-            assert_eq!(board.spec.filter.kind, vec![ItemKind::Issue]);
+            assert_eq!(board.spec.filter.kind, vec!["issue".to_string()]);
             // repo + builtin names coexist
             assert!(views.iter().any(|v| v.name == "mine"));
             // unknown name errors listing defined views

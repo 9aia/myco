@@ -37,6 +37,7 @@ fn active_groups(scan: &digest::Scan) -> Vec<ViewGroup<'_>> {
             group_by: Some(GroupAxis::Status),
             ..ViewSpec::default()
         },
+        myco_core::kind::prelude_table(),
     )
 }
 

@@ -8,10 +8,21 @@
 
 use std::collections::BTreeSet;
 
-use myco_core::{BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, ProjectMeta, TodoDoc};
+use myco_core::{
+    BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, KindTable, ProjectMeta, TodoDoc,
+};
 
 /// Project-state persistence.
 pub trait Store {
+    /// The kind table this store resolves against — which
+    /// prefixes map to dirs, states, and counter keys. Impls
+    /// default to the compiled-in prelude (zero-config = today's
+    /// five kinds); `[[kinds]]` (P-008) is injected by whoever
+    /// constructed the store.
+    fn kinds(&self) -> &KindTable {
+        myco_core::kind::prelude_table()
+    }
+
     /// `meta.toml` — load, or a default (`ProjectMeta::new`) when
     /// the file doesn't exist yet.
     fn meta(&self) -> Result<ProjectMeta, Error>;

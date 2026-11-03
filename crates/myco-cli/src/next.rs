@@ -66,9 +66,13 @@ pub(crate) fn spec(root: &std::path::Path, flags: &NextFlags) -> Result<ViewSpec
 /// behind the verb and `serve`'s `next` method. The universe is
 /// top-level items only — children ride with their parent (the
 /// `myco view` rule).
-pub(crate) fn pick<'a>(scan: &'a digest::Scan, spec: &ViewSpec) -> Option<&'a Item> {
+pub(crate) fn pick<'a>(
+    scan: &'a digest::Scan,
+    spec: &ViewSpec,
+    kinds: &myco_core::KindTable,
+) -> Option<&'a Item> {
     let universe = scan.items.iter().filter(|i| !scan.archived.contains(&i.id));
-    eval(universe, spec)
+    eval(universe, spec, kinds)
         .iter()
         .find_map(|g| g.items.first().map(|s| s.item))
 }
@@ -110,7 +114,7 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     };
     let spec = spec(&proj.root, &flags)?;
     let scan = digest::scan(&store)?;
-    let Some(item) = pick(&scan, &spec).cloned() else {
+    let Some(item) = pick(&scan, &spec, store.kinds()).cloned() else {
         if json_out {
             ops::print_json(&json!({"item": null}));
         } else {
@@ -161,7 +165,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let spec = spec_at(&dir, &NextFlags::default());
         assert_eq!(spec.limit, Some(1));
-        assert_eq!(spec.filter.kind, [ItemKind::Task, ItemKind::Issue]);
+        assert_eq!(spec.filter.kind, ["task".to_string(), "issue".to_string()]);
         assert_eq!(spec.filter.status, [Status::Open]);
         assert!(spec.sort.is_empty()); // engine default: pri,id
     }
@@ -170,7 +174,7 @@ mod tests {
     fn flags_merge_over_the_default() {
         let flags = NextFlags {
             filter: view::FilterPatch {
-                kind: vec![ItemKind::Issue],
+                kind: vec!["issue".to_string()],
                 label: vec!["bug".into()],
                 ..Default::default()
             },
@@ -179,7 +183,7 @@ mod tests {
         };
         let dir = tempfile::tempdir().unwrap();
         let spec = spec_at(&dir, &flags);
-        assert_eq!(spec.filter.kind, [ItemKind::Issue]);
+        assert_eq!(spec.filter.kind, ["issue".to_string()]);
         // unset fields keep the base: status stays [open]
         assert_eq!(spec.filter.status, [Status::Open]);
         assert_eq!(spec.filter.label, ["bug"]);
@@ -211,7 +215,9 @@ mod tests {
         };
         let spec = base_spec();
         assert_eq!(
-            pick(&scan, &spec).unwrap().id,
+            pick(&scan, &spec, myco_core::kind::prelude_table())
+                .unwrap()
+                .id,
             ItemId::new(ItemKind::Task, 2)
         );
         // a done crit drops out of the open default
@@ -222,7 +228,9 @@ mod tests {
         };
         scan2.items[1].status = Status::Done;
         assert_eq!(
-            pick(&scan2, &spec).unwrap().id,
+            pick(&scan2, &spec, myco_core::kind::prelude_table())
+                .unwrap()
+                .id,
             ItemId::new(ItemKind::Issue, 1)
         );
     }

@@ -36,6 +36,21 @@ impl ConfigLoader {
     }
 }
 
+/// The kind table for the repo rooted at `root` — the repo-layer
+/// `myco.toml` (or `$MYCO_CONFIG`), same path policy as
+/// `discover`'s `project_dir` read. The prelude on absence *or*
+/// error — a broken config already fails the verbs that read it
+/// strictly, and `check` lints `[[kinds]]` on its own.
+pub fn kinds_for(root: &Path, cfg: ConfigLoader) -> myco_core::KindTable {
+    let path = std::env::var("MYCO_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    cfg.load(Some(&path))
+        .ok()
+        .and_then(|c| c.kind_table().ok())
+        .unwrap_or_else(myco_core::KindTable::prelude)
+}
+
 /// The real TOML impl for tests — most ops tests exercise actual
 /// `myco.toml` files (config-driven `project_dir`, `[views]`).
 #[cfg(test)]

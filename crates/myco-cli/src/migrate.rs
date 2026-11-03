@@ -28,13 +28,16 @@ use crate::discover;
 use crate::init;
 use crate::ops;
 
-/// The file-backed kinds, in processing order.
-const FILE_KINDS: [ItemKind; 4] = [
-    ItemKind::Issue,
-    ItemKind::Proposal,
-    ItemKind::Adr,
-    ItemKind::Plan,
-];
+/// The file-backed kinds, in processing order — migrate's
+/// vocabulary is the prelude (legacy trees predate `[[kinds]]`).
+fn file_specs() -> impl Iterator<Item = &'static myco_core::KindSpec> {
+    myco_core::kind::prelude_table().file_backed()
+}
+
+/// The prelude spec for `kind` — migrate only speaks builtins.
+fn pspec(kind: ItemKind) -> Option<&'static myco_core::KindSpec> {
+    myco_core::kind::prelude_table().spec_of(kind)
+}
 
 /// What a `pm/` file converts into.
 enum PmDest {
@@ -197,7 +200,7 @@ fn migrate_pm(
     let ensured = init::ensure(dir, Some(&root), no_commit)?;
     let wt = ensured.worktree.clone();
     let _lock = ops::lock_worktree(&wt)?;
-    let store = ops::store_at(&wt)?;
+    let store = ops::store_at(&wt, myco_core::kind::prelude_table())?;
     let mut stats = Stats::default();
 
     let mut todo = store.todo().map_err(|e| e.to_string())?;
@@ -250,7 +253,9 @@ fn migrate_pm(
                 store.save_item(&file).map_err(|e| e.to_string())?;
                 let rel = format!(
                     "plans/{}",
-                    myco_store_md::item_filename(&id, &title).unwrap_or_default()
+                    pspec(ItemKind::Plan)
+                        .and_then(|s| myco_store_md::item_filename(s, &id, &title))
+                        .unwrap_or_default()
                 );
                 stats.converted_items += 1;
                 stats.files_moved.insert(rel_from, rel);
@@ -264,7 +269,9 @@ fn migrate_pm(
                 store.save_item(&file).map_err(|e| e.to_string())?;
                 let rel = format!(
                     "issues/{}",
-                    myco_store_md::item_filename(&id, &title).unwrap_or_default()
+                    pspec(ItemKind::Issue)
+                        .and_then(|s| myco_store_md::item_filename(s, &id, &title))
+                        .unwrap_or_default()
                 );
                 stats.converted_items += 1;
                 stats.files_moved.insert(rel_from, rel);
@@ -367,7 +374,7 @@ fn migrate_project(
     let proj = discover::discover(dir, root_hint)?;
     let wt = &proj.worktree;
     let _lock = ops::lock_worktree(wt)?;
-    let store = ops::store_at(wt)?;
+    let store = ops::store_at(wt, myco_core::kind::prelude_table())?;
     let mut stats = Stats::default();
 
     // seed counters from ids we're about to keep so allocation
@@ -432,11 +439,9 @@ fn migrate_project(
         taken: migrate_ids(wt)?,
         pending: BTreeMap::new(),
     };
-    for (kind, dir_name) in FILE_KINDS
-        .into_iter()
-        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
-    {
-        let dir = wt.join(dir_name);
+    for spec in file_specs() {
+        let dir_name = spec.dir_name();
+        let dir = wt.join(&dir_name);
         let Ok(read) = std::fs::read_dir(&dir) else {
             continue;
         };
@@ -449,7 +454,7 @@ fn migrate_project(
             if !name.ends_with(".md") || name.starts_with('.') {
                 continue;
             }
-            let fname_id = myco_store_md::parse_item_filename(kind, &name);
+            let fname_id = myco_store_md::parse_item_filename(spec, &name);
             match read_str(wt, &format!("{dir_name}/{name}"))
                 .as_deref()
                 .and_then(frontmatter_id)
@@ -468,7 +473,7 @@ fn migrate_project(
         if let Ok(read) = std::fs::read_dir(dir.join("archive")) {
             for entry in read.flatten().filter(|e| e.path().is_file()) {
                 if let Some(name) = entry.file_name().to_str() {
-                    owned.extend(myco_store_md::parse_item_filename(kind, name));
+                    owned.extend(myco_store_md::parse_item_filename(spec, name));
                 }
             }
         }
@@ -482,11 +487,9 @@ fn migrate_project(
     }
 
     let mut renames: BTreeMap<String, String> = BTreeMap::new();
-    for (kind, dir_name) in FILE_KINDS
-        .into_iter()
-        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
-    {
-        let dir = wt.join(dir_name);
+    for spec in file_specs() {
+        let dir_name = spec.dir_name();
+        let dir = wt.join(&dir_name);
         if !dir.is_dir() {
             continue;
         }
@@ -504,7 +507,7 @@ fn migrate_project(
                 Some(s) => s,
                 None => continue,
             };
-            match adopt_or_normalize(&store, &mut reg, &src, kind, &rel, &mut stats, &mut claims)? {
+            match adopt_or_normalize(&store, &mut reg, &src, spec, &rel, &mut stats, &mut claims)? {
                 Some(new_rel) if new_rel != rel => {
                     renames.insert(rel.clone(), new_rel.clone());
                     stats.files_moved.insert(rel, new_rel);
@@ -589,10 +592,8 @@ fn migrate_ids(wt: &Path) -> Result<BTreeSet<ItemId>, String> {
             }
         }
     }
-    for (kind, dir_name) in FILE_KINDS
-        .into_iter()
-        .filter_map(|k| myco_store_md::item_dir(k).map(|d| (k, d)))
-    {
+    for spec in file_specs() {
+        let dir_name = spec.dir_name();
         for archived in [false, true] {
             let rel_dir = match archived {
                 false => dir_name.to_string(),
@@ -605,7 +606,7 @@ fn migrate_ids(wt: &Path) -> Result<BTreeSet<ItemId>, String> {
                 let Some(name) = entry.file_name().to_str().map(String::from) else {
                     continue;
                 };
-                let Some(fname_id) = myco_store_md::parse_item_filename(kind, &name) else {
+                let Some(fname_id) = myco_store_md::parse_item_filename(spec, &name) else {
                     continue;
                 };
                 let rel = format!("{rel_dir}/{name}");
@@ -636,19 +637,25 @@ fn adopt_or_normalize(
     store: &myco_store_md::MdStore,
     reg: &mut Registry,
     src: &str,
-    kind: ItemKind,
+    spec: &myco_core::KindSpec,
     rel: &str,
     stats: &mut Stats,
     claims: &mut AdoptClaims,
 ) -> Result<Option<String>, String> {
     let wt = store.root();
+    let kind = spec.id_kind();
     // 1) parses under its own kind → save_item re-emits canonically
     //    and renames the file when the slug drifted
-    if let Ok(file) = myco_store_md::parse_item_file(src, kind, rel) {
+    if let Ok(file) = myco_store_md::parse_item_file(src, spec, rel) {
         let id = file.meta.id;
         store.save_item(&file).map_err(|e| e.to_string())?;
-        let canonical = myco_store_md::item_filename(&id, &file.meta.title)
-            .map(|f| format!("{}/{}", myco_store_md::item_dir(kind).unwrap_or(""), f));
+        let canonical = myco_store_md::item_filename(spec, &id, &file.meta.title).map(|f| {
+            format!(
+                "{}/{}",
+                myco_store_md::item_dir(spec).unwrap_or_default(),
+                f
+            )
+        });
         // save_item removes a drifted name only when it can tie it
         // to the id — a name without a number is ours to clean up
         if canonical.as_deref() != Some(rel) {
@@ -659,12 +666,18 @@ fn adopt_or_normalize(
     // 2) frontmatter id of a different kind → move + re-emit
     if let Some(id) = frontmatter_id(src) {
         if id.kind() != kind {
-            if let Ok(file) = myco_store_md::parse_item_file(src, id.kind(), rel) {
+            let moved = myco_core::kind::prelude_table()
+                .spec_of(id.kind())
+                .and_then(|s2| myco_store_md::parse_item_file(src, s2, rel).ok());
+            if let Some(file) = moved {
+                let s2 = pspec(id.kind());
                 store.save_item(&file).map_err(|e| e.to_string())?;
                 let _ = std::fs::remove_file(wt.join(rel));
-                let dir2 = myco_store_md::item_dir(id.kind()).unwrap_or("");
-                let canonical = myco_store_md::item_filename(&id, &file.meta.title)
-                    .map(|f| format!("{dir2}/{f}"));
+                let canonical = s2.and_then(|s2| {
+                    let d = myco_store_md::item_dir(s2)?;
+                    myco_store_md::item_filename(s2, &id, &file.meta.title)
+                        .map(|f| format!("{d}/{f}"))
+                });
                 return Ok(canonical);
             }
             // has frontmatter but can't be parsed under any kind —
@@ -681,7 +694,7 @@ fn adopt_or_normalize(
     //    real numbering), else probe the next number no other
     //    adoptee wants; number-less names take a fresh alloc
     let name = rel.rsplit('/').next().unwrap_or(rel);
-    let id = match myco_store_md::parse_item_filename(kind, name) {
+    let id = match myco_store_md::parse_item_filename(spec, name) {
         Some(desired) => {
             let (id, collided) = claims.claim(desired);
             if collided {
@@ -706,8 +719,8 @@ fn adopt_or_normalize(
     store.save_item(&file).map_err(|e| e.to_string())?;
     // an already-canonical adoptee lands on its own name — deleting
     // `rel` then would remove the file we just wrote
-    let canonical = myco_store_md::item_filename(&id, &title)
-        .map(|f| format!("{}/{f}", myco_store_md::item_dir(kind).unwrap_or("")));
+    let canonical = myco_store_md::item_filename(spec, &id, &title)
+        .map(|f| format!("{}/{f}", myco_store_md::item_dir(spec).unwrap_or_default()));
     if canonical.as_deref() != Some(rel) {
         let _ = std::fs::remove_file(wt.join(rel));
     }

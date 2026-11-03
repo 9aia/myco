@@ -182,7 +182,7 @@ fn emit(
     spec.validate()?;
     let mut warnings: Vec<String> = Vec::new();
     // the universe owners — `groups` borrows item refs
-    let (interrupted, scan, views) = match spec.source {
+    let (interrupted, scan, views, kinds) = match spec.source {
         ViewSource::Repo => {
             let (_proj, store) = items::open_read(dir, root)?;
             let s = digest::scan(&store)?;
@@ -190,12 +190,13 @@ fn emit(
                 continuity::interrupted_set(&store, s.live())?,
                 Some(s),
                 Vec::new(),
+                myco_store::Store::kinds(&store).clone(),
             )
         }
         ViewSource::Index => {
             let (v, repo_warnings) = view::index_universe()?;
             warnings.extend(repo_warnings);
-            (BTreeSet::new(), None, v)
+            (BTreeSet::new(), None, v, myco_core::KindTable::prelude())
         }
     };
     let groups = match spec.source {
@@ -203,6 +204,7 @@ fn emit(
             scan.iter()
                 .flat_map(|s| s.items.iter().filter(|i| !s.archived.contains(&i.id))),
             spec,
+            &kinds,
         ),
         ViewSource::Index => eval_scoped(
             views.iter().flat_map(|v| {
@@ -214,6 +216,7 @@ fn emit(
                 })
             }),
             spec,
+            &kinds,
         ),
     };
     match emit {

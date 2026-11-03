@@ -167,6 +167,8 @@ pub mod strat {
                     item.owner = owner;
                     item.labels = labels;
                     item.blocks = blocks;
+                    // an item can't block itself — emit rejects it
+                    item.blocks.remove(&item.id);
                     item.created = created;
                     item.epic = epic;
                     item.milestone = ms;
@@ -261,7 +263,14 @@ pub mod strat {
         )
             .prop_map(|(name, (t, i, p, adr, pl))| ProjectMeta {
                 name,
-                next: NextCounters { t, i, p, adr, pl },
+                next: NextCounters {
+                    t,
+                    i,
+                    p,
+                    adr,
+                    pl,
+                    ..Default::default()
+                },
             })
     }
 
@@ -325,12 +334,16 @@ pub mod strat {
                     item.owner = owner;
                     item.labels = labels;
                     item.blocks = blocks;
+                    // an item can't block itself — emit rejects it
+                    item.blocks.remove(&item.id);
                     item.created = created;
                     item.note = note;
                     item.epic = epic;
                     item.milestone = ms;
                     let mut file = ItemFile::new(item);
-                    file.body = lines.join("\n\n").trim().to_string();
+                    // canonical body: no leading blank lines, no
+                    // trailing whitespace — emit rejects less
+                    file.body = myco_core::canonical_body(&lines.join("\n\n")).to_string();
                     file
                 },
             )

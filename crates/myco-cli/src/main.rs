@@ -92,11 +92,37 @@ fn h_gen_docs(_ctx: &registry::Ctx, _a: &registry::Args) -> Result<i32, String> 
     Ok(0)
 }
 
-/// The `ui` verb (feature `tui`).
+/// The `ui` verb (feature `tui`). The index universe for
+/// `source = "index"` views is injected as a loader — the TUI
+/// re-runs it on every reload, so `load_fresh`'s staleness
+/// logic governs `:w` too.
 #[cfg(feature = "tui")]
 fn h_ui(ctx: &registry::Ctx, a: &registry::Args) -> Result<i32, String> {
     let view = a.opt("view").map(str::to_string);
-    myco_tui::run(ctx.dir.as_deref(), ctx.root.as_deref(), ctx.no_commit, view).map(|_| 0)
+    let org: myco_tui::OrgLoader = Box::new(|| {
+        let (views, _warnings) = view::index_universe()?;
+        Ok(views
+            .into_iter()
+            .map(|v| {
+                let (items, archived) = v.snap.map(|s| (s.items, s.archived)).unwrap_or_default();
+                myco_tui::OrgRepo {
+                    name: v.name,
+                    worktree: v.worktree.into_std_path_buf(),
+                    items,
+                    archived,
+                    error: v.error,
+                }
+            })
+            .collect())
+    });
+    myco_tui::run(
+        ctx.dir.as_deref(),
+        ctx.root.as_deref(),
+        ctx.no_commit,
+        view,
+        Some(org),
+    )
+    .map(|_| 0)
 }
 
 fn main() {

@@ -149,7 +149,9 @@ fn todo_add_list_done() {
     }
     let todo = read(&wt, "TODO.md");
     assert!(!todo.contains("T-00"), "{todo}");
-    assert!(!todo.contains("## Later"), "{todo}");
+    // emptied named sections stay — the `##` heading is user
+    // structure, not item data (I-021)
+    assert!(todo.contains("## Later"), "{todo}");
     assert_eq!(git(&wt, &["log", "-1", "--format=%s"]), "chore: done T-002");
 
     // id never reused

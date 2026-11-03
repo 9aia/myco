@@ -87,10 +87,11 @@ impl Ledger {
     }
 
     /// Remove the item at `loc` — the whole subtree goes with it
-    /// (`done` on a parent removes its children too). A section
-    /// the removal emptied is dropped (an empty unsectioned run
-    /// can't even be emitted). `None` on a stale loc — nothing
-    /// is removed.
+    /// (`done` on a parent removes its children too). An emptied
+    /// *unsectioned* run is dropped (it can't even be emitted);
+    /// an emptied named section stays — a bare `##` heading emits
+    /// and parses fine, and the heading is user structure, not
+    /// item data. `None` on a stale loc — nothing is removed.
     pub fn take(&mut self, loc: &TaskLoc) -> Option<Item> {
         let sections = if loc.backlog {
             &mut self.backlog.sections
@@ -107,7 +108,7 @@ impl Ledger {
             return None;
         }
         let item = level.remove(*last_idx);
-        if loc.path.len() == 1 && section.items.is_empty() {
+        if loc.path.len() == 1 && section.name.is_none() && section.items.is_empty() {
             sections.remove(loc.section);
         }
         Some(item)
@@ -168,13 +169,30 @@ fn find_pos(sections: &[Section], id: ItemId) -> Option<(usize, Vec<usize>)> {
 }
 
 /// Depth-first id search — pushes the index trail onto `path`.
+/// Iterative: each explicit frame is (siblings, next index), so a
+/// deep tree walks the heap, not the call stack.
 fn find_path(items: &[Item], id: ItemId, path: &mut Vec<usize>) -> bool {
-    for (i, item) in items.iter().enumerate() {
+    path.clear();
+    let mut frames: Vec<(&[Item], usize)> = vec![(items, 0)];
+    while let Some((level, i)) = frames.last().copied() {
+        if i >= level.len() {
+            frames.pop();
+            path.pop();
+            continue;
+        }
+        if let Some(frame) = frames.last_mut() {
+            frame.1 = i + 1;
+        }
+        let item = &level[i];
         path.push(i);
-        if item.id == id || find_path(&item.children, id, path) {
+        if item.id == id {
             return true;
         }
-        path.pop();
+        if item.children.is_empty() {
+            path.pop();
+        } else {
+            frames.push((&item.children, 0));
+        }
     }
     false
 }
@@ -248,6 +266,25 @@ mod tests {
         ledger.put_backlog(item.status(Status::Deferred), None);
         let loc = ledger.locate(tid(1)).unwrap();
         assert!(loc.backlog);
+    }
+
+    #[test]
+    fn take_keeps_an_emptied_named_section() {
+        // a bare `##` heading emits and parses fine — removing its
+        // last item must not delete user structure (I-021)
+        let mut ledger = Ledger::default();
+        ledger.put_todo(t(1), Some("Now"));
+        let loc = ledger.locate(tid(1)).unwrap();
+        ledger.take(&loc).unwrap();
+        assert_eq!(ledger.todo.sections.len(), 1);
+        assert_eq!(ledger.todo.sections[0].name.as_deref(), Some("Now"));
+        assert!(ledger.todo.sections[0].items.is_empty());
+        // …while an emptied unsectioned run is still dropped
+        let mut ledger = Ledger::default();
+        ledger.put_todo(t(1), None);
+        let loc = ledger.locate(tid(1)).unwrap();
+        ledger.take(&loc).unwrap();
+        assert!(ledger.todo.sections.is_empty());
     }
 
     #[test]

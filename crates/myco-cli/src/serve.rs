@@ -216,7 +216,7 @@ pub(crate) struct SpecPatch {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FilterPatch {
-    kind: Option<Vec<ItemKind>>,
+    kind: Option<Vec<String>>,
     status: Option<Vec<Status>>,
     #[serde(default, deserialize_with = "de_opt_priority")]
     pri_min: Option<Priority>,
@@ -708,7 +708,7 @@ pub(crate) fn w_next(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
     spec.limit = Some(1);
     spec.validate().map_err(Fail::Verb)?;
     let scan = digest::scan(&store).map_err(Fail::Verb)?;
-    Ok(json!({"item": next::pick(&scan, &spec)}))
+    Ok(json!({"item": next::pick(&scan, &spec, myco_store::Store::kinds(&store))}))
 }
 
 /// `view` — `{name}` resolves a named view (builtin preset or
@@ -778,6 +778,7 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
                     scan.iter()
                         .flat_map(|s| s.items.iter().filter(|i| !s.archived.contains(&i.id))),
                     &spec,
+                    myco_store::Store::kinds(&store),
                 ),
                 ViewSource::Index => eval_scoped(
                     views.iter().flat_map(|v| {
@@ -789,6 +790,7 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
                         })
                     }),
                     &spec,
+                    myco_core::kind::prelude_table(),
                 ),
             };
             Ok(json!({

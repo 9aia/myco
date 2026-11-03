@@ -18,7 +18,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use myco_core::{refs, Edge, EdgeKind, Item, ItemId, ItemKind};
+use myco_core::{refs, Edge, EdgeKind, Item, ItemId};
 use myco_index::{fingerprint, FileStamp, LinkIndex};
 use myco_store::Store;
 
@@ -270,32 +270,32 @@ pub fn live_graph(store: &impl Store) -> (LiveGraph, Vec<String>) {
                 .flat_map(Item::subtree)
             {
                 titles.insert(i.id, i.title.clone());
-                edges.extend(refs::extract(&i.title, Some(i), i.id));
+                edges.extend(refs::extract(&i.title, Some(i), i.id, store.kinds()));
             }
         }
         Err(e) => warnings.push(format!("ledger: {e}")),
     }
 
-    for kind in [
-        ItemKind::Issue,
-        ItemKind::Proposal,
-        ItemKind::Adr,
-        ItemKind::Plan,
-    ] {
+    for spec in store.kinds().file_backed() {
         // live and archived gather independently — a corrupt file
         // in one scope shouldn't blind the other
         for (scope, files) in [
-            ("", store.list_items(kind)),
-            ("archived ", store.list_archived(kind)),
+            ("", store.list_items(spec.id_kind())),
+            ("archived ", store.list_archived(spec.id_kind())),
         ] {
             match files {
                 Ok(files) => {
                     for f in files {
                         titles.insert(f.meta.id, f.meta.title.clone());
-                        edges.extend(refs::extract(&f.body, Some(&f.meta), f.meta.id));
+                        edges.extend(refs::extract(
+                            &f.body,
+                            Some(&f.meta),
+                            f.meta.id,
+                            store.kinds(),
+                        ));
                     }
                 }
-                Err(e) => warnings.push(format!("{scope}{} files: {e}", kind.name())),
+                Err(e) => warnings.push(format!("{scope}{} files: {e}", spec.name)),
             }
         }
     }
@@ -313,7 +313,7 @@ pub fn live_graph(store: &impl Store) -> (LiveGraph, Vec<String>) {
                             .map(|e| e.note.as_str())
                             .collect::<Vec<_>>()
                             .join("\n");
-                        edges.extend(refs::extract(&notes, None, h.id));
+                        edges.extend(refs::extract(&notes, None, h.id, store.kinds()));
                     }
                     Err(e) => warnings.push(format!("handoffs/{}.md: {e}", h.id)),
                 }

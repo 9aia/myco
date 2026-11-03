@@ -40,8 +40,13 @@ pub struct Item {
     /// `blocks:` — ids this item blocks. Sorted set.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub blocks: BTreeSet<ItemId>,
-    /// `created:` — `YYYY-MM-DD` when known.
-    #[serde(default, with = "crate::date::opt")]
+    /// `created:` — `YYYY-MM-DD` when known. Absent (not `null`)
+    /// in JSON — every other `Option` field skips the same way.
+    #[serde(
+        default,
+        with = "crate::date::opt",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
     pub created: Option<time::Date>,
     /// Free-form note — handoff/resume payload (phase 6).
@@ -284,17 +289,17 @@ impl NewItemMeta {
 }
 
 /// Depth-tagged pre-order view — list UIs indent children under
-/// their parent by it.
+/// their parent by it. Iterative (explicit stack, children pushed
+/// reversed to pop in file order): trees can nest past any sane
+/// recursion depth.
 pub fn tree_view(items: &[Item]) -> Vec<(usize, &Item)> {
-    fn go<'a>(item: &'a Item, depth: usize, out: &mut Vec<(usize, &'a Item)>) {
-        out.push((depth, item));
-        for c in &item.children {
-            go(c, depth + 1, out);
-        }
-    }
     let mut out = Vec::new();
-    for i in items {
-        go(i, 0, &mut out);
+    let mut stack: Vec<(usize, &Item)> = items.iter().rev().map(|i| (0, i)).collect();
+    while let Some((depth, item)) = stack.pop() {
+        out.push((depth, item));
+        for c in item.children.iter().rev() {
+            stack.push((depth + 1, c));
+        }
     }
     out
 }
@@ -459,6 +464,9 @@ mod tests {
         assert!(!obj.contains_key("owner"));
         assert!(!obj.contains_key("labels"));
         assert!(!obj.contains_key("blocks"));
+        // `created` is absent, not `null` — same as every other
+        // Option field (I-021)
+        assert!(!obj.contains_key("created"));
         assert!(!obj.contains_key("note"));
         assert!(!obj.contains_key("epic"));
         assert!(!obj.contains_key("milestone"));

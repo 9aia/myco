@@ -39,7 +39,8 @@ proptest! {
     #[test]
     fn item_file_roundtrip(file in strat::item_file()) {
         let out = emit_item_file(&file).unwrap();
-        let back = parse_item_file(&out, file.meta.id.kind(), "x.md").unwrap();
+        let spec = myco_core::kind::prelude_table().spec_of(file.meta.id.kind()).unwrap();
+        let back = parse_item_file(&out, spec, "x.md").unwrap();
         prop_assert_eq!(&back, &file);
         prop_assert_eq!(emit_item_file(&back).unwrap(), out);
     }

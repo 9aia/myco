@@ -162,28 +162,31 @@ pub fn counts(scan: &Scan) -> Counts {
     let mut c = Counts::default();
     for i in scan.items.iter().flat_map(Item::subtree) {
         let archived = scan.archived.contains(&i.id);
-        match i.id.kind() {
-            ItemKind::Task => match i.status {
+        if i.id.kind() == ItemKind::Task {
+            match i.status {
                 Status::Open => c.tasks_open += 1,
                 Status::Claimed => c.tasks_claimed += 1,
                 Status::InProgress => c.tasks_in_progress += 1,
                 Status::Blocked => c.tasks_blocked += 1,
                 Status::Deferred => c.backlog += 1,
                 Status::Done => {} // done tasks leave TODO.md
-            },
-            kind => {
-                let slot = match kind {
-                    ItemKind::Issue => &mut c.issues,
-                    ItemKind::Proposal => &mut c.proposals,
-                    ItemKind::Adr => &mut c.adrs,
-                    // tasks took the first arm — only plans remain
-                    ItemKind::Plan | ItemKind::Task => &mut c.plans,
-                };
-                if archived || i.status == Status::Done {
-                    slot.resolved += 1;
-                } else {
-                    slot.open += 1;
-                }
+            }
+        } else {
+            let kind = i.id.kind();
+            let slot = if kind == ItemKind::Issue {
+                &mut c.issues
+            } else if kind == ItemKind::Proposal {
+                &mut c.proposals
+            } else if kind == ItemKind::Adr {
+                &mut c.adrs
+            } else {
+                // plans + user kinds share the last bucket
+                &mut c.plans
+            };
+            if archived || i.status == Status::Done {
+                slot.resolved += 1;
+            } else {
+                slot.open += 1;
             }
         }
     }
