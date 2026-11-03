@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # bupha gate for main — runs in a detached worktree of the pushed sha.
-# check = fmt + clippy -D warnings; test = the whole suite.
+# check = fmt + clippy -D warnings; test = the whole suite;
+# coverage = the line-coverage floor in scripts/coverage-floor.
 set -euo pipefail
+
+# Script location, resolved — the gate runs from a detached worktree,
+# so $PWD is the tree but the floor file travels with the script.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # The bupha watcher unit runs with the minimal systemd PATH
 # (/usr/local/bin:/usr/bin) whenever it starts before the session env is
@@ -19,3 +24,15 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target/gate}"
 
 cargo xtask check
 cargo xtask test
+
+# Coverage floor — P-001's quality bar, enforced as "never regress"
+# rather than a distant aspiration. `xtask coverage` passes args
+# through to llvm-cov, so the floor is one number to raise over
+# time; it is not 100 yet and pretending otherwise makes the gate
+# a lie (the same failure mode ADR-0002 fixed for `check`).
+COVERAGE_FLOOR="${COVERAGE_FLOOR:-$(cat "$ROOT/scripts/coverage-floor" 2>/dev/null || echo 0)}"
+if [ "$COVERAGE_FLOOR" != "0" ]; then
+  cargo xtask coverage --fail-under-lines "$COVERAGE_FLOOR"
+else
+  echo "coverage: floor unset (scripts/coverage-floor) — skipping" >&2
+fi

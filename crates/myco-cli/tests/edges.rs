@@ -700,8 +700,13 @@ fn check_flags_dangling_prose_refs() {
     // index.md is verbatim prose — a stale ref flags there too
     write(&wt, "index.md", "# x\n\nmentions PL-042 here\n");
     let out = run(d.path(), &["check", "--json"]);
-    assert_eq!(code(&out), 1, "{out:?}");
+    // stale prose refs are warnings (ADR-0002): done doc items are
+    // deleted by design, so the ref cannot resolve — and no fixer
+    // could know what the author meant. The gate stays green.
+    assert_eq!(code(&out), 0, "{out:?}");
     let v = json(&out);
+    assert_eq!(v["ok"], true, "{v}");
+    assert_eq!(v["warnings"], 2, "{v}");
     let refs: Vec<&Value> = v["errors"]
         .as_array()
         .unwrap()
@@ -713,6 +718,7 @@ fn check_flags_dangling_prose_refs() {
         .iter()
         .find(|e| e["file"] == format!("adrs/{name}"))
         .expect("adr finding");
+    assert_eq!(adr_ref["severity"], "warning");
     assert!(adr_ref["line"].as_u64().unwrap() > 0, "{refs:?}");
     assert!(adr_ref["col"].as_u64().unwrap() > 0, "{refs:?}");
     assert_eq!(adr_ref["fixable"], false);
@@ -728,16 +734,92 @@ fn check_flags_dangling_prose_refs() {
         idx_ref["msg"].as_str().unwrap().contains("PL-042"),
         "{refs:?}"
     );
-    // --fix repairs everything it can but the stale refs remain —
-    // informational, intent unknown
+    // --fix repairs everything it can; the stale refs remain,
+    // informational — intent unknown
     let out = run(d.path(), &["check", "--fix", "--json"]);
-    assert_eq!(code(&out), 1, "{out:?}");
+    assert_eq!(code(&out), 0, "{out:?}");
     let v = json(&out);
     assert!(v["errors"]
         .as_array()
         .unwrap()
         .iter()
         .all(|e| e["code"] == "dangling-ref"));
+}
+
+#[test]
+fn check_flags_and_repairs_a_detached_worktree() {
+    let (d, wt) = project();
+    assert_eq!(code(&run(d.path(), &["todo", "add", "first"])), 0);
+    // detach the ledger from its branch: every commit from here on
+    // belongs to no ref, so the audit trail is unreachable
+    git(&wt, &["checkout", "--detach"]);
+    // a write refuses rather than landing somewhere unreachable
+    let out = run(d.path(), &["todo", "add", "second"]);
+    assert_eq!(code(&out), 2, "{out:?}");
+    assert!(stderr(&out).contains("detached HEAD"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("check --fix"), "{}", stderr(&out));
+    // check reports it as an error — the one invariant it can't skip
+    let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 1, "{out:?}");
+    let v = json(&out);
+    let f = v["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["code"] == "worktree-detached")
+        .unwrap_or_else(|| panic!("no detached finding: {v}"));
+    assert_eq!(f["severity"], "error");
+    assert_eq!(f["fixable"], true);
+    // --fix reattaches, keeping the ledger at its current tip
+    let head = git(&wt, &["rev-parse", "HEAD"]);
+    let out = run(d.path(), &["check", "--fix", "--json"]);
+    assert_eq!(code(&out), 0, "{out:?}");
+    assert_eq!(json(&out)["ok"], true);
+    assert_eq!(git(&wt, &["rev-parse", "--abbrev-ref", "HEAD"]), "project");
+    assert_eq!(git(&wt, &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&wt, &["rev-parse", "project"]), head);
+    // the write path works again
+    assert_eq!(code(&run(d.path(), &["todo", "add", "third"])), 0);
+}
+
+#[test]
+fn check_warns_on_unpushed_ledger_commits() {
+    let d = repo();
+    let bare = tempfile::tempdir().unwrap();
+    git(bare.path(), &["init", "-q", "--bare"]);
+    git(
+        d.path(),
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    git(d.path(), &["push", "-q", "origin", "HEAD"]);
+    let out = run(d.path(), &["init", "--json"]);
+    assert_eq!(code(&out), 0, "init: {}", stderr(&out));
+    // publish the fresh branch, then commit one more time locally
+    git(d.path(), &["push", "-q", "origin", "project"]);
+    assert_eq!(code(&run(d.path(), &["todo", "add", "local only"])), 0);
+    let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 0, "{out:?}");
+    let v = json(&out);
+    let f = v["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["code"] == "worktree-unpushed")
+        .unwrap_or_else(|| panic!("no unpushed finding: {v}"));
+    assert_eq!(f["severity"], "warning");
+    assert!(f["msg"].as_str().unwrap().contains("origin/project"), "{f}");
+    // push it and the warning clears
+    git(d.path(), &["push", "-q", "origin", "project"]);
+    let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 0, "{out:?}");
+    assert!(
+        json(&out)["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|e| e["code"] != "worktree-unpushed"),
+        "{out:?}"
+    );
 }
 
 // ---------- migrate ----------

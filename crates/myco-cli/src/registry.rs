@@ -978,7 +978,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "check",
-        about: "Validate schemas + state machine, repair file/index drift; also validates the managed AGENTS.md block on the repo root. Exit 1 with findings; `--fix` applies safe repairs + commits.",
+        about: "Validate the ledger (schemas, state machine, ids, refs) and the worktree it lives in (detached HEAD, wrong branch, unpushed commits); also validates the managed AGENTS.md block on the repo root. Findings carry a severity: `error` exits 1, `warning` is reported and costs nothing (ADR-0002). `--fix` applies safe repairs + commits, including reattaching a detached worktree.",
         params: &[&[flag(
             "fix",
             "Repair drift in place instead of only reporting.",

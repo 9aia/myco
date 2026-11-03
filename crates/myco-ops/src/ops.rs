@@ -148,6 +148,22 @@ pub fn commits_enabled(no_commit: bool) -> bool {
     !no_commit && std::env::var_os("MYCO_NO_COMMIT").is_none()
 }
 
+/// Mutating verbs must not write a ledger they cannot commit. A
+/// detached `project/` worktree is the failure mode that costs the
+/// most: every write lands, no branch records it, and the audit
+/// trail is gone the moment the worktree moves. `check` reports and
+/// repairs it; every write path refuses it first.
+pub fn ensure_committable(dir: &Path) -> Result<(), String> {
+    if myco_git::is_detached(dir) == Some(true) {
+        return Err(format!(
+            "{} is on a detached HEAD — refusing to write a ledger whose commits would be \
+             unreachable; run `myco check --fix` to reattach it",
+            dir.display()
+        ));
+    }
+    Ok(())
+}
+
 /// One atomic commit of everything under `dir` — the
 /// auto-commit-per-verb path. No commit when disabled or when the
 /// tree is clean. Returns whether a commit was made.

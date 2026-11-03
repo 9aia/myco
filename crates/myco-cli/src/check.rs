@@ -8,14 +8,24 @@
 //! title or H1 still carries its old `ADR-0008:` number), stale
 //! `PREFIX-NNNN` prose references (a mention in a body, title,
 //! index or handoff that no live or archived id resolves — code
-//! spans/fences and self-references are whitelisted), and
-//! non-canonical emit drift.
+//! spans/fences and self-references are whitelisted), non-canonical
+//! emit drift, and **worktree health**: a `project/` worktree on a
+//! detached HEAD, one sitting on a branch that isn't `project`, or
+//! a branch that was never pushed — the git-side invariants the
+//! audit trail depends on.
+//!
+//! Two severities (ADR-0002): `error` findings fail the gate,
+//! `warning` findings are reported and cost nothing. A stale prose
+//! reference is a warning, because doc-storage items are *deleted*
+//! when they finish — every handoff and note naming one dangles by
+//! design and no fixer can know what the author meant.
 //!
 //! `--fix` applies the safe repairs — strip done items, rename
 //! misplaced files, renumber title-mismatched items (repointing
 //! index links, `blocks:`/`supersedes` refs and handoffs),
-//! reconcile counters, re-emit canonical — then re-analyzes;
-//! without it every finding is just reported.
+//! reconcile counters, reattach a detached worktree, re-emit
+//! canonical — then re-analyzes; without it every finding is just
+//! reported.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -27,6 +37,30 @@ use serde_json::json;
 
 use crate::discover::Project;
 use crate::ops;
+
+/// How much a finding costs. `Error` fails the gate; `Warn` is
+/// knowledge for the reader and never changes the exit code — the
+/// distinction exists because some findings are *by design* and
+/// unfixable (a prose `T-NNN` naming an item that was completed and
+/// therefore removed: see ADR-0002). A gate that reds on those is a
+/// gate everyone learns to ignore.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Severity {
+    /// Reported, exit code unaffected.
+    Warn,
+    /// Fails `check`.
+    Error,
+}
+
+impl Severity {
+    /// Stable machine token — `warning` / `error`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Severity::Warn => "warning",
+            Severity::Error => "error",
+        }
+    }
+}
 
 /// A validation finding. `fixable` means `--fix` repairs it.
 #[derive(Debug, Clone)]
@@ -41,10 +75,14 @@ pub struct Finding {
     /// `duplicate-id`, `dangling-blocks`, `dangling-ref`, `filename`,
     /// `missing-file`, `unexpected-file`, `emit-drift`,
     /// `orphan-handoff`, `id-title-mismatch`, `unreadable-file`,
-    /// `config`, `view-invalid`.
+    /// `config`, `view-invalid`, `verb-invalid`, `kind-invalid`,
+    /// `agents-md`, `worktree-detached`, `worktree-branch`,
+    /// `worktree-unpushed`.
     pub code: &'static str,
     /// Human/agent-readable message.
     pub msg: String,
+    /// Error (fails the gate) or warning (informational).
+    pub severity: Severity,
     /// `--fix` repairs this.
     pub fixable: bool,
     /// miette rendering for human output (parse errors only).
@@ -59,8 +97,17 @@ impl Finding {
             col: 0,
             code,
             msg: msg.into(),
+            severity: Severity::Error,
             fixable,
             rendered: None,
+        }
+    }
+
+    /// A finding that informs without failing the gate.
+    fn warn(file: &str, code: &'static str, msg: impl Into<String>) -> Self {
+        Finding {
+            severity: Severity::Warn,
+            ..Finding::at(file, code, msg, false)
         }
     }
 
@@ -73,6 +120,7 @@ impl Finding {
             col: e.column(),
             code: "parse",
             msg,
+            severity: Severity::Error,
             fixable,
             rendered: Some(rendered),
         }
@@ -623,6 +671,7 @@ fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
                         "{} done item(s) — done tasks are removed from TODO.md",
                         done.len()
                     ),
+                    severity: Severity::Error,
                     fixable: true,
                     rendered: None,
                 });
@@ -1104,12 +1153,35 @@ fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
             }
         }
     }
+    // `supersedes:`/`superseded_by:` are declared refs too —
+    // same error class as dangling-blocks (ADR-0002).
+    if !ids_incomplete {
+        for l in &items {
+            for (field, target) in [
+                ("supersedes", l.item.supersedes),
+                ("superseded_by", l.item.superseded_by),
+            ] {
+                let Some(target) = target else { continue };
+                if !ids.contains_key(&target) {
+                    a.findings.push(Finding::at(
+                        &l.loc,
+                        "dangling-supersede",
+                        format!("{} {field} {target} which doesn't exist", l.item.id),
+                        false,
+                    ));
+                }
+            }
+        }
+    }
 
-    // bare `PREFIX-NNNN` mentions in prose — a stale ref is
-    // informational only (unfixable: `--fix` can't know whether
-    // the ref meant a renumbered item, another repo, or history).
-    // Skipped when the id set is incomplete: a ref may resolve to
-    // an id hidden in a doc that failed to parse.
+    // bare `PREFIX-NNNN` mentions in prose — a stale ref is a
+    // WARNING, not an error (ADR-0002): doc-storage items are
+    // deleted when done, so prose and handoffs that name them
+    // dangle by design and forever. `--fix` can't repair it either
+    // (was the ref a renumber, another repo, or history?), so it
+    // must never fail the gate. Skipped when the id set is
+    // incomplete: a ref may resolve to an id hidden in a doc that
+    // failed to parse.
     if !ids_incomplete {
         for p in &prose {
             let code = myco_store_md::code_spans(&p.src);
@@ -1128,6 +1200,7 @@ fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
                     col,
                     code: "dangling-ref",
                     msg: format!("{id} doesn't exist — stale prose reference"),
+                    severity: Severity::Warn,
                     fixable: false,
                     rendered: None,
                 });
@@ -1409,25 +1482,99 @@ fn agents_md_finding(state: crate::agentmd::State) -> Option<Finding> {
     Some(Finding::at("AGENTS.md", "agents-md", msg, true))
 }
 
+/// Worktree health — the invariant the whole design rests on:
+/// "the `project` branch history is the audit trail". A ledger
+/// sitting on a detached HEAD (or on a branch nobody pushes) has
+/// no audit trail at all, and nothing else in `check` looks at
+/// git. `--fix` reattaches; the unpushed case is reported only,
+/// because pushing is a network opinion `check` must not have.
+fn worktree_findings(worktree: &Path) -> Vec<Finding> {
+    use myco_ops::discover::BRANCH;
+
+    let mut out = Vec::new();
+    // Only a checkout that IS its own worktree root has a branch of
+    // its own. A plain `project/` subdirectory (the legacy in-tree
+    // layout) rides the enclosing branch by design — `myco migrate`
+    // is the answer there, not a finding on every `check`.
+    let is_root = myco_git::repo_root(worktree)
+        .map(|top| top.canonicalize().ok() == worktree.canonicalize().ok())
+        .unwrap_or(false);
+    if !is_root {
+        return out;
+    }
+    match myco_git::is_detached(worktree) {
+        // a detached ledger worktree: every commit is unreferenced
+        Some(true) => {
+            out.push(Finding::at(
+                ".",
+                "worktree-detached",
+                "project worktree is on a detached HEAD — commits land on no branch, so the \
+                 audit trail is unreachable; `check --fix` reattaches it to `project`",
+                true,
+            ));
+            return out;
+        }
+        // not a checkout (plain-dir ledger) — nothing to say
+        None => return out,
+        Some(false) => {}
+    }
+    match myco_git::worktree_branch(worktree).as_deref() {
+        Some(BRANCH) => {}
+        Some(other) => out.push(Finding::warn(
+            ".",
+            "worktree-branch",
+            format!(
+                "project dir is a checkout on `{other}`, not `{BRANCH}` — ledger commits ride \
+                 `{other}` (legacy in-tree layout; `myco migrate` normalizes it)"
+            ),
+        )),
+        None => {}
+    }
+    // local-only work: the branch exists but origin's copy is behind.
+    // No `origin/project` ref = never published (or no remote at
+    // all) — that's a repo-level choice, not this verb's business.
+    if let Some(ahead) = myco_git::commits_ahead(worktree, "refs/remotes/origin/project") {
+        if ahead > 0 {
+            out.push(Finding::warn(
+                ".",
+                "worktree-unpushed",
+                format!(
+                    "{ahead} commit(s) on `{BRANCH}` not pushed to `origin/{BRANCH}` — the \
+                     audit trail exists on this machine only"
+                ),
+            ));
+        }
+    }
+    out
+}
+
 /// The read-only `check` payload — the `--json` report shape
 /// without running a fix pass. Served by `myco serve` (the
 /// verdict rides in `ok`; there's no exit code on the wire).
 pub fn check_json(proj: &Project) -> Result<serde_json::Value, String> {
     let mut analysis = analyze_with(&proj.worktree, &repo_kinds(&proj.root));
+    analysis.findings.extend(worktree_findings(&proj.worktree));
     let agents_md = crate::agentmd::block_state(&proj.root);
     if let Some(f) = agents_md_finding(agents_md) {
         analysis.findings.push(f);
     }
     let remaining = &analysis.findings;
+    let errors = remaining
+        .iter()
+        .filter(|f| f.severity == Severity::Error)
+        .count();
+    let warnings = remaining.len() - errors;
     Ok(json!({
-        "ok": remaining.is_empty(),
+        "ok": errors == 0,
         "worktree": proj.worktree.to_string_lossy(),
         "repo_root": proj.root.to_string_lossy(),
         "agents_md": agents_md.as_str(),
         "errors": remaining.iter().map(|f| json!({
             "file": f.file, "line": f.line, "col": f.col,
             "code": f.code, "msg": f.msg, "fixable": f.fixable,
+            "severity": f.severity.as_str(),
         })).collect::<Vec<_>>(),
+        "warnings": warnings,
         "fixes_available": analysis.fixes.len(),
         "fixes_applied": 0,
     }))
@@ -1508,7 +1655,8 @@ fn kind_findings(root: &std::path::Path) -> Vec<Finding> {
     }
 }
 
-/// The `check` verb. Exit 1 with findings, 0 when clean.
+/// The `check` verb. Exit 1 on errors, 0 when clean (or
+/// warnings-only).
 pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
     let (fix, json_out, no_commit) = (a.flag("fix"), ctx.json, ctx.no_commit);
     let proj = crate::discover::discover(ctx.dir.as_deref(), ctx.root.as_deref())?;
@@ -1541,6 +1689,29 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             analysis = analyze_with(wt, &kinds);
         }
     }
+    // worktree health: a detached ledger worktree is the one repair
+    // that must run before anything else can be committed — without
+    // it every later write is unreachable (`myco_git::commit_all`
+    // refuses, so the order here is load-bearing).
+    let mut health = worktree_findings(wt);
+    if fix && health.iter().any(|f| f.fixable) {
+        myco_git::attach_branch(wt, myco_ops::discover::BRANCH)
+            .map_err(|e| format!("reattach {}: {e}", wt.display()))?;
+        // pending writes made against the detached HEAD (an older
+        // myco, or a verb refused by the guard) ride onto the
+        // branch now that one exists — not counted as a "repair",
+        // it's the same rescue
+        if myco_git::has_changes(wt).map_err(|e| e.to_string())? {
+            ops::autocommit(
+                wt,
+                "chore: check --fix (reattach project worktree)",
+                ops::commits_enabled(no_commit),
+            )?;
+        }
+        fixes_applied += 1;
+        health = worktree_findings(wt);
+    }
+    analysis.findings.extend(health);
     // config layer: `[views]` specs in the repo/user myco.toml —
     // lint-only (no fixer); a broken spec fails every verb that
     // loads config, so it surfaces here too
@@ -1574,7 +1745,15 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
         ops::autocommit(wt, &msg, ops::commits_enabled(no_commit))?;
     }
     let repairs = fixes_applied + usize::from(root_repaired);
-    let ok = remaining.is_empty();
+    // warnings never fail the gate (ADR-0002): they are findings the
+    // ledger cannot fix by design, and a gate that reds on them is a
+    // gate everyone learns to ignore
+    let errors = remaining
+        .iter()
+        .filter(|f| f.severity == Severity::Error)
+        .count();
+    let warnings = remaining.len() - errors;
+    let ok = errors == 0;
     if json_out {
         ops::print_json(&json!({
             "ok": ok,
@@ -1584,7 +1763,9 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             "errors": remaining.iter().map(|f| json!({
                 "file": f.file, "line": f.line, "col": f.col,
                 "code": f.code, "msg": f.msg, "fixable": f.fixable,
+                "severity": f.severity.as_str(),
             })).collect::<Vec<_>>(),
+            "warnings": warnings,
             "fixes_available": fixes_available,
             "fixes_applied": repairs,
         }));
@@ -1593,7 +1774,15 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             if let Some(rendered) = &f.rendered {
                 eprintln!("{rendered}");
             } else {
-                eprintln!("{}:{}:{} [{}] {}", f.file, f.line, f.col, f.code, f.msg);
+                eprintln!(
+                    "{}:{}:{} [{}] {}: {}",
+                    f.file,
+                    f.line,
+                    f.col,
+                    f.code,
+                    f.severity.as_str(),
+                    f.msg
+                );
             }
         }
         if repairs > 0 {
@@ -1601,14 +1790,15 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
         }
         if !ok {
             eprintln!(
-                "check: {} finding(s){}",
-                remaining.len(),
+                "check: {errors} error(s), {warnings} warning(s){}",
                 if fix || fixes_available == 0 {
                     String::new()
                 } else {
                     format!(" — {fixes_available} fixable via `myco check --fix`")
                 }
             );
+        } else if warnings > 0 {
+            eprintln!("check: clean ({warnings} warning(s))");
         } else {
             eprintln!("check: clean");
         }

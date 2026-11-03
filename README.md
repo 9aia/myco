@@ -46,8 +46,15 @@ coordination), **kuda** (code memory), **peregrin** (orchestration),
 ## Status
 
 Working — the full verb surface is implemented (`myco manifest`
-lists it), including the `myco ui` board TUI. `myco-template` and
-`myco serve` are planned (`project/proposals/`, `project/adrs/`).
+lists it), including the `myco ui` board TUI and `myco serve`
+(JSON-RPC 2.0 over stdio, ADR-0001) with its one-shot `myco batch`.
+`myco-template` is the one crate still planned.
+
+`myco check` validates the ledger **and the worktree it lives in**:
+two severities (ADR-0002) — `error` fails the gate, `warning` is
+reported and costs nothing — and the git-side invariants the audit
+trail depends on (ADR-0003): a detached `project/` worktree is an
+error `--fix` repairs, because every commit there is unreachable.
 
 ## Install
 

@@ -451,7 +451,10 @@ fn human_output_paths() {
     assert_eq!(code(&out), 1);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("TODO.md"), "{stderr}");
-    assert!(stderr.contains("finding"), "{stderr}");
+    // the summary names both severities (ADR-0002) — errors fail,
+    // warnings are reported and cost nothing
+    assert!(stderr.contains("error(s)"), "{stderr}");
+    assert!(stderr.contains("warning(s)"), "{stderr}");
     // --fix can't repair a fully-unparseable file — migrate can
     let out = run(d.path(), &["migrate"]);
     assert_eq!(code(&out), 0);

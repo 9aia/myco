@@ -43,6 +43,14 @@ pub enum Error {
     /// through as an empty string.
     #[error("path is not utf-8: {}", .0.display())]
     NonUtf8Path(PathBuf),
+    /// The checkout's HEAD is detached — a commit there belongs to no
+    /// branch, so the ledger's audit trail would be unreachable the
+    /// moment the worktree moves. `myco check --fix` reattaches it.
+    #[error(
+        "{} is on a detached HEAD — a commit would be unreachable; run `myco check --fix`",
+        .0.display()
+    )]
+    Detached(PathBuf),
 }
 
 /// `git -C <repo> <args>` → trimmed stdout. stdin is `/dev/null` —
@@ -137,6 +145,38 @@ pub fn worktree_branch(dir: &Path) -> Option<String> {
     git_out(dir, &["rev-parse", "--abbrev-ref", "HEAD"])
         .ok()
         .filter(|b| b != "HEAD" && !b.is_empty())
+}
+
+/// `dir` is a git checkout whose HEAD is detached — commits made
+/// there belong to no branch and become unreachable as soon as the
+/// worktree moves. `None` when `dir` isn't a checkout at all
+/// (the plain-directory ledger shape), which is not a defect.
+pub fn is_detached(dir: &Path) -> Option<bool> {
+    head_commit(dir)?;
+    Some(worktree_branch(dir).is_none())
+}
+
+/// Attach the checkout at `dir` to `name`, keeping its current HEAD
+/// as the branch tip — the repair for a detached ledger worktree
+/// (`myco check --fix`). `checkout -B` is create-or-reset, so a
+/// branch left behind by an earlier run loses to the commits that
+/// are actually here; git refuses when another worktree holds the
+/// branch, which is precisely the case a human must arbitrate.
+pub fn attach_branch(dir: &Path, name: &str) -> Result<(), Error> {
+    if worktree_branch(dir).as_deref() == Some(name) {
+        return Ok(());
+    }
+    git_out(dir, &["checkout", "-B", name]).map(|_| ())
+}
+
+/// How many commits `HEAD` has that `rev` doesn't — `None` when
+/// `rev` doesn't resolve (no such local or remote ref).
+pub fn commits_ahead(dir: &Path, rev: &str) -> Option<usize> {
+    git_out(dir, &["rev-list", "--count", &format!("{rev}..HEAD")])
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 /// `git rev-parse --path-format=absolute --git-common-dir` — the
@@ -244,6 +284,14 @@ pub fn branch(repo: &Path, name: &str, start: &str) -> bool {
 /// commit — the pathspec must match known files). `--allow-empty`
 /// keeps no-op verbs honest in the audit trail.
 pub fn commit_all(repo: &Path, msg: &str) -> Result<(), Error> {
+    // A detached checkout has no branch to commit onto: the write
+    // would succeed and the audit trail would quietly vanish. Refuse
+    // before touching the index (`check --fix` reattaches, and the
+    // repair paths — `commit`, `migrate`, `check` — take the lock
+    // directly, so they still reach a detached ledger).
+    if is_detached(repo) == Some(true) {
+        return Err(Error::Detached(repo.to_path_buf()));
+    }
     git_out(repo, &["add", "-A", "--", "."])?;
     // Foreign *staged* changes must not be swept into the ledger
     // commit — refuse them. `:(exclude).` is cwd-relative, so the
@@ -421,6 +469,55 @@ mod tests {
         let scratch = d.path().join("scratch");
         worktree_add_detached(d.path(), &scratch, "project").unwrap();
         assert_eq!(worktree_branch(&scratch), None);
+    }
+
+    #[test]
+    fn detached_worktree_is_detected_refused_and_reattached() {
+        let d = repo();
+        commit_all(d.path(), "c0").unwrap();
+        create_orphan_branch(d.path(), "project", "init").unwrap();
+        let wt = d.path().join("project");
+        worktree_add_branch(d.path(), &wt, "project").unwrap();
+        let scratch = d.path().join("scratch");
+        worktree_add_detached(d.path(), &scratch, "project").unwrap();
+
+        // a plain repo/dir is not a detached checkout
+        assert_eq!(is_detached(d.path()), Some(false));
+        assert_eq!(is_detached(&wt), Some(false));
+        assert_eq!(is_detached(&scratch), Some(true));
+        assert_eq!(is_detached(&tmpdir("outside")), None);
+
+        // committing there would be unreachable — refused, not
+        // silently accepted
+        std::fs::write(scratch.join("f.md"), "x").unwrap();
+        assert!(matches!(commit_all(&scratch, "x"), Err(Error::Detached(_))));
+
+        // the repair keeps the ledger at its current tip (a branch
+        // held by another worktree is git's refusal to arbitrate —
+        // we name a free one here)
+        attach_branch(&scratch, "ledger").unwrap();
+        assert_eq!(worktree_branch(&scratch).as_deref(), Some("ledger"));
+        commit_all(&scratch, "kept").unwrap();
+        assert_eq!(
+            git_out(&scratch, &["log", "--oneline", "-1", "ledger"]).unwrap(),
+            git_out(&scratch, &["log", "--oneline", "-1"]).unwrap()
+        );
+        // already attached → no-op
+        attach_branch(&scratch, "ledger").unwrap();
+        // a branch another worktree holds is refused, not stolen
+        attach_branch(&scratch, "project").unwrap_err();
+    }
+
+    #[test]
+    fn commits_ahead_counts_local_only_work() {
+        let d = repo();
+        commit_all(d.path(), "c0").unwrap();
+        // no such ref → unknown, not zero
+        assert_eq!(commits_ahead(d.path(), "refs/heads/ghost"), None);
+        assert_eq!(commits_ahead(d.path(), "HEAD"), Some(0));
+        std::fs::write(d.path().join("f2.txt"), "x").unwrap();
+        commit_all(d.path(), "c1").unwrap();
+        assert_eq!(commits_ahead(d.path(), "HEAD~1"), Some(1));
     }
 
     #[test]

@@ -1,6 +1,5 @@
 ---
 source: crates/myco-cli/tests/lifecycle.rs
-assertion_line: 512
 expression: "serde_json::to_string_pretty(&v).unwrap()"
 ---
 {
@@ -12,7 +11,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "file": "TODO.md",
       "fixable": true,
       "line": 3,
-      "msg": "1 done item(s) — done tasks are removed from TODO.md"
+      "msg": "1 done item(s) — done tasks are removed from TODO.md",
+      "severity": "error"
     },
     {
       "code": "parse",
@@ -20,12 +20,14 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "file": "TODO.md",
       "fixable": false,
       "line": 3,
-      "msg": "checked item — done tasks are removed from TODO.md"
+      "msg": "checked item — done tasks are removed from TODO.md",
+      "severity": "error"
     }
   ],
   "fixes_applied": 0,
   "fixes_available": 1,
   "ok": false,
   "repo_root": "[ROOT]",
+  "warnings": 0,
   "worktree": "[WT]"
 }
