@@ -1,7 +1,7 @@
 +++
 id = "P-008"
 title = "configurable item kinds — kind table in myco.toml, init seeds the prelude"
-status = "open"
+status = "in-progress"
 created = "2026-11-02"
 owner = "devin"
 priority = "medium"
