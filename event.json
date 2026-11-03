@@ -1,1 +1,1 @@
-{"id":"","ws":"fix-fleet","actor":"luis","ts":1793673388,"op":{"op":"claim","glob":"crates/myco-cli/src/check.rs","ttl_secs":3600}}
+{"id":"","ws":"fix-fleet","actor":"luis","ts":1793673388,"op":{"op":"claim","glob":"crates/myco-git/src/lib.rs","ttl_secs":3600}}
