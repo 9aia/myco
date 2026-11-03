@@ -1,7 +1,7 @@
 +++
 id = "ADR-0003"
 title = "Worktree integrity — detached ledger worktrees are errors, check repairs them"
-status = "open"
+status = "done"
 created = "2026-11-03"
 priority = "high"
 labels = ["git"]
