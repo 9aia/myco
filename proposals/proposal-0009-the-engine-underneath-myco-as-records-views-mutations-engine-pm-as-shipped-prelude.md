@@ -1,7 +1,7 @@
 +++
 id = "P-009"
 title = "the engine underneath — myco as records+views+mutations engine, PM as shipped prelude"
-status = "open"
+status = "done"
 created = "2026-11-03"
 owner = "devin"
 priority = "high"
