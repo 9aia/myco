@@ -1,7 +1,7 @@
 +++
 id = "I-026"
 title = "shared-target stale rmeta — isolate CARGO_TARGET_DIR in gate scripts"
-status = "in-progress"
+status = "done"
 created = "2026-10-31"
 owner = "devin"
 priority = "medium"
