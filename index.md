@@ -4,7 +4,7 @@ layout: home
 hero:
   name: myco
   text: project management, grown not built
-  tagline: a mycorrhizal network for your agents — tasks, signals, handoffs, grown not built
+  tagline: Records engine for agent work — views + mutations; project management is the shipped prelude
   actions:
     - theme: brand
       text: Getting Started
