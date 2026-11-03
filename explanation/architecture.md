@@ -40,6 +40,48 @@ Design rules:
 | `myco` | binary | myco — project management, grown not built: agent-first PM CLI |
 
 
+## The engine and the prelude
+
+The shape that emerged rather than being designed: **myco is a
+records + views + mutations engine, and PM is its shipped prelude**
+(P-009). `myco init` seeds that prelude — the five `[[kinds]]`, the
+builtin views, the registry verbs — so editing config isn't
+customizing a PM tool, it's programming an engine whose default
+program happens to be project management.
+
+```text
+            engine (code)                      prelude (seeded config)
+  ┌────────────────────────────────┐    ┌───────────────────────────────┐
+  │ sources   repo │ index         │    │ [[kinds]]  task issue …       │
+  │ eval      filter→group→sort    │    │ [views]    board open hot …   │
+  │ emits     list board md json   │    │ [verbs]    alias view-emit …  │
+  │ dispatch  one registry table   │    └───────────────────────────────┘
+  └────────────────────────────────┘
+      owns, must never be data            declared, layered, shadowable
+```
+
+A read is `universe → eval → emit`:
+
+| stage | knob | values |
+| --- | --- | --- |
+| universe | `source` | `repo` (this worktree) · `index` (the registered-repo union) |
+| eval | `filter → group_by → sort → limit` | a `ViewSpec`, from config or flags |
+| emit | `format` | `list` · `board` · `md` · `json` · `repos` |
+
+Every feature gets asked one question — **engine or prelude?**
+Engine answers generalize (a new source, axis or format); prelude
+answers configure (which kinds, views and verbs ship seeded).
+
+### What stays code
+
+The moat is what must be *owned* rather than declared: the markdown
+file spec, atomic commit-per-mutation on `project`, the state
+machine, the id registry. `Item` keeps fixed semantics — a schema
+DSL over arbitrary fields would make this jq-over-markdown, a
+different and worse product. Mutations stay code as well: the
+prelude configures *what* exists, never *how* writes behave
+(ADR-0004, one registry).
+
 ## Boundary — work memory only
 
 myco owns the ledger of intent (tasks, issues, proposals, plans,
