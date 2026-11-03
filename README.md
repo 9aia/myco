@@ -1,6 +1,6 @@
 # myco
 
-*Project management, grown not built.*
+*Records engine for agent work — views + mutations; project management is the shipped prelude.*
 
 A mycorrhizal network for your agents: tasks, signals, handoffs.
 Agent-first PM — a single `myco` CLI owns every deterministic write
