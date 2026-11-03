@@ -1,8 +1,9 @@
 +++
 id = "P-007"
 title = "verb registry + config-declared verbs"
-status = "open"
+status = "in-progress"
 created = "2026-11-02"
+owner = "devin"
 priority = "medium"
 +++
 
