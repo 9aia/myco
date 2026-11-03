@@ -1,13 +1,13 @@
 +++
 id = "ADR-0002"
 title = "ID durability — declared refs are errors, prose refs are warnings"
-status = "open"
+status = "in-progress"
 created = "2026-11-03"
 priority = "high"
 labels = ["ledger"]
 +++
 
-Status: **accepted** · Created: 2026-11-02
+Status: **accepted** · Created: 2026-11-03
 
 ## Context
 
@@ -81,6 +81,11 @@ the most natural sentence in a handoff ("T-005 done: …") and the
   author's problem, not the validator's.** If a warning on every
   handoff becomes noise, the answer is a done-log (option 1), and
   that is a new ADR, not a severity flip.
+- Gap, recorded not fixed: `check` flags a dangling `blocks:`
+  (`dangling-blocks`) but not yet a dangling `supersedes:`/
+  `superseded_by:` — `refs::extract` puts both on the index
+  (P-005), the validator only calls one. Under this ADR that is
+  an error-class bug owed to `check`, not a reopened question.
 - `myco check --fix` now also repairs *worktree health* (see
   ADR-0003): a detached `project/` worktree is the one condition
   under which the audit trail is not merely incomplete but
