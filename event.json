@@ -1,1 +1,1 @@
-{"id":"","ws":"devin","actor":"luis","ts":1793667148,"op":{"op":"presence","status":"left"}}
+{"id":"","ws":"devin","actor":"luis","ts":1793669341,"op":{"op":"claim","glob":"crates/myco-tui/**","ttl_secs":3600}}
