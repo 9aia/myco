@@ -144,7 +144,7 @@ pub fn document() -> serde_json::Value {
 
 /// The `schema` verb — JSON on stdout (`--json` or not; there is
 /// no useful human rendering of a spec document).
-pub fn run() -> Result<i32, String> {
+pub fn h(_ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, String> {
     ops::print_json(&document());
     Ok(0)
 }

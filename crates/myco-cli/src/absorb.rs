@@ -28,92 +28,65 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use clap::Subcommand;
 use myco_core::{Actor, Item, ItemFile, ItemId, ItemKind, Priority, Status};
 use myco_store::Store;
 use serde_json::json;
 
 use crate::discover::Project;
+use crate::registry::{Args, Ctx};
 use crate::{digest, items, ops, templates};
 
-/// The `absorb` verb group.
-#[derive(Subcommand)]
-pub enum Cmd {
-    /// Sweep code comments into the ledger via ripgrep (`rg` must
-    /// be installed — respects `.gitignore`; `project/`, `docs/`,
-    /// `target/` are excluded).
-    Comments {
-        /// Directory to scan (default: the repo root).
-        #[arg(long)]
-        path: Option<PathBuf>,
-        /// Comment kinds to match — comma-separated or repeatable
-        /// (default TODO,FIXME,HACK).
-        #[arg(long, value_delimiter = ',')]
-        kinds: Option<Vec<String>>,
-        /// Where findings land: `backlog` items or `issues` files
-        /// (default `backlog`).
-        #[arg(long, default_value = "backlog")]
-        to: String,
-        /// Report findings without creating items or committing.
-        #[arg(long)]
-        dry: bool,
-    },
-    /// Import a Jira CSV export. `Done`/`Resolved` rows are skipped
-    /// unless `--include-done` (created done + archived).
-    Jira {
-        /// The export file (`.csv`).
-        file: PathBuf,
-        /// Import done/resolved issues too.
-        #[arg(long)]
-        include_done: bool,
-    },
-    /// Import a GitHub issues dump — a JSON array (`number`,
-    /// `title`, `state`, `labels`, `assignee`, `body`) or the CSV
-    /// equivalent. `closed` rows are skipped unless
-    /// `--include-done` (created done + archived).
-    Github {
-        /// The export file (`.json` or `.csv`).
-        file: PathBuf,
-        /// Import closed issues too.
-        #[arg(long)]
-        include_done: bool,
-    },
+/// The `absorb comments` verb.
+pub fn h_comments(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    comments(
+        &proj,
+        &store,
+        CommentSpec {
+            path: a.opt("path").map(PathBuf::from),
+            kinds: non_empty(a.many("kinds")),
+            to: a.opt("to").unwrap_or("backlog").to_string(),
+            dry: a.flag("dry"),
+        },
+        ctx.json,
+        ctx.no_commit,
+    )
 }
 
-/// The `absorb` verb group body.
-pub fn run(
-    cmd: Cmd,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
-    match cmd {
-        Cmd::Comments {
-            path,
-            kinds,
-            to,
-            dry,
-        } => comments(
-            &proj,
-            &store,
-            CommentSpec {
-                path,
-                kinds,
-                to,
-                dry,
-            },
-            json_out,
-            no_commit,
-        ),
-        Cmd::Jira { file, include_done } => {
-            jira(&proj, &store, &file, include_done, json_out, no_commit)
-        }
-        Cmd::Github { file, include_done } => {
-            github(&proj, &store, &file, include_done, json_out, no_commit)
-        }
+/// An empty multi means "no flag" — `kinds` defaults in
+/// `comments()`.
+fn non_empty(xs: Vec<String>) -> Option<Vec<String>> {
+    if xs.is_empty() {
+        None
+    } else {
+        Some(xs)
     }
+}
+
+/// The `absorb jira` verb.
+pub fn h_jira(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    jira(
+        &proj,
+        &store,
+        &PathBuf::from(a.text("file")?),
+        a.flag("include_done"),
+        ctx.json,
+        ctx.no_commit,
+    )
+}
+
+/// The `absorb github` verb.
+pub fn h_github(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    github(
+        &proj,
+        &store,
+        &PathBuf::from(a.text("file")?),
+        a.flag("include_done"),
+        ctx.json,
+        ctx.no_commit,
+    )
 }
 
 // ---------- shared ----------

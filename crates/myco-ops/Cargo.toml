@@ -9,7 +9,9 @@ repository.workspace = true
 [dependencies]
 myco-core.workspace = true
 myco-git.workspace = true
+myco-index.workspace = true
 myco-store.workspace = true
+camino.workspace = true
 serde_json.workspace = true
 time.workspace = true
 
@@ -19,7 +21,7 @@ time.workspace = true
 myco-config.workspace = true
 myco-config-toml.workspace = true
 myco-store-md.workspace = true
-camino.workspace = true
+myco-index-redb.workspace = true
 tempfile.workspace = true
 temp-env.workspace = true
 

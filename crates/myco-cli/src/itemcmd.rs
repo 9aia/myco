@@ -2,64 +2,12 @@
 //! item anywhere in the ledger; mutate metadata, with `--status`
 //! going through the transition machine only.
 
-use std::path::PathBuf;
-
-use clap::Subcommand;
 use myco_core::{is_valid_label, Actor, Item, ItemId, Priority, Status};
 use myco_store::Store;
 use serde_json::json;
 
 use crate::items;
-
-#[derive(Subcommand)]
-pub enum Cmd {
-    /// Dump items — frontmatter fields plus the body for
-    /// file-backed kinds (`--json` = the full Item + location +
-    /// body). 1..n ids: a batch repeats the block in argument
-    /// order; `--json` emits the per-id `[{id, ok, …}]` array.
-    Show {
-        /// Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`,
-        /// `PL-NNN`) — live or archived.
-        #[arg(required = true, num_args = 1..)]
-        id: Vec<ItemId>,
-    },
-    /// Mutate an item in place. `--status` is the only field routed
-    /// through the state machine — single steps only, invalid ones
-    /// error with the valid targets. Status changes on tasks move
-    /// the line between TODO.md and BACKLOG.md (`done` deletes it).
-    Set {
-        /// Any item id.
-        id: ItemId,
-        /// New status — one legal step from the current one.
-        #[arg(long)]
-        status: Option<Status>,
-        /// Priority: low|med|high|crit.
-        #[arg(long, visible_alias = "priority")]
-        pri: Option<Priority>,
-        /// Owner actor id.
-        #[arg(long)]
-        owner: Option<Actor>,
-        /// Add (`+x` or `x`) or remove (`-x`) a label — repeatable.
-        #[arg(long, allow_hyphen_values = true)]
-        label: Vec<String>,
-        /// Remove a label — repeatable.
-        #[arg(long)]
-        unlabel: Vec<String>,
-        /// Add (`+T-1` or `T-1`) or remove (`-T-1`) a blocks dep —
-        /// repeatable or comma-separated.
-        #[arg(long, allow_hyphen_values = true, value_delimiter = ',')]
-        blocks: Vec<String>,
-        /// Remove a blocks dep — repeatable or comma-separated.
-        #[arg(long, value_delimiter = ',')]
-        unblock: Vec<ItemId>,
-        /// Epic name — `""` clears the epic.
-        #[arg(long)]
-        epic: Option<String>,
-        /// Milestone name — `""` clears the milestone.
-        #[arg(long)]
-        milestone: Option<String>,
-    },
-}
+use crate::registry::{Args, Ctx};
 
 /// The set-verb flag bundle — applied to an `Item` after the
 /// status transition check.
@@ -74,6 +22,22 @@ pub(crate) struct SetFlags {
     pub(crate) unblock: Vec<ItemId>,
     pub(crate) epic: Option<String>,
     pub(crate) milestone: Option<String>,
+}
+
+/// The decoded `item set` flags — shared by the CLI handler and
+/// the wire handler (`myco serve`'s `item.set`).
+pub(crate) fn set_flags(a: &Args) -> Result<SetFlags, String> {
+    Ok(SetFlags {
+        status: a.parsed("status")?,
+        pri: a.parsed("pri")?,
+        owner: a.parsed("owner")?,
+        label: a.many("label"),
+        unlabel: a.many("unlabel"),
+        blocks: a.many("blocks"),
+        unblock: a.many_parsed("unblock")?,
+        epic: a.opt("epic").map(str::to_string),
+        milestone: a.opt("milestone").map(str::to_string),
+    })
 }
 
 impl SetFlags {
@@ -172,61 +136,32 @@ fn apply_set(item: &mut Item, flags: &SetFlags) -> Result<(), String> {
     Ok(())
 }
 
-/// The `item` verb group.
-pub fn run(
-    cmd: Cmd,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let (proj, store) = if matches!(cmd, Cmd::Show { .. }) {
-        items::open_read(dir.as_deref(), root.as_deref())?
-    } else {
-        items::open(dir.as_deref(), root.as_deref())?
-    };
-    match cmd {
-        Cmd::Show { id: ids } => show(&store, &ids, json_out),
-        Cmd::Set {
-            id,
-            status,
-            pri,
-            owner,
-            label,
-            unlabel,
-            blocks,
-            unblock,
-            epic,
-            milestone,
-        } => {
-            let flags = SetFlags {
-                status,
-                pri,
-                owner,
-                label,
-                unlabel,
-                blocks,
-                unblock,
-                epic,
-                milestone,
-            };
-            if flags.is_noop() {
-                return Err("item set: nothing to change — pass at least one flag".into());
-            }
-            let (item, location) = mutate_item(&store, id, &flags)?;
-            let committed = items::commit(&proj.worktree, &format!("chore: set {id}"), no_commit)?;
-            let human = item
-                .as_ref()
-                .map(|i| format!("set {}", items::compact(i)))
-                .unwrap_or_else(|| format!("set {id} done — line removed"));
-            items::report(
-                json!({"item": item, "location": location}),
-                committed,
-                json_out,
-                &human,
-            )
-        }
+/// The `item show` verb.
+pub fn h_show(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (_proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    show(&store, &a.many_parsed::<ItemId>("id")?, ctx.json)
+}
+
+/// The `item set` verb.
+pub fn h_set(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let id = a.req::<ItemId>("id")?;
+    let flags = set_flags(a)?;
+    if flags.is_noop() {
+        return Err("item set: nothing to change — pass at least one flag".into());
     }
+    let (item, location) = mutate_item(&store, id, &flags)?;
+    let committed = items::commit(&proj.worktree, &format!("chore: set {id}"), ctx.no_commit)?;
+    let human = item
+        .as_ref()
+        .map(|i| format!("set {}", items::compact(i)))
+        .unwrap_or_else(|| format!("set {id} done — line removed"));
+    items::report(
+        json!({"item": item, "location": location}),
+        committed,
+        ctx.json,
+        &human,
+    )
 }
 
 /// The gathered `item show` pieces — one id's load shared by

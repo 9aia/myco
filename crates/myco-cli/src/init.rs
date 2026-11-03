@@ -169,13 +169,9 @@ fn ensure_gitignore(root: &Path) -> Result<bool, String> {
 }
 
 /// The `init` verb.
-pub fn run(
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let out = ensure(dir.as_deref(), root.as_deref(), no_commit)?;
+pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, String> {
+    let json_out = ctx.json;
+    let out = ensure(ctx.dir.as_deref(), ctx.root.as_deref(), ctx.no_commit)?;
     if json_out {
         ops::print_json(&json!({
             "branch": discover::BRANCH,

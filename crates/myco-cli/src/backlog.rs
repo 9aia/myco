@@ -1,39 +1,11 @@
 //! `myco backlog add|promote|list` — deferred items in BACKLOG.md.
 
-use std::path::PathBuf;
-
-use clap::Subcommand;
 use myco_core::{Item, ItemId, ItemKind, Status};
 use myco_store::Store;
 use serde_json::json;
 
 use crate::items;
-
-#[derive(Subcommand)]
-pub enum Cmd {
-    /// Add a deferred item — allocs a T-id straight into BACKLOG.md.
-    Add {
-        /// One-line title.
-        title: String,
-        /// Section to add under (created when absent; default: the
-        /// first section, or an unsectioned run).
-        #[arg(long)]
-        section: Option<String>,
-        #[command(flatten)]
-        meta: items::MetaFlags,
-    },
-    /// Re-activate a parked item — `deferred → open`, move the line
-    /// to TODO.md.
-    Promote {
-        /// Task id (`T-NNN`).
-        id: ItemId,
-    },
-    /// List backlog items.
-    List {
-        #[command(flatten)]
-        list: items::ListFlags,
-    },
-}
+use crate::registry::{Args, Ctx};
 
 /// The `backlog add` mutation — allocs a T-id straight into
 /// BACKLOG.md (backlog items are born deferred). Caller commits.
@@ -79,57 +51,55 @@ pub fn promote_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
     Ok(item)
 }
 
-/// The `backlog` verb group.
-pub fn run(
-    cmd: Cmd,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let (proj, store) = if matches!(cmd, Cmd::List { .. }) {
-        items::open_read(dir.as_deref(), root.as_deref())?
-    } else {
-        items::open(dir.as_deref(), root.as_deref())?
-    };
-    match cmd {
-        Cmd::Add {
-            title,
-            section,
-            meta,
-        } => {
-            let item = add_item(&store, &title, section.as_deref(), &meta.to_meta())?;
-            let committed = items::commit(
-                &proj.worktree,
-                &format!("chore: add {}", item.id),
-                no_commit,
-            )?;
-            items::report(
-                json!({"item": item, "file": "BACKLOG.md"}),
-                committed,
-                json_out,
-                &format!("added {}", items::compact(&item)),
-            )
-        }
-        Cmd::Promote { id } => {
-            let item = promote_item(&store, id)?;
-            let committed =
-                items::commit(&proj.worktree, &format!("chore: promote {id}"), no_commit)?;
-            items::report(
-                json!({"item": item, "file": "TODO.md"}),
-                committed,
-                json_out,
-                &format!("promoted {id} → TODO.md"),
-            )
-        }
-        Cmd::List { list } => {
-            let all = crate::todo::doc_items(&store, true)?;
-            let found: Vec<(usize, &Item)> = items::tree_view(&all)
-                .into_iter()
-                .filter(|(_, i)| list.matches(i))
-                .take(list.take())
-                .collect();
-            items::print_tree(&found, json_out)
-        }
-    }
+/// The `backlog add` verb.
+pub fn h_add(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let item = add_item(
+        &store,
+        a.text("title")?,
+        a.opt("section"),
+        &items::meta_args(a)?,
+    )?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: add {}", item.id),
+        ctx.no_commit,
+    )?;
+    items::report(
+        json!({"item": item, "file": "BACKLOG.md"}),
+        committed,
+        ctx.json,
+        &format!("added {}", items::compact(&item)),
+    )
+}
+
+/// The `backlog promote` verb.
+pub fn h_promote(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let id = a.req::<ItemId>("id")?;
+    let item = promote_item(&store, id)?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: promote {id}"),
+        ctx.no_commit,
+    )?;
+    items::report(
+        json!({"item": item, "file": "TODO.md"}),
+        committed,
+        ctx.json,
+        &format!("promoted {id} → TODO.md"),
+    )
+}
+
+/// The `backlog list` verb.
+pub fn h_list(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (_proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let list = items::list_args(a)?;
+    let all = crate::todo::doc_items(&store, true)?;
+    let found: Vec<(usize, &Item)> = items::tree_view(&all)
+        .into_iter()
+        .filter(|(_, i)| list.matches(i))
+        .take(list.take())
+        .collect();
+    items::print_tree(&found, ctx.json)
 }

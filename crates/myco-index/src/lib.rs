@@ -9,11 +9,19 @@
 //! always safe: `myco index rebuild` derives it back.
 //!
 //! Impls: `myco-index-redb` (`~/.local/share/myco/`).
+//!
+//! The second face is the link index ([`links`], P-005):
+//! `project/` files → `(src, dst, kind)` edges, invalidated by
+//! content fingerprint — same "derived, disposable" contract.
+
+pub mod links;
 
 use std::collections::BTreeSet;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use myco_core::{Item, ItemId};
+
+pub use links::{fingerprint, FileStamp, LinkIndex, Related};
 
 /// A registered repo — an entry in the index's registry.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

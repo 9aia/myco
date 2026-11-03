@@ -14,5 +14,7 @@
 pub mod config;
 pub mod discover;
 pub mod items;
+pub mod links;
 pub mod ops;
+pub mod verb;
 pub mod view;

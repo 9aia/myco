@@ -10,35 +10,13 @@
 
 use std::path::{Path, PathBuf};
 
-use camino::Utf8PathBuf;
-use clap::Subcommand;
+use camino::{Utf8Path, Utf8PathBuf};
 use myco_index::{Index, RepoEntry, RepoSnapshot};
 use myco_index_redb::RedbIndex;
 use serde_json::json;
 
-use crate::{digest, discover, ops};
-
-#[derive(Subcommand)]
-pub enum Cmd {
-    /// Register a repo — `<path>` is a repo root (or its
-    /// `project/` worktree). Takes an initial snapshot.
-    Add {
-        /// Repo root (or project worktree) to register.
-        path: PathBuf,
-    },
-    /// Unregister a repo and drop its snapshot.
-    Remove {
-        /// Registered repo root (or project worktree).
-        path: PathBuf,
-    },
-    /// List registered repos with snapshot freshness.
-    List,
-    /// Re-scan a registered repo (all of them without `<path>`).
-    Rebuild {
-        /// Registered repo root (or project worktree).
-        path: Option<PathBuf>,
-    },
-}
+use crate::registry::{Args, Ctx};
+use crate::{digest, discover, links, ops};
 
 /// Open the default index (`$MYCO_HOME` / `~/.local/share/myco`).
 pub fn open_index() -> Result<RedbIndex, String> {
@@ -172,6 +150,18 @@ pub fn scan_one(entry: &RepoEntry) -> Result<RepoSnapshot, String> {
     })
 }
 
+/// The link index rides the same scan (P-005): edges for this
+/// repo's `project/` files, invalidated by fingerprint. `wt` is
+/// the entry's registered worktree — non-utf8 paths skip links
+/// rather than failing the snapshot rebuild.
+fn sync_links(
+    index: &impl myco_index::LinkIndex,
+    repo: &str,
+    wt: &Utf8Path,
+) -> Result<myco_ops::links::SyncReport, String> {
+    myco_ops::links::sync(index, repo, wt, links::extract_file)
+}
+
 /// The registered entry matching `path`, else a "not registered"
 /// error. `path` may be the repo root or the worktree.
 fn registered_entry(index: &impl Index, path: &Path) -> Result<RepoEntry, String> {
@@ -259,147 +249,179 @@ fn snap_json(s: &RepoSnapshot) -> serde_json::Value {
     })
 }
 
-/// The `index` verb group.
-pub fn run(cmd: Cmd, json_out: bool) -> Result<i32, String> {
+/// The `index add` verb.
+pub fn h_add(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let index = open_index()?;
-    match cmd {
-        Cmd::Add { path } => {
-            let proj = repo_at(&path)?;
-            let snap = scan_repo(&proj)?;
-            // root + worktree are canonicalized by repo_at — the
-            // registered key and the snapshot key agree, and the
-            // worktree path rides along for `current_head`/`rebuild`
-            let wt = Utf8PathBuf::from_path_buf(proj.worktree.clone())
-                .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
-            let entry = RepoEntry::new(snap.path.clone(), snap.name.clone()).with_worktree(wt);
-            index.register(&entry).map_err(|e| e.to_string())?;
-            index.save_snapshot(&snap).map_err(|e| e.to_string())?;
+    let json_out = ctx.json;
+    let path = PathBuf::from(a.text("path")?);
+    {
+        let proj = repo_at(&path)?;
+        let snap = scan_repo(&proj)?;
+        // root + worktree are canonicalized by repo_at — the
+        // registered key and the snapshot key agree, and the
+        // worktree path rides along for `current_head`/`rebuild`
+        let wt = Utf8PathBuf::from_path_buf(proj.worktree.clone())
+            .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
+        let entry = RepoEntry::new(snap.path.clone(), snap.name.clone()).with_worktree(wt.clone());
+        index.register(&entry).map_err(|e| e.to_string())?;
+        index.save_snapshot(&snap).map_err(|e| e.to_string())?;
+        // the link index rides the same scan (P-005)
+        let lrep = sync_links(&index, snap.path.as_str(), &wt)?;
+        if json_out {
+            ops::print_json(&json!({"registered": entry, "snapshot": snap_json(&snap),
+                    "links": {"files": lrep.files, "edges": lrep.edges}}));
+        } else {
+            println!(
+                "registered {} ({}) — {} items @ {}, {} edges",
+                snap.name,
+                snap.path,
+                snap.items.len(),
+                &snap.head_commit[..snap.head_commit.len().min(7)],
+                lrep.edges,
+            );
+        }
+        Ok(0)
+    }
+}
+
+/// The `index remove` verb.
+pub fn h_remove(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let index = open_index()?;
+    let json_out = ctx.json;
+    let path = PathBuf::from(a.text("path")?);
+    {
+        // the registry decides the key — a repo whose
+        // worktree (or whole dir) vanished can't canonicalize,
+        // so `registered_key` also matches the raw arg's
+        // normalized forms against what's actually registered
+        let Some(key) = registered_key(&index, &path)? else {
+            return Err(format!("{}: not registered", path.display()));
+        };
+        if index.remove(&key).map_err(|e| e.to_string())? {
             if json_out {
-                ops::print_json(&json!({"registered": entry, "snapshot": snap_json(&snap)}));
+                ops::print_json(&json!({"removed": key}));
             } else {
-                println!(
-                    "registered {} ({}) — {} items @ {}",
-                    snap.name,
-                    snap.path,
-                    snap.items.len(),
-                    &snap.head_commit[..snap.head_commit.len().min(7)],
-                );
+                println!("removed {key}");
             }
             Ok(0)
+        } else {
+            Err(format!("{key}: not registered"))
         }
-        Cmd::Remove { path } => {
-            // the registry decides the key — a repo whose
-            // worktree (or whole dir) vanished can't canonicalize,
-            // so `registered_key` also matches the raw arg's
-            // normalized forms against what's actually registered
-            let Some(key) = registered_key(&index, &path)? else {
-                return Err(format!("{}: not registered", path.display()));
+    }
+}
+
+/// The `index list` verb.
+pub fn h_list(ctx: &Ctx, _a: &Args) -> Result<i32, String> {
+    let index = open_index()?;
+    let json_out = ctx.json;
+    {
+        let repos = index.repos().map_err(|e| e.to_string())?;
+        let heads = par_map(&repos, current_head);
+        let mut rows = Vec::new();
+        let mut out = Vec::new();
+        for (r, head) in repos.iter().zip(&heads) {
+            let snap = index.snapshot(&r.path).map_err(|e| e.to_string())?;
+            let stale = match (&snap, head) {
+                (Some(s), Some(h)) => s.head_commit != *h,
+                (Some(_), None) => true, // worktree gone
+                (None, _) => true,       // never scanned
             };
-            if index.remove(&key).map_err(|e| e.to_string())? {
-                if json_out {
-                    ops::print_json(&json!({"removed": key}));
-                } else {
-                    println!("removed {key}");
-                }
-                Ok(0)
-            } else {
-                Err(format!("{key}: not registered"))
-            }
+            out.push(json!({
+                "path": r.path,
+                "name": r.name,
+                "head_commit": snap.as_ref().map(|s| s.head_commit.clone()),
+                "scanned_at": snap.as_ref().map(|s| s.scanned_at.clone()),
+                "items": snap.as_ref().map(|s| s.items.len()),
+                "stale": stale,
+            }));
+            rows.push(format!(
+                "{}\t{}\t{}\t{}",
+                r.path,
+                r.name,
+                snap.as_ref()
+                    .map(|s| s.items.len().to_string())
+                    .unwrap_or_else(|| "-".into()),
+                if stale { "stale" } else { "fresh" },
+            ));
         }
-        Cmd::List => {
-            let repos = index.repos().map_err(|e| e.to_string())?;
-            let heads = par_map(&repos, current_head);
-            let mut rows = Vec::new();
-            let mut out = Vec::new();
-            for (r, head) in repos.iter().zip(&heads) {
-                let snap = index.snapshot(&r.path).map_err(|e| e.to_string())?;
-                let stale = match (&snap, head) {
-                    (Some(s), Some(h)) => s.head_commit != *h,
-                    (Some(_), None) => true, // worktree gone
-                    (None, _) => true,       // never scanned
-                };
-                out.push(json!({
-                    "path": r.path,
-                    "name": r.name,
-                    "head_commit": snap.as_ref().map(|s| s.head_commit.clone()),
-                    "scanned_at": snap.as_ref().map(|s| s.scanned_at.clone()),
-                    "items": snap.as_ref().map(|s| s.items.len()),
-                    "stale": stale,
-                }));
-                rows.push(format!(
-                    "{}\t{}\t{}\t{}",
-                    r.path,
-                    r.name,
-                    snap.as_ref()
-                        .map(|s| s.items.len().to_string())
-                        .unwrap_or_else(|| "-".into()),
-                    if stale { "stale" } else { "fresh" },
-                ));
-            }
+        if json_out {
+            ops::print_json(&json!(out));
+        } else if rows.is_empty() {
+            println!("no repos registered — `myco index add <path>`");
+        } else {
+            ops::print_paged(&rows.join("\n"));
+        }
+        Ok(0)
+    }
+}
+
+/// The `index rebuild` verb.
+pub fn h_rebuild(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let index = open_index()?;
+    let json_out = ctx.json;
+    let path = a.opt("path").map(PathBuf::from);
+    {
+        let entries: Vec<RepoEntry> = match path {
+            Some(p) => vec![registered_entry(&index, &p)?],
+            None => index.repos().map_err(|e| e.to_string())?,
+        };
+        if entries.is_empty() {
             if json_out {
-                ops::print_json(&json!(out));
-            } else if rows.is_empty() {
+                ops::print_json(&json!([]));
+            } else {
                 println!("no repos registered — `myco index add <path>`");
-            } else {
-                ops::print_paged(&rows.join("\n"));
             }
-            Ok(0)
+            return Ok(0);
         }
-        Cmd::Rebuild { path } => {
-            let entries: Vec<RepoEntry> = match path {
-                Some(p) => vec![registered_entry(&index, &p)?],
-                None => index.repos().map_err(|e| e.to_string())?,
-            };
-            if entries.is_empty() {
-                if json_out {
-                    ops::print_json(&json!([]));
-                } else {
-                    println!("no repos registered — `myco index add <path>`");
-                }
-                return Ok(0);
-            }
-            // parallel rescans; serial saves + ordered reporting
-            let snaps = par_map(&entries, scan_one);
-            let mut results = Vec::new();
-            let mut failures = Vec::new();
-            for (entry, snap) in entries.iter().zip(snaps) {
-                match snap.and_then(|s| {
-                    index
-                        .save_snapshot(&s)
-                        .map_err(|e| e.to_string())
-                        .map(|_| s)
-                }) {
-                    Ok(s) => {
-                        if !json_out {
-                            println!(
-                                "rebuilt {} — {} items @ {}",
-                                s.name,
-                                s.items.len(),
-                                &s.head_commit[..s.head_commit.len().min(7)],
-                            );
-                        }
-                        results.push(
-                            json!({"path": s.path, "status": "rebuilt", "snapshot": snap_json(&s)}),
+        // parallel rescans; serial saves + ordered reporting
+        let snaps = par_map(&entries, scan_one);
+        let mut results = Vec::new();
+        let mut failures = Vec::new();
+        for (entry, snap) in entries.iter().zip(snaps) {
+            match snap.and_then(|s| {
+                index
+                    .save_snapshot(&s)
+                    .map_err(|e| e.to_string())
+                    .map(|_| s)
+                    // the link index rides the same rebuild
+                    // (P-005): edges re-derived per dirty file
+                    .and_then(|s| {
+                        sync_links(&index, s.path.as_str(), &entry.worktree_path()).map(|l| (s, l))
+                    })
+            }) {
+                Ok((s, lrep)) => {
+                    if !json_out {
+                        println!(
+                            "rebuilt {} — {} items @ {}, {} edges",
+                            s.name,
+                            s.items.len(),
+                            &s.head_commit[..s.head_commit.len().min(7)],
+                            lrep.edges,
                         );
                     }
-                    Err(e) => {
-                        failures.push(format!("{}: {e}", entry.path));
-                        results.push(json!({"path": entry.path, "status": "error", "error": e}));
-                    }
+                    results.push(
+                        json!({"path": s.path, "status": "rebuilt", "snapshot": snap_json(&s),
+                                "links": {"files": lrep.files, "dirty": lrep.dirty,
+                                    "swept": lrep.swept, "edges": lrep.edges}}),
+                    );
+                }
+                Err(e) => {
+                    failures.push(format!("{}: {e}", entry.path));
+                    results.push(json!({"path": entry.path, "status": "error", "error": e}));
                 }
             }
-            if json_out {
-                ops::print_json(&json!(results));
-            }
-            if failures.is_empty() {
-                Ok(0)
-            } else {
-                Err(format!(
-                    "{} rebuild(s) failed: {}",
-                    failures.len(),
-                    failures.join("; ")
-                ))
-            }
+        }
+        if json_out {
+            ops::print_json(&json!(results));
+        }
+        if failures.is_empty() {
+            Ok(0)
+        } else {
+            Err(format!(
+                "{} rebuild(s) failed: {}",
+                failures.len(),
+                failures.join("; ")
+            ))
         }
     }
 }
@@ -415,6 +437,18 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let dir = Utf8PathBuf::from_path_buf(d.path().join("idx")).unwrap();
         (d, RedbIndex::open_at(dir).unwrap())
+    }
+
+    /// Drive a verb the way dispatch does — argv through the
+    /// registry's decoder into the handler.
+    fn run_verb(name: &str, argv: &[String]) -> Result<i32, String> {
+        let mut ctx = crate::registry::Ctx {
+            json: true,
+            ..Default::default()
+        };
+        let v = crate::registry::find(name).unwrap();
+        let a = crate::registry::Args::from_argv(v, argv, &mut ctx, false)?;
+        (v.cli.unwrap())(&ctx, &a)
     }
 
     fn git(dir: &Path, args: &[&str]) {
@@ -486,13 +520,7 @@ mod tests {
         temp_env::with_var("MYCO_HOME", Some(ds.as_str()), || {
             let d = repo_with_project();
             let canon_root = Utf8PathBuf::from_path_buf(d.path().canonicalize().unwrap()).unwrap();
-            run(
-                Cmd::Add {
-                    path: d.path().to_path_buf(),
-                },
-                true,
-            )
-            .unwrap();
+            run_verb("index.add", &[d.path().to_string_lossy().into_owned()]).unwrap();
             let index = RedbIndex::open().unwrap();
             let repos = index.repos().unwrap();
             assert_eq!(repos.len(), 1);
@@ -502,11 +530,9 @@ mod tests {
             assert_eq!(repos[0].worktree_path(), canon_root.join(discover::DIR));
             // the whole repo vanishes — remove must still match
             std::fs::remove_dir_all(d.path().join("project")).unwrap();
-            run(
-                Cmd::Remove {
-                    path: d.path().join("project"),
-                },
-                true,
+            run_verb(
+                "index.remove",
+                &[d.path().join("project").to_string_lossy().into_owned()],
             )
             .unwrap();
             assert!(index.repos().unwrap().is_empty());

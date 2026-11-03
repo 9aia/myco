@@ -61,6 +61,7 @@ proptest = "1"
 tempfile = "3"
 temp-env = "0.3"
 redb = "3"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 tabled = "0.20"
 ratatui = "0.30"
 crossterm = "0.29"

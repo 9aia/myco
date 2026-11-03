@@ -17,7 +17,7 @@
 //!   everything re-emitted canonically.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use myco_core::{BacklogDoc, Item, ItemFile, ItemId, ItemKind, Registry, Section, Status, TodoDoc};
 use myco_store::Store;
@@ -719,12 +719,9 @@ fn read_str(wt: &Path, rel: &str) -> Option<String> {
 }
 
 /// The `migrate` verb.
-pub fn run(
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
+pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, String> {
+    let (dir, root, json_out, no_commit) =
+        (ctx.dir.clone(), ctx.root.clone(), ctx.json, ctx.no_commit);
     let repo = discover::repo_root_for(dir.as_deref(), root.as_deref());
     let pm_mode = repo
         .as_ref()

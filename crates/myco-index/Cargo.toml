@@ -13,6 +13,7 @@ myco-core.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 camino.workspace = true
+xxhash-rust.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

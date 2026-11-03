@@ -14,7 +14,6 @@
 //! `cli:<pid>`, whatever — myco records it, never interprets it.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 
 use myco_core::{is_valid_session, Actor, HandoffEntry, ItemId, Status};
 use myco_store::Store;
@@ -130,25 +129,26 @@ pub fn record_handoff(
 }
 
 /// The `handoff` verb — `-` reads the note from stdin.
-#[allow(clippy::too_many_arguments)]
-pub fn handoff(
-    id: ItemId,
-    note: &str,
-    actor: Option<Actor>,
-    session: Option<String>,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
-    let (entry, rel) =
-        record_handoff(&store, &proj.worktree, id, read_note(note)?, actor, session)?;
-    let committed = items::commit(&proj.worktree, &format!("chore: handoff {id}"), no_commit)?;
+pub fn h_handoff(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let (entry, rel) = record_handoff(
+        &store,
+        &proj.worktree,
+        a.req::<ItemId>("id")?,
+        read_note(a.text("note")?)?,
+        a.parsed("actor")?,
+        a.opt("session").map(str::to_string),
+    )?;
+    let id = a.req::<ItemId>("id")?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: handoff {id}"),
+        ctx.no_commit,
+    )?;
     items::report(
         json!({"id": id.to_string(), "path": rel, "entry": entry}),
         committed,
-        json_out,
+        ctx.json,
         &format!("handoff {id} → {rel}"),
     )
 }
@@ -237,19 +237,18 @@ pub fn interrupt_item(
 /// The `interrupt` verb — called by whoever owns session
 /// lifecycle (sepia hooks, CLI session-end hooks); myco never
 /// detects sessions itself.
-#[allow(clippy::too_many_arguments)]
-pub fn interrupt(
-    id: ItemId,
-    note: Option<&str>,
-    actor: Option<Actor>,
-    session: Option<String>,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let (proj, store) = items::open(dir.as_deref(), root.as_deref())?;
-    let entry = interrupt_item(&store, id, note, actor, session)?;
+pub fn h_interrupt(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let id = a.req::<ItemId>("id")?;
+    let json_out = ctx.json;
+    let no_commit = ctx.no_commit;
+    let entry = interrupt_item(
+        &store,
+        id,
+        a.opt("note"),
+        a.parsed("actor")?,
+        a.opt("session").map(str::to_string),
+    )?;
     let committed = items::commit(&proj.worktree, &format!("chore: interrupt {id}"), no_commit)?;
     items::report(
         json!({"id": id.to_string(), "status": "open", "entry": entry}),
@@ -392,14 +391,12 @@ fn resume_block(d: &ResumeData) -> String {
 /// `[{id, ok, payload|error}]` batch array. Human output is the
 /// prompt block per id in argument order; a bad id reports to
 /// stderr and exits 1 without aborting the rest.
-pub fn resume(
-    ids: &[ItemId],
-    last: Option<usize>,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-) -> Result<i32, String> {
-    let (_proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
+/// The `resume` verb — 1..n ids, one discover + store open.
+pub fn h_resume(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
+    let ids = a.many_parsed::<ItemId>("id")?;
+    let last: Option<usize> = a.parsed("last")?;
+    let json_out = ctx.json;
+    let (_proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
     if ids.len() == 1 {
         let d = resume_data(&store, ids[0], last)?;
         if json_out {
@@ -410,14 +407,14 @@ pub fn resume(
         return Ok(0);
     }
     if json_out {
-        let (entries, failed) = items::multi_json(ids, |id| resume_json(&store, id, last));
+        let (entries, failed) = items::multi_json(&ids, |id| resume_json(&store, id, last));
         ops::print_json(&entries);
         return Ok(if failed { 1 } else { 0 });
     }
     let mut blocks = Vec::new();
     let mut failed = false;
     for id in ids {
-        match resume_data(&store, *id, last) {
+        match resume_data(&store, id, last) {
             Ok(d) => blocks.push(resume_block(&d)),
             Err(e) => {
                 failed = true;

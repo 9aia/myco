@@ -241,6 +241,7 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
             Span::raw(format!(" {d}")),
         ]));
     }
+    lines.extend(related_lines(m, item));
     if !item.children.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
@@ -281,6 +282,47 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
             .scroll((scroll, 0)),
         area,
     );
+}
+
+/// The preview's "related" section — edges in/out grouped by
+/// kind (P-005, the I-019 related-files view). `other` resolves
+/// to `ID title` when the neighbor is loaded; a `handoff` self
+/// edge shows the file path instead of the item's own id.
+fn related_lines(m: &Model, item: &myco_core::Item) -> Vec<Line<'static>> {
+    let related = m.related(item.id);
+    if related.is_empty() {
+        return Vec::new();
+    }
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "related",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        )),
+    ];
+    for kind in myco_core::EdgeKind::ALL {
+        let dsts: Vec<String> = related
+            .iter()
+            .filter(|(k, _)| *k == kind)
+            .map(|(_, other)| {
+                if kind == myco_core::EdgeKind::Handoff {
+                    return format!("handoffs/{other}.md");
+                }
+                match m.item_title(*other) {
+                    Some(title) if !title.is_empty() => format!("{other} {title}"),
+                    _ => other.to_string(),
+                }
+            })
+            .collect();
+        if dsts.is_empty() {
+            continue;
+        }
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<13}", kind.name()), Style::default().fg(MUTED)),
+            Span::raw(dsts.join(" · ")),
+        ]));
+    }
+    lines
 }
 
 /// Normal-mode hint sets, widest first — `pick_hints` takes the

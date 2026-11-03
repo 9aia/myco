@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use myco_core::Ledger;
-use myco_core::{Item, ItemFile, ItemId, ItemKind, Status, ViewSpec};
+use myco_core::{refs, Edge, EdgeKind, Item, ItemFile, ItemId, ItemKind, Status, ViewSpec};
 use myco_ops::{discover, items, ops};
 use myco_store::Store;
 use myco_store_md::MdStore;
@@ -137,6 +137,13 @@ pub struct Model {
     pub pending_editor: Option<PathBuf>,
     /// File-backed items for the `Files` board.
     files: Vec<ItemFile>,
+    /// `handoffs/<ID>.md` files → `(id, joined note text)` — the
+    /// link graph's handoff input, refreshed with `load_files`.
+    handoffs: Vec<(ItemId, String)>,
+    /// The in-memory link graph (P-005 phase 1): every edge the
+    /// loaded ledger/files/handoffs declare. Rebuilt with the
+    /// rows — O(items) once per rebuild, no index involved.
+    links: Vec<Edge>,
     /// Preview pane scroll offset (`j`/`k`/`PgUp`/`PgDn`/`g`/`G`
     /// in Preview mode; clamped to the content at draw time).
     pub preview_scroll: u16,
@@ -194,6 +201,8 @@ impl Model {
             status: String::new(),
             pending_editor: None,
             files: Vec::new(),
+            handoffs: Vec::new(),
+            links: Vec::new(),
             preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
@@ -235,9 +244,91 @@ impl Model {
                 )),
             }
         }
+        // handoff files feed the link graph — the id comes from
+        // the filename, the mention input from the entry notes
+        self.handoffs.clear();
+        match self.store.list_handoff_files() {
+            Ok(hs) => {
+                for h in hs {
+                    match self.store.read_handoffs(h.id) {
+                        Ok(entries) => self.handoffs.push((
+                            h.id,
+                            entries
+                                .iter()
+                                .map(|e| e.note.as_str())
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        )),
+                        Err(e) => errs.push(format!("handoffs/{}: {e}", h.id)),
+                    }
+                }
+            }
+            Err(e) => errs.push(format!("handoffs: {e}")),
+        }
         if !errs.is_empty() {
             self.status = format!("files: {}", errs.join("; "));
         }
+    }
+
+    /// Rebuild the in-memory edge set from what's loaded — ledger
+    /// item titles/metas, file bodies/metas, handoff files. Pure:
+    /// no store hits, so `rebuild_rows` can call it freely.
+    fn rebuild_links(&mut self) {
+        let mut edges = std::collections::BTreeSet::new();
+        for i in self
+            .ledger
+            .todo
+            .items()
+            .chain(self.ledger.backlog.items())
+            .flat_map(Item::subtree)
+        {
+            edges.extend(refs::extract(&i.title, Some(i), i.id));
+        }
+        for f in &self.files {
+            edges.extend(refs::extract(&f.body, Some(&f.meta), f.meta.id));
+        }
+        for (id, notes) in &self.handoffs {
+            edges.insert(Edge::handoff(*id));
+            edges.extend(refs::extract(notes, None, *id));
+        }
+        self.links = edges.into_iter().collect();
+    }
+
+    /// Everything attached to `id` — `(kind, other)` pairs with
+    /// incoming kinds already mirrored (`blocked_by`, …).
+    /// The preview's related section renders this.
+    pub fn related(&self, id: ItemId) -> Vec<(EdgeKind, ItemId)> {
+        let mut out = Vec::new();
+        for e in &self.links {
+            if e.src == id {
+                out.push((e.kind, e.dst));
+            } else if e.dst == id {
+                out.push((e.kind.mirror(), e.src));
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// Title for `id` when it's loaded — the related list
+    /// annotates neighbors with it.
+    pub fn item_title(&self, id: ItemId) -> Option<&str> {
+        if let Some(f) = self.files.iter().find(|f| f.meta.id == id) {
+            return Some(f.meta.title.as_str());
+        }
+        for s in self
+            .ledger
+            .todo
+            .sections
+            .iter()
+            .chain(&self.ledger.backlog.sections)
+        {
+            if let Some(i) = s.items.iter().flat_map(Item::subtree).find(|i| i.id == id) {
+                return Some(i.title.as_str());
+            }
+        }
+        None
     }
 
     /// Body of a file-backed item (preview on the `Files` board).
@@ -264,6 +355,7 @@ impl Model {
 
     /// Flatten the active board's sections into rows.
     fn rebuild_rows(&mut self) {
+        self.rebuild_links();
         self.rows.clear();
         match self.board {
             Board::Files => {
@@ -1007,6 +1099,8 @@ mod tests {
             status: String::new(),
             pending_editor: None,
             files: Vec::new(),
+            handoffs: Vec::new(),
+            links: Vec::new(),
             preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
@@ -1435,6 +1529,67 @@ mod tests {
         assert_eq!(m.files.len(), 1);
         m.key(key('3'));
         assert_eq!(m.selected().unwrap().id, ItemId::new(ItemKind::Issue, 1));
+    }
+
+    #[test]
+    fn related_groups_edges_in_and_out() {
+        let mut m = model(|l| {
+            l.put_todo(t(1).blocks(ItemId::new(ItemKind::Task, 2)), None);
+            l.put_todo(
+                Item::new(ItemId::new(ItemKind::Task, 2), "depends on T-001"),
+                None,
+            );
+        });
+        // T-1 declares blocks; T-2's title mentions T-001 → for
+        // T-1 that's an incoming `references`, read `referenced_by`
+        let r1 = m.related(ItemId::new(ItemKind::Task, 1));
+        assert_eq!(
+            r1,
+            [
+                (EdgeKind::Blocks, ItemId::new(ItemKind::Task, 2)),
+                (EdgeKind::ReferencedBy, ItemId::new(ItemKind::Task, 2)),
+            ]
+        );
+        assert_eq!(
+            m.related(ItemId::new(ItemKind::Task, 2)),
+            [
+                (EdgeKind::BlockedBy, ItemId::new(ItemKind::Task, 1)),
+                (EdgeKind::References, ItemId::new(ItemKind::Task, 1)),
+            ]
+        );
+        // file items contribute too — an issue body mention
+        let issue = Item::new(ItemId::new(ItemKind::Issue, 1), "the issue");
+        m.store
+            .save_item(&ItemFile::new(issue).body("see T-001"))
+            .unwrap();
+        m.load_files();
+        m.rebuild_rows();
+        assert!(m
+            .related(ItemId::new(ItemKind::Task, 1))
+            .contains(&(EdgeKind::ReferencedBy, ItemId::new(ItemKind::Issue, 1))));
+        // and a handoff file is a self-edge
+        m.store
+            .append_handoff(
+                ItemId::new(ItemKind::Task, 1),
+                &myco_core::HandoffEntry {
+                    date: myco_core::date::parse("2026-01-01").unwrap(),
+                    actor: "devin".parse().unwrap(),
+                    session: None,
+                    note: "next: T-002".into(),
+                },
+            )
+            .unwrap();
+        m.load_files();
+        m.rebuild_rows();
+        let r = m.related(ItemId::new(ItemKind::Task, 1));
+        assert!(r.contains(&(EdgeKind::Handoff, ItemId::new(ItemKind::Task, 1))));
+        // titles resolve for loaded neighbors
+        assert_eq!(
+            m.item_title(ItemId::new(ItemKind::Issue, 1)),
+            Some("the issue")
+        );
+        assert_eq!(m.item_title(ItemId::new(ItemKind::Task, 1)), Some("t1"));
+        assert!(m.item_title(ItemId::new(ItemKind::Task, 99)).is_none());
     }
 
     #[test]

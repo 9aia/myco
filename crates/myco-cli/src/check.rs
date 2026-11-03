@@ -18,7 +18,7 @@
 //! without it every finding is just reported.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use camino::Utf8PathBuf;
 use myco_core::{Item, ItemId, ItemKind, ProjectMeta};
@@ -1431,15 +1431,30 @@ fn view_findings(root: &std::path::Path) -> Vec<Finding> {
     }
 }
 
+/// `[verbs]` lint — an invalid config verb is a finding
+/// (unfixable — the repair is editing myco.toml). Only the repo
+/// layer is linted; shadowing a builtin is legal (warned at use).
+fn verb_findings(root: &std::path::Path) -> Vec<Finding> {
+    match myco_ops::verb::validate_repo_verbs(root, ops::CONFIG, crate::registry::builtin_refs()) {
+        Ok(errs) => errs
+            .into_iter()
+            .map(|(name, e)| {
+                Finding::at(
+                    "myco.toml",
+                    "verb-invalid",
+                    format!("verb \"{name}\": {e}"),
+                    false,
+                )
+            })
+            .collect(),
+        Err(e) => vec![Finding::at("myco.toml", "config", e, false)],
+    }
+}
+
 /// The `check` verb. Exit 1 with findings, 0 when clean.
-pub fn run(
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    fix: bool,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let proj = crate::discover::discover(dir.as_deref(), root.as_deref())?;
+pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
+    let (fix, json_out, no_commit) = (a.flag("fix"), ctx.json, ctx.no_commit);
+    let proj = crate::discover::discover(ctx.dir.as_deref(), ctx.root.as_deref())?;
     run_on(&proj, fix, json_out, no_commit)
 }
 
@@ -1472,6 +1487,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
     // lint-only (no fixer); a broken spec fails every verb that
     // loads config, so it surfaces here too
     analysis.findings.extend(view_findings(&proj.root));
+    analysis.findings.extend(verb_findings(&proj.root));
     // root-side: the managed AGENTS.md block lives on the checked-
     // out branch, not in the worktree — validated/repaired against
     // proj.root separately.

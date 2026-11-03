@@ -1,45 +1,13 @@
 //! `myco proposal new|list|status` — design proposals in
 //! `proposals/proposal-NNNN-<slug>.md`.
 
-use std::path::PathBuf;
-
-use clap::Subcommand;
 use myco_core::{ItemId, ItemKind, Status};
 use myco_store::Store;
 use serde_json::json;
 
 use crate::items;
+use crate::registry::{Args, Ctx};
 use crate::templates;
-
-#[derive(Subcommand)]
-pub enum Cmd {
-    /// File a proposal — allocs a P-id, writes the proposal file
-    /// with frontmatter + template.
-    New {
-        /// One-line title (drives the filename slug).
-        title: String,
-        #[command(flatten)]
-        body: items::BodyFlags,
-        #[command(flatten)]
-        meta: items::MetaFlags,
-    },
-    /// List proposals.
-    List {
-        #[command(flatten)]
-        list: items::ListFlags,
-    },
-    /// Set a proposal's status. Proposal words alias the state
-    /// machine: `draft` = open, `accepted` = done,
-    /// `rejected` = deferred — the transition is walked through the
-    /// machine, so `accepted` passes `open → in-progress → done`.
-    Status {
-        /// Proposal id (`P-NNN`).
-        id: ItemId,
-        /// `draft` | `accepted` | `rejected` (raw machine statuses
-        /// like `in-progress` also accepted).
-        status: String,
-    },
-}
 
 /// Proposal-domain words → machine [`Status`].
 fn proposal_status(word: &str) -> Result<Status, String> {
@@ -56,58 +24,59 @@ fn proposal_status(word: &str) -> Result<Status, String> {
     }
 }
 
-/// The `proposal` verb group.
-pub fn run(
-    cmd: Cmd,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let (proj, store) = if matches!(cmd, Cmd::List { .. }) {
-        items::open_read(dir.as_deref(), root.as_deref())?
-    } else {
-        items::open(dir.as_deref(), root.as_deref())?
-    };
-    match cmd {
-        Cmd::New { title, body, meta } => items::new_file(
-            &proj,
-            &store,
-            &items::NewItem {
-                kind: ItemKind::Proposal,
-                title,
-                body: body.read()?.as_deref(),
-                meta: &meta.to_meta(),
-                template: templates::proposal,
-                word: "proposal",
-                json_out,
-                no_commit,
-            },
-        ),
-        Cmd::List { list } => {
-            items::list_files(&store, ItemKind::Proposal, false, &list.filter(), json_out)
-        }
-        Cmd::Status { id, status } => {
-            items::require_kind(id, ItemKind::Proposal, "proposal status")?;
-            let to = proposal_status(&status)?;
-            let mut file = items::item_for_edit(&store, id)?;
-            let from = file.meta.status;
-            items::walk_to(&mut file.meta, to)?;
-            let item = file.meta.clone();
-            store.save_item(&file).map_err(|e| e.to_string())?;
-            let committed = items::commit(
-                &proj.worktree,
-                &format!("chore: proposal {id} → {to}"),
-                no_commit,
-            )?;
-            items::report(
-                json!({"item": item, "from": from.token(), "to": to.token()}),
-                committed,
-                json_out,
-                &format!("{id}: {from} → {to}"),
-            )
-        }
-    }
+/// The `proposal new` verb.
+pub fn h_new(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    items::new_file(
+        &proj,
+        &store,
+        &items::NewItem {
+            kind: ItemKind::Proposal,
+            title: a.text("title")?.to_string(),
+            body: items::body_args(a)?.as_deref(),
+            meta: &items::meta_args(a)?,
+            template: templates::proposal,
+            word: "proposal",
+            json_out: ctx.json,
+            no_commit: ctx.no_commit,
+        },
+    )
+}
+
+/// The `proposal list` verb.
+pub fn h_list(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (_proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    items::list_files(
+        &store,
+        ItemKind::Proposal,
+        false,
+        &items::list_args(a)?,
+        ctx.json,
+    )
+}
+
+/// The `proposal status` verb.
+pub fn h_status(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let id = a.req::<ItemId>("id")?;
+    items::require_kind(id, ItemKind::Proposal, "proposal status")?;
+    let to = proposal_status(a.text("status")?)?;
+    let mut file = items::item_for_edit(&store, id)?;
+    let from = file.meta.status;
+    items::walk_to(&mut file.meta, to)?;
+    let item = file.meta.clone();
+    store.save_item(&file).map_err(|e| e.to_string())?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: proposal {id} → {to}"),
+        ctx.no_commit,
+    )?;
+    items::report(
+        json!({"item": item, "from": from.token(), "to": to.token()}),
+        committed,
+        ctx.json,
+        &format!("{id}: {from} → {to}"),
+    )
 }
 
 #[cfg(test)]

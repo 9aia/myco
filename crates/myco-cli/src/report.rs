@@ -9,7 +9,6 @@
 //! history still exists.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use myco_core::{date, Item, Status};
 use myco_store::Store;
@@ -178,8 +177,9 @@ pub fn report_json(
 }
 
 /// The `report` verb.
-pub fn run(dir: Option<PathBuf>, root: Option<PathBuf>, json_out: bool) -> Result<i32, String> {
-    let (proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
+pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, String> {
+    let json_out = ctx.json;
+    let (proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
     if json_out {
         ops::print_json(&report_json(&store, &proj.worktree)?);
         return Ok(0);

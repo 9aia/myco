@@ -1,51 +1,11 @@
 //! `myco todo add|done|defer|list` — task items in TODO.md.
 
-use std::path::PathBuf;
-
-use clap::Subcommand;
 use myco_core::{Item, ItemId, ItemKind, Status};
 use myco_store::Store;
 use serde_json::json;
 
 use crate::items;
-
-#[derive(Subcommand)]
-pub enum Cmd {
-    /// Add a task — allocs a T-id, appends to a section of TODO.md.
-    Add {
-        /// One-line title.
-        title: String,
-        /// Section to add under (created when absent; default: the
-        /// first section, or an unsectioned run).
-        #[arg(long, conflicts_with = "parent")]
-        section: Option<String>,
-        /// Nest under this task instead of a section — the new
-        /// item becomes a child (`  - [ ]` under the parent).
-        #[arg(long)]
-        parent: Option<ItemId>,
-        #[command(flatten)]
-        meta: items::MetaFlags,
-    },
-    /// Mark done — walks the state machine to `done`, then removes
-    /// the line (git history keeps the record). Done on a parent
-    /// removes the whole subtree — children die with it.
-    Done {
-        /// Task id (`T-NNN`).
-        id: ItemId,
-    },
-    /// Park a task — transition to `deferred`, move the line to
-    /// BACKLOG.md. Defer on a parent moves the whole subtree
-    /// (children park with it); on a child it detaches alone.
-    Defer {
-        /// Task id (`T-NNN`).
-        id: ItemId,
-    },
-    /// List tasks.
-    List {
-        #[command(flatten)]
-        list: items::ListFlags,
-    },
-}
+use crate::registry::{Args, Ctx};
 
 /// The `todo add` mutation — allocs a T-id and appends to
 /// TODO.md (or nests under `--parent`; a backlog parent's child
@@ -168,71 +128,69 @@ pub fn list_items(
         .collect())
 }
 
-/// The `todo` verb group.
-pub fn run(
-    cmd: Cmd,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let (proj, store) = if matches!(cmd, Cmd::List { .. }) {
-        items::open_read(dir.as_deref(), root.as_deref())?
-    } else {
-        items::open(dir.as_deref(), root.as_deref())?
-    };
-    match cmd {
-        Cmd::Add {
-            title,
-            section,
-            parent,
-            meta,
-        } => {
-            let (item, file) =
-                add_item(&store, &title, section.as_deref(), parent, &meta.to_meta())?;
-            let committed = items::commit(
-                &proj.worktree,
-                &format!("chore: add {}", item.id),
-                no_commit,
-            )?;
-            items::report(
-                json!({"item": item, "file": file, "parent": parent.map(|p| p.to_string())}),
-                committed,
-                json_out,
-                &format!("added {}", items::compact(&item)),
-            )
-        }
-        Cmd::Done { id } => {
-            let item = done_item(&store, id)?;
-            let committed = items::commit(&proj.worktree, &format!("chore: done {id}"), no_commit)?;
-            items::report(
-                json!({"item": item}),
-                committed,
-                json_out,
-                &format!("done {id} — {}", item.title),
-            )
-        }
-        Cmd::Defer { id } => {
-            let item = defer_item(&store, id)?;
-            let committed =
-                items::commit(&proj.worktree, &format!("chore: defer {id}"), no_commit)?;
-            items::report(
-                json!({"item": item, "file": "BACKLOG.md"}),
-                committed,
-                json_out,
-                &format!("deferred {id} → BACKLOG.md"),
-            )
-        }
-        Cmd::List { list } => {
-            let all = doc_items(&store, false)?;
-            let found: Vec<(usize, &Item)> = items::tree_view(&all)
-                .into_iter()
-                .filter(|(_, i)| list.matches(i))
-                .take(list.take())
-                .collect();
-            items::print_tree(&found, json_out)
-        }
-    }
+/// The `todo add` verb.
+pub fn h_add(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let parent: Option<ItemId> = a.parsed("parent")?;
+    let (item, file) = add_item(
+        &store,
+        a.text("title")?,
+        a.opt("section"),
+        parent,
+        &items::meta_args(a)?,
+    )?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: add {}", item.id),
+        ctx.no_commit,
+    )?;
+    items::report(
+        json!({"item": item, "file": file, "parent": parent.map(|p| p.to_string())}),
+        committed,
+        ctx.json,
+        &format!("added {}", items::compact(&item)),
+    )
+}
+
+/// The `todo done` verb.
+pub fn h_done(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let id = a.req::<ItemId>("id")?;
+    let item = done_item(&store, id)?;
+    let committed = items::commit(&proj.worktree, &format!("chore: done {id}"), ctx.no_commit)?;
+    items::report(
+        json!({"item": item}),
+        committed,
+        ctx.json,
+        &format!("done {id} — {}", item.title),
+    )
+}
+
+/// The `todo defer` verb.
+pub fn h_defer(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let id = a.req::<ItemId>("id")?;
+    let item = defer_item(&store, id)?;
+    let committed = items::commit(&proj.worktree, &format!("chore: defer {id}"), ctx.no_commit)?;
+    items::report(
+        json!({"item": item, "file": "BACKLOG.md"}),
+        committed,
+        ctx.json,
+        &format!("deferred {id} → BACKLOG.md"),
+    )
+}
+
+/// The `todo list` verb.
+pub fn h_list(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (_proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let list = items::list_args(a)?;
+    let all = doc_items(&store, false)?;
+    let found: Vec<(usize, &Item)> = items::tree_view(&all)
+        .into_iter()
+        .filter(|(_, i)| list.matches(i))
+        .take(list.take())
+        .collect();
+    items::print_tree(&found, ctx.json)
 }
 
 /// All items in one doc, cloned out (shared by the list verbs).

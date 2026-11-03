@@ -6,7 +6,6 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use clap::Args;
 use myco_core::{
     eval, eval_scoped, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, Scoped, SortKey, Status,
     ViewFilter, ViewFormat, ViewGroup, ViewSource, ViewSpec,
@@ -14,58 +13,50 @@ use myco_core::{
 use myco_ops::view::{NamedView, Origin};
 use serde_json::json;
 
+use crate::registry::Args;
 use crate::{board, continuity, digest, indexcmd, items, ops, org};
 
-/// The filter flags — each maps onto the same `ViewFilter`
-/// field `filter = { … }` uses. Shared by `view` (merged over
-/// the named spec's filter) and `next` (merged over its
-/// open-item default): a set flag replaces that field, unset
+/// The decoded filter flags — each maps onto the same
+/// `ViewFilter` field `filter = { … }` uses. Shared by `view`
+/// (merged over the named spec's filter) and `next` (merged over
+/// its open-item default): a set flag replaces that field, unset
 /// fields keep the base spec's value.
-#[derive(Debug, Default, Args)]
-pub struct FilterFlags {
-    /// Item kinds — task|issue|proposal|adr|plan
-    /// (repeatable/comma-separated).
-    #[arg(long, value_delimiter = ',')]
+#[derive(Debug, Default)]
+pub(crate) struct FilterPatch {
     pub(crate) kind: Vec<ItemKind>,
-    /// Statuses — open|claimed|in-progress|blocked|done|deferred
-    /// (repeatable/comma-separated).
-    #[arg(long, value_delimiter = ',')]
     pub(crate) status: Vec<Status>,
-    /// Inclusive lower severity bound — low|med|high|crit.
-    #[arg(long)]
     pub(crate) pri_min: Option<Priority>,
-    /// Inclusive upper severity bound.
-    #[arg(long)]
     pub(crate) pri_max: Option<Priority>,
-    /// `#`-less label — item carries any of these
-    /// (repeatable/comma-separated).
-    #[arg(long, value_delimiter = ',')]
     pub(crate) label: Vec<String>,
-    /// Owner actor — item's owner is any of these
-    /// (repeatable/comma-separated).
-    #[arg(long, value_delimiter = ',')]
     pub(crate) owner: Vec<Actor>,
-    /// Items with an owner.
-    #[arg(long, conflicts_with = "unclaimed")]
     pub(crate) claimed: bool,
-    /// Items with no owner.
-    #[arg(long)]
     pub(crate) unclaimed: bool,
-    /// Items in this epic.
-    #[arg(long)]
     pub(crate) epic: Option<String>,
-    /// Items in this milestone.
-    #[arg(long)]
     pub(crate) milestone: Option<String>,
-    /// Items not superseded by another (ADRs).
-    #[arg(long, conflicts_with = "superseded")]
     pub(crate) live_only: bool,
-    /// Items superseded by another (ADRs).
-    #[arg(long)]
     pub(crate) superseded: bool,
 }
 
-impl FilterFlags {
+/// The filter args → the patch — `view` and `next` share the
+/// flag set.
+pub(crate) fn filter_args(a: &Args) -> Result<FilterPatch, String> {
+    Ok(FilterPatch {
+        kind: a.many_parsed("kind")?,
+        status: a.many_parsed("status")?,
+        pri_min: a.parsed("pri_min")?,
+        pri_max: a.parsed("pri_max")?,
+        label: a.many("label"),
+        owner: a.many_parsed("owner")?,
+        claimed: a.flag("claimed"),
+        unclaimed: a.flag("unclaimed"),
+        epic: a.opt("epic").map(str::to_string),
+        milestone: a.opt("milestone").map(str::to_string),
+        live_only: a.flag("live_only"),
+        superseded: a.flag("superseded"),
+    })
+}
+
+impl FilterPatch {
     /// Fold every set flag into `f`; unset fields keep the
     /// base filter's value.
     pub(crate) fn apply(&self, f: &mut ViewFilter) {
@@ -124,34 +115,32 @@ impl FilterFlags {
     }
 }
 
-/// The ad-hoc spec flags — [`FilterFlags`] plus the
+/// The ad-hoc spec patch — [`FilterPatch`] plus the
 /// group/sort/limit/format spec fields; with NAME they merge
-/// over the named spec (a set flag replaces that field, unset
-/// fields keep the named spec's value).
-#[derive(Debug, Default, Args)]
-pub struct ViewFlags {
-    #[command(flatten)]
-    pub(crate) filter: FilterFlags,
-    /// Item universe — repo (default) reads this worktree; index
-    /// unions every registered repo's snapshot (org views).
-    #[arg(long)]
-    source: Option<ViewSource>,
-    /// Group axis — status|priority|kind|owner|epic|milestone|repo.
-    #[arg(long)]
-    group_by: Option<GroupAxis>,
-    /// Sort keys — `pri,id,-created`; `-` flips a key's default
-    /// direction.
-    #[arg(long, value_delimiter = ',')]
-    sort: Vec<SortKey>,
-    /// Keep the first N items after sorting.
-    #[arg(long, value_name = "N")]
-    limit: Option<u32>,
-    /// Renderer — list|board.
-    #[arg(long)]
-    format: Option<ViewFormat>,
+/// over the named spec (a set field replaces, unset keeps).
+#[derive(Debug, Default)]
+pub(crate) struct SpecPatchCli {
+    pub(crate) filter: FilterPatch,
+    pub(crate) source: Option<ViewSource>,
+    pub(crate) group_by: Option<GroupAxis>,
+    pub(crate) sort: Vec<SortKey>,
+    pub(crate) limit: Option<u32>,
+    pub(crate) format: Option<ViewFormat>,
 }
 
-impl ViewFlags {
+/// `view`'s args → the spec patch.
+pub(crate) fn spec_args(a: &Args) -> Result<SpecPatchCli, String> {
+    Ok(SpecPatchCli {
+        filter: filter_args(a)?,
+        source: a.parsed("source")?,
+        group_by: a.parsed("group_by")?,
+        sort: a.many_parsed("sort")?,
+        limit: a.parsed("limit")?,
+        format: a.parsed("format")?,
+    })
+}
+
+impl SpecPatchCli {
     /// Fold every set flag over `spec`; unset fields keep the
     /// named spec's value.
     fn apply(&self, spec: &mut ViewSpec) {
@@ -435,9 +424,30 @@ pub(crate) fn index_universe() -> Result<(Vec<org::RepoView>, Vec<String>), Stri
 /// worktree's ledger, `index` unions the registered repos'
 /// snapshots (the `org-*` presets — `myco org status|board`'s
 /// heirs).
-pub fn run(
+/// The `view` verb — `NAME` resolves builtin presets then config
+/// views; no NAME builds the spec from flags alone; bare `myco
+/// view` (or `--list`) enumerates the defined views.
+pub fn h(ctx: &crate::registry::Ctx, a: &Args) -> Result<i32, String> {
+    let name = a.opt("name").map(str::to_string);
+    let flags = spec_args(a)?;
+    let out = Out {
+        list: a.flag("list"),
+        md: a.flag("md"),
+        all: a.flag("all"),
+    };
+    run(
+        name,
+        flags,
+        out,
+        ctx.dir.clone(),
+        ctx.root.clone(),
+        ctx.json,
+    )
+}
+
+fn run(
     name: Option<String>,
-    flags: ViewFlags,
+    flags: SpecPatchCli,
     out: Out,
     dir: Option<PathBuf>,
     root: Option<PathBuf>,
@@ -578,8 +588,8 @@ mod tests {
                 assert!(!board::is_status_board(&spec));
                 // flag merge still applies over the shadowed spec
                 let mut scoped = spec.clone();
-                ViewFlags {
-                    filter: FilterFlags {
+                SpecPatchCli {
+                    filter: FilterPatch {
                         epic: Some("v2".into()),
                         ..Default::default()
                     },

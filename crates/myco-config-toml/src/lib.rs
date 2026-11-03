@@ -2,10 +2,12 @@
 //! ./myco.toml → ~/.config/myco/myco.toml.
 //!
 //! Scalar fields keep first-match semantics (the repo layer wins
-//! over the user layer). `[views]` is the one *merged* section
-//! (P-006): both layers contribute named views and the user layer
-//! wins name collisions — repo presets are shared, personal
-//! presets always reach through.
+//! over the user layer). `[views]` and `[verbs]` are the *merged*
+//! sections (P-006, P-007): both layers contribute entries. Views
+//! let the user layer win name collisions (personal presets reach
+//! through); verbs let the repo layer win — repo verbs are shared
+//! surface, personal ones can't override them. Builtins win over
+//! both at resolution.
 
 use myco_config::ConfigSource;
 use std::path::{Path, PathBuf};
@@ -75,7 +77,9 @@ impl ConfigSource for TomlSource {
         let user_cfg = user_path.as_deref().map(parse).transpose()?;
 
         // scalars: repo layer wins (today's first-match behavior);
-        // views: merged, user layer wins name collisions
+        // views: merged, user layer wins name collisions;
+        // verbs: merged, *repo* layer wins — repo verbs are shared
+        // surface, personal verbs don't override them
         let mut merged = myco_core::Config {
             project_dir: repo_cfg
                 .as_ref()
@@ -83,8 +87,11 @@ impl ConfigSource for TomlSource {
                 .or_else(|| user_cfg.as_ref().and_then(|c| c.project_dir.clone())),
             ..Default::default()
         };
-        for cfg in [repo_cfg, user_cfg].into_iter().flatten() {
-            merged.views.extend(cfg.views);
+        for cfg in [&repo_cfg, &user_cfg].into_iter().flatten() {
+            merged.views.extend(cfg.views.clone());
+        }
+        for cfg in [&user_cfg, &repo_cfg].into_iter().flatten() {
+            merged.verbs.extend(cfg.verbs.clone());
         }
         Ok(merged)
     }
@@ -147,6 +154,77 @@ mod tests {
                 let _ = std::fs::remove_dir_all(&dir);
             },
         );
+    }
+
+    #[test]
+    fn verbs_parse_and_merge_with_repo_winning() {
+        let base = std::env::temp_dir().join(format!("myco-cfg-verbs-{}", std::process::id()));
+        let repo_dir = base.join("repo");
+        let home = base.join("home");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+        std::fs::create_dir_all(home.join(".config/myco")).unwrap();
+        std::fs::write(
+            repo_dir.join("myco.toml"),
+            "[verbs.standup]\ntarget = \"view\"\nargs = [\"board\"]\n\n[verbs.hot]\nemit = \"ids\"\nfilter = { pri_min = \"high\" }\n\n[verbs.shared]\ntarget = \"status\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            home.join(".config/myco/myco.toml"),
+            "[verbs.shared]\ntarget = \"report\"\n\n[verbs.user_only]\ntarget = \"view\"\nargs = [\"open\"]\n",
+        )
+        .unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.to_string_lossy().as_ref())),
+            ],
+            || {
+                let cwd = std::env::current_dir().unwrap();
+                std::env::set_current_dir(&repo_dir).unwrap();
+                let cfg = TomlSource { path: None }.load().unwrap();
+                std::env::set_current_dir(cwd).unwrap();
+                assert_eq!(cfg.verbs.len(), 4);
+                // repo layer wins the `shared` collision
+                match &cfg.verbs["shared"] {
+                    myco_core::ConfigVerb::Alias(a) => assert_eq!(a.target, "status"),
+                    _ => panic!("shared should be an alias"),
+                }
+                match &cfg.verbs["hot"] {
+                    myco_core::ConfigVerb::ViewEmit(v) => {
+                        assert_eq!(v.emit, myco_core::EmitMode::Ids);
+                        assert_eq!(v.spec.filter.pri_min, Some(myco_core::Priority::High));
+                    }
+                    _ => panic!("hot should be view-emit"),
+                }
+                assert!(cfg.verbs.contains_key("user_only"));
+            },
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn verbs_reject_mixed_kinds_and_unknown_fields() {
+        // `target` + `emit` in one entry matches neither kind;
+        // an unknown key on a view-emit fails loudly too
+        for bad in [
+            "[verbs.x]\ntarget = \"view\"\nemit = \"ids\"\n",
+            "[verbs.x]\nemit = \"ids\"\nnonsense = 1\n",
+        ] {
+            let dir = std::env::temp_dir().join(format!(
+                "myco-cfg-verbsbad-{}-{}",
+                std::process::id(),
+                bad.len()
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            let f = dir.join("myco.toml");
+            std::fs::write(&f, bad).unwrap();
+            let src = TomlSource {
+                path: Some(f.to_string_lossy().into_owned()),
+            };
+            assert!(src.load().is_err(), "{bad}");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
     }
 
     #[test]

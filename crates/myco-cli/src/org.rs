@@ -9,19 +9,11 @@
 //! serve old data silently. Repos whose worktree vanished keep
 //! their last snapshot and report an error inline.
 
-use clap::Subcommand;
 use myco_index::{Index, RepoSnapshot};
 use serde_json::json;
 
+use crate::registry::{Args, Ctx};
 use crate::{indexcmd, ops};
-
-#[derive(Subcommand)]
-pub enum Cmd {
-    /// Re-run `init` on every registered repo — refreshes the
-    /// worktree scaffold and root files (.gitignore, the AGENTS.md
-    /// agent-awareness block). The rollout path for new scaffolding.
-    Init,
-}
 
 /// One repo's snapshot load outcome for index-sourced views.
 pub struct RepoView {
@@ -137,11 +129,8 @@ fn init_all(index: &impl Index, json_out: bool, no_commit: bool) -> Result<i32, 
     Ok(if failures == 0 { 0 } else { 1 })
 }
 
-/// The `org` verb group.
-pub fn run(cmd: Cmd, json_out: bool, no_commit: bool) -> Result<i32, String> {
+/// The `org init` verb — rolls scaffold out (no snapshot reads).
+pub fn h_init(ctx: &Ctx, _a: &Args) -> Result<i32, String> {
     let index = indexcmd::open_index()?;
-    match cmd {
-        // init rolls scaffold out — no snapshot reads
-        Cmd::Init => init_all(&index, json_out, no_commit),
-    }
+    init_all(&index, ctx.json, ctx.no_commit)
 }

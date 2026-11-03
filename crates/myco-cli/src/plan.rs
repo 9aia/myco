@@ -1,63 +1,39 @@
 //! `myco plan new|list` — execution plans in
 //! `plans/pl-NNNN-<slug>.md` with a phase checklist.
 
-use std::path::PathBuf;
-
-use clap::Subcommand;
 use myco_core::ItemKind;
 
 use crate::items;
+use crate::registry::{Args, Ctx};
 use crate::templates;
 
-#[derive(Subcommand)]
-pub enum Cmd {
-    /// File a plan — allocs a PL-id, writes the plan file with
-    /// frontmatter + a phase-checklist template.
-    New {
-        /// One-line title (drives the filename slug).
-        title: String,
-        #[command(flatten)]
-        body: items::BodyFlags,
-        #[command(flatten)]
-        meta: items::MetaFlags,
-    },
-    /// List plans.
-    List {
-        #[command(flatten)]
-        list: items::ListFlags,
-    },
+/// The `plan new` verb.
+pub fn h_new(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    items::new_file(
+        &proj,
+        &store,
+        &items::NewItem {
+            kind: ItemKind::Plan,
+            title: a.text("title")?.to_string(),
+            body: items::body_args(a)?.as_deref(),
+            meta: &items::meta_args(a)?,
+            template: templates::plan,
+            word: "plan",
+            json_out: ctx.json,
+            no_commit: ctx.no_commit,
+        },
+    )
 }
 
-/// The `plan` verb group.
-pub fn run(
-    cmd: Cmd,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let (proj, store) = if matches!(cmd, Cmd::List { .. }) {
-        items::open_read(dir.as_deref(), root.as_deref())?
-    } else {
-        items::open(dir.as_deref(), root.as_deref())?
-    };
-    match cmd {
-        Cmd::New { title, body, meta } => items::new_file(
-            &proj,
-            &store,
-            &items::NewItem {
-                kind: ItemKind::Plan,
-                title,
-                body: body.read()?.as_deref(),
-                meta: &meta.to_meta(),
-                template: templates::plan,
-                word: "plan",
-                json_out,
-                no_commit,
-            },
-        ),
-        Cmd::List { list } => {
-            items::list_files(&store, ItemKind::Plan, false, &list.filter(), json_out)
-        }
-    }
+/// The `plan list` verb.
+pub fn h_list(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let (_proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    items::list_files(
+        &store,
+        ItemKind::Plan,
+        false,
+        &items::list_args(a)?,
+        ctx.json,
+    )
 }

@@ -15,6 +15,7 @@ pub mod item;
 pub mod ledger;
 pub mod meta;
 pub mod priority;
+pub mod refs;
 pub mod status;
 pub mod view;
 pub mod walk;
@@ -27,6 +28,7 @@ pub use item::{is_valid_group_name, is_valid_label, tree_view, Item, ItemMeta, N
 pub use ledger::{Ledger, TaskLoc};
 pub use meta::{NextCounters, ProjectMeta, Registry};
 pub use priority::{ParsePriorityError, Priority};
+pub use refs::{Edge, EdgeKind};
 pub use status::{InvalidTransition, ParseStatusError, Status};
 pub use view::{
     eval, eval_scoped, GroupAxis, ParseGroupAxisError, ParseSortKeyError, ParseViewFormatError,
@@ -88,6 +90,61 @@ impl Default for Seen {
     }
 }
 
+/// A `[verbs.<name>]` config-declared verb (P-007). Both kinds are
+/// read-only by construction: an alias bakes argv for a read-only
+/// built-in; a view-emit binds a [`ViewSpec`] to an emit mode.
+/// Mutations stay builtin — the state machine, id alloc, locking
+/// and commit semantics aren't config data.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum ConfigVerb {
+    /// `target = "<builtin>"` + baked `args` — `myco <name>` runs
+    /// the builtin with `args` then any extra tokens appended.
+    Alias(AliasVerb),
+    /// A flattened [`ViewSpec`] + `emit` — `myco <name>` evaluates
+    /// the spec and emits in the declared shape.
+    ViewEmit(ViewEmitVerb),
+}
+
+/// The `alias` config verb — name → builtin + baked args.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AliasVerb {
+    /// The built-in verb it invokes (`view`, `status`, `todo.list`, …).
+    pub target: String,
+    /// Baked argv tokens — positionals and `--flag`/`--opt value`
+    /// pairs for the target verb (global `--json`/`--dir`/`--root`/
+    /// `--no-commit` also understood). Extra CLI tokens append.
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+/// The `view-emit` config verb — a [`ViewSpec`] (every field
+/// inline, like `[views.<name>]`) + an emit mode.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViewEmitVerb {
+    /// The view's spec — same fields as `[views.<name>]`.
+    #[serde(flatten)]
+    pub spec: ViewSpec,
+    /// The output shape.
+    pub emit: EmitMode,
+}
+
+/// How a `view-emit` verb renders its evaluated spec.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EmitMode {
+    /// The rendered table/board text.
+    Table,
+    /// The full `{view, spec, groups, interrupted}` payload.
+    Json,
+    /// The matching item ids.
+    Ids,
+    /// The single top item — `{"item": …}` like `next`.
+    First,
+}
+
 /// The `myco.toml`-shaped config value every `myco-config` source
 /// loads. Fields grow per phase; unknown keys are rejected so a typo
 /// fails loud instead of silently doing nothing.
@@ -96,12 +153,17 @@ impl Default for Seen {
 pub struct Config {
     /// Path to the project worktree, relative to the repo root.
     pub project_dir: Option<String>,
-    /// Named declarative views — the one section that *merges*
-    /// across config layers (P-006): repo `myco.toml` presets are
-    /// shared, user-config presets personal; the higher-precedence
-    /// layer wins a name collision.
+    /// Named declarative views — merged across config layers
+    /// (P-006): repo `myco.toml` presets are shared, user-config
+    /// presets personal; the *user* layer wins a name collision.
     #[serde(default)]
     pub views: std::collections::BTreeMap<String, ViewSpec>,
+    /// Config-declared verbs (P-007) — merged like `views`, but
+    /// the *repo* layer wins collisions (repo verbs are shared
+    /// surface, personal verbs don't override them). Builtins win
+    /// over both at resolution.
+    #[serde(default)]
+    pub verbs: std::collections::BTreeMap<String, ConfigVerb>,
 }
 
 #[cfg(test)]

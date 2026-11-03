@@ -5,31 +5,20 @@
 //! `--claim` is the only new surface: it mutates the emitted
 //! item to `claimed` + an owner in one per-verb commit.
 
-use std::path::PathBuf;
-
-use clap::Args;
-use myco_core::{eval, Actor, Item, SortKey, Status, ViewSpec};
+use myco_core::{eval, Actor, Item, Status, ViewSpec};
 use myco_store::Store;
 use serde_json::json;
 
+use crate::registry::{Args, Ctx};
 use crate::{continuity, digest, itemcmd, items, ops, view};
 
 /// The `next` flag bundle — `view`'s filter flags plus `--sort`
-/// (the engine's `pri,id` when unset) and `--claim`. No
-/// `--limit`/`--group-by`/`--format`: the verb *is* limit 1
-/// rendered as one compact line.
-#[derive(Debug, Default, Args)]
-pub struct NextFlags {
-    #[command(flatten)]
-    pub(crate) filter: view::FilterFlags,
-    /// Sort keys — `pri,id,-created`; `-` flips a key's default
-    /// direction. Default `pri,id`.
-    #[arg(long, value_delimiter = ',')]
-    sort: Vec<SortKey>,
-    /// Claim the emitted item — status `claimed`, owner set to
-    /// the `--owner` actor (else `cli`); `--owner` names the
-    /// claimer here and doesn't filter. Mutating: one commit.
-    #[arg(long)]
+/// (the engine's `pri,id` when unset) and `--claim`. Decoded out
+/// of the shared `Args` bag.
+#[derive(Debug, Default)]
+pub(crate) struct NextFlags {
+    pub(crate) filter: view::FilterPatch,
+    pub(crate) sort: Vec<myco_core::SortKey>,
     pub(crate) claim: bool,
 }
 
@@ -42,6 +31,15 @@ pub(crate) fn base_spec() -> ViewSpec {
         .find(|v| v.name == "next")
         .map(|v| v.spec)
         .unwrap_or_default()
+}
+
+/// `next`'s args → the flag bundle.
+pub(crate) fn next_flags(a: &Args) -> Result<NextFlags, String> {
+    Ok(NextFlags {
+        filter: view::filter_args(a)?,
+        sort: a.many_parsed("sort")?,
+        claim: a.flag("claim"),
+    })
 }
 
 /// Resolve the `next` named view — a repo's `[views.next]`
@@ -100,18 +98,15 @@ fn line(store: &impl Store, item: &Item) -> Result<String, String> {
 /// The `next` verb — read-only unless `--claim`, which takes
 /// the mutating open path + per-verb commit (`chore: claim
 /// <ID>`; `--no-commit`/`$MYCO_NO_COMMIT` honored).
-pub fn run(
-    flags: NextFlags,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
+pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let flags = next_flags(a)?;
+    let json_out = ctx.json;
+    let no_commit = ctx.no_commit;
     let owner = flags.claim.then(|| claim_owner(&flags)).transpose()?;
     let (proj, store) = if flags.claim {
-        items::open(dir.as_deref(), root.as_deref())?
+        items::open(ctx.dir.as_deref(), ctx.root.as_deref())?
     } else {
-        items::open_read(dir.as_deref(), root.as_deref())?
+        items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?
     };
     let spec = spec(&proj.root, &flags)?;
     let scan = digest::scan(&store)?;
@@ -174,7 +169,7 @@ mod tests {
     #[test]
     fn flags_merge_over_the_default() {
         let flags = NextFlags {
-            filter: view::FilterFlags {
+            filter: view::FilterPatch {
                 kind: vec![ItemKind::Issue],
                 label: vec!["bug".into()],
                 ..Default::default()

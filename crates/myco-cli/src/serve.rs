@@ -196,154 +196,14 @@ impl<R: BufRead, W: Write> ServeTransport for StdioTransport<R, W> {
 
 // ---------------------------------------------------------------- params
 
-/// `params` (or absent) → a typed struct — bad shape is -32602.
-fn parse_params<T: serde::de::DeserializeOwned>(v: &Value) -> Result<T, Fail> {
-    let v = if v.is_null() { json!({}) } else { v.clone() };
-    serde_json::from_value(v).map_err(|e| Fail::BadParams(format!("invalid params: {e}")))
-}
-
-#[derive(Deserialize)]
-struct StatusParams {
-    #[serde(default)]
-    prompt: bool,
-}
-
-#[derive(Deserialize)]
-struct IdParams {
-    id: ItemId,
-    last: Option<usize>,
-}
-
-/// `--status/--owner/--label/--limit/--archived` — every
-/// `*.list` method's params.
-#[derive(Deserialize)]
-struct ListParams {
-    status: Option<Status>,
-    owner: Option<String>,
-    #[serde(default)]
-    label: Vec<String>,
-    limit: Option<usize>,
-    #[serde(default)]
-    archived: bool,
-}
-
-impl ListParams {
-    fn filter(&self) -> items::Filter {
-        items::Filter {
-            status: self.status,
-            owner: self.owner.clone(),
-            labels: self.label.clone(),
-            limit: self.limit,
-        }
-    }
-}
-
-/// The `pri/owner/label/blocks/epic/milestone` metadata fields
-/// shared by `*.add` params — flattened into them.
-#[derive(Deserialize, Default)]
-struct MetaParams {
-    pri: Option<Priority>,
-    owner: Option<Actor>,
-    #[serde(default)]
-    label: Vec<String>,
-    #[serde(default)]
-    blocks: Vec<ItemId>,
-    epic: Option<String>,
-    milestone: Option<String>,
-}
-
-impl MetaParams {
-    fn into_meta(self) -> myco_core::NewItemMeta {
-        myco_core::NewItemMeta {
-            priority: self.pri,
-            owner: self.owner,
-            labels: self.label,
-            blocks: self.blocks,
-            epic: self.epic,
-            milestone: self.milestone,
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct TodoAddParams {
-    title: String,
-    section: Option<String>,
-    parent: Option<ItemId>,
-    #[serde(flatten)]
-    meta: MetaParams,
-}
-
-#[derive(Deserialize)]
-struct BacklogAddParams {
-    title: String,
-    section: Option<String>,
-    #[serde(flatten)]
-    meta: MetaParams,
-}
-
-/// `item.set` — `status` goes through the transition machine
-/// (single step); `""` clears `epic`/`milestone`.
-#[derive(Deserialize)]
-struct SetParams {
-    id: ItemId,
-    status: Option<Status>,
-    pri: Option<Priority>,
-    owner: Option<Actor>,
-    #[serde(default)]
-    label: Vec<String>,
-    #[serde(default)]
-    unlabel: Vec<String>,
-    #[serde(default)]
-    blocks: Vec<String>,
-    #[serde(default)]
-    unblock: Vec<ItemId>,
-    epic: Option<String>,
-    milestone: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct HandoffParams {
-    id: ItemId,
-    note: String,
-    actor: Option<Actor>,
-    session: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct InterruptParams {
-    id: ItemId,
-    note: Option<String>,
-    actor: Option<Actor>,
-    session: Option<String>,
-}
-
-/// `next` — `{spec}` is a partial spec merged over the verb's
-/// default (open tasks+issues, `pri,id`); `limit` is pinned at
-/// 1 — the method *is* the single top item. `{"item": null}`
-/// when the backlog is clear.
-#[derive(Deserialize)]
-struct NextParams {
-    spec: Option<SpecPatch>,
-}
-
-/// `view` — `{name}` resolves a named view (builtin preset or
-/// `[views]` config); `{spec}` is a partial spec merged over it
-/// (each set field replaces — `myco view`'s flag-merge on the
-/// wire), or over the default spec when `name` is absent —
-/// an ad-hoc view. Neither = list the defined views.
-#[derive(Deserialize)]
-struct ViewParams {
-    name: Option<String>,
-    spec: Option<SpecPatch>,
-}
-
-/// A partial `ViewSpec` — absent fields keep the base's value.
+/// `view`/`next`'s `spec` wire object — a partial `ViewSpec`
+/// merged over a base (each set field replaces, unset keeps).
 /// `deny_unknown_fields` so a typo'd key is -32602, not a silent
-/// no-op.
+/// no-op. Decoded out of the shared `Args` bag
+/// ([`crate::registry::Args::spec`]).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SpecPatch {
+pub(crate) struct SpecPatch {
     filter: Option<FilterPatch>,
     source: Option<ViewSource>,
     group_by: Option<GroupAxis>,
@@ -439,7 +299,7 @@ impl SpecPatch {
 /// Dispatch failure — [`Server::respond`] maps these to wire
 /// codes; dispatch itself knows no wire.
 #[derive(Debug)]
-enum Fail {
+pub(crate) enum Fail {
     /// The method isn't served.
     UnknownMethod,
     /// Params didn't decode — -32602.
@@ -463,34 +323,6 @@ impl From<String> for Fail {
     }
 }
 
-/// The v1 method surface — mirrored by `initialize`.
-const METHODS: &[&str] = &[
-    "initialize",
-    "manifest",
-    "schema",
-    "status",
-    "view",
-    "next",
-    "item.show",
-    "item.set",
-    "todo.list",
-    "todo.add",
-    "todo.done",
-    "todo.defer",
-    "backlog.list",
-    "backlog.add",
-    "backlog.promote",
-    "issue.list",
-    "proposal.list",
-    "plan.list",
-    "adr.list",
-    "report",
-    "resume",
-    "check",
-    "handoff",
-    "interrupt",
-];
-
 /// The served surface — discovery flags + `--no-commit`, shared
 /// across requests. Nothing caches store state: every method
 /// re-opens the store.
@@ -508,6 +340,16 @@ impl Server {
             root,
             no_commit,
         }
+    }
+
+    /// The `--dir` discovery flag.
+    pub(crate) fn dir(&self) -> Option<&std::path::Path> {
+        self.dir.as_deref()
+    }
+
+    /// The `--root` discovery flag.
+    pub(crate) fn root(&self) -> Option<&std::path::Path> {
+        self.root.as_deref()
     }
 
     /// Exclusive-locked store — mutating methods.
@@ -594,299 +436,384 @@ impl Server {
         }
     }
 
+    /// The config root for `[verbs]`/`[views]` resolution —
+    /// discovery's repo root, else `--root`/cwd.
+    pub(crate) fn cfg_root(&self) -> PathBuf {
+        crate::discover::repo_root_for(self.dir.as_deref(), self.root.as_deref())
+            .ok()
+            .or_else(|| self.root.clone())
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
+
+    /// `initialize`'s method table — the registry's wire verbs
+    /// ∪ this repo's config verbs (per call, like view config).
+    fn methods(&self) -> Vec<String> {
+        let mut out: Vec<String> = crate::registry::served_names()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        if let Ok((verbs, _)) = myco_ops::verb::named_verbs_lenient(
+            &self.cfg_root(),
+            crate::ops::CONFIG,
+            crate::registry::builtin_refs(),
+        ) {
+            out.extend(verbs.iter().map(|v| v.name.clone()));
+        }
+        out
+    }
+
     /// The verb surface — `method` + `params` → a JSON payload,
-    /// transport- and wire-agnostic.
+    /// transport- and wire-agnostic. One dispatch path: the
+    /// registry's wire handler, then this repo's config verbs.
     fn dispatch(&self, method: &str, params: &Value) -> Result<Value, Fail> {
-        match method {
-            "initialize" => Ok(json!({
-                "protocol": 1,
-                "wire": "jsonrpc-2.0",
-                "transport": "stdio",
-                "server": {"name": "myco", "version": env!("CARGO_PKG_VERSION")},
-                "methods": METHODS,
-            })),
-            "manifest" => Ok(crate::manifest()),
-            "schema" => Ok(schema::document()),
-            "status" => {
-                let p: StatusParams = parse_params(params)?;
-                let (_proj, store) = self.open_read()?;
-                if p.prompt {
-                    status::prompt_json(&store).map_err(Fail::Verb)
-                } else {
-                    status::status_json(&store).map_err(Fail::Verb)
-                }
-            }
-            "view" => {
-                let p: ViewParams = parse_params(params)?;
-                let (proj, store) = self.open_read()?;
-                match (p.name.as_deref(), p.spec.as_ref()) {
-                    // bare — enumerate the defined views
-                    (None, None) => {
-                        let (views, warnings) =
-                            myco_ops::view::named_views(&proj.root, crate::ops::CONFIG)
-                                .map_err(Fail::Verb)?;
-                        Ok(json!({
-                            "views": views
-                                .iter()
-                                .map(|v| json!({
-                                    "name": v.name,
-                                    "origin": match v.origin {
-                                        Origin::Builtin => "builtin",
-                                        Origin::Config => "config",
-                                    },
-                                    "spec": v.spec,
-                                }))
-                                .collect::<Vec<_>>(),
-                            "warnings": warnings,
-                        }))
-                    }
-                    (name, patch) => {
-                        let (mut spec, warnings) = match name {
-                            Some(n) => {
-                                let (v, w) =
-                                    myco_ops::view::resolve(&proj.root, n, crate::ops::CONFIG)
-                                        .map_err(Fail::Verb)?;
-                                (v.spec, w)
-                            }
-                            None => (ViewSpec::default(), Vec::new()),
-                        };
-                        if let Some(patch) = patch {
-                            patch.apply(&mut spec);
-                        }
-                        spec.validate().map_err(Fail::Verb)?;
-                        let mut warnings = warnings;
-                        // the universe owners — `groups` borrows
-                        // item refs out of them
-                        let (interrupted, scan, views) = match spec.source {
-                            ViewSource::Repo => {
-                                let s = digest::scan(&store).map_err(Fail::Verb)?;
-                                (
-                                    continuity::interrupted_set(&store, s.live())
-                                        .map_err(Fail::Verb)?,
-                                    Some(s),
-                                    Vec::new(),
-                                )
-                            }
-                            // `source = "index"` unions the
-                            // registered repos' snapshots,
-                            // repo-tagged; snapshots carry no
-                            // handoffs — the set stays empty
-                            ViewSource::Index => {
-                                let (v, repo_warnings) =
-                                    crate::view::index_universe().map_err(Fail::Verb)?;
-                                warnings.extend(repo_warnings);
-                                (std::collections::BTreeSet::new(), None, v)
-                            }
-                        };
-                        // top-level items only — children ride
-                        // with their parent
-                        let groups = match spec.source {
-                            ViewSource::Repo => eval(
-                                scan.iter().flat_map(|s| {
-                                    s.items.iter().filter(|i| !s.archived.contains(&i.id))
-                                }),
-                                &spec,
-                            ),
-                            ViewSource::Index => eval_scoped(
-                                views.iter().flat_map(|v| {
-                                    v.snap.iter().flat_map(|s| {
-                                        s.items
-                                            .iter()
-                                            .filter(|i| !s.archived.contains(&i.id))
-                                            .map(move |i| Scoped::tagged(s.name.as_str(), i))
-                                    })
-                                }),
-                                &spec,
-                            ),
-                        };
-                        Ok(json!({
-                            "view": name,
-                            "spec": spec,
-                            "groups": groups
-                                .iter()
-                                .map(|g| json!({"label": g.label, "items": g.items}))
-                                .collect::<Vec<_>>(),
-                            "interrupted": interrupted
-                                .iter()
-                                .map(|i| i.to_string())
-                                .collect::<Vec<_>>(),
-                            "warnings": warnings,
-                        }))
-                    }
-                }
-            }
-            "next" => {
-                let p: NextParams = parse_params(params)?;
-                let (proj, store) = self.open_read()?;
-                let (view, _warnings) =
-                    myco_ops::view::resolve_lenient(&proj.root, "next", crate::ops::CONFIG)
+        if let Some(v) = crate::registry::find(method) {
+            let Some(w) = v.wire else {
+                return Err(Fail::UnknownMethod);
+            };
+            let a = crate::registry::Args::from_json(v, params)
+                .map_err(|e| Fail::BadParams(format!("invalid params: {e}")))?;
+            return w(self, &a);
+        }
+        crate::cfgverb::wire(self, method, params)
+    }
+}
+
+/// The `initialize` handshake — protocol caps + the method table.
+pub(crate) fn w_initialize(s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(json!({
+        "protocol": 1,
+        "wire": "jsonrpc-2.0",
+        "transport": "stdio",
+        "server": {"name": "myco", "version": env!("CARGO_PKG_VERSION")},
+        "methods": s.methods(),
+    }))
+}
+
+/// `manifest` on the wire.
+pub(crate) fn w_manifest(_s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(crate::manifest())
+}
+
+/// `schema` on the wire.
+pub(crate) fn w_schema(_s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(schema::document())
+}
+
+/// `status` — `{prompt}` picks the digest or the prompt block.
+pub(crate) fn w_status(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let (_proj, store) = s.open_read()?;
+    if a.flag("prompt") {
+        status::prompt_json(&store).map_err(Fail::Verb)
+    } else {
+        status::status_json(&store).map_err(Fail::Verb)
+    }
+}
+
+/// `report` on the wire.
+pub(crate) fn w_report(s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    let (proj, store) = s.open_read()?;
+    report::report_json(&store, &proj.worktree).map_err(Fail::Verb)
+}
+
+/// `check` on the wire — the read-only payload (no `--fix`).
+pub(crate) fn w_check(s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    let (proj, _store) = s.open_read()?;
+    check::check_json(&proj).map_err(Fail::Verb)
+}
+
+/// `item.show` — `{id}` (a single id per request).
+pub(crate) fn w_item_show(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.one::<ItemId>("id").map_err(Fail::BadParams)?;
+    let (_proj, store) = s.open_read()?;
+    itemcmd::show_json(&store, id).map_err(Fail::Verb)
+}
+
+/// `resume` — `{id, last}`.
+pub(crate) fn w_resume(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.one::<ItemId>("id").map_err(Fail::BadParams)?;
+    let last: Option<usize> = a.parsed("last").map_err(Fail::BadParams)?;
+    let (_proj, store) = s.open_read()?;
+    continuity::resume_json(&store, id, last).map_err(Fail::Verb)
+}
+
+/// `todo.list` / `backlog.list` — the shared list filters.
+pub(crate) fn w_todo_list(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    w_doc_list(s, a, false)
+}
+
+/// `backlog.list`.
+pub(crate) fn w_backlog_list(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    w_doc_list(s, a, true)
+}
+
+fn w_doc_list(s: &Server, a: &crate::registry::Args, backlog: bool) -> Result<Value, Fail> {
+    let f = items::list_args(a).map_err(Fail::BadParams)?;
+    let (_proj, store) = s.open_read()?;
+    let found = todo::list_items(&store, backlog, &f)?;
+    Ok(items_json(&found))
+}
+
+/// `issue.list`.
+pub(crate) fn w_issue_list(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    w_file_list(s, a, ItemKind::Issue)
+}
+
+/// `proposal.list`.
+pub(crate) fn w_proposal_list(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    w_file_list(s, a, ItemKind::Proposal)
+}
+
+/// `plan.list`.
+pub(crate) fn w_plan_list(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    w_file_list(s, a, ItemKind::Plan)
+}
+
+/// `adr.list`.
+pub(crate) fn w_adr_list(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    w_file_list(s, a, ItemKind::Adr)
+}
+
+fn w_file_list(s: &Server, a: &crate::registry::Args, kind: ItemKind) -> Result<Value, Fail> {
+    let f = items::list_args(a).map_err(Fail::BadParams)?;
+    let (_proj, store) = s.open_read()?;
+    let found = items::query_files(&store, kind, a.flag("archived"), &f).map_err(Fail::Verb)?;
+    Ok(items::marked_json(&found))
+}
+
+/// `todo.add`.
+pub(crate) fn w_todo_add(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let title = a.text("title").map_err(Fail::BadParams)?.to_string();
+    let section = a.opt("section").map(str::to_string);
+    let parent: Option<ItemId> = a.parsed("parent").map_err(Fail::BadParams)?;
+    let meta = items::meta_args(a).map_err(Fail::BadParams)?;
+    let (proj, store) = s.open()?;
+    let (item, file) =
+        todo::add_item(&store, &title, section.as_deref(), parent, &meta).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: add {}", item.id))?;
+    Ok(json!({"item": item, "file": file, "parent": parent, "committed": committed}))
+}
+
+/// `todo.done`.
+pub(crate) fn w_todo_done(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let (proj, store) = s.open()?;
+    let item = todo::done_item(&store, id).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: done {id}"))?;
+    Ok(json!({"item": item, "committed": committed}))
+}
+
+/// `todo.defer`.
+pub(crate) fn w_todo_defer(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let (proj, store) = s.open()?;
+    let item = todo::defer_item(&store, id).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: defer {id}"))?;
+    Ok(json!({"item": item, "file": "BACKLOG.md", "committed": committed}))
+}
+
+/// `backlog.add`.
+pub(crate) fn w_backlog_add(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let title = a.text("title").map_err(Fail::BadParams)?.to_string();
+    let section = a.opt("section").map(str::to_string);
+    let meta = items::meta_args(a).map_err(Fail::BadParams)?;
+    let (proj, store) = s.open()?;
+    let item = backlog::add_item(&store, &title, section.as_deref(), &meta).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: add {}", item.id))?;
+    Ok(json!({"item": item, "file": "BACKLOG.md", "committed": committed}))
+}
+
+/// `backlog.promote`.
+pub(crate) fn w_backlog_promote(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let (proj, store) = s.open()?;
+    let item = backlog::promote_item(&store, id).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: promote {id}"))?;
+    Ok(json!({"item": item, "file": "TODO.md", "committed": committed}))
+}
+
+/// `item.set` — `status` goes through the transition machine
+/// (single step, typed -32001 on rejection); `""` clears
+/// `epic`/`milestone`.
+pub(crate) fn w_item_set(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let flags = itemcmd::set_flags(a).map_err(Fail::BadParams)?;
+    if flags.is_noop() {
+        return Err(Fail::Verb(
+            "item set: nothing to change — pass at least one field".into(),
+        ));
+    }
+    let (proj, store) = s.open()?;
+    // pre-check the status step so the wire gets the typed
+    // -32001 + valid targets, not a string
+    if let Some(to) = flags.status {
+        let Some((item, _, _)) = items::find_item(&store, id).map_err(Fail::Verb)? else {
+            return Err(Fail::Verb(format!("{id}: no such item")));
+        };
+        item.status
+            .transition_to(to)
+            .map_err(|_| Fail::Transition {
+                id,
+                from: item.status,
+                to,
+            })?;
+    }
+    let (item, location) = itemcmd::mutate_item(&store, id, &flags).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: set {id}"))?;
+    Ok(json!({"item": item, "location": location, "committed": committed}))
+}
+
+/// `handoff` — `note "-"` reads stdin, and stdin IS the wire.
+pub(crate) fn w_handoff(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let note = a.text("note").map_err(Fail::BadParams)?.to_string();
+    if note == "-" {
+        return Err(Fail::BadParams(
+            "note \"-\" reads stdin — stdin is the wire; pass the note inline".into(),
+        ));
+    }
+    let actor: Option<Actor> = a.parsed("actor").map_err(Fail::BadParams)?;
+    let session = a.opt("session").map(str::to_string);
+    let (proj, store) = s.open()?;
+    let (entry, rel) = continuity::record_handoff(&store, &proj.worktree, id, note, actor, session)
+        .map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: handoff {id}"))?;
+    Ok(json!({"id": id.to_string(), "path": rel, "entry": entry, "committed": committed}))
+}
+
+/// `interrupt`.
+pub(crate) fn w_interrupt(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let note = a.opt("note").map(str::to_string);
+    let actor: Option<Actor> = a.parsed("actor").map_err(Fail::BadParams)?;
+    let session = a.opt("session").map(str::to_string);
+    let (proj, store) = s.open()?;
+    let entry = continuity::interrupt_item(&store, id, note.as_deref(), actor, session)
+        .map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: interrupt {id}"))?;
+    Ok(json!({"id": id.to_string(), "status": "open", "entry": entry, "committed": committed}))
+}
+
+/// `next` — `{spec}` merges over the `next` named view; `limit`
+/// pinned at 1. `{"item": null}` when the backlog is clear.
+pub(crate) fn w_next(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let patch = a.spec("spec").map_err(Fail::BadParams)?;
+    let (proj, store) = s.open_read()?;
+    let (view, _warnings) = myco_ops::view::resolve_lenient(&proj.root, "next", crate::ops::CONFIG)
+        .map_err(Fail::Verb)?;
+    let mut spec = view.spec;
+    if let Some(patch) = &patch {
+        patch.apply(&mut spec);
+    }
+    spec.limit = Some(1);
+    spec.validate().map_err(Fail::Verb)?;
+    let scan = digest::scan(&store).map_err(Fail::Verb)?;
+    Ok(json!({"item": next::pick(&scan, &spec)}))
+}
+
+/// `view` — `{name}` resolves a named view (builtin preset or
+/// `[views]` config); `{spec}` patches over it (or over the
+/// default spec when `name` is absent). Neither lists views.
+pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let name = a.opt("name").map(str::to_string);
+    let patch = a.spec("spec").map_err(Fail::BadParams)?;
+    let (proj, store) = s.open_read()?;
+    match (name.as_deref(), patch.as_ref()) {
+        // bare — enumerate the defined views
+        (None, None) => {
+            let (views, warnings) =
+                myco_ops::view::named_views(&proj.root, crate::ops::CONFIG).map_err(Fail::Verb)?;
+            Ok(json!({
+                "views": views
+                    .iter()
+                    .map(|v| json!({
+                        "name": v.name,
+                        "origin": match v.origin {
+                            Origin::Builtin => "builtin",
+                            Origin::Config => "config",
+                        },
+                        "spec": v.spec,
+                    }))
+                    .collect::<Vec<_>>(),
+                "warnings": warnings,
+            }))
+        }
+        (name, patch) => {
+            let (mut spec, warnings) = match name {
+                Some(n) => {
+                    let (v, w) = myco_ops::view::resolve(&proj.root, n, crate::ops::CONFIG)
                         .map_err(Fail::Verb)?;
-                let mut spec = view.spec;
-                if let Some(patch) = &p.spec {
-                    patch.apply(&mut spec);
+                    (v.spec, w)
                 }
-                spec.limit = Some(1);
-                spec.validate().map_err(Fail::Verb)?;
-                let scan = digest::scan(&store).map_err(Fail::Verb)?;
-                Ok(json!({"item": next::pick(&scan, &spec)}))
+                None => (ViewSpec::default(), Vec::new()),
+            };
+            if let Some(patch) = patch {
+                patch.apply(&mut spec);
             }
-            "item.show" => {
-                let p: IdParams = parse_params(params)?;
-                let (_proj, store) = self.open_read()?;
-                itemcmd::show_json(&store, p.id).map_err(Fail::Verb)
-            }
-            "todo.list" | "backlog.list" => {
-                let p: ListParams = parse_params(params)?;
-                let (_proj, store) = self.open_read()?;
-                let found = todo::list_items(&store, method == "backlog.list", &p.filter())?;
-                Ok(items_json(&found))
-            }
-            "issue.list" | "proposal.list" | "plan.list" | "adr.list" => {
-                let p: ListParams = parse_params(params)?;
-                let (_proj, store) = self.open_read()?;
-                let kind = match method {
-                    "issue.list" => ItemKind::Issue,
-                    "proposal.list" => ItemKind::Proposal,
-                    "plan.list" => ItemKind::Plan,
-                    _ => ItemKind::Adr,
-                };
-                let found = items::query_files(&store, kind, p.archived, &p.filter())
-                    .map_err(Fail::Verb)?;
-                Ok(items::marked_json(&found))
-            }
-            "report" => {
-                let (proj, store) = self.open_read()?;
-                report::report_json(&store, &proj.worktree).map_err(Fail::Verb)
-            }
-            "resume" => {
-                let p: IdParams = parse_params(params)?;
-                let (_proj, store) = self.open_read()?;
-                continuity::resume_json(&store, p.id, p.last).map_err(Fail::Verb)
-            }
-            "check" => {
-                let (proj, _store) = self.open_read()?;
-                check::check_json(&proj).map_err(Fail::Verb)
-            }
-            "todo.add" => {
-                let p: TodoAddParams = parse_params(params)?;
-                let (proj, store) = self.open()?;
-                let (item, file) = todo::add_item(
-                    &store,
-                    &p.title,
-                    p.section.as_deref(),
-                    p.parent,
-                    &p.meta.into_meta(),
-                )
-                .map_err(Fail::Verb)?;
-                let committed = self.commit(&proj.worktree, &format!("chore: add {}", item.id))?;
-                Ok(json!({"item": item, "file": file, "parent": p.parent, "committed": committed}))
-            }
-            "todo.done" => {
-                let p: IdParams = parse_params(params)?;
-                let (proj, store) = self.open()?;
-                let item = todo::done_item(&store, p.id).map_err(Fail::Verb)?;
-                let committed = self.commit(&proj.worktree, &format!("chore: done {}", p.id))?;
-                Ok(json!({"item": item, "committed": committed}))
-            }
-            "todo.defer" => {
-                let p: IdParams = parse_params(params)?;
-                let (proj, store) = self.open()?;
-                let item = todo::defer_item(&store, p.id).map_err(Fail::Verb)?;
-                let committed = self.commit(&proj.worktree, &format!("chore: defer {}", p.id))?;
-                Ok(json!({"item": item, "file": "BACKLOG.md", "committed": committed}))
-            }
-            "backlog.add" => {
-                let p: BacklogAddParams = parse_params(params)?;
-                let (proj, store) = self.open()?;
-                let item =
-                    backlog::add_item(&store, &p.title, p.section.as_deref(), &p.meta.into_meta())
-                        .map_err(Fail::Verb)?;
-                let committed = self.commit(&proj.worktree, &format!("chore: add {}", item.id))?;
-                Ok(json!({"item": item, "file": "BACKLOG.md", "committed": committed}))
-            }
-            "backlog.promote" => {
-                let p: IdParams = parse_params(params)?;
-                let (proj, store) = self.open()?;
-                let item = backlog::promote_item(&store, p.id).map_err(Fail::Verb)?;
-                let committed = self.commit(&proj.worktree, &format!("chore: promote {}", p.id))?;
-                Ok(json!({"item": item, "file": "TODO.md", "committed": committed}))
-            }
-            "item.set" => {
-                let p: SetParams = parse_params(params)?;
-                let (proj, store) = self.open()?;
-                let flags = itemcmd::SetFlags {
-                    status: p.status,
-                    pri: p.pri,
-                    owner: p.owner,
-                    label: p.label,
-                    unlabel: p.unlabel,
-                    blocks: p.blocks,
-                    unblock: p.unblock,
-                    epic: p.epic,
-                    milestone: p.milestone,
-                };
-                if flags.is_noop() {
-                    return Err(Fail::Verb(
-                        "item set: nothing to change — pass at least one field".into(),
-                    ));
+            spec.validate().map_err(Fail::Verb)?;
+            let mut warnings = warnings;
+            // the universe owners — `groups` borrows item refs
+            // out of them
+            let (interrupted, scan, views) = match spec.source {
+                ViewSource::Repo => {
+                    let s = digest::scan(&store).map_err(Fail::Verb)?;
+                    (
+                        continuity::interrupted_set(&store, s.live()).map_err(Fail::Verb)?,
+                        Some(s),
+                        Vec::new(),
+                    )
                 }
-                // pre-check the status step so the wire gets the
-                // typed -32001 + valid targets, not a string
-                if let Some(to) = flags.status {
-                    let Some((item, _, _)) = items::find_item(&store, p.id).map_err(Fail::Verb)?
-                    else {
-                        return Err(Fail::Verb(format!("{}: no such item", p.id)));
-                    };
-                    item.status
-                        .transition_to(to)
-                        .map_err(|_| Fail::Transition {
-                            id: p.id,
-                            from: item.status,
-                            to,
-                        })?;
+                // `source = "index"` unions the registered repos'
+                // snapshots, repo-tagged; snapshots carry no
+                // handoffs — the set stays empty
+                ViewSource::Index => {
+                    let (v, repo_warnings) = crate::view::index_universe().map_err(Fail::Verb)?;
+                    warnings.extend(repo_warnings);
+                    (std::collections::BTreeSet::new(), None, v)
                 }
-                let (item, location) =
-                    itemcmd::mutate_item(&store, p.id, &flags).map_err(Fail::Verb)?;
-                let committed = self.commit(&proj.worktree, &format!("chore: set {}", p.id))?;
-                Ok(json!({"item": item, "location": location, "committed": committed}))
-            }
-            "handoff" => {
-                let p: HandoffParams = parse_params(params)?;
-                if p.note == "-" {
-                    return Err(Fail::BadParams(
-                        "note \"-\" reads stdin — stdin is the wire; pass the note inline".into(),
-                    ));
-                }
-                let (proj, store) = self.open()?;
-                let (entry, rel) = continuity::record_handoff(
-                    &store,
-                    &proj.worktree,
-                    p.id,
-                    p.note,
-                    p.actor,
-                    p.session,
-                )
-                .map_err(Fail::Verb)?;
-                let committed = self.commit(&proj.worktree, &format!("chore: handoff {}", p.id))?;
-                Ok(
-                    json!({"id": p.id.to_string(), "path": rel, "entry": entry, "committed": committed}),
-                )
-            }
-            "interrupt" => {
-                let p: InterruptParams = parse_params(params)?;
-                let (proj, store) = self.open()?;
-                let entry =
-                    continuity::interrupt_item(&store, p.id, p.note.as_deref(), p.actor, p.session)
-                        .map_err(Fail::Verb)?;
-                let committed =
-                    self.commit(&proj.worktree, &format!("chore: interrupt {}", p.id))?;
-                Ok(
-                    json!({"id": p.id.to_string(), "status": "open", "entry": entry, "committed": committed}),
-                )
-            }
-            _ => Err(Fail::UnknownMethod),
+            };
+            // top-level items only — children ride with their parent
+            let groups = match spec.source {
+                ViewSource::Repo => eval(
+                    scan.iter()
+                        .flat_map(|s| s.items.iter().filter(|i| !s.archived.contains(&i.id))),
+                    &spec,
+                ),
+                ViewSource::Index => eval_scoped(
+                    views.iter().flat_map(|v| {
+                        v.snap.iter().flat_map(|s| {
+                            s.items
+                                .iter()
+                                .filter(|i| !s.archived.contains(&i.id))
+                                .map(move |i| Scoped::tagged(s.name.as_str(), i))
+                        })
+                    }),
+                    &spec,
+                ),
+            };
+            Ok(json!({
+                "view": name,
+                "spec": spec,
+                "groups": groups
+                    .iter()
+                    .map(|g| json!({"label": g.label, "items": g.items}))
+                    .collect::<Vec<_>>(),
+                "interrupted": interrupted
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>(),
+                "warnings": warnings,
+            }))
         }
     }
+}
+
+/// The `serve` verb itself — stdio transport, JSON-RPC wire.
+pub(crate) fn h_serve(
+    ctx: &crate::registry::Ctx,
+    _a: &crate::registry::Args,
+) -> Result<i32, String> {
+    run(ctx.dir.clone(), ctx.root.clone(), ctx.no_commit)
 }
 
 /// `Vec<Item>` → a JSON array of item objects.

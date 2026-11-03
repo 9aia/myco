@@ -6,7 +6,6 @@
 //! structured digest — with `--prompt` it's `{"prompt": "<block>"}`.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 
 use myco_core::{eval, GroupAxis, Item, ItemId, Scoped, Status, ViewFilter, ViewGroup, ViewSpec};
 use myco_store::Store;
@@ -175,13 +174,10 @@ pub fn prompt_json(store: &impl Store) -> Result<serde_json::Value, String> {
 }
 
 /// The `status` verb.
-pub fn run(
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    prompt: bool,
-    json_out: bool,
-) -> Result<i32, String> {
-    let (_proj, store) = items::open_read(dir.as_deref(), root.as_deref())?;
+pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
+    let prompt = a.flag("prompt");
+    let json_out = ctx.json;
+    let (_proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let scan = digest::scan(&store)?;
     let interrupted = crate::continuity::interrupted_set(&store, scan.live())?;
     if prompt {

@@ -2,8 +2,6 @@
 //! conventional message. Git identity comes from the repo config,
 //! like every other myco commit.
 
-use std::path::PathBuf;
-
 use serde_json::json;
 
 use crate::discover;
@@ -13,14 +11,11 @@ use crate::ops;
 const DEFAULT_MSG: &str = "chore: update project ledger";
 
 /// The `commit` verb.
-pub fn run(
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    message: Option<String>,
-    json_out: bool,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let proj = discover::discover(dir.as_deref(), root.as_deref())?;
+pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
+    let message = a.opt("message").map(str::to_string);
+    let json_out = ctx.json;
+    let no_commit = ctx.no_commit;
+    let proj = discover::discover(ctx.dir.as_deref(), ctx.root.as_deref())?;
     // committing sweeps pending writes — don't catch another
     // verb mid-mutation
     let _lock = ops::lock_worktree(&proj.worktree)?;

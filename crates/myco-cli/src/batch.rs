@@ -18,13 +18,9 @@ use crate::serve::{JsonRpc2, Server, WireProtocol};
 /// The `batch` verb — exits nonzero only when the runner itself
 /// fails (unreadable `--file`, a write/read error), never on a
 /// line's own error response.
-pub fn run(
-    file: Option<PathBuf>,
-    dir: Option<PathBuf>,
-    root: Option<PathBuf>,
-    no_commit: bool,
-) -> Result<i32, String> {
-    let server = Server::new(dir, root, no_commit);
+pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
+    let file = a.opt("file").map(PathBuf::from);
+    let server = Server::new(ctx.dir.clone(), ctx.root.clone(), ctx.no_commit);
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     match file {
@@ -184,13 +180,18 @@ mod tests {
 
     #[test]
     fn missing_file_fails_the_runner_not_a_line() {
-        let err = run(
-            Some(PathBuf::from("/definitely/not/here.ndjson")),
-            None,
-            None,
-            true,
+        let mut ctx = crate::registry::Ctx {
+            no_commit: true,
+            ..Default::default()
+        };
+        let a = crate::registry::Args::from_argv(
+            crate::registry::find("batch").unwrap(),
+            &["--file".into(), "/definitely/not/here.ndjson".into()],
+            &mut ctx,
+            false,
         )
-        .unwrap_err();
+        .unwrap();
+        let err = h(&ctx, &a).unwrap_err();
         assert!(err.contains("--file"), "{err}");
         // a perfectly valid batch run still exits 0 with per-line
         // errors inside — covered by mixed_success_* above
