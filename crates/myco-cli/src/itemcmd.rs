@@ -2,7 +2,7 @@
 //! item anywhere in the ledger; mutate metadata, with `--status`
 //! going through the transition machine only.
 
-use myco_core::{is_valid_label, Actor, Item, ItemId, Priority, Status};
+use myco_core::{is_valid_label, Actor, EdgeKind, Item, ItemId, Priority, Status};
 use myco_store::Store;
 use serde_json::json;
 
@@ -142,6 +142,21 @@ pub fn h_show(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     show(&store, &a.many_parsed::<ItemId>("id")?, ctx.json)
 }
 
+/// The link graph behind the related section — derived live, not
+/// read from the persisted index. One gather per `item show` call,
+/// shared across a multi-id batch (see [`myco_ops::links::live_graph`]
+/// for why the index isn't consulted here). The gather is
+/// per-source lenient — a corrupt file costs its own edges — and
+/// its warnings go to stderr: they're drift `check` reports, not
+/// show's output.
+fn graph(store: &impl Store) -> myco_ops::links::LiveGraph {
+    let (graph, warnings) = myco_ops::links::live_graph(store);
+    for w in warnings {
+        eprintln!("myco: warning: {w}");
+    }
+    graph
+}
+
 /// The `item set` verb.
 pub fn h_set(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
@@ -173,11 +188,19 @@ struct ShowData {
     handoffs: usize,
     interrupted: bool,
     body: Option<String>,
+    /// The item's link-graph neighborhood — kind already
+    /// mirrored for incoming edges (`blocked_by`, …).
+    related: Vec<myco_ops::links::RelatedItem>,
 }
 
 /// Load one id anywhere in the ledger — TODO/BACKLOG line or
-/// item file, live or archived.
-fn show_data(store: &impl Store, id: ItemId) -> Result<ShowData, String> {
+/// item file, live or archived — plus its related edges out of
+/// `graph`.
+fn show_data(
+    store: &impl Store,
+    id: ItemId,
+    graph: &myco_ops::links::LiveGraph,
+) -> Result<ShowData, String> {
     match items::find_item(store, id)? {
         Some((item, location, body)) => {
             let handoffs = store.read_handoffs(id).map_err(|e| e.to_string())?.len();
@@ -188,10 +211,63 @@ fn show_data(store: &impl Store, id: ItemId) -> Result<ShowData, String> {
                 handoffs,
                 interrupted,
                 body,
+                related: graph.related(id),
             })
         }
         None => Err(format!("{id}: no such item")),
     }
+}
+
+/// The related section's human lines — the TUI's preview shape:
+/// one `kind:` line per edge kind in declaration order, neighbors
+/// joined by `·`, `ID title` when the ledger knows the other end
+/// (a `handoff` self-edge prints the file path instead of the
+/// item's own id). Empty graph → empty string.
+fn related_lines(related: &[myco_ops::links::RelatedItem]) -> String {
+    let mut out = String::from("\n  related:");
+    for kind in EdgeKind::ALL {
+        let dsts: Vec<String> = related
+            .iter()
+            .filter(|r| r.kind == kind)
+            .map(|r| {
+                if kind == EdgeKind::Handoff {
+                    return format!("handoffs/{}.md", r.other);
+                }
+                match &r.title {
+                    Some(t) if !t.is_empty() => format!("{} {}", r.other, t),
+                    _ => r.other.to_string(),
+                }
+            })
+            .collect();
+        if !dsts.is_empty() {
+            out.push_str(&format!("\n    {:<13} {}", kind.name(), dsts.join(" · ")));
+        }
+    }
+    out
+}
+
+/// The related section's JSON shape — `{kind: [{id, title?}]}`,
+/// kinds in declaration order, empty groups omitted, `title`
+/// only when the ledger resolves the neighbor.
+fn related_json(related: &[myco_ops::links::RelatedItem]) -> serde_json::Value {
+    let mut groups = serde_json::Map::new();
+    for kind in EdgeKind::ALL {
+        let items: Vec<serde_json::Value> = related
+            .iter()
+            .filter(|r| r.kind == kind)
+            .map(|r| {
+                let mut v = json!({"id": r.other.to_string()});
+                if let Some(t) = &r.title {
+                    v["title"] = json!(t);
+                }
+                v
+            })
+            .collect();
+        if !items.is_empty() {
+            groups.insert(kind.name().to_string(), json!(items));
+        }
+    }
+    serde_json::Value::Object(groups)
 }
 
 /// One item's human block — identical for single- and multi-id
@@ -209,6 +285,9 @@ fn show_block(d: &ShowData) -> String {
             d.item.id
         ));
     }
+    if !d.related.is_empty() {
+        out.push_str(&related_lines(&d.related));
+    }
     if let Some(body) = &d.body {
         if !body.is_empty() {
             out.push_str(&format!("\n\n{body}"));
@@ -218,15 +297,17 @@ fn show_block(d: &ShowData) -> String {
 }
 
 /// `ShowData` → the `{item, location, handoffs, interrupted,
-/// body}` payload shape.
+/// related, body}` payload shape.
 fn show_value(d: &ShowData) -> serde_json::Value {
-    json!({"item": d.item, "location": d.location, "handoffs": d.handoffs, "interrupted": d.interrupted, "body": d.body})
+    json!({"item": d.item, "location": d.location, "handoffs": d.handoffs, "interrupted": d.interrupted, "related": related_json(&d.related), "body": d.body})
 }
 
 /// The `item show` payload — `{item, location, handoffs,
-/// interrupted, body}` — the `myco serve` method surface.
+/// interrupted, related, body}` — the `myco serve` method surface
+/// (related-ness rides `item.show`; `batch` inherits it).
 pub(crate) fn show_json(store: &impl Store, id: ItemId) -> Result<serde_json::Value, String> {
-    Ok(show_value(&show_data(store, id)?))
+    let graph = graph(store);
+    Ok(show_value(&show_data(store, id, &graph)?))
 }
 
 /// The `item show` body — 1..n ids in one open. Single id keeps
@@ -234,8 +315,9 @@ pub(crate) fn show_json(store: &impl Store, id: ItemId) -> Result<serde_json::Va
 /// in argument order (a bad id reports to stderr, exit 1) and
 /// `--json` becomes the `[{id, ok, payload|error}]` array.
 fn show(store: &impl Store, ids: &[ItemId], json_out: bool) -> Result<i32, String> {
+    let graph = graph(store);
     if ids.len() == 1 {
-        let d = show_data(store, ids[0])?;
+        let d = show_data(store, ids[0], &graph)?;
         if json_out {
             crate::ops::print_json(&show_value(&d));
         } else {
@@ -244,14 +326,16 @@ fn show(store: &impl Store, ids: &[ItemId], json_out: bool) -> Result<i32, Strin
         return Ok(0);
     }
     if json_out {
-        let (entries, failed) = items::multi_json(ids, |id| show_json(store, id));
+        let (entries, failed) = items::multi_json(ids, |id| {
+            show_data(store, id, &graph).map(|d| show_value(&d))
+        });
         crate::ops::print_json(&entries);
         return Ok(if failed { 1 } else { 0 });
     }
     let mut blocks = Vec::new();
     let mut failed = false;
     for id in ids {
-        match show_data(store, *id) {
+        match show_data(store, *id, &graph) {
             Ok(d) => blocks.push(show_block(&d)),
             Err(e) => {
                 failed = true;

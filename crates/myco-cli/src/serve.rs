@@ -1022,6 +1022,52 @@ mod tests {
     }
 
     #[test]
+    fn item_show_carries_kind_grouped_related() {
+        let (_d, s) = fixture();
+        call(&s, "todo.add", json!({"title": "alpha"})).unwrap();
+        call(&s, "todo.add", json!({"title": "beta — see T-001"})).unwrap();
+        call(&s, "item.set", json!({"id": "T-001", "blocks": "T-002"})).unwrap();
+        call(&s, "handoff", json!({"id": "T-001", "note": "wip"})).unwrap();
+
+        // no `index add`, no MYCO_HOME — related is derived live
+        // from the ledger, so an unregistered repo answers fully
+        let v = call(&s, "item.show", json!({"id": "T-001"})).unwrap();
+        assert_eq!(
+            v["related"]["handoff"],
+            json!([{"id": "T-001", "title": "alpha"}])
+        );
+        assert_eq!(
+            v["related"]["blocks"],
+            json!([{"id": "T-002", "title": "beta — see T-001"}])
+        );
+        // T-002's title mentions T-001 → mirrored incoming edge
+        assert_eq!(
+            v["related"]["referenced_by"],
+            json!([{"id": "T-002", "title": "beta — see T-001"}])
+        );
+
+        let v = call(&s, "item.show", json!({"id": "T-002"})).unwrap();
+        assert_eq!(v["related"]["blocked_by"][0]["id"], "T-001");
+        assert_eq!(v["related"]["references"][0]["id"], "T-001");
+
+        // no edges → an empty object, not an absent key
+        call(&s, "todo.add", json!({"title": "lonely"})).unwrap();
+        let v = call(&s, "item.show", json!({"id": "T-003"})).unwrap();
+        assert_eq!(v["related"], json!({}));
+
+        // batch drives the identical dispatch — one line through
+        // handle_line proves related-ness rides it too
+        let line = s
+            .handle_line(
+                &JsonRpc2,
+                &json!({"id": 1, "method": "item.show", "params": {"id": "T-002"}}).to_string(),
+            )
+            .unwrap();
+        let v: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(v["result"]["related"]["blocked_by"][0]["id"], "T-001");
+    }
+
+    #[test]
     fn stdio_transport_lines_and_eof() {
         let input = b"one\n\r\nthree";
         let mut out = Vec::new();

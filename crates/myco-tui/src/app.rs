@@ -530,6 +530,8 @@ impl Model {
             KeyCode::Char('g') if was_g => self.sel = self.first_item_row().unwrap_or(0),
             KeyCode::Char('g') => self.pending = Some('g'),
             KeyCode::Char('G') => self.sel = self.last_item_row().unwrap_or(0),
+            KeyCode::Char('{') => self.jump_section(-1),
+            KeyCode::Char('}') => self.jump_section(1),
             KeyCode::Char('d') if was_d => self.mutate(|m| m.done_selected()),
             KeyCode::Char('d') => self.pending = Some('d'),
             KeyCode::Char('D') => self.mutate(|m| m.defer_selected()),
@@ -793,6 +795,47 @@ impl Model {
             if matches!(self.rows[i as usize], Row::Item { .. }) {
                 self.sel = i as usize;
                 break;
+            }
+        }
+    }
+
+    /// `{`/`}` — jump between section boundaries (kind groups on
+    /// the `Files` board, `##` sections on the ledgers). `}` lands
+    /// on the first item under the next header; `{` on the first
+    /// item of the current group, or the previous group's when
+    /// already there. Edges stop, matching `move_sel`.
+    fn jump_section(&mut self, delta: isize) {
+        let is_item = |i: usize| matches!(self.rows.get(i), Some(Row::Item { .. }));
+        let is_header = |r: &Row| matches!(r, Row::Header(_));
+        let item_after = |h: usize| (h + 1..self.rows.len()).find(|&i| is_item(i));
+        if delta > 0 {
+            if let Some(h) = (self.sel + 1..self.rows.len()).find(|&i| is_header(&self.rows[i])) {
+                if let Some(t) = item_after(h) {
+                    self.sel = t;
+                }
+            }
+            return;
+        }
+        match self.rows[..self.sel].iter().rposition(is_header) {
+            // In a group: first item, else the previous group's first.
+            Some(h) => match item_after(h) {
+                Some(first) if first == self.sel => {
+                    // Group start: previous group, or the leading
+                    // pre-header span when no header precedes.
+                    let prev = self.rows[..h]
+                        .iter()
+                        .rposition(is_header)
+                        .and_then(item_after);
+                    self.sel = prev.or_else(|| self.first_item_row()).unwrap_or(self.sel);
+                }
+                Some(t) => self.sel = t,
+                None => {}
+            },
+            // Before any header — the leading span is the first group.
+            None => {
+                if let Some(t) = self.first_item_row() {
+                    self.sel = t;
+                }
             }
         }
     }
@@ -1126,6 +1169,38 @@ mod tests {
         assert!(matches!(m.rows[3], Row::Item { ref item, depth: 1 } if item.id.number() == 4));
         // cursor lands on the first item, not the header
         assert_eq!(m.sel, 1);
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+    }
+
+    #[test]
+    fn section_jumps() {
+        let mut m = model(|l| {
+            l.todo.sections.push(Section {
+                name: Some("A".into()),
+                items: vec![t(1), t(2)],
+            });
+            l.todo.sections.push(Section {
+                name: Some("B".into()),
+                items: vec![t(3)],
+            });
+        });
+        // rows: [H(A), t1, t2, H(B), t3] — sel starts on t1
+        assert_eq!(m.sel, 1);
+        // } → next group's first item
+        m.key(key('}'));
+        assert_eq!(m.selected().unwrap().id.number(), 3);
+        // } at the last group — stays
+        m.key(key('}'));
+        assert_eq!(m.selected().unwrap().id.number(), 3);
+        // { at group start → previous group's first item
+        m.key(key('{'));
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+        // { again — already at the top group's start, stays
+        m.key(key('{'));
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+        // { mid-group → current group's first item
+        m.sel = 2;
+        m.key(key('{'));
         assert_eq!(m.selected().unwrap().id.number(), 1);
     }
 

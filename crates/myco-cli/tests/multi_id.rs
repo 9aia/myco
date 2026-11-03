@@ -50,6 +50,20 @@ fn run(dir: &Path, args: &[&str]) -> Output {
         .unwrap()
 }
 
+/// `run` + extra env vars — for pinning `MYCO_HOME` somewhere
+/// dead when a test wants to prove the index isn't consulted.
+fn run_env(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
+    let mut c = Command::new(MYCO);
+    c.current_dir(dir)
+        .args(args)
+        .env("MYCO_CONFIG", "/nonexistent/myco.toml")
+        .env_remove("MYCO_NO_COMMIT");
+    for (k, v) in env {
+        c.env(k, v);
+    }
+    c.output().unwrap()
+}
+
 fn json(out: &Output) -> Value {
     serde_json::from_slice(&out.stdout)
         .unwrap_or_else(|e| panic!("bad json ({}): {}", e, String::from_utf8_lossy(&out.stdout)))
@@ -147,6 +161,56 @@ fn item_show_multi_json_shape_and_partial_failure() {
         stderr(&out)
     );
     assert!(stdout(&out).contains("T-001"), "{}", stdout(&out));
+}
+
+#[test]
+fn item_show_related_section_human_and_json() {
+    let d = seeded();
+    // a real edge: the issue declares it blocks the task
+    let out = run(d.path(), &["item", "set", "I-001", "--blocks", "T-001"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    // human — a kind-grouped section, titles resolved, the
+    // handoff self-edge rendered as its file path
+    let out = run(d.path(), &["item", "show", "I-001"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.contains("related:"), "{text}");
+    assert!(text.contains("handoff"), "{text}");
+    assert!(text.contains("handoffs/I-001.md"), "{text}");
+    assert!(text.contains("T-001 a task"), "{text}");
+
+    // the incoming side mirrors the kind — the task is
+    // blocked_by the issue
+    let out = run(d.path(), &["item", "show", "T-001"]);
+    let text = stdout(&out);
+    assert!(text.contains("blocked_by"), "{text}");
+    assert!(text.contains("I-001 an issue"), "{text}");
+
+    // --json — `{kind: [{id, title?}]}`; MYCO_HOME pointed at
+    // nothing to prove the related section never consults the
+    // persisted index (it's derived live from the ledger)
+    let out = run_env(
+        d.path(),
+        &["item", "show", "I-001", "--json"],
+        &[("MYCO_HOME", "/nonexistent/myco-home")],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(
+        v["related"]["handoff"],
+        serde_json::json!([{"id": "I-001", "title": "an issue"}])
+    );
+    assert_eq!(
+        v["related"]["blocks"],
+        serde_json::json!([{"id": "T-001", "title": "a task"}])
+    );
+
+    // multi-id shares the one graph — both payloads carry related
+    let out = run(d.path(), &["item", "show", "I-001", "T-001", "--json"]);
+    let arr = json(&out);
+    assert_eq!(arr[0]["payload"]["related"]["blocks"][0]["id"], "T-001");
+    assert_eq!(arr[1]["payload"]["related"]["blocked_by"][0]["id"], "I-001");
 }
 
 #[test]

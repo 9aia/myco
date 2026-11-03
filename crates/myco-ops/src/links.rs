@@ -15,11 +15,12 @@
 //! broken file is "processed, nothing declared", not a retry
 //! loop — and reported in [`SyncReport::errors`].
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use myco_core::Edge;
+use myco_core::{refs, Edge, EdgeKind, Item, ItemId, ItemKind};
 use myco_index::{fingerprint, FileStamp, LinkIndex};
+use myco_store::Store;
 
 /// What one [`sync`] did — the counters a report renders.
 #[derive(Debug, Default, Clone)]
@@ -167,6 +168,169 @@ fn stat(meta: &std::fs::Metadata) -> (u64, u64) {
     (mtime_ms, meta.len())
 }
 
+// ---------------------------------------------------------------- live graph
+
+/// The link graph derived live from a store — the same edge set
+/// [`sync`] would record plus a title per known item. This is the
+/// read side `item show` and `serve item.show` use instead of the
+/// persisted index, deliberately:
+///
+/// - The question is bounded — "what touches `id`?" — and the
+///   store is already open; a full gather is one ledger scan,
+///   which `item show` mostly pays for anyway.
+/// - A live read has no registration or staleness question —
+///   `item show` works on repos `index add` never saw, and never
+///   shows edges older than the file on disk.
+/// - A read verb stays read-only: `sync` writes stamps/edges into
+///   the shared redb (taking its lock), which would make `show`
+///   mutate global state and contend with real writers.
+///
+/// The persisted index exists for the queries that outnumber
+/// ledger scans — repeated lookups, cross-repo views — not for a
+/// single item's neighborhood.
+pub struct LiveGraph {
+    /// Every edge the ledger declares, `(src, kind, dst)`-sorted —
+    /// frontmatter links, prose mentions, handoff attachments;
+    /// live *and* archived items (an archived ADR still supersedes).
+    pub edges: Vec<Edge>,
+    /// Item id → title, for annotating neighbors in output.
+    pub titles: BTreeMap<ItemId, String>,
+}
+
+/// One neighbor of an item, as `related` reports it — the
+/// query-side view of [`myco_index::Related`] with the title
+/// resolved while the graph is in hand. `kind` is already
+/// mirrored for incoming edges.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelatedItem {
+    /// The relationship as seen from the queried item —
+    /// `blocked_by`/`referenced_by` for incoming edges.
+    pub kind: EdgeKind,
+    /// The item at the other end of the edge.
+    pub other: ItemId,
+    /// `other`'s title when the ledger knows it — a dangling edge
+    /// end (a mention of an id that doesn't exist) carries `None`
+    /// and renders as the bare id, not a filtered-away edge.
+    pub title: Option<String>,
+}
+
+impl LiveGraph {
+    /// Everything attached to `id`, both directions — outgoing
+    /// kinds verbatim, incoming mirrored (`blocks` → `blocked_by`),
+    /// sorted by `(kind, other)`. Unlike [`LinkIndex::related`]
+    /// there's no `alive` filter: the TUI's in-memory graph has
+    /// the same contract, and a dangling id in the output is
+    /// information (`check` repairs it), not corruption.
+    pub fn related(&self, id: ItemId) -> Vec<RelatedItem> {
+        let mut out: Vec<RelatedItem> = Vec::new();
+        for e in &self.edges {
+            let (kind, other) = if e.src == id {
+                (e.kind, e.dst)
+            } else if e.dst == id {
+                (e.kind.mirror(), e.src)
+            } else {
+                continue;
+            };
+            out.push(RelatedItem {
+                kind,
+                other,
+                title: self.titles.get(&other).cloned(),
+            });
+        }
+        out.sort_by_key(|r| (r.kind, r.other));
+        out.dedup_by(|a, b| a.kind == b.kind && a.other == b.other);
+        out
+    }
+}
+
+/// Derive the [`LiveGraph`] over a store — TODO/BACKLOG items
+/// (whole subtrees, titles scanned for mentions), every item file
+/// (live + `archive/`, metas + bodies), and every `handoffs/*.md`
+/// (the filename self-edge plus mentions inside entry notes).
+/// Per-source edge sets are what `extract_file` emits per path;
+/// gathering through [`Store`] ports it off the `*.md` walk so
+/// non-fs stores play too.
+///
+/// Per-source lenient: this feeds display surfaces (`item show`),
+/// so one corrupt file costs its own edges, not the whole graph —
+/// a source that fails to read contributes nothing and its error
+/// lands in the returned `warnings` (drift is `myco check`'s
+/// report, not a display verb's abort).
+pub fn live_graph(store: &impl Store) -> (LiveGraph, Vec<String>) {
+    let mut edges = BTreeSet::new();
+    let mut titles = BTreeMap::new();
+    let mut warnings = Vec::new();
+
+    match crate::items::load_ledger(store) {
+        Ok(ledger) => {
+            for i in ledger
+                .todo
+                .items()
+                .chain(ledger.backlog.items())
+                .flat_map(Item::subtree)
+            {
+                titles.insert(i.id, i.title.clone());
+                edges.extend(refs::extract(&i.title, Some(i), i.id));
+            }
+        }
+        Err(e) => warnings.push(format!("ledger: {e}")),
+    }
+
+    for kind in [
+        ItemKind::Issue,
+        ItemKind::Proposal,
+        ItemKind::Adr,
+        ItemKind::Plan,
+    ] {
+        // live and archived gather independently — a corrupt file
+        // in one scope shouldn't blind the other
+        for (scope, files) in [
+            ("", store.list_items(kind)),
+            ("archived ", store.list_archived(kind)),
+        ] {
+            match files {
+                Ok(files) => {
+                    for f in files {
+                        titles.insert(f.meta.id, f.meta.title.clone());
+                        edges.extend(refs::extract(&f.body, Some(&f.meta), f.meta.id));
+                    }
+                }
+                Err(e) => warnings.push(format!("{scope}{} files: {e}", kind.name())),
+            }
+        }
+    }
+
+    match store.list_handoff_files() {
+        Ok(handoffs) => {
+            for h in handoffs {
+                // the filename fact survives even when the notes
+                // don't parse — the file exists either way
+                edges.insert(Edge::handoff(h.id));
+                match store.read_handoffs(h.id) {
+                    Ok(entries) => {
+                        let notes = entries
+                            .iter()
+                            .map(|e| e.note.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        edges.extend(refs::extract(&notes, None, h.id));
+                    }
+                    Err(e) => warnings.push(format!("handoffs/{}.md: {e}", h.id)),
+                }
+            }
+        }
+        Err(e) => warnings.push(format!("handoffs: {e}")),
+    }
+
+    (
+        LiveGraph {
+            edges: edges.into_iter().collect(),
+            titles,
+        },
+        warnings,
+    )
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -283,5 +447,143 @@ mod tests {
         // the index)
         let r = sync(&idx, "/r", &wt.join("nope"), stub_extract);
         assert!(r.is_err());
+    }
+
+    // ------------------------------------------------ live graph
+
+    use myco_core::{HandoffEntry, Item, ItemFile};
+    use myco_store_md::MdStore;
+
+    /// A store over a tempdir worktree — the tests name the impl,
+    /// like the composition root does.
+    fn store() -> (tempfile::TempDir, MdStore) {
+        let d = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(d.path().to_path_buf()).unwrap();
+        (d, MdStore::new(root))
+    }
+
+    fn item(id: ItemId, title: &str) -> Item {
+        Item::new(id, title)
+    }
+
+    fn entry(note: &str) -> HandoffEntry {
+        HandoffEntry {
+            date: myco_core::date::parse("2026-10-29").unwrap(),
+            actor: myco_core::Actor::new("devin").unwrap(),
+            session: None,
+            note: note.into(),
+        }
+    }
+
+    /// `related(id)` → `(kind, other, title)` tuples — assertion
+    /// shorthand.
+    fn rels(g: &LiveGraph, id: ItemId) -> Vec<(EdgeKind, ItemId, Option<String>)> {
+        g.related(id)
+            .into_iter()
+            .map(|r| (r.kind, r.other, r.title))
+            .collect()
+    }
+
+    #[test]
+    fn live_graph_gathers_every_source() {
+        let (_d, s) = store();
+        let mut ledger = crate::items::load_ledger(&s).unwrap();
+        ledger.put_todo(item(tid(1), "alpha").blocks(tid(2)), None);
+        ledger.put_todo(item(tid(2), "beta — see T-009"), None);
+        crate::items::save_ledger(&s, &ledger).unwrap();
+        let i3 = ItemId::new(ItemKind::Issue, 3);
+        s.save_item(&ItemFile::new(item(i3, "the issue")).body("blocked by T-001"))
+            .unwrap();
+        s.append_handoff(tid(1), &entry("wip — unblocks I-003"))
+            .unwrap();
+
+        let (g, warnings) = live_graph(&s);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        // titles resolve for every known item
+        assert_eq!(g.titles[&tid(1)], "alpha");
+        assert_eq!(g.titles[&i3], "the issue");
+
+        // T-001's neighborhood: outgoing blocks + handoff self-edge +
+        // the note's mention, incoming mirrored references (file body)
+        assert_eq!(
+            rels(&g, tid(1)),
+            [
+                (EdgeKind::Handoff, tid(1), Some("alpha".to_string())),
+                (
+                    EdgeKind::Blocks,
+                    tid(2),
+                    Some("beta — see T-009".to_string())
+                ),
+                (EdgeKind::References, i3, Some("the issue".to_string())),
+                (EdgeKind::ReferencedBy, i3, Some("the issue".to_string())),
+            ]
+        );
+        // the mirror reads from T-002's side as blocked_by; its own
+        // mention of a dangling id resolves to no title but still
+        // surfaces (check's job to repair, not ours to hide)
+        assert_eq!(
+            rels(&g, tid(2)),
+            [
+                (EdgeKind::BlockedBy, tid(1), Some("alpha".to_string())),
+                (EdgeKind::References, tid(9), None),
+            ]
+        );
+    }
+
+    #[test]
+    fn live_graph_sees_archived_and_ignores_the_unknown() {
+        let (_d, s) = store();
+        let adr1 = ItemId::new(ItemKind::Adr, 1);
+        let adr2 = ItemId::new(ItemKind::Adr, 2);
+        s.save_item(&ItemFile::new(item(adr1, "old decision")))
+            .unwrap();
+        s.save_item(
+            &ItemFile::new(item(adr2, "new decision").supersedes(adr1)).body("replaces ADR-0001"),
+        )
+        .unwrap();
+        s.archive_item(adr1).unwrap();
+
+        let (g, warnings) = live_graph(&s);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        // an archived item still declares (and receives) edges —
+        // supersession is history, and history is what archive holds
+        assert_eq!(
+            rels(&g, adr1),
+            [
+                (
+                    EdgeKind::SupersededBy,
+                    adr2,
+                    Some("new decision".to_string())
+                ),
+                (
+                    EdgeKind::ReferencedBy,
+                    adr2,
+                    Some("new decision".to_string())
+                ),
+            ]
+        );
+        // nothing attached → empty, not an error
+        assert!(g.related(tid(9)).is_empty());
+    }
+
+    #[test]
+    fn live_graph_leniency_costs_only_the_corrupt_source() {
+        let (_d, s) = store();
+        let i3 = ItemId::new(ItemKind::Issue, 3);
+        s.save_item(&ItemFile::new(item(i3, "good"))).unwrap();
+        // an unparseable issue file kills `list_items(Issue)` but
+        // nothing else — the graph keeps its other sources
+        let bad = s.root().join("issues/issue-0009-bad.md");
+        std::fs::write(&bad, "+++\nid = \"I-009\"\ntitle = [oops\n+++\n").unwrap();
+        let mut ledger = crate::items::load_ledger(&s).unwrap();
+        ledger.put_todo(item(tid(1), "alpha").blocks(tid(2)), None);
+        crate::items::save_ledger(&s, &ledger).unwrap();
+
+        let (g, warnings) = live_graph(&s);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("issue files"), "{warnings:?}");
+        // ledger edges still gathered; the bad file's neighbors
+        // just lose their issue-kind edges + titles
+        assert_eq!(rels(&g, tid(1)), [(EdgeKind::Blocks, tid(2), None)]);
     }
 }

@@ -1309,7 +1309,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "item.show",
-        about: "Dump items — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.",
+        about: "Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.",
         params: &[IDS],
         kind_lock: None,
         mutates: false,

@@ -417,7 +417,7 @@ fn help_lines() -> Vec<Line<'static>> {
     vec![
         group("nav"),
         bind("j/k, ↑/↓", "move"),
-        bind("gg / G", "first / last"),
+        bind("gg/G · {/}", "ends · sections"),
         bind("enter", "preview (j/k scroll)"),
         group("tabs"),
         bind("1 / 2 / 3", "TODO / BACKLOG / FILES"),
