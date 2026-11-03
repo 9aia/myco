@@ -378,8 +378,162 @@ pub(crate) fn render_groups(
 ) -> String {
     match spec.format {
         ViewFormat::Board => render_board(spec, groups, interrupted, md, all),
-        ViewFormat::List => render_list(groups, interrupted),
+        // `repos` never reaches here — `run`/`w_view` route it to
+        // `emit_repos` before eval; the list fallback keeps this
+        // total if a caller ever skips that branch
+        ViewFormat::List | ViewFormat::Repos => render_list(groups, interrupted),
     }
+}
+
+/// One row of `format = "repos"` — a repo and its live-ledger
+/// counts (`None` + `error` when the rescan failed).
+pub(crate) struct RepoRow {
+    /// Registry / project name.
+    pub(crate) name: String,
+    /// The repo root's parent-dir name (`~/GitHub/9aia/myco` → `9aia`).
+    pub(crate) org: Option<String>,
+    /// Canonical repo-root path.
+    pub(crate) path: String,
+    /// `(total, open, claimed)` over live items — `claimed`
+    /// counts owned items (the `claimed` filter's rule).
+    pub(crate) counts: Option<(usize, usize, usize)>,
+    /// Terse rescan failure — the row shows `—` counts.
+    pub(crate) error: Option<String>,
+}
+
+/// `path`'s parent-dir name — the org bucket a repos row
+/// reports (`~/GitHub/9aia/myco` → `9aia`).
+fn org_of(path: &std::path::Path) -> Option<String> {
+    path.parent()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().into_owned())
+}
+
+/// `(total, open, claimed)` over a live-ledger iterator —
+/// children count like any item (`live`/`live_items` flatten).
+fn live_counts<'a>(items: impl Iterator<Item = &'a Item>) -> (usize, usize, usize) {
+    let mut c = (0, 0, 0);
+    for i in items {
+        c.0 += 1;
+        c.1 += usize::from(i.status == Status::Open);
+        c.2 += usize::from(i.owner.is_some());
+    }
+    c
+}
+
+/// [`org::RepoView`] → a repos row. An error row keeps its
+/// identity (`name`/`org`/`path`) and names the failure minus
+/// the redundant worktree-path prefix; counts stay `None` even
+/// when a stale snapshot rode along.
+pub(crate) fn repo_row(v: &org::RepoView) -> RepoRow {
+    RepoRow {
+        name: v.name.clone(),
+        org: org_of(v.path.as_std_path()),
+        path: v.path.to_string(),
+        counts: if v.error.is_none() {
+            v.snap.as_ref().map(|s| live_counts(s.live_items()))
+        } else {
+            None
+        },
+        error: v.error.as_ref().map(|e| {
+            e.strip_prefix(v.worktree.as_str())
+                .and_then(|r| r.strip_prefix(": "))
+                .unwrap_or(e)
+                .to_string()
+        }),
+    }
+}
+
+/// A repo-sourced repos row — this worktree's own scan.
+pub(crate) fn repo_row_local(proj: &myco_ops::discover::Project, scan: &digest::Scan) -> RepoRow {
+    RepoRow {
+        name: scan.name.clone(),
+        org: org_of(&proj.root),
+        path: proj.root.to_string_lossy().into_owned(),
+        counts: Some(live_counts(scan.live())),
+        error: None,
+    }
+}
+
+/// The `--json` row — `{name, org, path, counts, error}`.
+pub(crate) fn row_json(r: &RepoRow) -> serde_json::Value {
+    json!({
+        "name": r.name,
+        "org": r.org,
+        "path": r.path,
+        "counts": r.counts.map(|(total, open, claimed)| json!({
+            "total": total, "open": open, "claimed": claimed,
+        })),
+        "error": r.error,
+    })
+}
+
+/// `repo org items open claimed err` — one record per row,
+/// `—` fills cells a missing/failed repo can't supply.
+fn render_repos(rows: &[RepoRow], md: bool) -> String {
+    let mut b = tabled::builder::Builder::default();
+    b.push_record(["repo", "org", "items", "open", "claimed", "err"]);
+    for r in rows {
+        let dash = "—".to_string();
+        let (total, open, claimed) = r
+            .counts
+            .map(|(t, o, c)| (t.to_string(), o.to_string(), c.to_string()))
+            .unwrap_or((dash.clone(), dash.clone(), dash));
+        b.push_record([
+            r.name.as_str(),
+            r.org.as_deref().unwrap_or("—"),
+            total.as_str(),
+            open.as_str(),
+            claimed.as_str(),
+            r.error.as_deref().unwrap_or(""),
+        ]);
+    }
+    let mut table = b.build();
+    if md {
+        table.with(tabled::settings::Style::markdown());
+    }
+    table.to_string()
+}
+
+/// `format = "repos"` — one row per repo instead of item
+/// groups. `index` rows come from the registered snapshots
+/// (a rescan failure shows the error + `—` counts); `repo`
+/// emits a single row for this worktree.
+fn emit_repos(
+    name: Option<&str>,
+    spec: &ViewSpec,
+    dir: Option<&std::path::Path>,
+    root: Option<&std::path::Path>,
+    out: Out,
+    json_out: bool,
+) -> Result<i32, String> {
+    let (rows, warnings) = match spec.source {
+        ViewSource::Index => {
+            let (views, w) = index_universe()?;
+            (views.iter().map(repo_row).collect::<Vec<_>>(), w)
+        }
+        ViewSource::Repo => {
+            let (proj, store) = items::open_read(dir, root)?;
+            let scan = digest::scan(&store)?;
+            (vec![repo_row_local(&proj, &scan)], Vec::new())
+        }
+    };
+    warn(&warnings);
+    if json_out {
+        ops::print_json(&json!({
+            "view": name,
+            "spec": spec,
+            "repos": rows.iter().map(row_json).collect::<Vec<_>>(),
+            "warnings": warnings,
+        }));
+        return Ok(0);
+    }
+    if rows.is_empty() {
+        println!("no repos registered — `myco index add <path>`");
+    } else {
+        ops::print_paged(&render_repos(&rows, out.md));
+    }
+    Ok(0)
 }
 
 /// The `--json` payload — `{view, spec, groups, interrupted}`.
@@ -424,9 +578,6 @@ pub(crate) fn index_universe() -> Result<(Vec<org::RepoView>, Vec<String>), Stri
 /// worktree's ledger, `index` unions the registered repos'
 /// snapshots (the `org-*` presets — `myco org status|board`'s
 /// heirs).
-/// The `view` verb — `NAME` resolves builtin presets then config
-/// views; no NAME builds the spec from flags alone; bare `myco
-/// view` (or `--list`) enumerates the defined views.
 pub fn h(ctx: &crate::registry::Ctx, a: &Args) -> Result<i32, String> {
     let name = a.opt("name").map(str::to_string);
     let flags = spec_args(a)?;
@@ -465,6 +616,16 @@ fn run(
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
 
+    // `default_view` in config names the landing view — bare
+    // `myco view` renders it instead of listing (a `~/myco.toml`
+    // pins the machine-global board outside any repo).
+    let name = match name {
+        None if !flags.any_set() && !out.list => {
+            myco_ops::config::default_view_for(&cfg_root, ops::CONFIG)
+        }
+        n => n,
+    };
+
     if out.list || (name.is_none() && !flags.any_set()) {
         let (views, _) = myco_ops::view::named_views_lenient(&cfg_root, ops::CONFIG)?;
         list_views(&views, json_out);
@@ -481,6 +642,19 @@ fn run(
     flags.apply(&mut spec);
     spec.validate()?;
     warn(&warnings);
+
+    // `repos` emits per-repo rows, not item groups — a repo
+    // source is a single row for this worktree.
+    if spec.format == ViewFormat::Repos {
+        return emit_repos(
+            name.as_deref(),
+            &spec,
+            dir.as_deref(),
+            root.as_deref(),
+            out,
+            json_out,
+        );
+    }
 
     // The universe owners — `groups` borrows item refs out of
     // them, so they must outlive it.

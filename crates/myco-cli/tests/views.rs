@@ -73,6 +73,40 @@ fn ok(d: &Path, args: &[&str]) -> Output {
     out
 }
 
+/// `run` with extra env overrides — config/HOME pinning beyond
+/// the shared `MYCO_CONFIG=/nonexistent` baseline.
+fn run_env(dir: &Path, args: &[&str], myco_home: Option<&Path>, envs: &[(&str, &str)]) -> Output {
+    let mut c = Command::new(MYCO);
+    c.current_dir(dir)
+        .args(args)
+        .env("MYCO_CONFIG", "/nonexistent/myco.toml")
+        .env_remove("MYCO_NO_COMMIT");
+    match myco_home {
+        Some(h) => c.env("MYCO_HOME", h),
+        None => c.env_remove("MYCO_HOME"),
+    };
+    for (k, v) in envs {
+        c.env(k, v);
+    }
+    c.output().unwrap()
+}
+
+/// A repo at `dir` with init + a mixed ledger (name = dir basename).
+fn seeded_at(dir: &Path) {
+    std::fs::create_dir_all(dir).unwrap();
+    git(dir, &["init", "-q"]);
+    git(dir, &["config", "user.email", "t@t"]);
+    git(dir, &["config", "user.name", "t"]);
+    std::fs::write(dir.join("README.md"), "x").unwrap();
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-qm", "c0"]);
+    init(dir);
+    ok(dir, &["todo", "add", "plain task"]);
+    ok(dir, &["todo", "add", "hot task", "--pri", "high"]);
+    ok(dir, &["issue", "new", "a bug", "--owner", "devin"]);
+    ok(dir, &["backlog", "add", "someday idea"]);
+}
+
 /// A repo with init + a mixed ledger (name = dir basename).
 fn seeded() -> tempfile::TempDir {
     let d = repo();
@@ -464,4 +498,156 @@ fn org_view_error_warns_and_identifies_the_repo() {
     assert!(stderr.contains("warning"), "{stderr}");
     assert!(stderr.contains(&name_of(d.path())), "{stderr}");
     assert!(stderr.contains("worktree"), "{stderr}");
+}
+
+#[test]
+fn default_view_renders_instead_of_listing() {
+    let d = seeded();
+    // `default_view` in the repo layer names the landing view —
+    // bare `myco view` renders it rather than listing views
+    std::fs::write(d.path().join("myco.toml"), "default_view = \"open\"\n").unwrap();
+    let cfg = d.path().join("myco.toml");
+    let envs = [
+        ("MYCO_CONFIG", cfg.to_str().unwrap()),
+        ("XDG_CONFIG_HOME", "/nonexistent-xdg"),
+        ("HOME", "/nonexistent-home"),
+    ];
+    let out = run_env(d.path(), &["view"], None, &envs);
+    assert_eq!(code(&out), 0, "{out:?}");
+    let s = String::from_utf8_lossy(&out.stdout);
+    // the `open` preset renders items, not the `name origin spec`
+    // list columns
+    assert!(s.contains("T-001"), "{s}");
+    assert!(!s.contains("builtin"), "{s}");
+    // `--list` still enumerates
+    let out = run_env(d.path(), &["view", "--list"], None, &envs);
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("builtin"), "{s}");
+}
+
+#[test]
+fn view_repos_format_rows_counts_and_error() {
+    let home = tempfile::tempdir().unwrap();
+    let base = tempfile::tempdir().unwrap();
+    // two repos under one parent dir — the "org" column names it
+    let a = base.path().join("acme").join("alpha");
+    let b = base.path().join("acme").join("beta");
+    seeded_at(&a);
+    seeded_at(&b);
+    for r in [&a, &b] {
+        let canon = r.canonicalize().unwrap();
+        let out = run(
+            r,
+            &["index", "add", &canon.to_string_lossy()],
+            Some(home.path()),
+        );
+        assert_eq!(code(&out), 0, "{out:?}");
+    }
+    // `[views.repos]` in the repo layer names the repos format
+    std::fs::write(
+        a.join("myco.toml"),
+        "[views.repos]\nsource = \"index\"\nformat = \"repos\"\n",
+    )
+    .unwrap();
+    let sealed = [
+        ("XDG_CONFIG_HOME", "/nonexistent-xdg"),
+        ("HOME", "/nonexistent-home"),
+    ];
+    // human table — one row per registered repo
+    let out = run_env(&a, &["view", "repos"], Some(home.path()), &sealed);
+    assert_eq!(code(&out), 0, "{out:?}");
+    let s = String::from_utf8_lossy(&out.stdout);
+    for want in [
+        "repo", "org", "items", "open", "claimed", "err", "alpha", "beta", "acme",
+    ] {
+        assert!(s.contains(want), "{want} missing:\n{s}");
+    }
+    // --md falls out of the tabled renderer
+    let out = run_env(&a, &["view", "repos", "--md"], Some(home.path()), &sealed);
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.lines().next().unwrap_or("").starts_with('|'), "{s}");
+    // json — counts from each snapshot's live ledger (4 live:
+    // 2 tasks + 1 owned issue + 1 deferred backlog item)
+    let v = json(&run_env(
+        &a,
+        &["view", "repos", "--json"],
+        Some(home.path()),
+        &sealed,
+    ));
+    assert_eq!(v["view"], "repos");
+    assert_eq!(v["spec"]["format"], "repos");
+    let rows = v["repos"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "{v}");
+    for r in rows {
+        assert_eq!(r["org"], "acme", "{r}");
+        assert_eq!(r["counts"]["total"], 4, "{r}");
+        assert_eq!(r["counts"]["open"], 3, "{r}");
+        assert_eq!(r["counts"]["claimed"], 1, "{r}");
+        assert!(r["error"].is_null(), "{r}");
+    }
+    // outside a repo — an ad-hoc spec still reaches the index
+    let plain = tempfile::tempdir().unwrap();
+    let out = run_env(
+        plain.path(),
+        &["view", "--format", "repos", "--source", "index", "--json"],
+        Some(home.path()),
+        &sealed,
+    );
+    assert_eq!(code(&out), 0, "{out:?}");
+    assert_eq!(json(&out)["repos"].as_array().unwrap().len(), 2);
+    // and a config layer outside any repo can name `view repos`
+    // (a machine `~/myco.toml` — here pinned via $MYCO_CONFIG —
+    // plus `default_view` making it the bare `myco view` landing)
+    let cfg = tempfile::tempdir().unwrap();
+    let cfgfile = cfg.path().join("myco.toml");
+    std::fs::write(
+        &cfgfile,
+        "default_view = \"repos\"\n\n[views.repos]\nsource = \"index\"\nformat = \"repos\"\n",
+    )
+    .unwrap();
+    let envs = [
+        ("MYCO_CONFIG", cfgfile.to_str().unwrap()),
+        ("XDG_CONFIG_HOME", "/nonexistent-xdg"),
+        ("HOME", "/nonexistent-home"),
+    ];
+    let out = run_env(plain.path(), &["view", "--json"], Some(home.path()), &envs);
+    assert_eq!(code(&out), 0, "{out:?}");
+    let v = json(&out);
+    assert_eq!(v["view"], "repos");
+    assert_eq!(v["repos"].as_array().unwrap().len(), 2);
+    // a vanished worktree → the row keeps its identity, names the
+    // failure, and reports `—`/null counts (the stale snapshot
+    // doesn't masquerade as live)
+    std::fs::remove_dir_all(b.join("project")).unwrap();
+    let v = json(&run_env(
+        &a,
+        &["view", "repos", "--json"],
+        Some(home.path()),
+        &sealed,
+    ));
+    let rows = v["repos"].as_array().unwrap();
+    let beta = rows.iter().find(|r| r["name"] == "beta").unwrap();
+    assert!(beta["counts"].is_null(), "{beta}");
+    assert!(
+        beta["error"].as_str().unwrap().contains("worktree"),
+        "{beta}"
+    );
+    let alpha = rows.iter().find(|r| r["name"] == "alpha").unwrap();
+    assert_eq!(alpha["counts"]["total"], 4, "{alpha}");
+    // human — the error repo's dash cells + terse err text
+    let out = run_env(&a, &["view", "repos"], Some(home.path()), &sealed);
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains('—'), "{s}");
+    assert!(s.contains("worktree"), "{s}");
+    // a repo-sourced repos view is a single row for this repo
+    let v = json(&run_env(
+        &a,
+        &["view", "--format", "repos", "--json"],
+        Some(home.path()),
+        &sealed,
+    ));
+    let rows = v["repos"].as_array().unwrap();
+    assert_eq!(rows.len(), 1, "{v}");
+    assert_eq!(rows[0]["name"], "alpha");
+    assert_eq!(rows[0]["counts"]["total"], 4);
 }

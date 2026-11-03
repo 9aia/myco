@@ -170,6 +170,10 @@ pub enum ViewFormat {
     List,
     /// Columnar — `group_by` supplies the column axis.
     Board,
+    /// One row per repo, not item groups — an `index` source emits
+    /// a row per registered repo (snapshot counts + error), a
+    /// `repo` source a single row for this repo.
+    Repos,
 }
 
 /// Sortable fields for [`SortKey`].
@@ -447,7 +451,7 @@ impl FromStr for GroupAxis {
 
 /// Failure to parse a [`ViewFormat`] name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("invalid format {0:?} — expected list|board")]
+#[error("invalid format {0:?} — expected list|board|repos")]
 pub struct ParseViewFormatError(pub String);
 
 impl ViewFormat {
@@ -456,6 +460,7 @@ impl ViewFormat {
         match self {
             ViewFormat::List => "list",
             ViewFormat::Board => "board",
+            ViewFormat::Repos => "repos",
         }
     }
 }
@@ -467,6 +472,7 @@ impl FromStr for ViewFormat {
         match s {
             "list" => Ok(ViewFormat::List),
             "board" => Ok(ViewFormat::Board),
+            "repos" => Ok(ViewFormat::Repos),
             _ => Err(ParseViewFormatError(s.to_string())),
         }
     }
@@ -551,10 +557,11 @@ impl ViewSpec {
 
     /// `group_by`, or `status` when the format needs an axis
     /// (board is columnar — it must group by *something*).
+    /// `repos` emits repo rows, not item groups — no axis.
     pub fn effective_group_by(&self) -> Option<GroupAxis> {
         self.group_by.or(match self.format {
             ViewFormat::Board => Some(GroupAxis::Status),
-            ViewFormat::List => None,
+            ViewFormat::List | ViewFormat::Repos => None,
         })
     }
 
@@ -875,6 +882,26 @@ mod tests {
     fn board_defaults_axis_to_status() {
         let spec: ViewSpec = toml::from_str(r#"format = "board""#).unwrap();
         assert_eq!(spec.effective_group_by(), Some(GroupAxis::Status));
+    }
+
+    #[test]
+    fn repos_format_parses_names_and_needs_no_axis() {
+        let spec: ViewSpec = toml::from_str(
+            r#"source = "index"
+format = "repos""#,
+        )
+        .unwrap();
+        assert_eq!(spec.format, ViewFormat::Repos);
+        assert_eq!(spec.format.name(), "repos");
+        // repos emits repo rows — no implicit group axis
+        assert_eq!(spec.effective_group_by(), None);
+        assert_eq!("repos".parse::<ViewFormat>().unwrap(), ViewFormat::Repos);
+        assert_eq!(
+            "wat".parse::<ViewFormat>().unwrap_err().to_string(),
+            "invalid format \"wat\" — expected list|board|repos"
+        );
+        // serde round-trips through the lowercase name
+        assert!(toml::to_string(&spec).unwrap().contains("repos"));
     }
 
     #[test]

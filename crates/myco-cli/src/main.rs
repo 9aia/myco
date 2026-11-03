@@ -99,7 +99,17 @@ fn h_gen_docs(_ctx: &registry::Ctx, _a: &registry::Args) -> Result<i32, String> 
 /// logic governs `:w` too.
 #[cfg(feature = "tui")]
 fn h_ui(ctx: &registry::Ctx, a: &registry::Args) -> Result<i32, String> {
-    let view = a.opt("view").map(str::to_string);
+    let view = a.opt("view").map(str::to_string).or_else(|| {
+        // config `default_view` is the landing view — cwd falls
+        // back for index-sourced views outside a repo (`~/myco.toml`)
+        let root = ctx
+            .root
+            .clone()
+            .or_else(|| ctx.dir.clone())
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        myco_ops::config::default_view_for(&root, ops::CONFIG)
+    });
     let org: myco_tui::OrgLoader = Box::new(|| {
         let (views, _warnings) = view::index_universe()?;
         Ok(views

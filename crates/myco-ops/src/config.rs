@@ -36,6 +36,19 @@ impl ConfigLoader {
     }
 }
 
+/// The layer's `default_view` — same path policy as
+/// [`kinds_for`]: repo `myco.toml` (or `$MYCO_CONFIG`) if present,
+/// the impl's default probe (user layer) otherwise. Missing
+/// config, not error.
+pub fn default_view_for(root: &Path, cfg: ConfigLoader) -> Option<String> {
+    let path = std::env::var("MYCO_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    cfg.load(path.exists().then_some(&path))
+        .ok()
+        .and_then(|c| c.default_view)
+}
+
 /// The kind table for the repo rooted at `root` — the repo-layer
 /// `myco.toml` (or `$MYCO_CONFIG`), same path policy as
 /// `discover`'s `project_dir` read. The prelude on absence *or*
@@ -64,5 +77,33 @@ pub(crate) fn test_loader() -> ConfigLoader {
             .load()
         },
         file: myco_config_toml::load_file,
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_view_for_reads_the_repo_layer() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("myco.toml"), "default_view = \"board\"\n").unwrap();
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            assert_eq!(
+                default_view_for(dir.path(), test_loader()).as_deref(),
+                Some("board")
+            );
+        });
+    }
+
+    #[test]
+    fn default_view_for_missing_config_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        // $MYCO_CONFIG naming a missing file → the impl's default
+        // probe also misses → None, not an error
+        temp_env::with_var("MYCO_CONFIG", Some("/nonexistent/myco.toml"), || {
+            assert_eq!(default_view_for(dir.path(), test_loader()), None);
+        });
     }
 }

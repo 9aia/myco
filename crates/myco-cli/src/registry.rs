@@ -78,7 +78,7 @@ pub enum Val {
     Source,
     /// A group axis (`status|priority|kind|owner|epic|milestone|repo`).
     Axis,
-    /// A view format (`list|board`).
+    /// A view format (`list|board|repos`).
     Format,
     /// A wire-only `ViewSpec` patch object.
     Spec,
@@ -908,7 +908,7 @@ const SPEC_FIELDS: &[Param] = &[
         .delim()
         .cli(),
     opt("limit", Val::Count, "Keep the first N items after sorting.").vname("N").cli(),
-    opt("format", Val::Format, "Renderer — list|board.").cli(),
+    opt("format", Val::Format, "Renderer — list|board|repos.").cli(),
 ];
 
 /// `spec` — the wire-only `ViewSpec` patch (`view`/`next`).
@@ -1351,11 +1351,11 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "view",
-        about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; bare `myco view` lists views.",
+        about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = \"repos\"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).",
         params: &[&[
             pos("name", Val::Str, "View name — builtin preset or config view.").optional(),
             flag("list", "List defined views and exit.").cli(),
-            flag("md", "Emit a markdown table (board format).").cli(),
+            flag("md", "Emit a markdown table (board/repos formats).").cli(),
             flag("all", "Show every row — no cap.").cli(),
         ], FILTER, SPEC_FIELDS, SPEC_PATCH],
         kind_lock: None,

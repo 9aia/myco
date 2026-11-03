@@ -85,6 +85,10 @@ impl ConfigSource for TomlSource {
                 .as_ref()
                 .and_then(|c| c.project_dir.clone())
                 .or_else(|| user_cfg.as_ref().and_then(|c| c.project_dir.clone())),
+            default_view: repo_cfg
+                .as_ref()
+                .and_then(|c| c.default_view.clone())
+                .or_else(|| user_cfg.as_ref().and_then(|c| c.default_view.clone())),
             ..Default::default()
         };
         for cfg in [&repo_cfg, &user_cfg].into_iter().flatten() {
@@ -230,6 +234,40 @@ mod tests {
             assert!(src.load().is_err(), "{bad}");
             let _ = std::fs::remove_dir_all(&dir);
         }
+    }
+
+    #[test]
+    fn default_view_is_a_scalar_repo_wins() {
+        let base = std::env::temp_dir().join(format!("myco-cfg-dv-{}", std::process::id()));
+        let repo_dir = base.join("repo");
+        let home = base.join("home");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+        std::fs::create_dir_all(home.join(".config/myco")).unwrap();
+        std::fs::write(
+            home.join(".config/myco/myco.toml"),
+            "default_view = \"org-status\"\n",
+        )
+        .unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.to_string_lossy().as_ref())),
+            ],
+            || {
+                let cwd = std::env::current_dir().unwrap();
+                std::env::set_current_dir(&repo_dir).unwrap();
+                // user layer alone supplies it
+                let cfg = TomlSource { path: None }.load().unwrap();
+                assert_eq!(cfg.default_view.as_deref(), Some("org-status"));
+                // the repo layer wins once it names one
+                std::fs::write(repo_dir.join("myco.toml"), "default_view = \"board\"\n").unwrap();
+                let cfg = TomlSource { path: None }.load().unwrap();
+                std::env::set_current_dir(cwd).unwrap();
+                assert_eq!(cfg.default_view.as_deref(), Some("board"));
+            },
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

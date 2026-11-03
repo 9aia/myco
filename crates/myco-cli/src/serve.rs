@@ -812,6 +812,27 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
             }
             spec.validate().map_err(Fail::Verb)?;
             let mut warnings = warnings;
+            // `repos` emits per-repo rows, not item groups — the
+            // same emit the CLI's repos table renders
+            if spec.format == ViewFormat::Repos {
+                let (rows, repo_warnings) = match spec.source {
+                    ViewSource::Index => {
+                        let (v, w) = crate::view::index_universe().map_err(Fail::Verb)?;
+                        (v.iter().map(crate::view::repo_row).collect::<Vec<_>>(), w)
+                    }
+                    ViewSource::Repo => {
+                        let scan = digest::scan(&store).map_err(Fail::Verb)?;
+                        (vec![crate::view::repo_row_local(&proj, &scan)], Vec::new())
+                    }
+                };
+                warnings.extend(repo_warnings);
+                return Ok(json!({
+                    "view": name,
+                    "spec": spec,
+                    "repos": rows.iter().map(crate::view::row_json).collect::<Vec<_>>(),
+                    "warnings": warnings,
+                }));
+            }
             // the universe owners — `groups` borrows item refs
             // out of them
             let (interrupted, scan, views) = match spec.source {
