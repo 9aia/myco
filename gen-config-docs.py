@@ -23,7 +23,8 @@ STRUCTS = [n for names in SRCS.values() for n in names]
 
 SIMPLE = {"String": "string", "PathBuf": "path", "bool": "bool",
           "u16": "int", "usize": "int", "Vec<String>": "list",
-          "std::collections::BTreeMap<String, ViewSpec>": "map"}
+          "std::collections::BTreeMap<String, ViewSpec>": "map",
+          "std::collections::BTreeMap<String, ConfigVerb>": "map"}
 
 def fields(name):
     m = re.search(rf"pub struct {name} \{{(.*?)\n\}}", SRC[name], re.S)
