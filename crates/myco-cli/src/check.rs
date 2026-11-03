@@ -1676,8 +1676,18 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
         ops::lock_shared(wt)?
     };
     let kinds = repo_kinds(&proj.root);
-    let mut analysis = analyze_with(wt, &kinds);
+    // Worktree health first: a detached ledger must be reattached
+    // before anything else can be committed (`commit_all` refuses a
+    // detached HEAD), so the repair runs ahead of the fix loop and
+    // the loop's writes ride the normal `--fix` commit.
+    let health = worktree_findings(wt);
     let mut fixes_applied = 0usize;
+    if fix && health.iter().any(|f| f.fixable) {
+        myco_git::attach_branch(wt, myco_ops::discover::BRANCH)
+            .map_err(|e| format!("reattach {}: {e}", wt.display()))?;
+        fixes_applied += 1;
+    }
+    let mut analysis = analyze_with(wt, &kinds);
     if fix {
         // a fix can unlock another (strip done → the file parses →
         // drift shows) — loop until nothing left to repair
@@ -1689,29 +1699,6 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             analysis = analyze_with(wt, &kinds);
         }
     }
-    // worktree health: a detached ledger worktree is the one repair
-    // that must run before anything else can be committed — without
-    // it every later write is unreachable (`myco_git::commit_all`
-    // refuses, so the order here is load-bearing).
-    let mut health = worktree_findings(wt);
-    if fix && health.iter().any(|f| f.fixable) {
-        myco_git::attach_branch(wt, myco_ops::discover::BRANCH)
-            .map_err(|e| format!("reattach {}: {e}", wt.display()))?;
-        // pending writes made against the detached HEAD (an older
-        // myco, or a verb refused by the guard) ride onto the
-        // branch now that one exists — not counted as a "repair",
-        // it's the same rescue
-        if myco_git::has_changes(wt).map_err(|e| e.to_string())? {
-            ops::autocommit(
-                wt,
-                "chore: check --fix (reattach project worktree)",
-                ops::commits_enabled(no_commit),
-            )?;
-        }
-        fixes_applied += 1;
-        health = worktree_findings(wt);
-    }
-    analysis.findings.extend(health);
     // config layer: `[views]` specs in the repo/user myco.toml —
     // lint-only (no fixer); a broken spec fails every verb that
     // loads config, so it surfaces here too
@@ -1738,12 +1725,16 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
         }
     }
 
-    let remaining: Vec<&Finding> = analysis.findings.iter().collect();
-    let fixes_available = analysis.fixes.len();
+    // health is evaluated last, after this run's own commits have
+    // landed — otherwise `--fix` reports the pre-repair push state
+    // and hides the commit it just made
     if fixes_applied > 0 {
         let msg = format!("chore: check --fix ({fixes_applied} repairs)");
         ops::autocommit(wt, &msg, ops::commits_enabled(no_commit))?;
     }
+    analysis.findings.extend(worktree_findings(wt));
+    let remaining: Vec<&Finding> = analysis.findings.iter().collect();
+    let fixes_available = analysis.fixes.len();
     let repairs = fixes_applied + usize::from(root_repaired);
     // warnings never fail the gate (ADR-0002): they are findings the
     // ledger cannot fix by design, and a gate that reds on them is a

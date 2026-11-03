@@ -14,8 +14,19 @@ file impl; `myco-git` and `myco-shell` shell out; `myco`
 
 - New source/sink = a new impl crate, not a core change.
 - `cargo xtask check` and `cargo xtask test` must stay green.
+- `myco check` must stay green too: findings carry a **severity**
+  (ADR-0002) — `error` fails the gate, `warning` is reported and
+  costs nothing. A red `check` on a live repo is the bug; do not
+  add warnings to "clean up" a genuine error.
 - Coverage: `cargo xtask coverage` — cargo-llvm-cov HTML report in
-  `target/llvm-cov/html`; pass `--fail-under-lines 100` to gate.
+  `target/llvm-cov/html`; pass `--fail-under-lines N` to gate.
+  `scripts/ci.sh` gates on **`scripts/coverage-floor`** (a bare
+  percentage). The floor is not set yet because it must come from a
+  real run — arm it once: run the report, then
+  `echo <lines>% > scripts/coverage-floor`, and only ever raise it.
+  Needs `llvm-tools-preview` (`rustup component add
+  llvm-tools-preview`); without it the coverage step says so and
+  skips rather than failing the gate for a missing tool.
 - Keep the binary dependency-light and sync; no async runtime.
 - Commits: conventional prefixes (`feat:`/`fix:`/`refactor:`/`docs:`/`chore:`).
 - Never commit secrets — `myco.toml` takes names of env vars, not values.
