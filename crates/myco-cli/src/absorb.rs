@@ -3,7 +3,8 @@
 //!
 //! - `comments` — `rg` sweeps TODO/FIXME/HACK (any `--kinds`)
 //!   comments at the repo root (respects `.gitignore`; `project/`,
-//!   `docs/`, `target/` excluded). Each hit becomes a backlog item
+//!   `docs/`, `target/`, `myco.toml` excluded). Each hit becomes a
+//!   backlog item
 //!   or an issue, `note` = `file:line`.
 //! - `jira` — a Jira CSV export (`Issue key`, `Summary`, `Status`,
 //!   `Priority`, `Assignee`, `Labels`; header-name/case tolerant,
@@ -401,7 +402,7 @@ fn comments(
     }
     let pattern = format!("({})", kinds.join("|"));
     let cmd = format!(
-        "rg -n --no-heading --null --glob '!project/' --glob '!docs/' --glob '!target/' '{pattern}'"
+        "rg -n --no-heading --null --glob '!project/' --glob '!docs/' --glob '!target/' --glob '!myco.toml' '{pattern}'"
     );
     let out = myco_shell::output(&scan_dir, &cmd)
         .map_err(|e| format!("rg failed to run in {}: {e}", scan_dir.display()))?;
