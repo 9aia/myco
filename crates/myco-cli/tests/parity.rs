@@ -528,7 +528,7 @@ fn manifest_lists_parity_verbs() {
     let out = run(std::path::Path::new("/"), &["manifest", "--json"]);
     let v = json(&out);
     let implemented = v["implemented"].as_array().unwrap();
-    for verb in ["view", "absorb"] {
+    for verb in ["view", "absorb comments"] {
         assert!(implemented.contains(&Value::String(verb.into())), "{verb}");
     }
     // the legacy verb aliases are gone — `view <name>` is the surface
