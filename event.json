@@ -1,1 +1,1 @@
-{"id":"","ws":"fix-fleet","actor":"luis","ts":1793673388,"op":{"op":"claim","glob":"README.md scripts/ci.sh","ttl_secs":3600}}
+{"id":"","ws":"fix-fleet","actor":"luis","ts":1793675916,"op":{"op":"presence","status":"left"}}
