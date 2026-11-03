@@ -1,7 +1,7 @@
 +++
 id = "P-001"
 title = "myco v2 — agent-first project management, in Rust"
-status = "open"
+status = "in-progress"
 priority = "medium"
 +++
 
