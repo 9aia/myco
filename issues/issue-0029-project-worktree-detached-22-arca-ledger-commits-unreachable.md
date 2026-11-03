@@ -1,7 +1,7 @@
 +++
 id = "I-029"
 title = "project worktree detached — 22 arca ledger commits unreachable"
-status = "open"
+status = "done"
 created = "2026-11-03"
 priority = "high"
 labels = ["audit"]
