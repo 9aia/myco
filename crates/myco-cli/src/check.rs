@@ -1531,18 +1531,22 @@ fn worktree_findings(worktree: &Path) -> Vec<Finding> {
         None => {}
     }
     // local-only work: the branch exists but origin's copy is behind.
-    // No `origin/project` ref = never published (or no remote at
-    // all) — that's a repo-level choice, not this verb's business.
-    if let Some(ahead) = myco_git::commits_ahead(worktree, "refs/remotes/origin/project") {
-        if ahead > 0 {
-            out.push(Finding::warn(
-                ".",
-                "worktree-unpushed",
-                format!(
-                    "{ahead} commit(s) on `{BRANCH}` not pushed to `origin/{BRANCH}` — the \
-                     audit trail exists on this machine only"
-                ),
-            ));
+    // Only claimable when git actually tracks it (a `--single-branch`
+    // clone leaves `origin/<branch>` stale forever); no tracked ref =
+    // never published, or no remote at all — a repo-level choice, not
+    // this verb's business.
+    if myco_git::tracks_branch(worktree, "origin", BRANCH) {
+        if let Some(ahead) = myco_git::commits_ahead(worktree, "refs/remotes/origin/project") {
+            if ahead > 0 {
+                out.push(Finding::warn(
+                    ".",
+                    "worktree-unpushed",
+                    format!(
+                        "{ahead} commit(s) on `{BRANCH}` not pushed to `origin/{BRANCH}` — the \
+                         audit trail exists on this machine only"
+                    ),
+                ));
+            }
         }
     }
     out
@@ -1720,6 +1724,10 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
                 ops::commits_enabled(no_commit),
             )?;
             agents_md = crate::agentmd::block_state(&proj.root);
+            // a repair that didn't take must not report success
+            if agents_md != crate::agentmd::State::Ok {
+                analysis.findings.extend(agents_md_finding(agents_md));
+            }
         } else {
             analysis.findings.extend(agents_md_finding(agents_md));
         }

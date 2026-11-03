@@ -169,6 +169,24 @@ pub fn attach_branch(dir: &Path, name: &str) -> Result<(), Error> {
     git_out(dir, &["checkout", "-B", name]).map(|_| ())
 }
 
+/// Does `origin`'s fetch refspec publish `branch` into
+/// `refs/remotes/origin/`? A repo cloned with `--single-branch`
+/// only tracks some branches, so `origin/<branch>` can sit stale
+/// forever while `git push` still succeeds — comparing against it
+/// would report "unpushed" no matter what the user does.
+pub fn tracks_branch(dir: &Path, remote: &str, branch: &str) -> bool {
+    let key = format!("remote.{remote}.fetch");
+    let Ok(specs) = git_out(dir, &["config", "--get-all", &key]) else {
+        return false;
+    };
+    let want = format!("refs/remotes/{remote}/{branch}");
+    let all = format!("refs/remotes/{remote}/*");
+    specs.lines().any(|line| {
+        let spec = line.trim().trim_start_matches('+');
+        matches!(spec.rsplit_once(':'), Some((_, dst)) if dst == want || dst == all)
+    })
+}
+
 /// How many commits `HEAD` has that `rev` doesn't — `None` when
 /// `rev` doesn't resolve (no such local or remote ref).
 pub fn commits_ahead(dir: &Path, rev: &str) -> Option<usize> {
@@ -506,6 +524,49 @@ mod tests {
         attach_branch(&scratch, "ledger").unwrap();
         // a branch another worktree holds is refused, not stolen
         attach_branch(&scratch, "project").unwrap_err();
+    }
+
+    #[test]
+    fn tracks_branch_respects_the_fetch_refspec() {
+        let d = repo();
+        commit_all(d.path(), "c0").unwrap();
+        // no remote configured → nothing tracked
+        assert!(!tracks_branch(d.path(), "origin", "project"));
+        assert!(git(d.path(), &["config", "remote.origin.url", "x"]));
+        // a `--single-branch` clone (arca): only main is tracked, so
+        // `origin/project` is stale by construction
+        assert!(git(
+            d.path(),
+            &[
+                "config",
+                "remote.origin.fetch",
+                "+refs/heads/main:refs/remotes/origin/main"
+            ]
+        ));
+        assert!(!tracks_branch(d.path(), "origin", "project"));
+        // the default wildcard refspec tracks everything
+        assert!(git(
+            d.path(),
+            &[
+                "config",
+                "--replace-all",
+                "remote.origin.fetch",
+                "+refs/heads/*:refs/remotes/origin/*"
+            ]
+        ));
+        assert!(tracks_branch(d.path(), "origin", "project"));
+        // an explicit single-branch spec also counts
+        assert!(git(
+            d.path(),
+            &[
+                "config",
+                "--replace-all",
+                "remote.origin.fetch",
+                "+refs/heads/project:refs/remotes/origin/project"
+            ]
+        ));
+        assert!(tracks_branch(d.path(), "origin", "project"));
+        assert!(!tracks_branch(d.path(), "origin", "docs"));
     }
 
     #[test]

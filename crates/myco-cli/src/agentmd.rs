@@ -162,6 +162,15 @@ fn merged(src: &str) -> String {
         out.push(String::new());
         out.extend(tail);
     }
+    // Canonical emission ends with exactly one newline. Trailing
+    // blank lines must be dropped here, not tolerated: `block_state`
+    // compares `merged(src)` with `src`, so a file ending in "\n\n"
+    // would otherwise look canonical to `sync` (no write) and
+    // non-canonical to the check — a drift report that no `--fix`
+    // can ever clear.
+    while out.last().is_some_and(|l| l.trim().is_empty()) {
+        out.pop();
+    }
     format!("{}\n", out.join("\n"))
 }
 
@@ -171,7 +180,10 @@ pub fn block_state(root: &Path) -> State {
     let Ok(src) = std::fs::read_to_string(&path) else {
         return State::Missing;
     };
-    if src.contains(BEGIN) && merged(&src) == format!("{}\n", src.trim_end_matches('\n')) {
+    // canonical iff emitting it is a no-op — the same predicate
+    // `sync` uses, so "canonical" and "would change" can never
+    // disagree
+    if src.contains(BEGIN) && merged(&src) == src {
         return State::Ok;
     }
     let lines: Vec<String> = src.lines().map(str::to_string).collect();
@@ -208,6 +220,38 @@ pub fn sync(root: &Path) -> Result<Change, String> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trailing_blank_line_is_drift_and_sync_fixes_it() {
+        // regression: `sync` compared against the raw source while
+        // `block_state` compared against a newline-normalized one, so
+        // a file ending in a blank line reported drift forever and
+        // `--fix` rewrote nothing
+        let d = tempfile::tempdir().unwrap();
+        sync(d.path()).unwrap();
+        let p = d.path().join("AGENTS.md");
+        let src = std::fs::read_to_string(&p).unwrap();
+        std::fs::write(&p, format!("{src}\n")).unwrap();
+        assert_eq!(block_state(d.path()), State::Drift);
+        assert_eq!(sync(d.path()).unwrap(), Change::Updated);
+        assert_eq!(block_state(d.path()), State::Ok);
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), src);
+    }
+
+    #[test]
+    fn block_state_and_sync_agree_on_canonical() {
+        let d = tempfile::tempdir().unwrap();
+        sync(d.path()).unwrap();
+        let before = std::fs::read_to_string(d.path().join("AGENTS.md")).unwrap();
+        // a canonical file is a fixed point: state says ok, sync
+        // writes nothing
+        assert_eq!(block_state(d.path()), State::Ok);
+        assert_eq!(sync(d.path()).unwrap(), Change::Unchanged);
+        assert_eq!(
+            std::fs::read_to_string(d.path().join("AGENTS.md")).unwrap(),
+            before
+        );
+    }
 
     #[test]
     fn missing_file() {
