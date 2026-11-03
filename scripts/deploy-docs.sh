@@ -18,6 +18,12 @@ export MYCO_ROOT="$REPO"
 # like they do in a login shell.
 export PATH="$HOME/.bun/bin:$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 
+# Isolated target dir (I-026): gen-api runs `cargo doc` in MYCO_REPO,
+# whose default `target/` is shared with agent/interactive builds —
+# stale rmeta there false-fails the gate. `target/gate` stays under
+# the gitignored `target/`.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$REPO/target/gate}"
+
 echo "==> bun install"
 bun install
 
