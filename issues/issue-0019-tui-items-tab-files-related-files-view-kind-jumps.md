@@ -1,7 +1,7 @@
 +++
 id = "I-019"
 title = "TUI: ITEMS tab → FILES, related-files view, {/} kind jumps"
-status = "in-progress"
+status = "done"
 created = "2026-10-31"
 owner = "devin"
 priority = "medium"
