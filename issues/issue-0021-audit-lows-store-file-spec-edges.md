@@ -1,8 +1,9 @@
 +++
 id = "I-021"
 title = "audit lows: store/file-spec edges"
-status = "open"
+status = "in-progress"
 created = "2026-10-31"
+owner = "devin"
 priority = "low"
 labels = ["audit"]
 +++
