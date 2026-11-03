@@ -1,8 +1,9 @@
 +++
 id = "P-005"
 title = "link index — DAG edges, fingerprint invalidation, bounded GC"
-status = "open"
+status = "in-progress"
 created = "2026-10-31"
+owner = "devin"
 priority = "medium"
 labels = ["index"]
 blocks = ["I-019"]
