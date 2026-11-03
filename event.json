@@ -1,1 +1,1 @@
-{"id":"","ws":"p009","actor":"luis","ts":1793683599,"op":{"op":"claim","glob":"docs/explanation/architecture.md","ttl_secs":3600}}
+{"id":"","ws":"p009","actor":"luis","ts":1793683620,"op":{"op":"presence","status":"left"}}
