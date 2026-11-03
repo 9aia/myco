@@ -3,6 +3,6 @@ name = "myco"
 [next]
 t = 37
 i = 30
-p = 9
+p = 10
 adr = 5
 pl = 1
