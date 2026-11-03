@@ -41,8 +41,8 @@ by archiving, but only *after* the fact.
   grows forever in the files agents read every turn.
 - **Authorship discipline** — ban `T-NNN` from prose, cite only
   stable kinds (`I-`, `P-`, `ADR-`, `PL-`). Cheap, but it forbids
-the most natural sentence in a handoff ("T-005 done: …") and the
-  rule is invisible at write time.
+  the most natural sentence in a handoff (`T-NNN done: …`)
+  and the rule is invisible at write time.
 - **Severity split** — unknown ids in *prose* are warnings;
   unknown ids in *declared* positions (frontmatter `blocks:`,
   `supersedes:`, handoff filenames) stay errors.
