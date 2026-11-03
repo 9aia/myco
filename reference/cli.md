@@ -83,7 +83,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `manifest` — Capabilities + protocol version — agent self-discovery.
 * `schema` — The file/state spec, machine-readable JSON Schema.
 * `init` — Scaffold `project/`: orphan branch + worktree + .gitignore + seed files + the managed AGENTS.md agent-awareness block. Idempotent — existing worktree and AGENTS.md prose are preserved, only the marked block is (re)written.
-* `check` — Validate schemas + state machine, repair file/index drift; also validates the managed AGENTS.md block on the repo root. Exit 1 with findings; `--fix` applies safe repairs + commits.
+* `check` — Validate the ledger (schemas, state machine, ids, refs) and the worktree it lives in (detached HEAD, wrong branch, unpushed commits); also validates the managed AGENTS.md block on the repo root. Findings carry a severity: `error` exits 1, `warning` is reported and costs nothing (ADR-0002). `--fix` applies safe repairs + commits, including reattaching a detached worktree.
 * `migrate` — Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch.
 * `commit` — Stage + commit worktree changes (conventional message).
 * `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; bare `myco view` lists views.
@@ -93,7 +93,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `handoff` — Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only).
 * `interrupt` — A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.
 * `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call.
-* `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use.
+* `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = "index"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
 * `serve` — Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it.
 * `batch` — One-shot `serve` — NDJSON verb requests from stdin or `--file`, one JSON-RPC response line per request, dispatched through the same served surface. Per-line errors never fail the run; mutations keep per-request commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS the wire here too — requests that would read it are rejected.
 
@@ -534,14 +534,14 @@ Kind-agnostic item verbs — show / set.
 
 ###### **Subcommands:**
 
-* `show` — Dump items — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
+* `show` — Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
 * `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it).
 
 
 
 ## `myco item show`
 
-Dump items — frontmatter fields plus the body for file-backed kinds (`--json` = the full Item + location + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
+Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
 
 **Usage:** `myco item show <id>...`
 
@@ -743,7 +743,7 @@ Scaffold `project/`: orphan branch + worktree + .gitignore + seed files + the ma
 
 ## `myco check`
 
-Validate schemas + state machine, repair file/index drift; also validates the managed AGENTS.md block on the repo root. Exit 1 with findings; `--fix` applies safe repairs + commits.
+Validate the ledger (schemas, state machine, ids, refs) and the worktree it lives in (detached HEAD, wrong branch, unpushed commits); also validates the managed AGENTS.md block on the repo root. Findings carry a severity: `error` exits 1, `warning` is reported and costs nothing (ADR-0002). `--fix` applies safe repairs + commits, including reattaching a detached worktree.
 
 **Usage:** `myco check [OPTIONS]`
 
@@ -907,13 +907,13 @@ Minimal context block to restart work on an item — the item, `blocks:` dep tit
 
 ## `myco ui`
 
-Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use.
+Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = "index"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
 
 **Usage:** `myco ui [OPTIONS]`
 
 ###### **Options:**
 
-* `--view <NAME>` — Open with a named view's filter narrowing every board.
+* `--view <NAME>` — Open with a named view's filter narrowing every board; index-sourced views load the cross-repo universe.
 
 
 

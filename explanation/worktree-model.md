@@ -46,6 +46,22 @@ when, replayable and greppable, with no separate audit store.
 `--no-commit` / `$MYCO_NO_COMMIT` opts out per run; `myco commit`
 squashes a batch into one.
 
+That sentence is only true while the worktree is attached. A
+`project/` worktree on a **detached HEAD** commits onto no branch:
+the files change, the trail does not. So the invariant is enforced
+rather than assumed (ADR-0003):
+
+- `myco check` reports `worktree-detached` as an **error**
+  (`worktree-branch` and `worktree-unpushed` are warnings), and
+  `myco check --fix` reattaches with `git checkout -B project`,
+  keeping the detached commits as the branch tip.
+- Every mutating verb refuses a detached ledger before writing —
+  the error names the repair.
+- `myco check` never pushes. `worktree-unpushed` is a warning
+  because local-only is a legitimate mode (offline, no remote,
+  pre-publication); publishing is `git push origin project` or
+  sturn's business.
+
 ## Canonical markdown, disposable index
 
 The markdown in `project/` is canonical — human-editable,
