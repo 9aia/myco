@@ -1,7 +1,7 @@
 +++
 id = "ADR-0002"
 title = "ID durability — declared refs are errors, prose refs are warnings"
-status = "in-progress"
+status = "done"
 created = "2026-11-03"
 priority = "high"
 labels = ["ledger"]
