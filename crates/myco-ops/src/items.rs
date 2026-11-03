@@ -213,8 +213,15 @@ pub fn open_read_with<S: Store>(
 }
 
 /// The standard mutation tail — one atomic commit on the worktree.
-pub fn commit(wt: &Path, msg: &str, no_commit: bool) -> Result<bool, String> {
-    ops::autocommit(wt, msg, ops::commits_enabled(no_commit))
+/// `actor` is the verb's actor (`--actor`/`--owner` where the verb
+/// takes one) — stamped as the `Actor:` trailer; `None` → `cli`.
+pub fn commit(
+    wt: &Path,
+    msg: &str,
+    actor: Option<&myco_core::Actor>,
+    no_commit: bool,
+) -> Result<bool, String> {
+    ops::autocommit(wt, msg, actor, ops::commits_enabled(no_commit))
 }
 
 /// Standard mutation output: `--json` gets `payload` plus a
@@ -342,6 +349,7 @@ pub fn new_file(
     let committed = commit(
         &proj.worktree,
         &format!("chore: new {} {id}", spec.word),
+        spec.meta.owner.as_ref(),
         spec.no_commit,
     )?;
     report(

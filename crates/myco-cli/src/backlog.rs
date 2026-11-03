@@ -54,15 +54,12 @@ pub fn promote_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
 /// The `backlog add` verb.
 pub fn h_add(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
-    let item = add_item(
-        &store,
-        a.text("title")?,
-        a.opt("section"),
-        &items::meta_args(a)?,
-    )?;
+    let meta = items::meta_args(a)?;
+    let item = add_item(&store, a.text("title")?, a.opt("section"), &meta)?;
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: add {}", item.id),
+        meta.owner.as_ref(),
         ctx.no_commit,
     )?;
     items::report(
@@ -81,6 +78,7 @@ pub fn h_promote(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: promote {id}"),
+        None,
         ctx.no_commit,
     )?;
     items::report(

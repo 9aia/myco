@@ -1721,6 +1721,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
                 &proj.root,
                 "chore: manage AGENTS.md agent-awareness block",
                 &["AGENTS.md"],
+                None,
                 ops::commits_enabled(no_commit),
             )?;
             agents_md = crate::agentmd::block_state(&proj.root);
@@ -1738,7 +1739,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
     // and hides the commit it just made
     if fixes_applied > 0 {
         let msg = format!("chore: check --fix ({fixes_applied} repairs)");
-        ops::autocommit(wt, &msg, ops::commits_enabled(no_commit))?;
+        ops::autocommit(wt, &msg, None, ops::commits_enabled(no_commit))?;
     }
     analysis.findings.extend(worktree_findings(wt));
     let remaining: Vec<&Finding> = analysis.findings.iter().collect();

@@ -69,6 +69,7 @@ pub fn h_status(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: proposal {id} → {to}"),
+        None,
         ctx.no_commit,
     )?;
     items::report(

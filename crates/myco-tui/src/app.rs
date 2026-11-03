@@ -1191,7 +1191,7 @@ impl Model {
             .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Done)?;
         items::save_ledger(&store, &ledger)?;
-        items::commit(&wt, &format!("chore: done {id}"), self.no_commit)?;
+        items::commit(&wt, &format!("chore: done {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("done {id} — {}", item.title);
         let at = self.sel;
@@ -1222,7 +1222,7 @@ impl Model {
         items::walk_descendants_to(&mut item, Status::Deferred)?;
         ledger.put_backlog(item, None);
         items::save_ledger(&store, &ledger)?;
-        items::commit(&wt, &format!("chore: defer {id}"), self.no_commit)?;
+        items::commit(&wt, &format!("chore: defer {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("deferred {id} → BACKLOG.md");
         let at = self.sel;
@@ -1253,7 +1253,7 @@ impl Model {
         items::walk_descendants_to(&mut item, Status::Open)?;
         ledger.put_todo(item, None);
         items::save_ledger(&store, &ledger)?;
-        items::commit(&wt, &format!("chore: promote {id}"), self.no_commit)?;
+        items::commit(&wt, &format!("chore: promote {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("promoted {id} → TODO.md");
         self.rebuild_rows();
@@ -1276,7 +1276,7 @@ impl Model {
             return Ok(());
         }
         items::save_ledger(&store, &ledger)?;
-        items::commit(&wt, &format!("chore: reorder {id}"), self.no_commit)?;
+        items::commit(&wt, &format!("chore: reorder {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("reordered {id}");
         self.rebuild_rows();
@@ -1303,7 +1303,7 @@ impl Model {
             _ => ledger.put_backlog(item.clone(), None),
         }
         items::save_ledger(&store, &ledger)?;
-        items::commit(&wt, &format!("chore: add {id}"), self.no_commit)?;
+        items::commit(&wt, &format!("chore: add {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("added {}", items::compact(&item));
         self.rebuild_rows();

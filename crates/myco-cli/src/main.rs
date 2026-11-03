@@ -71,9 +71,10 @@ fn manifest() -> serde_json::Value {
         "verbs": registry::manifest_verbs(),
         "implemented": registry::manifest_implemented(),
         "notes": "markdown in project/ is canonical; every verb is one \
-                  atomic commit on the `project` branch; the redb index \
-                  under $MYCO_HOME|~/.local/share/myco is a disposable \
-                  derived cache",
+                  atomic commit on the `project` branch carrying an \
+                  `Actor:` trailer (the verb's actor, default `cli`); \
+                  the redb index under $MYCO_HOME|~/.local/share/myco is \
+                  a disposable derived cache",
     })
 }
 

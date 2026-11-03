@@ -20,6 +20,8 @@ pub(crate) struct NextFlags {
     pub(crate) filter: view::FilterPatch,
     pub(crate) sort: Vec<myco_core::SortKey>,
     pub(crate) claim: bool,
+    /// `--session` — tags the claim (requires `--claim`).
+    pub(crate) session: Option<String>,
 }
 
 /// The default `next` spec — the builtin `next` view (open
@@ -33,12 +35,19 @@ pub(crate) fn base_spec() -> ViewSpec {
         .unwrap_or_default()
 }
 
-/// `next`'s args → the flag bundle.
+/// `next`'s args → the flag bundle. `--session` only makes sense
+/// under `--claim` — it tags the claim being taken; on a
+/// read-only `next` there's no claim to tag.
 pub(crate) fn next_flags(a: &Args) -> Result<NextFlags, String> {
+    let session = a.opt("session").map(str::to_string);
+    if session.is_some() && !a.flag("claim") {
+        return Err("next: --session needs --claim (it tags the claim being taken)".into());
+    }
     Ok(NextFlags {
         filter: view::filter_args(a)?,
         sort: a.many_parsed("sort")?,
         claim: a.flag("claim"),
+        session,
     })
 }
 
@@ -135,11 +144,18 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         // identity isn't a transition — an already-claimed item
         // just re-stamps the owner
         status: (item.status != Status::Claimed).then_some(Status::Claimed),
-        owner: Some(owner),
+        owner: Some(owner.clone()),
         ..Default::default()
     };
-    let (item, _location) = itemcmd::mutate_item(&store, id, &set)?;
-    let committed = items::commit(&proj.worktree, &format!("chore: claim {id}"), no_commit)?;
+    // `--session` tags the claim — the mutation and the `claimed`
+    // handoff entry pair through the atomic claim path
+    let (item, _location, _claim) = itemcmd::set_item(&store, id, &set, flags.session)?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: claim {id}"),
+        Some(&owner),
+        no_commit,
+    )?;
     let human = match &item {
         Some(i) => line(&store, i)?,
         None => format!("claimed {id}"),
@@ -180,6 +196,7 @@ mod tests {
             },
             sort: vec!["-id".parse().unwrap()],
             claim: false,
+            session: None,
         };
         let dir = tempfile::tempdir().unwrap();
         let spec = spec_at(&dir, &flags);

@@ -75,6 +75,14 @@ fn first_heading(src: &str, fallback: &str) -> String {
     fallback.to_string()
 }
 
+/// A title for an adopted/converted item file — `·` is the line
+/// grammar's metadata separator and can't live in a title, so a
+/// heading or filename that uses it degrades to `-` rather than
+/// failing the emit.
+fn adopt_title(src: &str, fallback: &str) -> String {
+    first_heading(src, fallback).replace('·', "-")
+}
+
 /// Per-run counters for the JSON report.
 #[derive(Default)]
 struct Stats {
@@ -84,6 +92,10 @@ struct Stats {
     files_moved: BTreeMap<String, String>,
     unparsed: Vec<String>,
     warnings: Vec<String>,
+    /// Ids issued to ledger items this run — a kept source id is
+    /// honored only while free; a source naming it again collides
+    /// to a fresh alloc with a warning, never a duplicate.
+    issued: BTreeSet<ItemId>,
 }
 
 /// Filename-number claim table for frontmatter-less adoption —
@@ -147,40 +159,104 @@ fn materialize(
     let mut item = li.item.clone();
     item.id = match li.id {
         Some(id) if id.kind() == kind => {
-            // a kept id must still raise the counter floor —
-            // `all_ids` never sees pm/-source ids, so without
-            // this a later alloc could reissue it mid-run
-            reg.observe(id);
-            id
+            if stats.issued.insert(id) {
+                // a kept id must still raise the counter floor —
+                // `all_ids` never sees pm/-source ids, so without
+                // this a later alloc could reissue it mid-run
+                reg.observe(id);
+                id
+            } else {
+                // the source named an id already issued this run —
+                // keeping it would write a duplicate (id'd lines
+                // must still validate), so the item converts on a
+                // fresh number with a warning
+                let fresh = reg.alloc(kind);
+                stats.issued.insert(fresh);
+                stats.ids_allocated += 1;
+                stats
+                    .warnings
+                    .push(format!("{id} already issued — item converted as {fresh}"));
+                fresh
+            }
         }
         _ => {
+            let fresh = reg.alloc(kind);
+            stats.issued.insert(fresh);
             stats.ids_allocated += 1;
-            reg.alloc(kind)
+            fresh
         }
     };
     stats.converted_items += 1;
     Ok(item)
 }
 
-/// Legacy sections → v2 `Section`s, allocating ids as needed.
+/// Legacy sections → v2 `Section`s for `file` (`TODO.md` /
+/// `BACKLOG.md`), allocating ids as needed. Shapes the target
+/// doc's grammar can't express demote to plain-task text rather
+/// than failing the migration — see [`demote`].
 fn convert_sections(
     reg: &mut Registry,
     doc: &myco_store_md::LegacyDoc,
     kind: ItemKind,
+    file: &'static str,
     stats: &mut Stats,
 ) -> Result<Vec<Section>, String> {
-    let mut out = Vec::new();
+    let mut out: Vec<Section> = Vec::new();
     for sec in &doc.sections {
-        let mut s = Section {
-            name: sec.name.clone(),
-            items: Vec::new(),
-        };
-        for li in &sec.items {
-            s.items.push(materialize(reg, li, kind, stats)?);
+        // a `##` heading that flattens to no text (`##`, `## ###`)
+        // marks no real boundary — an empty name can't emit, so the
+        // section's items merge into the one before it (or the
+        // leading unsectioned run when nothing precedes)
+        let name = sec.name.as_deref().filter(|n| !n.trim().is_empty());
+        if name.is_some() || out.is_empty() {
+            out.push(Section {
+                name: name.map(String::from),
+                items: Vec::new(),
+            });
         }
-        out.push(s);
+        // a nameless section that isn't first lands its items on
+        // the previous one — `out` is non-empty either way
+        let target = out.len() - 1;
+        for li in &sec.items {
+            let mut item = materialize(reg, li, kind, stats)?;
+            demote(&mut item, li.id, file, stats);
+            out[target].items.push(item);
+        }
     }
     Ok(out)
+}
+
+/// Demote the parts of a converted item `file`'s grammar can't
+/// express to plain text, instead of failing the whole migration:
+/// a `status:` the doc forbids folds back into the title (the
+/// ` - ` separator unknown `·` tokens already use), and a
+/// self-block drops — each with a warning, nothing silent. The
+/// id stands: an id'd line keeps its number, only its unemittable
+/// *state* demotes. `src_id` is the id the line carried — the
+/// item's own number may have moved on a collision.
+fn demote(item: &mut Item, src_id: Option<ItemId>, file: &str, stats: &mut Stats) {
+    // `status:deferred` has no home in TODO.md — the marker becomes
+    // title text and the task lands open like any freeform bullet
+    if file == "TODO.md" && item.status == Status::Deferred {
+        let tok = "status:deferred";
+        item.title = match item.title.is_empty() {
+            true => tok.to_string(),
+            false => format!("{} - {tok}", item.title),
+        };
+        item.status = Status::Open;
+        stats.warnings.push(format!(
+            "{file}: {} — deferred tasks live in BACKLOG.md, folded `{tok}` into the title",
+            item.id
+        ));
+    }
+    // a `blocks:` at the line's own source id is meaningless at
+    // any address — it drops whether the item kept its number or
+    // collided onto a fresh one
+    if src_id.is_some_and(|id| item.blocks.remove(&id)) {
+        stats
+            .warnings
+            .push(format!("{file}: {} — self-block dropped", item.id));
+    }
 }
 
 /// Mode A — `pm/` at the repo root.
@@ -229,6 +305,7 @@ fn migrate_pm(
                     &mut reg,
                     &doc,
                     ItemKind::Task,
+                    "TODO.md",
                     &mut stats,
                 )?);
                 stats.files_moved.insert(rel_from, "TODO.md".into());
@@ -236,7 +313,8 @@ fn migrate_pm(
             Some(PmDest::Backlog) => {
                 let doc = myco_store_md::parse_legacy_backlog(&src);
                 stats.dropped_done += doc.dropped;
-                let mut secs = convert_sections(&mut reg, &doc, ItemKind::Task, &mut stats)?;
+                let mut secs =
+                    convert_sections(&mut reg, &doc, ItemKind::Task, "BACKLOG.md", &mut stats)?;
                 for s in &mut secs {
                     for i in &mut s.items {
                         i.status = Status::Deferred;
@@ -248,7 +326,7 @@ fn migrate_pm(
             Some(PmDest::Plan) => {
                 let id = reg.alloc(ItemKind::Plan);
                 stats.ids_allocated += 1;
-                let title = first_heading(&src, "Roadmap");
+                let title = adopt_title(&src, "Roadmap");
                 let file = ItemFile::new(Item::new(id, &title)).body(src);
                 store.save_item(&file).map_err(|e| e.to_string())?;
                 let rel = format!(
@@ -264,7 +342,7 @@ fn migrate_pm(
                 let id = reg.alloc(ItemKind::Issue);
                 stats.ids_allocated += 1;
                 let stem = name.trim_end_matches(".md");
-                let title = first_heading(&src, stem);
+                let title = adopt_title(&src, stem);
                 let file = ItemFile::new(Item::new(id, &title)).body(src);
                 store.save_item(&file).map_err(|e| e.to_string())?;
                 let rel = format!(
@@ -308,7 +386,7 @@ fn migrate_pm(
     // leave them gone-but-uncommitted; restore them on the way out
     let commits = (|| -> Result<(bool, bool), String> {
         Ok((
-            ops::autocommit(&wt, &msg, enabled)?,
+            ops::autocommit(&wt, &msg, None, enabled)?,
             commit_pm_removal(&root, enabled)?,
         ))
     })();
@@ -331,6 +409,7 @@ fn migrate_pm(
             .collect::<Vec<_>>(),
         "pm_removed": pm_removed,
         "pm_leftover": leftovers,
+        "warnings": stats.warnings,
         "worktree": wt.to_string_lossy(),
         "committed": committed,
     });
@@ -357,12 +436,10 @@ fn commit_pm_removal(root: &Path, enabled: bool) -> Result<bool, String> {
     if dirty.is_empty() {
         return Ok(false);
     }
-    myco_git::git_ident(
-        root,
-        &["commit", "-m", "chore: migrate pm/ → project/", "--", "pm"],
-    )
-    .map_err(|e| e.to_string())
-    .map(|_| true)
+    let msg = ops::commit_msg("chore: migrate pm/ → project/", None);
+    myco_git::git_ident(root, &["commit", "-m", &msg, "--", "pm"])
+        .map_err(|e| e.to_string())
+        .map(|_| true)
 }
 
 /// Mode B — normalize files already on the `project` branch.
@@ -401,7 +478,8 @@ fn migrate_project(
                 let (repo, legacy) = myco_store_md::parse_legacy_todo(&src, &meta.name);
                 stats.dropped_done += legacy.dropped;
                 let mut doc = TodoDoc::new(if repo.is_empty() { &meta.name } else { &repo });
-                doc.sections = convert_sections(&mut reg, &legacy, ItemKind::Task, &mut stats)?;
+                doc.sections =
+                    convert_sections(&mut reg, &legacy, ItemKind::Task, "TODO.md", &mut stats)?;
                 doc
             }
         };
@@ -415,7 +493,8 @@ fn migrate_project(
             Err(_) => {
                 let legacy = myco_store_md::parse_legacy_backlog(&src);
                 stats.dropped_done += legacy.dropped;
-                let mut secs = convert_sections(&mut reg, &legacy, ItemKind::Task, &mut stats)?;
+                let mut secs =
+                    convert_sections(&mut reg, &legacy, ItemKind::Task, "BACKLOG.md", &mut stats)?;
                 for s in &mut secs {
                     for i in &mut s.items {
                         i.status = Status::Deferred;
@@ -546,7 +625,7 @@ fn migrate_project(
         "chore: migrate project/ → v2 schema ({} items)",
         stats.converted_items
     );
-    let committed = ops::autocommit(wt, &msg, enabled)?;
+    let committed = ops::autocommit(wt, &msg, None, enabled)?;
 
     let out = json!({
         "mode": "project",
@@ -714,7 +793,7 @@ fn adopt_or_normalize(
     stats.ids_allocated += 1;
     stats.converted_items += 1;
     let stem = name.trim_end_matches(".md");
-    let title = first_heading(src, stem);
+    let title = adopt_title(src, stem);
     let file = ItemFile::new(Item::new(id, &title)).body(src.to_string());
     store.save_item(&file).map_err(|e| e.to_string())?;
     // an already-canonical adoptee lands on its own name — deleting
@@ -794,5 +873,117 @@ mod tests {
             Some(ItemId::new(ItemKind::Issue, 2))
         );
         assert_eq!(frontmatter_id("# heading\n"), None);
+    }
+
+    #[test]
+    fn adopt_title_strips_metadata_separator() {
+        // `·` can't live in an item title — the separator degrades
+        // to `-` on headings and filename-stem fallbacks alike
+        assert_eq!(adopt_title("# plan · v2\n", "x"), "plan - v2");
+        assert_eq!(adopt_title("no heading\n", "fb·x"), "fb-x");
+    }
+
+    #[test]
+    fn demote_deferred_folds_status_into_title() {
+        let mut stats = Stats::default();
+        let mut item =
+            Item::new(ItemId::new(ItemKind::Task, 3), "park me").status(Status::Deferred);
+        demote(&mut item, None, "TODO.md", &mut stats);
+        assert_eq!(item.status, Status::Open);
+        assert_eq!(item.title, "park me - status:deferred");
+        assert_eq!(stats.warnings.len(), 1);
+
+        // an empty title folds to the bare token, no leading ` - `
+        let mut bare = Item::new(ItemId::new(ItemKind::Task, 4), "").status(Status::Deferred);
+        demote(&mut bare, None, "TODO.md", &mut stats);
+        assert_eq!(bare.title, "status:deferred");
+
+        // BACKLOG.md is deferred's home — nothing to demote
+        let mut kept = Item::new(ItemId::new(ItemKind::Task, 5), "x").status(Status::Deferred);
+        let before = stats.warnings.len();
+        demote(&mut kept, None, "BACKLOG.md", &mut stats);
+        assert_eq!(kept.status, Status::Deferred);
+        assert_eq!(stats.warnings.len(), before);
+    }
+
+    #[test]
+    fn demote_drops_self_block_only() {
+        let mut stats = Stats::default();
+        let src = ItemId::new(ItemKind::Task, 1);
+        let mut item = Item::new(src, "x")
+            .blocks(src)
+            .blocks(ItemId::new(ItemKind::Task, 2));
+        demote(&mut item, Some(src), "TODO.md", &mut stats);
+        assert_eq!(item.blocks.len(), 1);
+        assert!(item.blocks.contains(&ItemId::new(ItemKind::Task, 2)));
+        assert!(stats.warnings[0].contains("self-block"));
+
+        // a re-idded line still drops the edge at its *source* id —
+        // blocks: meant itself, not whoever holds the number now
+        let mut moved = Item::new(ItemId::new(ItemKind::Task, 9), "x").blocks(src);
+        demote(&mut moved, Some(src), "TODO.md", &mut stats);
+        assert!(moved.blocks.is_empty());
+    }
+
+    #[test]
+    fn materialize_rejects_reissued_ids() {
+        // an id is honored while free; a source naming it twice —
+        // or after an earlier line's alloc — collides to a fresh
+        // number with a warning, never a duplicate
+        let mut reg = Registry::default();
+        let mut stats = Stats::default();
+        let li = |id| myco_store_md::LegacyItem {
+            id,
+            item: Item::new(ItemId::new(ItemKind::Task, 0), "x"),
+        };
+        let first = materialize(&mut reg, &li(None), ItemKind::Task, &mut stats).unwrap();
+        let dup = materialize(&mut reg, &li(Some(first.id)), ItemKind::Task, &mut stats).unwrap();
+        assert_ne!(dup.id, first.id);
+        assert!(
+            stats.warnings.iter().any(|w| w.contains("already issued")),
+            "{:?}",
+            stats.warnings
+        );
+    }
+
+    #[test]
+    fn convert_sections_merges_textless_headings() {
+        // `##`/`## ###` sections flatten to no name — their items
+        // merge into the section before them (an empty name would
+        // fail the emit); a nameless first section stays unsectioned
+        let li = |t: &str| myco_store_md::LegacyItem {
+            id: None,
+            item: Item::new(ItemId::new(ItemKind::Task, 0), t),
+        };
+        let doc = myco_store_md::LegacyDoc {
+            sections: vec![
+                myco_store_md::LegacySection {
+                    name: Some("Real".into()),
+                    items: vec![li("a")],
+                },
+                myco_store_md::LegacySection {
+                    name: Some("  ".into()),
+                    items: vec![li("b")],
+                },
+                myco_store_md::LegacySection {
+                    name: None,
+                    items: vec![li("c")],
+                },
+            ],
+            dropped: 0,
+        };
+        let mut reg = Registry::default();
+        let mut stats = Stats::default();
+        let secs = convert_sections(&mut reg, &doc, ItemKind::Task, "TODO.md", &mut stats).unwrap();
+        assert_eq!(secs.len(), 1);
+        assert_eq!(secs[0].name.as_deref(), Some("Real"));
+        assert_eq!(
+            secs[0]
+                .items
+                .iter()
+                .map(|i| i.title.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
     }
 }

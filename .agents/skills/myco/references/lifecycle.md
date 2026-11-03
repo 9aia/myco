@@ -12,6 +12,10 @@ branch (`chore: <verb> <id>`). No commit when the tree didn't change.
 Opt out with `--no-commit` or `$MYCO_NO_COMMIT` (tests, dry runs);
 batch up later with `myco commit -m "…"`.
 
+Each commit body carries an `Actor: <id>` trailer — the verb's
+`--actor`/`--owner` where it takes one, else `cli`. Author/committer
+stay the repo's git identity; actor attribution lives in the trailer.
+
 ## `myco init` — scaffold a repo
 
 ```bash

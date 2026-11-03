@@ -132,16 +132,12 @@ pub fn list_items(
 pub fn h_add(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let parent: Option<ItemId> = a.parsed("parent")?;
-    let (item, file) = add_item(
-        &store,
-        a.text("title")?,
-        a.opt("section"),
-        parent,
-        &items::meta_args(a)?,
-    )?;
+    let meta = items::meta_args(a)?;
+    let (item, file) = add_item(&store, a.text("title")?, a.opt("section"), parent, &meta)?;
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: add {}", item.id),
+        meta.owner.as_ref(),
         ctx.no_commit,
     )?;
     items::report(
@@ -157,7 +153,12 @@ pub fn h_done(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let id = a.req::<ItemId>("id")?;
     let item = done_item(&store, id)?;
-    let committed = items::commit(&proj.worktree, &format!("chore: done {id}"), ctx.no_commit)?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: done {id}"),
+        None,
+        ctx.no_commit,
+    )?;
     items::report(
         json!({"item": item}),
         committed,
@@ -171,7 +172,12 @@ pub fn h_defer(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let id = a.req::<ItemId>("id")?;
     let item = defer_item(&store, id)?;
-    let committed = items::commit(&proj.worktree, &format!("chore: defer {id}"), ctx.no_commit)?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: defer {id}"),
+        None,
+        ctx.no_commit,
+    )?;
     items::report(
         json!({"item": item, "file": "BACKLOG.md"}),
         committed,

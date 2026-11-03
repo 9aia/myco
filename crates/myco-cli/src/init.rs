@@ -125,8 +125,12 @@ pub fn ensure(
     // branch: reuse or create as an orphan root via plumbing
     let created_branch = !myco_git::branch_exists(&root, discover::BRANCH);
     if created_branch {
-        myco_git::create_orphan_branch(&root, discover::BRANCH, "chore: init project branch")
-            .map_err(|e| format!("create project branch: {e}"))?;
+        myco_git::create_orphan_branch(
+            &root,
+            discover::BRANCH,
+            &ops::commit_msg("chore: init project branch", None),
+        )
+        .map_err(|e| format!("create project branch: {e}"))?;
     }
 
     // worktree: reuse a valid one, or `worktree add`
@@ -157,7 +161,7 @@ pub fn ensure(
     let store = ops::store_at(&worktree, myco_core::kind::prelude_table())?;
     let name = repo_name(&root);
     let files_created = ops::scaffold(&store, &worktree, &name).map_err(|e| e.to_string())?;
-    if ops::autocommit(&worktree, "chore: init project ledger", enabled)? {
+    if ops::autocommit(&worktree, "chore: init project ledger", None, enabled)? {
         committed = true;
     }
 
@@ -168,6 +172,7 @@ pub fn ensure(
             &root,
             "chore: ignore project/ worktree mount point",
             &[".gitignore"],
+            None,
             enabled,
         )?
     {
@@ -181,6 +186,7 @@ pub fn ensure(
             &root,
             "chore: manage AGENTS.md agent-awareness block",
             &["AGENTS.md"],
+            None,
             enabled,
         )?
     {
@@ -195,6 +201,7 @@ pub fn ensure(
             &root,
             "chore: seed myco.toml kinds prelude",
             &["myco.toml"],
+            None,
             enabled,
         )?
     {

@@ -61,6 +61,7 @@ pub fn h_resolve(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: resolve {id}"),
+        None,
         ctx.no_commit,
     )?;
     items::report(
@@ -90,6 +91,7 @@ pub fn h_archive(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: archive {id}"),
+        None,
         ctx.no_commit,
     )?;
     items::report(
@@ -117,6 +119,7 @@ pub fn h_comment(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: comment {id}"),
+        None,
         ctx.no_commit,
     )?;
     items::report(

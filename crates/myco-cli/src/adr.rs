@@ -60,6 +60,7 @@ pub fn h_supersede(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: supersede {id} by {by}"),
+        None,
         ctx.no_commit,
     )?;
     items::report(

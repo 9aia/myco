@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use myco_core::{BacklogDoc, ProjectMeta, TodoDoc};
+use myco_core::{Actor, BacklogDoc, ProjectMeta, TodoDoc};
 use myco_store::{Error as StoreError, Store};
 
 /// Dirs `myco init` / `check --fix` scaffold (with `.gitkeep`).
@@ -148,6 +148,25 @@ pub fn commits_enabled(no_commit: bool) -> bool {
     !no_commit && std::env::var_os("MYCO_NO_COMMIT").is_none()
 }
 
+/// Fallback actor for the `Actor:` commit trailer — the local
+/// CLI wrote it. Verbs that name an actor (`--actor` on
+/// `handoff`/`interrupt`, `--owner` on `add`/`new`/`set`/`--claim`)
+/// stamp that id instead; the same default those flags already
+/// fall back to.
+pub const DEFAULT_ACTOR: &str = "cli";
+
+/// `msg` + the `Actor:` trailer — every myco commit names the
+/// verb's actor in the message body (T-011: actor-tagged
+/// trailers, not per-actor git authors — author/committer stay
+/// the repo's stable `user.name`/`user.email` identity, or the
+/// `myco@localhost` fallback). `None` resolves to
+/// [`DEFAULT_ACTOR`]. The subject line is untouched, so `%s`
+/// parses (e.g. `report`'s velocity walk) never see it.
+pub fn commit_msg(msg: &str, actor: Option<&Actor>) -> String {
+    let actor = actor.map(Actor::as_str).unwrap_or(DEFAULT_ACTOR);
+    format!("{msg}\n\nActor: {actor}")
+}
+
 /// Mutating verbs must not write a ledger they cannot commit. A
 /// detached `project/` worktree is the failure mode that costs the
 /// most: every write lands, no branch records it, and the audit
@@ -165,13 +184,20 @@ pub fn ensure_committable(dir: &Path) -> Result<(), String> {
 }
 
 /// One atomic commit of everything under `dir` — the
-/// auto-commit-per-verb path. No commit when disabled or when the
+/// auto-commit-per-verb path. `msg` gains the `Actor:` trailer
+/// ([`commit_msg`]; `actor` is the verb's actor, `None` →
+/// [`DEFAULT_ACTOR`]). No commit when disabled or when the
 /// tree is clean. Returns whether a commit was made.
-pub fn autocommit(dir: &Path, msg: &str, enabled: bool) -> Result<bool, String> {
+pub fn autocommit(
+    dir: &Path,
+    msg: &str,
+    actor: Option<&Actor>,
+    enabled: bool,
+) -> Result<bool, String> {
     if !enabled || !myco_git::has_changes(dir).map_err(|e| e.to_string())? {
         return Ok(false);
     }
-    myco_git::commit_all(dir, msg)
+    myco_git::commit_all(dir, &commit_msg(msg, actor))
         .map_err(|e| format!("git commit failed in {}: {e}", dir.display()))?;
     Ok(true)
 }
@@ -186,7 +212,13 @@ pub fn autocommit(dir: &Path, msg: &str, enabled: bool) -> Result<bool, String> 
 /// land in the commit under myco's message — an accepted
 /// limitation (hunk-level staging via `git apply --cached` was
 /// judged disproportionate for the managed-file call sites).
-pub fn commit_paths(dir: &Path, msg: &str, paths: &[&str], enabled: bool) -> Result<bool, String> {
+pub fn commit_paths(
+    dir: &Path,
+    msg: &str,
+    paths: &[&str],
+    actor: Option<&Actor>,
+    enabled: bool,
+) -> Result<bool, String> {
     if !enabled {
         return Ok(false);
     }
@@ -199,7 +231,8 @@ pub fn commit_paths(dir: &Path, msg: &str, paths: &[&str], enabled: bool) -> Res
     let mut add = vec!["add", "--"];
     add.extend_from_slice(paths);
     myco_git::git_out(dir, &add).map_err(|e| e.to_string())?;
-    let mut commit = vec!["commit", "-m", msg, "--"];
+    let msg = commit_msg(msg, actor);
+    let mut commit = vec!["commit", "-m", msg.as_str(), "--"];
     commit.extend_from_slice(paths);
     myco_git::git_ident(dir, &commit)
         .map_err(|e| e.to_string())
@@ -352,11 +385,67 @@ mod tests {
         git(d.path(), &["config", "user.email", "t@t"]);
         git(d.path(), &["config", "user.name", "t"]);
         // enabled but nothing dirty under the path → false, no commit
-        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], true).unwrap());
+        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], None, true).unwrap());
         // disabled short-circuits before even checking
-        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], false).unwrap());
+        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], None, false).unwrap());
         std::fs::write(d.path().join("other.txt"), "x").unwrap();
         // dirty elsewhere doesn't count — only the named paths do
-        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], true).unwrap());
+        assert!(!commit_paths(d.path(), "msg", &[".gitignore"], None, true).unwrap());
+    }
+
+    #[test]
+    fn commit_msg_appends_actor_trailer() {
+        // no named actor → the cli default
+        assert_eq!(commit_msg("chore: x", None), "chore: x\n\nActor: cli");
+        let a = Actor::new("devin").unwrap();
+        assert_eq!(commit_msg("chore: y", Some(&a)), "chore: y\n\nActor: devin");
+        let h = Actor::new("human:luis").unwrap();
+        assert_eq!(
+            commit_msg("chore: z", Some(&h)),
+            "chore: z\n\nActor: human:luis"
+        );
+    }
+
+    #[test]
+    fn autocommit_stamps_actor_trailer() {
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        let body = || {
+            String::from_utf8(
+                Command::new("git")
+                    .arg("-C")
+                    .arg(d.path())
+                    .args(["log", "-1", "--format=%B"])
+                    .output()
+                    .unwrap()
+                    .stdout,
+            )
+            .unwrap()
+        };
+        // a verb's named actor lands in the body, not the subject
+        let devin = Actor::new("devin").unwrap();
+        std::fs::write(d.path().join("a.md"), "x").unwrap();
+        assert!(autocommit(d.path(), "chore: first", Some(&devin), true).unwrap());
+        let b = body();
+        assert!(b.contains("Actor: devin"), "{b}");
+        assert_eq!(b.lines().next().unwrap(), "chore: first");
+        // no actor → `cli`; git author stays the repo identity
+        std::fs::write(d.path().join("b.md"), "x").unwrap();
+        assert!(autocommit(d.path(), "chore: second", None, true).unwrap());
+        let b = body();
+        assert!(b.contains("Actor: cli"), "{b}");
+        let author = String::from_utf8(
+            Command::new("git")
+                .arg("-C")
+                .arg(d.path())
+                .args(["log", "-1", "--format=%an"])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap();
+        assert_eq!(author.trim(), "t");
     }
 }

@@ -162,6 +162,43 @@ fn todo_add_list_done() {
 }
 
 #[test]
+fn commits_carry_actor_trailer() {
+    let (d, wt) = project();
+    // `--owner` names the actor on add/new verbs
+    run(d.path(), &["todo", "add", "owned task", "--owner", "devin"]);
+    let body = git(&wt, &["log", "-1", "--format=%B"]);
+    assert!(body.contains("Actor: devin"), "{body}");
+    // subject line is untouched — `%s` parses never see the trailer
+    assert_eq!(git(&wt, &["log", "-1", "--format=%s"]), "chore: add T-001");
+
+    // no actor flag → the `cli` default
+    run(d.path(), &["todo", "done", "T-001"]);
+    let body = git(&wt, &["log", "-1", "--format=%B"]);
+    assert!(body.contains("Actor: cli"), "{body}");
+
+    // `--actor` on continuity verbs
+    run(d.path(), &["todo", "add", "another"]);
+    let out = run(
+        d.path(),
+        &[
+            "handoff",
+            "T-002",
+            "--note",
+            "Done: x",
+            "--actor",
+            "human:luis",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let body = git(&wt, &["log", "-1", "--format=%B"]);
+    assert!(body.contains("Actor: human:luis"), "{body}");
+
+    // author/committer stay the repo's git identity, not the actor
+    assert_eq!(git(&wt, &["log", "-1", "--format=%an"]), "t");
+    assert_eq!(git(&wt, &["log", "-1", "--format=%ae"]), "t@t");
+}
+
+#[test]
 fn todo_defer_and_backlog_promote() {
     let (d, wt) = project();
     run(d.path(), &["todo", "add", "task one"]);

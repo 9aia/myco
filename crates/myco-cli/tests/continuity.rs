@@ -455,3 +455,185 @@ fn interrupt_reverts_status_and_marks_the_handoff() {
     assert_eq!(code(&out), 2);
     assert!(stderr(&out).contains("nothing to interrupt"));
 }
+
+#[test]
+fn session_scoped_claim_and_teardown() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "s1 task"]);
+    run(d.path(), &["todo", "add", "s2 task"]);
+    run(d.path(), &["todo", "add", "sessionless"]);
+
+    // `item set --session` tags the claim — the mutation and the
+    // `claimed` handoff entry ride one commit
+    let out = run(
+        d.path(),
+        &[
+            "item",
+            "set",
+            "T-001",
+            "--status",
+            "in-progress",
+            "--session",
+            "sepia:s1",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["claim"]["session"], "sepia:s1");
+    assert_eq!(v["claim"]["note"], "claimed");
+    let h = read(&wt, "handoffs/T-001.md");
+    assert!(h.contains("session:sepia:s1"), "{h}");
+    assert!(h.contains("claimed"), "{h}");
+    let out = run(
+        d.path(),
+        &[
+            "item",
+            "set",
+            "T-002",
+            "--status",
+            "claimed",
+            "--owner",
+            "devin",
+            "--session",
+            "sepia:s2",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    // a sessionless claim stays untagged
+    run(
+        d.path(),
+        &["item", "set", "T-003", "--status", "in-progress"],
+    );
+
+    // --session scopes the single-id form too: s2 can't kill s1's
+    let out = run(d.path(), &["interrupt", "T-001", "--session", "sepia:s2"]);
+    assert_eq!(code(&out), 2);
+    let e = stderr(&out);
+    assert!(e.contains("claimed under session sepia:s1"), "{e}");
+    // …and nothing changed
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("status:in-progress"), "{todo}");
+
+    // the teardown — only s1's items revert, one commit
+    let out = run(d.path(), &["interrupt", "--session", "sepia:s1", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["session"], "sepia:s1");
+    let ids: Vec<&str> = v["interrupted"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["T-001"]);
+    assert!(v["errors"].as_array().unwrap().is_empty());
+    assert_eq!(v["interrupted"][0]["entry"]["session"], "sepia:s1");
+    assert_eq!(
+        git(&wt, &["log", "-1", "--format=%s"]),
+        "chore: interrupt session sepia:s1"
+    );
+    // T-001 reverted; s2's and the sessionless claim untouched
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("- [ ] T-001"), "{todo}");
+    assert!(todo.contains("status:claimed"), "{todo}");
+    assert!(todo.contains("status:in-progress"), "{todo}");
+    // the interrupt marker is tagged too — resume shows it
+    let h = read(&wt, "handoffs/T-001.md");
+    assert!(h.contains("interrupted"), "{h}");
+
+    // a session that claimed nothing tears down to nothing
+    let out = run(d.path(), &["interrupt", "--session", "sepia:ghost"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(
+        stdout(&out).contains("nothing claimed under"),
+        "{}",
+        stdout(&out)
+    );
+
+    // bare interrupt names the two modes
+    let out = run(d.path(), &["interrupt"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("pass an item id"), "{}", stderr(&out));
+
+    // s2's teardown lands its own item
+    let out = run(d.path(), &["interrupt", "--session", "sepia:s2", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(json(&out)["interrupted"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn next_claim_session_tags_the_claim() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "the work", "--pri", "high"]);
+    run(d.path(), &["todo", "add", "less urgent", "--pri", "low"]);
+    // --session without --claim is meaningless
+    let out = run(d.path(), &["next", "--session", "sepia:s9"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("--claim"), "{}", stderr(&out));
+    // claim under a session — tag lands in the handoff entry
+    let out = run(
+        d.path(),
+        &[
+            "next",
+            "--claim",
+            "--owner",
+            "devin",
+            "--session",
+            "sepia:s9",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(json(&out)["item"]["id"], "T-001");
+    let h = read(&wt, "handoffs/T-001.md");
+    assert!(h.contains("session:sepia:s9"), "{h}");
+    assert!(h.contains("claimed"), "{h}");
+    // teardown of that session picks it up
+    let out = run(d.path(), &["interrupt", "--session", "sepia:s9", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["interrupted"].as_array().unwrap().len(), 1);
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("- [ ] T-001"), "{todo}");
+}
+
+#[test]
+fn session_tag_validation_and_edges() {
+    let (d, _wt) = project();
+    run(d.path(), &["todo", "add", "t"]);
+    // bad session ids are rejected on every tag path
+    for args in [
+        vec![
+            "item",
+            "set",
+            "T-001",
+            "--status",
+            "claimed",
+            "--session",
+            "a·b",
+        ],
+        vec!["item", "set", "T-001", "--session", "a·b"],
+        vec!["interrupt", "--session", "a·b"],
+        vec!["next", "--claim", "--session", "a·b"],
+    ] {
+        let out = run(d.path(), &args);
+        assert_eq!(code(&out), 2, "{args:?}: {}", stderr(&out));
+        assert!(
+            stderr(&out).contains("session"),
+            "{args:?}: {}",
+            stderr(&out)
+        );
+    }
+    // --session on an open item — there's no claim to tag
+    let out = run(d.path(), &["item", "set", "T-001", "--session", "sepia:s1"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("no claim"), "{}", stderr(&out));
+    // but it *does* tag an existing claim (e.g. adopt one)
+    run(d.path(), &["item", "set", "T-001", "--status", "claimed"]);
+    let out = run(d.path(), &["item", "set", "T-001", "--session", "sepia:s1"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    // …so the session teardown finds it
+    let out = run(d.path(), &["interrupt", "--session", "sepia:s1", "--json"]);
+    assert_eq!(json(&out)["interrupted"].as_array().unwrap().len(), 1);
+}

@@ -157,26 +157,56 @@ fn graph(store: &impl Store) -> myco_ops::links::LiveGraph {
     graph
 }
 
+/// `item set` + an optional `--session` claim tag — the shared
+/// mutation path when absent, [`crate::continuity::tag_claim`]
+/// (mutation + `claimed` entry, atomically) when present.
+/// Returns the post-mutation item, the location label, and the
+/// claim entry when one was written.
+pub(crate) fn set_item(
+    store: &impl Store,
+    id: ItemId,
+    flags: &SetFlags,
+    session: Option<String>,
+) -> Result<(Option<Item>, String, Option<myco_core::HandoffEntry>), String> {
+    match session {
+        Some(s) => {
+            let actor = flags.owner.clone();
+            let (item, location, entry) =
+                crate::continuity::tag_claim(store, id, flags, actor, &s)?;
+            Ok((item, location, Some(entry)))
+        }
+        None => {
+            let (item, location) = mutate_item(store, id, flags)?;
+            Ok((item, location, None))
+        }
+    }
+}
+
 /// The `item set` verb.
 pub fn h_set(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let id = a.req::<ItemId>("id")?;
     let flags = set_flags(a)?;
-    if flags.is_noop() {
+    let session = a.opt("session").map(str::to_string);
+    if flags.is_noop() && session.is_none() {
         return Err("item set: nothing to change — pass at least one flag".into());
     }
-    let (item, location) = mutate_item(&store, id, &flags)?;
-    let committed = items::commit(&proj.worktree, &format!("chore: set {id}"), ctx.no_commit)?;
+    let (item, location, claim) = set_item(&store, id, &flags, session)?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: set {id}"),
+        flags.owner.as_ref(),
+        ctx.no_commit,
+    )?;
     let human = item
         .as_ref()
         .map(|i| format!("set {}", items::compact(i)))
         .unwrap_or_else(|| format!("set {id} done — line removed"));
-    items::report(
-        json!({"item": item, "location": location}),
-        committed,
-        ctx.json,
-        &human,
-    )
+    let mut payload = json!({"item": item, "location": location});
+    if let Some(entry) = claim {
+        payload["claim"] = json!(entry);
+    }
+    items::report(payload, committed, ctx.json, &human)
 }
 
 /// The gathered `item show` pieces — one id's load shared by

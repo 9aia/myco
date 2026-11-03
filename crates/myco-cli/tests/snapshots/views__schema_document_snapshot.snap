@@ -3,6 +3,12 @@ source: crates/myco-cli/tests/views.rs
 expression: "serde_json::to_string_pretty(&v).unwrap()"
 ---
 {
+  "commits": {
+    "identity": "author/committer = repo git config (`user.name`/`user.email`, `myco@localhost` fallback) — actor attribution is a trailer, never a per-actor author",
+    "subject": "chore: <verb> <id>…",
+    "timing": "one atomic commit per mutating verb, only when the worktree changed",
+    "trailer": "Actor: <actor> — the verb's actor (`--actor`/`--owner` where the verb takes one, else `cli`)"
+  },
   "files": {
     "BACKLOG.md": {
       "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",

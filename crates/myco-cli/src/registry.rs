@@ -808,14 +808,17 @@ const BODY: &[Param] = &[
     opt("text", Val::Str, "Body markdown inline."),
 ];
 
-/// `id` + `--note/--actor/--session` — `interrupt` (the handoff
-/// verb requires the note).
+/// `[id]` + `--note/--actor/--session` — `interrupt` (the
+/// handoff verb requires the note). Omitting `id` makes
+/// `--session` the bulk teardown: every item claimed under the
+/// session reverts.
 const INTERRUPT_PARAMS: &[Param] = &[
     pos(
         "id",
         Val::Id,
-        "Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`, `PL-NNN`).",
-    ),
+        "Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`, `PL-NNN`) — omit for the `--session` bulk teardown.",
+    )
+    .optional(),
     opt(
         "note",
         Val::Str,
@@ -826,7 +829,7 @@ const INTERRUPT_PARAMS: &[Param] = &[
     opt(
         "session",
         Val::Str,
-        "Session provenance — a sepia session id, `cli:<pid>`, any id string.",
+        "Session scope — a sepia session id, `cli:<pid>`, any id string. With `id`: interrupt only when the item's claim tag matches. Without `id`: teardown — interrupt every item claimed under it.",
     ),
 ];
 
@@ -1338,6 +1341,7 @@ pub static VERBS: &[Verb] = &[
                 .delim(),
             opt("epic", Val::Str, "Epic name — `\"\"` clears the epic."),
             opt("milestone", Val::Str, "Milestone name — `\"\"` clears the milestone."),
+            opt("session", Val::Str, "Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state."),
         ]],
         kind_lock: None,
         mutates: true,
@@ -1369,6 +1373,7 @@ pub static VERBS: &[Verb] = &[
                 .delim()
                 .cli(),
             flag("claim", "Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else `cli`); `--owner` names the claimer here and doesn't filter. Mutating: one commit.").cli(),
+            opt("session", Val::Str, "With `--claim`: tag the claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it).").cli(),
         ], SPEC_PATCH],
         kind_lock: None,
         mutates: true,
@@ -1481,7 +1486,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "interrupt",
-        about: "A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.",
+        about: "A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Without an id, `--session <id>` is the teardown: every item claimed under that session reverts in one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.",
         params: &[INTERRUPT_PARAMS],
         kind_lock: None,
         mutates: true,

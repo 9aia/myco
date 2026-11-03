@@ -203,6 +203,7 @@ fn finish(
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: absorb {source} ({created} items)"),
+        None,
         no_commit,
     )?;
     items::report(

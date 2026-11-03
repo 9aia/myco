@@ -362,8 +362,8 @@ impl Server {
         items::open_read(self.dir.as_deref(), self.root.as_deref()).map_err(Fail::Verb)
     }
 
-    fn commit(&self, wt: &std::path::Path, msg: &str) -> Result<bool, Fail> {
-        items::commit(wt, msg, self.no_commit).map_err(Fail::Verb)
+    fn commit(&self, wt: &std::path::Path, msg: &str, actor: Option<&Actor>) -> Result<bool, Fail> {
+        items::commit(wt, msg, actor, self.no_commit).map_err(Fail::Verb)
     }
 
     /// The request loop — wire- and transport-agnostic: read one
@@ -590,7 +590,11 @@ pub(crate) fn w_todo_add(s: &Server, a: &crate::registry::Args) -> Result<Value,
     let (proj, store) = s.open()?;
     let (item, file) =
         todo::add_item(&store, &title, section.as_deref(), parent, &meta).map_err(Fail::Verb)?;
-    let committed = s.commit(&proj.worktree, &format!("chore: add {}", item.id))?;
+    let committed = s.commit(
+        &proj.worktree,
+        &format!("chore: add {}", item.id),
+        meta.owner.as_ref(),
+    )?;
     Ok(json!({"item": item, "file": file, "parent": parent, "committed": committed}))
 }
 
@@ -599,7 +603,7 @@ pub(crate) fn w_todo_done(s: &Server, a: &crate::registry::Args) -> Result<Value
     let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
     let (proj, store) = s.open()?;
     let item = todo::done_item(&store, id).map_err(Fail::Verb)?;
-    let committed = s.commit(&proj.worktree, &format!("chore: done {id}"))?;
+    let committed = s.commit(&proj.worktree, &format!("chore: done {id}"), None)?;
     Ok(json!({"item": item, "committed": committed}))
 }
 
@@ -608,7 +612,7 @@ pub(crate) fn w_todo_defer(s: &Server, a: &crate::registry::Args) -> Result<Valu
     let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
     let (proj, store) = s.open()?;
     let item = todo::defer_item(&store, id).map_err(Fail::Verb)?;
-    let committed = s.commit(&proj.worktree, &format!("chore: defer {id}"))?;
+    let committed = s.commit(&proj.worktree, &format!("chore: defer {id}"), None)?;
     Ok(json!({"item": item, "file": "BACKLOG.md", "committed": committed}))
 }
 
@@ -619,7 +623,11 @@ pub(crate) fn w_backlog_add(s: &Server, a: &crate::registry::Args) -> Result<Val
     let meta = items::meta_args(a).map_err(Fail::BadParams)?;
     let (proj, store) = s.open()?;
     let item = backlog::add_item(&store, &title, section.as_deref(), &meta).map_err(Fail::Verb)?;
-    let committed = s.commit(&proj.worktree, &format!("chore: add {}", item.id))?;
+    let committed = s.commit(
+        &proj.worktree,
+        &format!("chore: add {}", item.id),
+        meta.owner.as_ref(),
+    )?;
     Ok(json!({"item": item, "file": "BACKLOG.md", "committed": committed}))
 }
 
@@ -628,7 +636,7 @@ pub(crate) fn w_backlog_promote(s: &Server, a: &crate::registry::Args) -> Result
     let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
     let (proj, store) = s.open()?;
     let item = backlog::promote_item(&store, id).map_err(Fail::Verb)?;
-    let committed = s.commit(&proj.worktree, &format!("chore: promote {id}"))?;
+    let committed = s.commit(&proj.worktree, &format!("chore: promote {id}"), None)?;
     Ok(json!({"item": item, "file": "TODO.md", "committed": committed}))
 }
 
@@ -638,7 +646,8 @@ pub(crate) fn w_backlog_promote(s: &Server, a: &crate::registry::Args) -> Result
 pub(crate) fn w_item_set(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
     let flags = itemcmd::set_flags(a).map_err(Fail::BadParams)?;
-    if flags.is_noop() {
+    let session = a.opt("session").map(str::to_string);
+    if flags.is_noop() && session.is_none() {
         return Err(Fail::Verb(
             "item set: nothing to change — pass at least one field".into(),
         ));
@@ -658,9 +667,18 @@ pub(crate) fn w_item_set(s: &Server, a: &crate::registry::Args) -> Result<Value,
                 to,
             })?;
     }
-    let (item, location) = itemcmd::mutate_item(&store, id, &flags).map_err(Fail::Verb)?;
-    let committed = s.commit(&proj.worktree, &format!("chore: set {id}"))?;
-    Ok(json!({"item": item, "location": location, "committed": committed}))
+    let (item, location, claim) =
+        itemcmd::set_item(&store, id, &flags, session).map_err(Fail::Verb)?;
+    let committed = s.commit(
+        &proj.worktree,
+        &format!("chore: set {id}"),
+        flags.owner.as_ref(),
+    )?;
+    let mut payload = json!({"item": item, "location": location, "committed": committed});
+    if let Some(entry) = claim {
+        payload["claim"] = json!(entry);
+    }
+    Ok(payload)
 }
 
 /// `handoff` — `note "-"` reads stdin, and stdin IS the wire.
@@ -677,21 +695,63 @@ pub(crate) fn w_handoff(s: &Server, a: &crate::registry::Args) -> Result<Value, 
     let (proj, store) = s.open()?;
     let (entry, rel) = continuity::record_handoff(&store, &proj.worktree, id, note, actor, session)
         .map_err(Fail::Verb)?;
-    let committed = s.commit(&proj.worktree, &format!("chore: handoff {id}"))?;
+    let committed = s.commit(
+        &proj.worktree,
+        &format!("chore: handoff {id}"),
+        Some(&entry.actor),
+    )?;
     Ok(json!({"id": id.to_string(), "path": rel, "entry": entry, "committed": committed}))
 }
 
-/// `interrupt`.
+/// `interrupt` — `{id}` reverts one item (`session` asserts the
+/// claim tag); `{session}` without `id` is the teardown — every
+/// item claimed under the session reverts, one commit, per-item
+/// errors collected in `errors[]`.
 pub(crate) fn w_interrupt(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
-    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let id: Option<ItemId> = a.parsed("id").map_err(Fail::BadParams)?;
     let note = a.opt("note").map(str::to_string);
     let actor: Option<Actor> = a.parsed("actor").map_err(Fail::BadParams)?;
     let session = a.opt("session").map(str::to_string);
     let (proj, store) = s.open()?;
-    let entry = continuity::interrupt_item(&store, id, note.as_deref(), actor, session)
-        .map_err(Fail::Verb)?;
-    let committed = s.commit(&proj.worktree, &format!("chore: interrupt {id}"))?;
-    Ok(json!({"id": id.to_string(), "status": "open", "entry": entry, "committed": committed}))
+    match (id, session) {
+        (Some(id), session) => {
+            let entry = continuity::interrupt_item(&store, id, note.as_deref(), actor, session)
+                .map_err(Fail::Verb)?;
+            let committed = s.commit(
+                &proj.worktree,
+                &format!("chore: interrupt {id}"),
+                Some(&entry.actor),
+            )?;
+            Ok(
+                json!({"id": id.to_string(), "status": "open", "entry": entry, "committed": committed}),
+            )
+        }
+        (None, Some(session)) => {
+            let out =
+                continuity::interrupt_session(&store, &session, note.as_deref(), actor.clone())
+                    .map_err(Fail::Verb)?;
+            let committed = s.commit(
+                &proj.worktree,
+                &format!("chore: interrupt session {session}"),
+                actor.as_ref(),
+            )?;
+            Ok(json!({
+                "session": session,
+                "interrupted": out.interrupted.iter().map(|(id, e)| {
+                    json!({"id": id.to_string(), "status": "open", "entry": e})
+                }).collect::<Vec<_>>(),
+                "errors": out.errors.iter().map(|(id, e)| {
+                    json!({"id": id.to_string(), "error": e})
+                }).collect::<Vec<_>>(),
+                "committed": committed,
+            }))
+        }
+        (None, None) => Err(Fail::BadParams(
+            "missing `id` — pass an item id, or a `session` to interrupt \
+             everything it claimed"
+                .into(),
+        )),
+    }
 }
 
 /// `next` — `{spec}` merges over the `next` named view; `limit`
@@ -1067,6 +1127,80 @@ mod tests {
             .unwrap();
         let v: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(v["result"]["related"]["blocked_by"][0]["id"], "T-001");
+    }
+
+    #[test]
+    fn session_teardown_on_the_wire() {
+        let (_d, s) = fixture();
+        call(&s, "todo.add", json!({"title": "s1 work"})).unwrap();
+        call(&s, "todo.add", json!({"title": "s2 work"})).unwrap();
+        call(&s, "todo.add", json!({"title": "sessionless"})).unwrap();
+        // claim through the wire item.set — session tags the claim
+        let v = call(
+            &s,
+            "item.set",
+            json!({"id": "T-001", "status": "in-progress", "session": "s1"}),
+        )
+        .unwrap();
+        assert_eq!(v["claim"]["session"], "s1");
+        assert_eq!(v["claim"]["note"], "claimed");
+        call(
+            &s,
+            "item.set",
+            json!({"id": "T-002", "status": "claimed", "owner": "devin", "session": "s2"}),
+        )
+        .unwrap();
+        call(
+            &s,
+            "item.set",
+            json!({"id": "T-003", "status": "in-progress"}),
+        )
+        .unwrap();
+
+        // single-id interrupt with a foreign session → verb error,
+        // nothing reverts
+        match call(&s, "interrupt", json!({"id": "T-001", "session": "s2"})) {
+            Err(Fail::Verb(m)) => assert!(m.contains("claimed under session s1"), "{m}"),
+            other => panic!("expected verb failure: {other:?}"),
+        }
+        let v = call(&s, "todo.list", Value::Null).unwrap();
+        assert_eq!(v[0]["status"], "in-progress");
+
+        // the teardown — only s1's item reverts
+        let v = call(&s, "interrupt", json!({"session": "s1"})).unwrap();
+        assert_eq!(v["session"], "s1");
+        let ids: Vec<&str> = v["interrupted"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["T-001"]);
+        assert_eq!(v["errors"], json!([]));
+        assert_eq!(v["interrupted"][0]["entry"]["session"], "s1");
+        // s2 + sessionless claims untouched (the revert re-lands
+        // T-001 at the section tail — sort before comparing)
+        let v = call(&s, "todo.list", Value::Null).unwrap();
+        let mut statuses: Vec<(&str, &str)> = v
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| (i["id"].as_str().unwrap(), i["status"].as_str().unwrap()))
+            .collect();
+        statuses.sort();
+        assert_eq!(
+            statuses,
+            [
+                ("T-001", "open"),
+                ("T-002", "claimed"),
+                ("T-003", "in-progress")
+            ]
+        );
+        // no id and no session → -32602
+        assert!(matches!(
+            call(&s, "interrupt", json!({})),
+            Err(Fail::BadParams(_))
+        ));
     }
 
     #[test]

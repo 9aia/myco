@@ -22,13 +22,9 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
     let msg = message.unwrap_or_else(|| DEFAULT_MSG.to_string());
     let enabled = ops::commits_enabled(no_commit);
     let dirty = myco_git::has_changes(&proj.worktree).map_err(|e| e.to_string())?;
-    let committed = if dirty && enabled {
-        myco_git::commit_all(&proj.worktree, &msg)
-            .map_err(|e| format!("git commit failed in {}: {e}", proj.worktree.display()))?;
-        true
-    } else {
-        false
-    };
+    // the verb's own message still rides the shared autocommit
+    // path so it gains the `Actor:` trailer like every myco commit
+    let committed = ops::autocommit(&proj.worktree, &msg, None, enabled && dirty)?;
     if json_out {
         ops::print_json(&json!({
             "worktree": proj.worktree.to_string_lossy(),

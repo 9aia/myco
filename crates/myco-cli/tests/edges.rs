@@ -982,6 +982,48 @@ fn migrate_project_normalizes() {
 }
 
 #[test]
+fn migrate_project_freeform_shapes_demote() {
+    let (d, wt) = project();
+    // pm-style shapes the target grammar can't express demote to
+    // plain tasks instead of aborting the run: a deferred marker
+    // in TODO.md folds into the title, a self-block drops, a
+    // textless `##` merges into the section before it — each with
+    // a warning, no hard error (T-013)
+    write(
+        &wt,
+        "TODO.md",
+        "# TODO — x\n\n## Phase 1\n\n- freeform one\n- [ ] parked · status:deferred\n- T-005 self · blocks:T-005\n\n##\n\n- after empty heading\n",
+    );
+    write(&wt, "issues/idea.md", "# idea · draft\n\nbody\n");
+    let out = run(d.path(), &["migrate", "--json"]);
+    assert_eq!(code(&out), 0, "{out:?}");
+    let v = json(&out);
+    let warnings = v["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 2, "{warnings:?}");
+    let todo = std::fs::read_to_string(wt.join("TODO.md")).unwrap();
+    assert!(todo.contains("freeform one"), "{todo}");
+    // `status:deferred` has no home in TODO.md — folded, kept, open
+    assert!(todo.contains("parked - status:deferred"), "{todo}");
+    // the id'd line keeps its number; the self-block edge is gone
+    assert!(todo.contains("- [ ] T-005 self"), "{todo}");
+    assert!(!todo.contains("blocks:"), "{todo}");
+    // the textless heading merged its items into Phase 1
+    assert!(todo.contains("after empty heading"), "{todo}");
+    // `·` in an adoptee's heading degrades to `-` in the title
+    let issues: Vec<String> = std::fs::read_dir(wt.join("issues"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        issues.iter().any(|n| n.contains("idea-draft")),
+        "{issues:?}"
+    );
+    let out = run(d.path(), &["check"]);
+    assert_eq!(code(&out), 0, "{out:?}");
+}
+
+#[test]
 fn migrate_project_missing_item_dir() {
     let (d, wt) = project();
     // `plans` simply isn't there: the claim pass tolerates the

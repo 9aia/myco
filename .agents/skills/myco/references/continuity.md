@@ -30,18 +30,42 @@ Also leave statuses honest before exiting: work in flight stays
 `in-progress` or `blocked` (never silently `open`), finished work
 gets `item set <ID> --status done` (or `todo done`).
 
+## Claim tagging — `--session`
+
+A session id (`sepia:<id>`, `cli:<pid>`, any `[A-Za-z0-9._:-]+`)
+tags the *claim* itself, not just the note. Pass it on the
+claiming verbs and the tag lands as a `session:<id>` field on a
+`claimed` handoff entry — the item's claim belongs to the session
+named by its **latest session-tagged entry**:
+
+```bash
+myco next --claim --owner devin --session sepia:<id>   # claim the top item
+myco item set T-012 --status claimed --session sepia:<id>
+myco item set T-012 --session sepia:<id>   # tag an existing claim
+```
+
+`--session` needs a work state to tag — an `open` item has no
+claim. Untagged writes are anonymous: they never move the tag.
+
 ## Abnormal end — `myco interrupt`
 
 ```bash
 myco interrupt T-012 [--note "ctx"] [--actor devin] [--session sepia:<id>]
+myco interrupt --session sepia:<id>        # teardown: its own items only
 ```
 
 Session ended with work still `claimed`/`in-progress`/`blocked`?
 The item reverts to `open` and gets an `interrupted` handoff in one
 commit — the board stays honest, the log keeps the event. Hooks
 call this: sepia owns session lifecycle; CLI `SessionEnd` hooks
-can too (interrupt each in-progress item you own). myco never
-detects sessions itself.
+can too. myco never detects sessions itself.
+
+`--session` scopes, not just labels. Without an id it's the
+**teardown**: every item whose claim tag names the session
+reverts in one commit — a dying session releases exactly its own
+work, never another's. With an id it asserts: `interrupt T-012
+--session sepia:<id>` errors when T-012's claim tag names a
+different session (drop `--session` to force it).
 
 Interrupted items surface as `⚡` in `status`, `status --prompt`,
 `view board`, and `item show`. An `in-progress` item idle >3d with no
