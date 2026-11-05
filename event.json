@@ -1,1 +1,1 @@
-{"id":"","ws":"item-move","actor":"luis","ts":1793852792,"op":{"op":"claim","glob":".kuda/**","ttl_secs":3600}}
+{"id":"","ws":"item-move","actor":"luis","ts":1793855567,"op":{"op":"release","glob":"crates/myco-cli/src/movecmd.rs"}}
