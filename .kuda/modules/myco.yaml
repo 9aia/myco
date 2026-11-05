@@ -1,11 +1,11 @@
 name: myco
 path: Cargo.toml
-purpose: '*Project management, grown not built.*'
+purpose: '*Records engine for agent work — views + mutations; project management is the shipped prelude.*'
 api:
 - name: AdoptClaims
   kind: type
   file: crates/myco-cli/src/migrate.rs
-  line: 94
+  line: 115
   module: myco
 - name: Aging
   kind: type
@@ -15,32 +15,42 @@ api:
 - name: Analysis
   kind: type
   file: crates/myco-cli/src/check.rs
-  line: 95
+  line: 143
+  module: myco
+- name: ArgVal
+  kind: type
+  file: crates/myco-cli/src/registry.rs
+  line: 225
+  module: myco
+- name: Args
+  kind: type
+  file: crates/myco-cli/src/registry.rs
+  line: 239
   module: myco
 - name: BEGIN
   kind: const
   file: crates/myco-cli/src/agentmd.rs
   line: 12
   module: myco
-- name: BacklogAddParams
-  kind: type
-  file: crates/myco-cli/src/serve.rs
-  line: 283
+- name: BODY
+  kind: const
+  file: crates/myco-cli/src/registry.rs
+  line: 800
   module: myco
-- name: BoardParams
-  kind: type
-  file: crates/myco-cli/src/serve.rs
-  line: 211
-  module: myco
-- name: BodyFlags
-  kind: type
-  file: crates/myco-cli/src/items.rs
-  line: 93
+- name: CLAIM_NOTE
+  kind: const
+  file: crates/myco-cli/src/continuity.rs
+  line: 49
   module: myco
 - name: COLUMNS
   kind: const
   file: crates/myco-cli/src/board.rs
-  line: 240
+  line: 233
+  module: myco
+- name: CONFIG
+  kind: const
+  file: crates/myco-cli/src/ops.rs
+  line: 31
   module: myco
 - name: Change
   kind: type
@@ -50,159 +60,149 @@ api:
 - name: Claim
   kind: type
   file: crates/myco-cli/src/check.rs
-  line: 151
+  line: 199
   module: myco
-- name: Cli
+- name: CliHandler
   kind: type
-  file: crates/myco-cli/src/main.rs
-  line: 54
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/absorb.rs
-  line: 41
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/adr.rs
-  line: 15
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/backlog.rs
-  line: 13
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/indexcmd.rs
-  line: 22
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/issue.rs
-  line: 15
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/itemcmd.rs
-  line: 15
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/main.rs
-  line: 77
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/org.rs
-  line: 19
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/plan.rs
-  line: 13
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/proposal.rs
-  line: 15
-  module: myco
-- name: Cmd
-  kind: type
-  file: crates/myco-cli/src/todo.rs
-  line: 13
+  file: crates/myco-cli/src/registry.rs
+  line: 639
   module: myco
 - name: CommentSpec
   kind: type
   file: crates/myco-cli/src/absorb.rs
-  line: 388
+  line: 363
   module: myco
 - name: Counts
   kind: type
   file: crates/myco-cli/src/digest.rs
-  line: 91
+  line: 90
   module: myco
-- name: DEFAULT_ACTOR
-  kind: const
-  file: crates/myco-cli/src/continuity.rs
-  line: 26
+- name: Ctx
+  kind: type
+  file: crates/myco-cli/src/registry.rs
+  line: 627
   module: myco
 - name: DEFAULT_LAST
   kind: const
   file: crates/myco-cli/src/continuity.rs
-  line: 29
+  line: 37
   module: myco
 - name: DEFAULT_MAX_ROWS
   kind: const
   file: crates/myco-cli/src/board.rs
-  line: 29
+  line: 22
   module: myco
 - name: DEFAULT_MSG
   kind: const
   file: crates/myco-cli/src/commit.rs
-  line: 13
+  line: 11
   module: myco
 - name: END
   kind: const
   file: crates/myco-cli/src/agentmd.rs
   line: 14
   module: myco
-- name: Emit
-  kind: type
-  file: crates/myco-cli/src/board.rs
-  line: 492
-  module: myco
-- name: FILE_KINDS
-  kind: const
-  file: crates/myco-cli/src/check.rs
-  line: 316
-  module: myco
 - name: FILE_KINDS
   kind: const
   file: crates/myco-cli/src/digest.rs
-  line: 16
+  line: 15
   module: myco
-- name: FILE_KINDS
+- name: FILE_LIST
   kind: const
-  file: crates/myco-cli/src/migrate.rs
-  line: 32
+  file: crates/myco-cli/src/registry.rs
+  line: 781
+  module: myco
+- name: FILTER
+  kind: const
+  file: crates/myco-cli/src/registry.rs
+  line: 839
   module: myco
 - name: Fail
   kind: type
   file: crates/myco-cli/src/serve.rs
-  line: 434
+  line: 302
   module: myco
 - name: FilterPatch
   kind: type
   file: crates/myco-cli/src/serve.rs
-  line: 353
+  line: 218
+  module: myco
+- name: FilterPatch
+  kind: type
+  file: crates/myco-cli/src/view.rs
+  line: 25
   module: myco
 - name: Finding
   kind: type
   file: crates/myco-cli/src/absorb.rs
-  line: 336
+  line: 311
   module: myco
 - name: Finding
   kind: type
   file: crates/myco-cli/src/check.rs
-  line: 33
+  line: 67
   module: myco
 - name: Fit
   kind: type
   file: crates/myco-cli/src/board.rs
-  line: 41
+  line: 34
   module: myco
 - name: Fix
   kind: type
   file: crates/myco-cli/src/check.rs
-  line: 84
+  line: 132
+  module: myco
+- name: GROUPS
+  kind: const
+  file: crates/myco-cli/src/registry.rs
+  line: 685
   module: myco
 - name: Group
   kind: type
-  file: crates/myco-cli/src/group.rs
-  line: 16
+  file: crates/myco-cli/src/registry.rs
+  line: 680
   module: myco
-api_omitted: 650
+- name: HEADER_STYLE
+  kind: const
+  file: crates/myco-cli/src/board.rs
+  line: 96
+  module: myco
+- name: IDS
+  kind: const
+  file: crates/myco-cli/src/registry.rs
+  line: 926
+  module: myco
+- name: IGNORE_COMMENT
+  kind: const
+  file: crates/myco-cli/src/init.rs
+  line: 19
+  module: myco
+- name: IGNORE_ENTRY
+  kind: const
+  file: crates/myco-cli/src/init.rs
+  line: 20
+  module: myco
+- name: INTERRUPT_NOTE
+  kind: const
+  file: crates/myco-cli/src/continuity.rs
+  line: 43
+  module: myco
+- name: INTERRUPT_PARAMS
+  kind: const
+  file: crates/myco-cli/src/registry.rs
+  line: 815
+  module: myco
+- name: INVALID_PARAMS
+  kind: const
+  file: crates/myco-cli/src/serve.rs
+  line: 42
+  module: myco
+- name: INVALID_REQUEST
+  kind: const
+  file: crates/myco-cli/src/serve.rs
+  line: 38
+  module: myco
+api_omitted: 923
 deps:
 - camino
 - clap
@@ -233,13 +233,14 @@ deps:
 - tempfile
 - serde_json
 - myco-core
-- clap
+- myco-store-md
 - myco-store
 - unicode_width
 - serde
-- myco-index
-- myco-store-md
+- myco-config
 - camino
+- myco-index
+- clap
 - myco-index-redb
 notes: ''
 verify:
@@ -283,23 +284,27 @@ provenance:
   - crates/myco-cli/src/backlog.rs
   - crates/myco-cli/src/batch.rs
   - crates/myco-cli/src/board.rs
+  - crates/myco-cli/src/cfgverb.rs
   - crates/myco-cli/src/check.rs
   - crates/myco-cli/src/commit.rs
   - crates/myco-cli/src/continuity.rs
   - crates/myco-cli/src/digest.rs
   - crates/myco-cli/src/discover.rs
-  - crates/myco-cli/src/group.rs
   - crates/myco-cli/src/indexcmd.rs
   - crates/myco-cli/src/init.rs
   - crates/myco-cli/src/issue.rs
   - crates/myco-cli/src/itemcmd.rs
   - crates/myco-cli/src/items.rs
+  - crates/myco-cli/src/links.rs
   - crates/myco-cli/src/main.rs
   - crates/myco-cli/src/migrate.rs
+  - crates/myco-cli/src/movecmd.rs
+  - crates/myco-cli/src/next.rs
   - crates/myco-cli/src/ops.rs
   - crates/myco-cli/src/org.rs
   - crates/myco-cli/src/plan.rs
   - crates/myco-cli/src/proposal.rs
+  - crates/myco-cli/src/registry.rs
   - crates/myco-cli/src/report.rs
   - crates/myco-cli/src/schema.rs
   - crates/myco-cli/src/serve.rs
@@ -307,11 +312,14 @@ provenance:
   - crates/myco-cli/src/templates.rs
   - crates/myco-cli/src/todo.rs
   - crates/myco-cli/src/view.rs
+  - crates/myco-cli/tests/cfgverbs.rs
   - crates/myco-cli/tests/continuity.rs
   - crates/myco-cli/tests/edges.rs
   - crates/myco-cli/tests/id_repair.rs
   - crates/myco-cli/tests/items.rs
   - crates/myco-cli/tests/lifecycle.rs
+  - crates/myco-cli/tests/multi_id.rs
+  - crates/myco-cli/tests/next.rs
   - crates/myco-cli/tests/parity.rs
   - crates/myco-cli/tests/serve.rs
   - crates/myco-cli/tests/views.rs
@@ -336,46 +344,53 @@ provenance:
   - e58c70bea39d5b252a1e819f242bbdcdf20e8b87
   - 30a263d674ef19de11c756d6f7537f91a421909e
   - 51b6a07dd57174197a937034b7eecebd5768ff8a
-  - 6542c4476e1b679648721be037960de963c3aad4
-  - 7f306d69a2e5652e836dd07e0af1b560a2aea67d
-  - 1cf2991abe3d05c93bee1275ceea961914cdfbff
-  - 786355a69fe2d5b49321bacf904d52c8c9941e3b
-  - d0c9c43178d521abef849094a7455d894cd855e8
-  - 7587b25eda6b9457785a1f0979621d887ac435ea
-  - a21803c7dd37408ef0c2d1a7c5e006b4c846c4ad
-  - 7192b62998659cefcb7700c742cf931865eb45c1
-  - 9e9213f43f7af98988bb006003ac87bd11a9b60c
-  - d8746a823bb2c2a9c759559316cfe60736ba1ad3
-  - f754318f428bc8a5341d6a4f6f49d5e17a25b6a3
-  - 138b2133d116368a6726a304949c7831846da50e
-  - d18d2d455145f6c4ebb0b6453105d7b3cfa86f95
-  - db7ceefdf1c659f2efc831c54c65b2ebe314d4c2
-  - 2d067f20c57fa9a0178c51842c9a8a09e3e87b14
-  - 3cb90edaab812c8862b4dad05e37df9bc73148dc
-  - 610d2e7928fd9b3ebc599e582bac7c7261f29833
-  - 06943c05cbec2195f663511fa12c8f2b213491ac
-  - 4f3b89ec5fb2bf0b95925ebe5b16b43baac9ac21
-  - 275b294214a984aeea0f379d6fb4029963b47d1a
-  - 911b069154eec9c7148bf0fbdbea74abe311bb00
-  - 59e2e450597aecd10daf78d0cb806d863c81f1ca
-  - 0caff896bc64ee6e49891bf51802a63e4d095f57
-  - 042f8a9fded4a8d41d5f31b7c4d2bea3af7d2138
-  - b38dc85a2bbbd64a47b6f19ad54e330055dd101d
-  - f64dacf6fc80208973f8d8048f985cf159f9cad1
-  - e446934219ad64f7c777b671e4ce01b24dffc3e0
-  - 1a5288116250786b5fb5c248e7233e6096d2d53d
-  - ef06a72ff98145ad73aa8144393cd261a02d32b7
+  - bd3017d804f22846f01beeba93ddff4cad52dfb9
+  - daae184cb07bf25317144cf39a9d6177dd6b2a36
+  - e4e9a6ea1f511d9183fb63d797870ba0134e65e8
+  - 524380801d28b1b5b9b20225ea8c6ef3673810b6
+  - b892bd1690a1b90660e5eb1b38633921aea838be
+  - b75622af11afd8f4dc51d6b1be59f52ff7aff62c
+  - 1bcf31dd6b9de31827e53e57d25d9081bd935fbe
+  - f4c875d2af3f274260ea075f765b6fc8429366ef
+  - 2e182c8c710d7705517434be80d8bed48b39367c
+  - 420b90f9fc28c8eaa9b358c377ddcff42e81de60
+  - 624e1ab16140855241d45033ebb33a64f1b7e85f
+  - 560edfd501c44ba360b6a88f1897ad8543ea457f
+  - 381726343dc289ca966e7dfbf5bf027ae3d04b1f
+  - b11f6da12ccc5429267b247531f42e40ae7462a1
+  - 4c03351ca9b5570442094cf3c8ff737e6554d791
+  - b719b47ab3002b01c6a3b18f1b89d2ef2c02c8ec
+  - 8848edc08ccf6975edd7be9341878d1ff7806983
+  - 3d99be9ea0a34846fdef8b2a4bedf46c959f89f3
+  - c90c60c39d0fb7003707f119c717ba208d7a6241
+  - 831325260258889ac9cbd4c5a008022d1888a366
+  - cd0cf5732dd7733210059ead57985f3400fce9dc
+  - 6e0c6edfd92ab350abef7069bea69822632ebc1f
+  - 47c1be61e42b24f826105b39becfce3a0a9590dc
+  - c19e697847a9729f9beba0d77b1f310588d07c3a
+  - 5441bb659c3cea4bae8166926f661c50a2636ea2
+  - 5a089c550f9dd02e9c10269082c105ed992d4130
+  - c329af7ef72f8af98b379c75735d07b566154bdb
+  - 708073c26ba96e6cdc0a2c1b9050ee53896be78f
+  - 622818ff7e3aa8ba331799b56031e38f17ea3d0a
+  - 4699cb3c6ef39eaffc7b84950c13b63f6050f289
+  - 3d672666134744d58dafc5ffa4d82f103aa7e187
+  - 91fb26712ed805da1159bc9be8e0cb4af53a6d3a
+  - 914b2b585b00f8ba89bff293c79a7c780a3ed00b
   - 7be39d581a523abe21ae23e03481689006e804f0
-  - 78fcb863917e1a609db91f84e23ca5c89ab1ee32
-  - 74c1bcb126a0d6d1a2bd33f37cf4923592a91ed6
-  - 13d3bb618eddc733e6d5dd68cb116b8093c8723e
-  - eaedfeb70a0f0d04e5a286ce10f0f6c5f380d348
+  - 6c6bb6a9e36780b25e92a2b5db04d5036ca5521b
+  - db0f8f7f878fe86dc70d875c852366462bf1c47d
+  - 36346a6ad0e6f97341b382b4764e08a50c67f65f
+  - 2e610db154a2334ce5c32a7b382463c15d0d3f1c
+  - f5fc13de914cf4694acc812797f2833812282975
   - fec24fa68dead615385d1c965c464aa90b52614a
-  - 7ea9f74e15d4aceafacc379b447e7965bc3e8342
-  - e257b61108820fe23db09e2874628a7cd69a757d
-  - bdc1d49e57a6f951e1fee23fca2e1ea46664f9e8
+  - 84d376b94a8fbdf06256da9f3a73667bd95b831d
+  - 63af7d181de0ada85c1015e520b64a9881c714d8
+  - e6fdf13d4c9ebcf07cb2855f85a5687720767c4a
+  - 07974e98007cd4fdf302f05ab8546068b5b111b4
+  - 800c97209612a2f7cd885b5e84b6d3622ecf4bc9
   - a43956a72d4e2eec983cc53446e62a5dea4db50b
-  - 7dcbbafb73d2abb7591e21934110184aa9aef5ee
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
+  - 2b65ad8589374ca829298e1422fb4ab7eb946cfe
+  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
+  generated_at: '1793854989'
   generator: kuda-template/0.1.2

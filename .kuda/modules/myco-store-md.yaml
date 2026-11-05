@@ -10,7 +10,7 @@ api:
 - name: ARCHIVE_DIR
   kind: const
   file: crates/myco-store-md/src/store.rs
-  line: 14
+  line: 17
   module: myco-store-md
 - name: Conv
   kind: type
@@ -20,7 +20,7 @@ api:
 - name: DOGFOOD_TODO
   kind: const
   file: crates/myco-store-md/src/legacy.rs
-  line: 313
+  line: 327
   module: myco-store-md
 - name: EmitError
   kind: type
@@ -35,7 +35,7 @@ api:
 - name: FILE
   kind: const
   file: crates/myco-store-md/src/handoff.rs
-  line: 273
+  line: 282
   module: myco-store-md
 - name: FILE
   kind: const
@@ -50,7 +50,7 @@ api:
 - name: FRONTMATTER_PROBE_MAX
   kind: const
   file: crates/myco-store-md/src/itemfile.rs
-  line: 94
+  line: 83
   module: myco-store-md
 - name: FrontmatterIn
   kind: type
@@ -60,7 +60,7 @@ api:
 - name: FrontmatterIn
   kind: type
   file: crates/myco-store-md/src/itemfile.rs
-  line: 134
+  line: 123
   module: myco-store-md
 - name: FrontmatterOut
   kind: type
@@ -70,7 +70,7 @@ api:
 - name: FrontmatterOut
   kind: type
   file: crates/myco-store-md/src/itemfile.rs
-  line: 155
+  line: 171
   module: myco-store-md
 - name: HANDOFFS_ARCHIVE
   kind: const
@@ -85,7 +85,7 @@ api:
 - name: ISSUE
   kind: const
   file: crates/myco-store-md/src/itemfile.rs
-  line: 360
+  line: 393
   module: myco-store-md
 - name: LINE_START
   kind: const
@@ -110,12 +110,17 @@ api:
 - name: LineSpec
   kind: type
   file: crates/myco-store-md/src/line.rs
-  line: 29
+  line: 35
+  module: myco-store-md
+- name: MAX_ITEM_DEPTH
+  kind: const
+  file: crates/myco-store-md/src/line.rs
+  line: 32
   module: myco-store-md
 - name: MdStore
   kind: type
   file: crates/myco-store-md/src/store.rs
-  line: 17
+  line: 20
   module: myco-store-md
 - name: ParseError
   kind: type
@@ -135,52 +140,52 @@ api:
 - name: TODO
   kind: const
   file: crates/myco-store-md/src/line.rs
-  line: 290
+  line: 305
   module: myco-store-md
 - name: all_ids
   kind: function
   file: crates/myco-store-md/src/store.rs
-  line: 149
+  line: 201
   module: myco-store-md
 - name: all_ids_collects
   kind: function
   file: crates/myco-store-md/src/store.rs
-  line: 614
+  line: 694
   module: myco-store-md
 - name: alloc_id
   kind: function
   file: crates/myco-store-md/src/store.rs
-  line: 139
+  line: 191
   module: myco-store-md
 - name: alloc_reconciles_against_files
   kind: function
   file: crates/myco-store-md/src/store.rs
-  line: 582
+  line: 662
   module: myco-store-md
 - name: append_handoff
   kind: function
   file: crates/myco-store-md/src/store.rs
-  line: 334
+  line: 414
   module: myco-store-md
 - name: append_handoff_normalizes_missing_trailing_newline
   kind: function
   file: crates/myco-store-md/src/store.rs
-  line: 944
+  line: 1024
   module: myco-store-md
 - name: apply_token
   kind: function
   file: crates/myco-store-md/src/legacy.rs
-  line: 269
+  line: 283
   module: myco-store-md
 - name: archive_item
   kind: function
   file: crates/myco-store-md/src/store.rs
-  line: 276
+  line: 338
   module: myco-store-md
 - name: archive_lifecycle
   kind: function
   file: crates/myco-store-md/src/store.rs
-  line: 525
+  line: 605
   module: myco-store-md
 - name: at
   kind: function
@@ -197,12 +202,7 @@ api:
   file: crates/myco-store-md/src/error.rs
   line: 186
   module: myco-store-md
-- name: atomic_write_creates_dirs_and_leaves_no_tmp
-  kind: function
-  file: crates/myco-store-md/src/store.rs
-  line: 641
-  module: myco-store-md
-api_omitted: 220
+api_omitted: 236
 deps:
 - camino
 - markdown
@@ -260,17 +260,17 @@ provenance:
   - crates/myco-store-md/src/todo.rs
   hashes:
   - 25f507bd5a36d534979028b1f69ebc144b081884
-  - 0a51c65fe52da3fe25b01acc4b5a6a00449a9a3a
+  - f5f16f2f6789b3d568f7bb2f3ecab98c7116973b
   - 0f4252f1d31daea262ee8ded1c3944f9a2cf6d72
-  - b48bf387bfafca46e51f607d5f6af81021e5a5cf
-  - 525272462bc83a34fc0989eee133b080462bc606
-  - 63a4e2dd6ebfb22a36dd850bfda027d46e5aac10
+  - cff97a0d5e3a7b92aee95b3462b96bac4239bfef
+  - 9d1c6ad80a835876676b0b225a68e48aefe0ffa8
+  - 2038f568bd992afec3b0163a934580bce1f58553
   - 1f52a6f5ef4059658a62d8fafd40ac86737c1996
-  - 0e348c3810d28fa96027e7fdc4515e86d70cc6c6
-  - e91833b7001a203b3d5d9471b302c5a885e8981b
-  - 61346245da64122d89f2fca3cd21f371191311d5
-  - 3fafe30d87a652e38d565dcb7ba40246acc10696
-  - 005f2b50c4723bbf34f9d73ade2c3e65c533f5c8
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
+  - d2f51b2d362abdabe2a959da09799d24659f089f
+  - 0c92680d14f61194725ec9dac4d6476847479691
+  - 319e13ac429e7e938d4f3bdafcde59f033c01ce2
+  - 0e2f02f50c67ca51b488dd6150444a62a6455d9a
+  - 65fc26278c9f3019ee010602a6f17a8874707379
+  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
+  generated_at: '1793854989'
   generator: kuda-template/0.1.2

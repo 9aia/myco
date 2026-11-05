@@ -1,6 +1,6 @@
 name: myco
 root: /home/luis/GitHub/9aia/myco
-purpose: '*Project management, grown not built.*'
+purpose: '*Records engine for agent work — views + mutations; project management is the shipped prelude.*'
 modules:
 - myco
 - myco-config
@@ -19,8 +19,8 @@ modules:
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: 1498ab06ceb181b43fb92c37ed4217718c824d7b
-files_total: 118
+tree_digest: b1e28bfba940a5c2c3e41736f696c93cbbc5f8d9
+files_total: 131
 provenance:
   files:
   - Cargo.toml
@@ -40,22 +40,22 @@ provenance:
   - crates/myco-tui/Cargo.toml
   - xtask/Cargo.toml
   hashes:
-  - 6542c4476e1b679648721be037960de963c3aad4
-  - ef403f6c6e0e948039e6dc015d0149bd55c861bd
-  - 7f306d69a2e5652e836dd07e0af1b560a2aea67d
+  - bd3017d804f22846f01beeba93ddff4cad52dfb9
+  - 6053e980b98202a4507d7c10bc9425521297d174
+  - daae184cb07bf25317144cf39a9d6177dd6b2a36
   - 23f74adbbc8eef38ec170c5b09d557ad1af36096
   - 1a25ef123f1406c0e6eb8b48a0d2be5084a400e9
   - f75323e2b82195a4149a5fb91548e75ba386acbf
   - 432464a491cc0c5d00b71a63bd0392634e09f7b3
-  - 603766bf82de1f798dd22041c9985a6184720ea1
+  - 98ad0e8e8540bb83e139ee0ceadf6fc80dcf5348
   - ed7878723f2aeca5305d834b0ab071f7ba611399
-  - e7e3f83865831cc2059552870f72d32171c6d5ff
+  - 1aba36dd24389e2d11c0aa5c6d0ca852bfa19545
   - 29badfbe337fbf8e0367f2fa9a7857042662a868
   - 304a0f149ede87fc299a7c9bffd54e8cd151c35d
   - 25f507bd5a36d534979028b1f69ebc144b081884
   - df0b6d5c2130f3266885cbf75cf653df9869ea2c
-  - e0bd914745e4bc01e4eefd4dc0c80a992b552e9e
+  - 60e2f2820ac8349ce88443232cff446b68839416
   - 3bb61ce46463344ee41a3f06bc39d58040459339
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
+  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
+  generated_at: '1793854989'
   generator: kuda/0.1.0
