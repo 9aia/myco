@@ -709,7 +709,7 @@ const GROUPS: &[Group] = &[
     },
     Group {
         name: "item",
-        about: "Kind-agnostic item verbs — show / set.",
+        about: "Kind-agnostic item verbs — show / set / move.",
     },
     Group {
         name: "absorb",
@@ -1348,6 +1348,30 @@ pub static VERBS: &[Verb] = &[
         hidden: false,
         cli: Some(crate::itemcmd::h_set),
         wire: Some(serve::w_item_set),
+    },
+    Verb {
+        name: "item.move",
+        about: "Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:` dropped — it names source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.",
+        params: &[&[
+            pos("id", Val::Id, "Any item id."),
+            opt(
+                "to",
+                Val::Path,
+                "Destination — a repo root, its `project/` worktree, or a registered repo name.",
+            )
+            .req(),
+            opt(
+                "note",
+                Val::Str,
+                "Extra context appended to the source's `moved to` handoff note.",
+            ),
+            opt("actor", Val::Actor, "Who moved it (default `cli`)."),
+        ]],
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::movecmd::h_move),
+        wire: Some(serve::w_item_move),
     },
     Verb {
         name: "view",

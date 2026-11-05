@@ -58,11 +58,23 @@ myco adr supersede ADR-1 --by ADR-2             # reciprocal links
 myco item show T-NNN          # any kind, live or archived
 myco item set T-NNN --status in-progress --owner devin \
     --label +urgent --unlabel stale --blocks +I-3 --epic v2
+myco item move T-NNN --to /path/to/other-repo   # cross-repo transfer
 ```
 
 `item set` mutates metadata in place; `--status` is the only field
 routed through the state machine. `--label`/`--blocks` take `+`/`-`
 prefixes; `--epic ""` clears.
+
+`item move` re-files an item in another repo's ledger: `--to` takes
+the destination repo root, its `project/` worktree, or a registered
+repo name (`myco index list`). The destination copy gets the next id
+in *its* sequence (kind, title, body, pri/owner/labels/epic/
+milestone carried; `blocks:` is dropped — it names source-ledger
+ids), plus a `moved from <repo>:<ID>` handoff. The source gets a
+`moved to <repo>:<ID>` handoff, then closes `done` — a task's line
+leaves TODO.md and its handoff drops to `handoffs/archive/`; a
+file-backed item keeps its file at status `done`. Two commits, one
+per worktree; `--note` adds context to the source handoff.
 
 ## Metadata tokens
 

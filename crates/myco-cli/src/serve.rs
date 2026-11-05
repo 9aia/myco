@@ -26,7 +26,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
-    backlog, check, continuity, digest, itemcmd, items, next, report, schema, status, todo,
+    backlog, check, continuity, digest, itemcmd, items, movecmd, next, report, schema, status, todo,
 };
 
 // ---------------------------------------------------------------- wire
@@ -350,6 +350,13 @@ impl Server {
     /// The `--root` discovery flag.
     pub(crate) fn root(&self) -> Option<&std::path::Path> {
         self.root.as_deref()
+    }
+
+    /// The `--no-commit` flag — verbs that commit outside the
+    /// served repo (`item.move`'s second worktree) need it raw;
+    /// [`Server::commit`] already folds it in for the common case.
+    pub(crate) fn no_commit(&self) -> bool {
+        self.no_commit
     }
 
     /// Exclusive-locked store — mutating methods.
@@ -679,6 +686,27 @@ pub(crate) fn w_item_set(s: &Server, a: &crate::registry::Args) -> Result<Value,
         payload["claim"] = json!(entry);
     }
     Ok(payload)
+}
+
+/// `item.move` — `{id, to, note?, actor?}`; the destination is
+/// resolved and committed like the CLI path (two worktrees, two
+/// autocommits — both reported in the payload).
+pub(crate) fn w_item_move(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let to = a.text("to").map_err(Fail::BadParams)?.to_string();
+    let note = a.opt("note").map(str::to_string);
+    let actor: Option<Actor> = a.parsed("actor").map_err(Fail::BadParams)?;
+    let m = movecmd::do_move(
+        s.dir(),
+        s.root(),
+        id,
+        &to,
+        note.as_deref(),
+        actor,
+        s.no_commit(),
+    )
+    .map_err(Fail::Verb)?;
+    Ok(movecmd::moved_json(&m))
 }
 
 /// `handoff` — `note "-"` reads stdin, and stdin IS the wire.
