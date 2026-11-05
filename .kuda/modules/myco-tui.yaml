@@ -10,22 +10,27 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 47
+  line: 77
   module: myco-tui
 - name: Board
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 25
+  line: 55
+  module: myco-tui
+- name: CONFIG
+  kind: const
+  file: crates/myco-tui/src/app.rs
+  line: 48
   module: myco-tui
 - name: Guard
   kind: type
   file: crates/myco-tui/src/lib.rs
-  line: 32
+  line: 41
   module: myco-tui
 - name: HINTS
   kind: const
   file: crates/myco-tui/src/render.rs
-  line: 288
+  line: 344
   module: myco-tui
 - name: MUTED
   kind: const
@@ -35,52 +40,72 @@ api:
 - name: Mode
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 52
+  line: 82
   module: myco-tui
 - name: Model
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 79
+  line: 138
+  module: myco-tui
+- name: OrgCell
+  kind: type
+  file: crates/myco-tui/src/app.rs
+  line: 2044
+  module: myco-tui
+- name: OrgLoader
+  kind: type
+  file: crates/myco-tui/src/app.rs
+  line: 121
+  module: myco-tui
+- name: OrgRepo
+  kind: type
+  file: crates/myco-tui/src/app.rs
+  line: 104
   module: myco-tui
 - name: Row
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 71
+  line: 125
   module: myco-tui
 - name: add_item
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 831
+  line: 1290
   module: myco-tui
 - name: add_mode_commits_title
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1192
+  line: 1719
   module: myco-tui
 - name: app
   kind: module
   file: crates/myco-tui/src/lib.rs
-  line: 15
+  line: 22
   module: myco-tui
 - name: apply_filter
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 289
+  line: 623
+  module: myco-tui
+- name: apply_ledger
+  kind: function
+  file: crates/myco-tui/src/app.rs
+  line: 878
   module: myco-tui
 - name: bind
   kind: function
   file: crates/myco-tui/src/render.rs
-  line: 367
+  line: 423
   module: myco-tui
 - name: board_path
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 361
+  line: 709
   module: myco-tui
 - name: centered
   kind: function
   file: crates/myco-tui/src/render.rs
-  line: 348
+  line: 404
   module: myco-tui
 - name: chrome
   kind: function
@@ -90,134 +115,113 @@ api:
 - name: chrome_yields_to_the_viewport
   kind: function
   file: crates/myco-tui/src/render.rs
-  line: 450
+  line: 506
   module: myco-tui
 - name: click
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1145
+  line: 1672
   module: myco-tui
 - name: click_selects_items_and_wheel_moves
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1155
+  line: 1682
   module: myco-tui
 - name: cmd
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1206
+  line: 1733
   module: myco-tui
 - name: colon_id_and_go_jump_the_cursor
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1229
+  line: 1756
   module: myco-tui
 - name: colon_q_quits
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1272
+  line: 1799
   module: myco-tui
 - name: colon_set_toggles_ids
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1245
+  line: 1772
   module: myco-tui
 - name: colon_unknown_and_esc_cancel
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1257
+  line: 1784
   module: myco-tui
 - name: colon_w_reloads_from_disk
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1216
+  line: 1743
+  module: myco-tui
+- name: config_layered
+  kind: function
+  file: crates/myco-tui/src/app.rs
+  line: 39
   module: myco-tui
 - name: ctrl_c_quits_from_every_mode
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1093
+  line: 1620
   module: myco-tui
 - name: data_dir
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 864
+  line: 1317
   module: myco-tui
 - name: dd_remembers_the_prefix_and_dones
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1049
+  line: 1576
   module: myco-tui
 - name: defer_and_promote_cross_boards
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1059
+  line: 1586
   module: myco-tui
 - name: defer_selected
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 738
+  line: 1204
   module: myco-tui
 - name: done_lands_on_the_next_item_not_the_top
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1386
+  line: 1917
   module: myco-tui
 - name: done_selected
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 706
+  line: 1175
   module: myco-tui
 - name: draw
   kind: function
   file: crates/myco-tui/src/render.rs
   line: 28
   module: myco-tui
-- name: draw_board
-  kind: function
-  file: crates/myco-tui/src/render.rs
-  line: 141
-  module: myco-tui
-- name: draw_help
-  kind: function
-  file: crates/myco-tui/src/render.rs
-  line: 418
-  module: myco-tui
-- name: draw_preview
-  kind: function
-  file: crates/myco-tui/src/render.rs
-  line: 189
-  module: myco-tui
-- name: draw_status
-  kind: function
-  file: crates/myco-tui/src/render.rs
-  line: 311
-  module: myco-tui
-- name: draw_tabs
-  kind: function
-  file: crates/myco-tui/src/render.rs
-  line: 80
-  module: myco-tui
-- name: drop
-  kind: function
-  file: crates/myco-tui/src/lib.rs
-  line: 35
-  module: myco-tui
-api_omitted: 72
+api_omitted: 109
 deps:
+- camino
 - crossterm
+- myco-config
+- myco-config-toml
 - myco-core
 - myco-ops
 - myco-store
 - myco-store-md
 - ratatui
-- camino
 - tempfile
 - myco-core
 - myco-ops
 - myco-store
 - myco-store-md
+- myco-config
 - camino
 - ratatui
+- app
 - crossterm
 notes: ''
 verify:
@@ -234,11 +238,11 @@ provenance:
   - crates/myco-tui/src/main.rs
   - crates/myco-tui/src/render.rs
   hashes:
-  - e0bd914745e4bc01e4eefd4dc0c80a992b552e9e
-  - bd4f2ce387132451d1174aa3a4f348a165807a6b
-  - 89912f7aba26262c362417461efcc3be071bdb11
-  - 853ec95116abd27134236aea08881e0985e57c5f
-  - d7880730b9e8316004435d4d7b5de0d865759ca2
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
+  - 60e2f2820ac8349ce88443232cff446b68839416
+  - b2a9a129bf40a1b6d9ae97627df8df3bed8042fa
+  - 81f77fb48a4e5b98c6fe8b188ef1290dbefbe3f5
+  - 7ac02453b56f59bc259c4117c493f3c16730bff7
+  - b2dadecd33b473fe32c90ec2773071b202f4c84b
+  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
+  generated_at: '1793854989'
   generator: kuda-template/0.1.2

@@ -851,6 +851,137 @@ fn item_set_status_keeps_its_section() {
 }
 
 #[test]
+fn item_move_cross_repo() {
+    // `--to` falls back to registered repo names when the arg
+    // isn't a path — pin MYCO_HOME so that lookup never touches
+    // the real index.
+    let home = tempfile::tempdir().unwrap();
+    let run = |dir: &Path, args: &[&str]| {
+        Command::new(MYCO)
+            .current_dir(dir)
+            .args(args)
+            .env("MYCO_CONFIG", "/nonexistent/myco.toml")
+            .env("MYCO_HOME", home.path())
+            .env_remove("MYCO_NO_COMMIT")
+            .output()
+            .unwrap()
+    };
+    let (src, src_wt) = project();
+    let (dst, dst_wt) = project();
+    run(
+        src.path(),
+        &[
+            "todo",
+            "add",
+            "port this",
+            "--pri",
+            "high",
+            "--label",
+            "core",
+        ],
+    );
+    run(src.path(), &["issue", "new", "leaky vault"]);
+
+    // task: line goes, handoff drops to archive with the pointer
+    let out = run(
+        src.path(),
+        &[
+            "item",
+            "move",
+            "T-001",
+            "--to",
+            dst.path().to_str().unwrap(),
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["id"], "T-001");
+    assert_eq!(v["to"]["id"], "T-001");
+    assert_eq!(v["item"]["title"], "port this");
+    assert_eq!(v["committed"], true);
+    assert_eq!(v["committed_source"], true);
+    assert_eq!(v["committed_destination"], true);
+    let todo = read(&dst_wt, "TODO.md");
+    assert!(todo.contains("- [ ] T-001 port this · pri:high"), "{todo}");
+    assert!(todo.contains("#core"), "{todo}");
+    assert!(!read(&src_wt, "TODO.md").contains("T-001"));
+    let h = read(&src_wt, "handoffs/archive/T-001.md");
+    assert!(h.contains("moved to"), "{h}");
+    // the destination copy carries the provenance entry too
+    let h = read(&dst_wt, "handoffs/T-001.md");
+    assert!(h.contains("moved from"), "{h}");
+
+    // file kind: body + meta carry, source closes done in place
+    let out = run(
+        src.path(),
+        &[
+            "item",
+            "move",
+            "I-001",
+            "--to",
+            dst_wt.to_str().unwrap(), // the worktree path works too
+            "--note",
+            "per ADR-0001",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["id"], "I-001");
+    assert_eq!(v["to"]["id"], "I-001");
+    let out = run(dst.path(), &["item", "show", "I-001", "--json"]);
+    let v = json(&out);
+    assert_eq!(v["item"]["title"], "leaky vault");
+    assert_eq!(v["item"]["status"], "open");
+    let out = run(src.path(), &["item", "show", "I-001", "--json"]);
+    assert_eq!(json(&out)["item"]["status"], "done");
+    let h = read(&src_wt, "handoffs/I-001.md");
+    assert!(h.contains("moved to") && h.contains("per ADR-0001"), "{h}");
+
+    // both ledgers stay check-clean
+    for d in [src.path(), dst.path()] {
+        let out = run(d, &["check"]);
+        assert_eq!(code(&out), 0, "{}: {}", d.display(), stderr(&out));
+    }
+
+    // error paths
+    run(src.path(), &["todo", "add", "stay"]);
+    let out = run(
+        src.path(),
+        &[
+            "item",
+            "move",
+            "T-002",
+            "--to",
+            src.path().to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("this repo"), "{}", stderr(&out));
+    let out = run(
+        src.path(),
+        &[
+            "item",
+            "move",
+            "T-099",
+            "--to",
+            dst.path().to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("no such item"), "{}", stderr(&out));
+    let out = run(
+        src.path(),
+        &["item", "move", "T-002", "--to", "/nonexistent/repo"],
+    );
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("not a myco repo"), "{}", stderr(&out));
+    // nothing burned on the failures
+    assert!(read(&src_wt, "TODO.md").contains("T-002 stay"));
+}
+
+#[test]
 fn kind_locks_and_missing_ids() {
     let (d, _wt) = project();
     run(d.path(), &["todo", "add", "t"]);

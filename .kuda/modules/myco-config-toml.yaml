@@ -5,27 +5,32 @@ api:
 - name: TomlSource
   kind: type
   file: crates/myco-config-toml/src/lib.rs
-  line: 14
+  line: 16
   module: myco-config-toml
 - name: default_search_builds_candidates
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 122
+  line: 138
+  module: myco-config-toml
+- name: default_view_is_a_scalar_repo_wins
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 240
   module: myco-config-toml
 - name: explicit_missing_file_errors
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 99
+  line: 115
   module: myco-config-toml
 - name: load
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 46
+  line: 48
   module: myco-config-toml
 - name: load_file
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 22
+  line: 24
   module: myco-config-toml
 - name: myco-config-toml
   kind: module
@@ -35,27 +40,37 @@ api:
 - name: parse
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 28
+  line: 30
   module: myco-config-toml
 - name: parses_project_dir
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 108
+  line: 124
   module: myco-config-toml
 - name: tests
   kind: module
   file: crates/myco-config-toml/src/lib.rs
-  line: 95
+  line: 111
   module: myco-config-toml
 - name: user_layer
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 34
+  line: 36
+  module: myco-config-toml
+- name: verbs_parse_and_merge_with_repo_winning
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 169
+  module: myco-config-toml
+- name: verbs_reject_mixed_kinds_and_unknown_fields
+  kind: function
+  file: crates/myco-config-toml/src/lib.rs
+  line: 216
   module: myco-config-toml
 - name: views_merge_with_user_winning
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 153
+  line: 274
   module: myco-config-toml
 deps:
 - myco-config
@@ -73,7 +88,7 @@ provenance:
   - crates/myco-config-toml/src/lib.rs
   hashes:
   - 1a25ef123f1406c0e6eb8b48a0d2be5084a400e9
-  - b27f419bc7224882731009a68f9ea2ab84a0cdb4
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
+  - 5033f9280221c543c5f5c22cf635b87fc5a0cee8
+  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
+  generated_at: '1793854989'
   generator: kuda-template/0.1.2

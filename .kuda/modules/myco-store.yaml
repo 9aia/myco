@@ -5,22 +5,27 @@ api:
 - name: Error
   kind: type
   file: crates/myco-store/src/lib.rs
-  line: 111
+  line: 130
   module: myco-store
 - name: HandoffFile
   kind: type
   file: crates/myco-store/src/lib.rs
-  line: 100
+  line: 119
   module: myco-store
 - name: Store
   kind: trait
   file: crates/myco-store/src/lib.rs
-  line: 14
+  line: 16
   module: myco-store
 - name: error_display
   kind: function
   file: crates/myco-store/src/lib.rs
-  line: 148
+  line: 167
+  module: myco-store
+- name: kinds
+  kind: function
+  file: crates/myco-store/src/lib.rs
+  line: 22
   module: myco-store
 - name: myco-store
   kind: module
@@ -30,7 +35,7 @@ api:
 - name: tests
   kind: module
   file: crates/myco-store/src/lib.rs
-  line: 144
+  line: 163
   module: myco-store
 deps:
 - myco-core
@@ -46,7 +51,7 @@ provenance:
   - crates/myco-store/src/lib.rs
   hashes:
   - 304a0f149ede87fc299a7c9bffd54e8cd151c35d
-  - 6537a0a876f2cd439039b6873bc6638909677769
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
+  - 18c4a09acab9ec18165114e8fe21234ee974c678
+  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
+  generated_at: '1793854989'
   generator: kuda-template/0.1.2

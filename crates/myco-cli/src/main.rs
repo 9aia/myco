@@ -37,6 +37,7 @@ mod itemcmd;
 mod items;
 mod links;
 mod migrate;
+mod movecmd;
 mod next;
 mod ops;
 mod org;

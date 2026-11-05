@@ -5,37 +5,87 @@ api:
 - name: Error
   kind: type
   file: crates/myco-index/src/lib.rs
-  line: 118
+  line: 126
+  module: myco-index
+- name: FileStamp
+  kind: type
+  file: crates/myco-index/src/links.rs
+  line: 34
   module: myco-index
 - name: Index
   kind: trait
   file: crates/myco-index/src/lib.rs
-  line: 98
+  line: 106
+  module: myco-index
+- name: LinkIndex
+  kind: trait
+  file: crates/myco-index/src/links.rs
+  line: 62
+  module: myco-index
+- name: Related
+  kind: type
+  file: crates/myco-index/src/links.rs
+  line: 48
   module: myco-index
 - name: RepoEntry
   kind: type
   file: crates/myco-index/src/lib.rs
-  line: 20
+  line: 28
   module: myco-index
 - name: RepoSnapshot
   kind: type
   file: crates/myco-index/src/lib.rs
-  line: 68
+  line: 76
+  module: myco-index
+- name: Stub
+  kind: type
+  file: crates/myco-index/src/links.rs
+  line: 144
+  module: myco-index
+- name: dirty
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 71
+  module: myco-index
+- name: dirty_defaults_to_a_stamp_diff
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 202
   module: myco-index
 - name: entry_and_snapshot_serde
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 139
+  line: 147
   module: myco-index
 - name: error_display
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 168
+  line: 176
+  module: myco-index
+- name: file_stamp_serde_roundtrip
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 216
+  module: myco-index
+- name: fingerprint
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 26
+  module: myco-index
+- name: fingerprint_is_stable_and_content_sensitive
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 195
+  module: myco-index
+- name: links
+  kind: module
+  file: crates/myco-index/src/lib.rs
+  line: 17
   module: myco-index
 - name: live_items
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 89
+  line: 97
   module: myco-index
 - name: myco-index
   kind: module
@@ -45,42 +95,92 @@ api:
 - name: new
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 36
+  line: 44
+  module: myco-index
+- name: purge
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 134
+  module: myco-index
+- name: reach
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 172
+  module: myco-index
+- name: record
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 152
+  module: myco-index
+- name: related
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 164
+  module: myco-index
+- name: restamp
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 161
+  module: myco-index
+- name: stamp
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 186
+  module: myco-index
+- name: stamps
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 149
+  module: myco-index
+- name: sweep
+  kind: function
+  file: crates/myco-index/src/links.rs
+  line: 181
   module: myco-index
 - name: tests
   kind: module
   file: crates/myco-index/src/lib.rs
-  line: 134
+  line: 142
+  module: myco-index
+- name: tests
+  kind: module
+  file: crates/myco-index/src/links.rs
+  line: 141
   module: myco-index
 - name: with_worktree
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 45
+  line: 53
   module: myco-index
 - name: worktree_path
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 52
+  line: 60
   module: myco-index
 deps:
 - camino
 - myco-core
 - serde
 - thiserror
+- xxhash-rust
 - serde_json
 - camino
 - myco-core
+- links
 notes: ''
 verify:
 - crates/myco-index/Cargo.toml
 - crates/myco-index/src/lib.rs
+- crates/myco-index/src/links.rs
 provenance:
   files:
   - crates/myco-index/Cargo.toml
   - crates/myco-index/src/lib.rs
+  - crates/myco-index/src/links.rs
   hashes:
-  - 603766bf82de1f798dd22041c9985a6184720ea1
-  - 8207ee2403f581ce9b534bad8d43d8deb9a55cce
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
+  - 98ad0e8e8540bb83e139ee0ceadf6fc80dcf5348
+  - 3d3b2564ae53f59cb5b60b88a6e0b88454bd5433
+  - ec22e4f9bbfd8ab271702836d063cc42d6f8cdc4
+  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
+  generated_at: '1793854989'
   generator: kuda-template/0.1.2

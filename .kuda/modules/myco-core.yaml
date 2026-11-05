@@ -5,12 +5,17 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-core/src/id.rs
-  line: 28
+  line: 98
   module: myco-core
 - name: ALL
   kind: const
   file: crates/myco-core/src/priority.rs
   line: 27
+  module: myco-core
+- name: ALL
+  kind: const
+  file: crates/myco-core/src/refs.rs
+  line: 65
   module: myco-core
 - name: ALL
   kind: const
@@ -20,12 +25,22 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-core/src/view.rs
-  line: 299
+  line: 417
   module: myco-core
 - name: Actor
   kind: type
   file: crates/myco-core/src/actor.rs
   line: 10
+  module: myco-core
+- name: Adr
+  kind: const
+  file: crates/myco-core/src/id.rs
+  line: 87
+  module: myco-core
+- name: AliasVerb
+  kind: type
+  file: crates/myco-core/src/lib.rs
+  line: 114
   module: myco-core
 - name: BacklogDoc
   kind: type
@@ -35,7 +50,27 @@ api:
 - name: Config
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 95
+  line: 155
+  module: myco-core
+- name: ConfigVerb
+  kind: type
+  file: crates/myco-core/src/lib.rs
+  line: 102
+  module: myco-core
+- name: Edge
+  kind: type
+  file: crates/myco-core/src/refs.rs
+  line: 128
+  module: myco-core
+- name: EdgeKind
+  kind: type
+  file: crates/myco-core/src/refs.rs
+  line: 44
+  module: myco-core
+- name: EmitMode
+  kind: type
+  file: crates/myco-core/src/lib.rs
+  line: 139
   module: myco-core
 - name: Err
   kind: type
@@ -45,12 +80,12 @@ api:
 - name: Err
   kind: type
   file: crates/myco-core/src/id.rs
-  line: 90
+  line: 216
   module: myco-core
 - name: Err
   kind: type
   file: crates/myco-core/src/id.rs
-  line: 155
+  line: 309
   module: myco-core
 - name: Err
   kind: type
@@ -65,17 +100,22 @@ api:
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 153
+  line: 55
   module: myco-core
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 322
+  line: 214
   module: myco-core
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 348
+  line: 442
+  module: myco-core
+- name: Err
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 469
   module: myco-core
 - name: Error
   kind: type
@@ -87,15 +127,20 @@ api:
   file: crates/myco-core/src/date.rs
   line: 7
   module: myco-core
+- name: Flat
+  kind: type
+  file: crates/myco-core/src/view.rs
+  line: 334
+  module: myco-core
 - name: GroupAxis
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 91
+  line: 145
   module: myco-core
 - name: GroupKey
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 362
+  line: 484
   module: myco-core
 - name: HandoffEntry
   kind: type
@@ -107,6 +152,11 @@ api:
   file: crates/myco-core/src/status.rs
   line: 93
   module: myco-core
+- name: Issue
+  kind: const
+  file: crates/myco-core/src/id.rs
+  line: 83
+  module: myco-core
 - name: Item
   kind: type
   file: crates/myco-core/src/item.rs
@@ -115,7 +165,7 @@ api:
 - name: Item
   kind: type
   file: crates/myco-core/src/item.rs
-  line: 87
+  line: 92
   module: myco-core
 - name: ItemFile
   kind: type
@@ -125,84 +175,34 @@ api:
 - name: ItemId
   kind: type
   file: crates/myco-core/src/id.rs
-  line: 103
+  line: 257
   module: myco-core
 - name: ItemKind
   kind: type
   file: crates/myco-core/src/id.rs
-  line: 13
+  line: 71
   module: myco-core
 - name: ItemMeta
   kind: type
   file: crates/myco-core/src/item.rs
-  line: 78
+  line: 83
+  module: myco-core
+- name: KindSpec
+  kind: type
+  file: crates/myco-core/src/kind.rs
+  line: 45
+  module: myco-core
+- name: KindTable
+  kind: type
+  file: crates/myco-core/src/kind.rs
+  line: 182
   module: myco-core
 - name: Ledger
   kind: type
   file: crates/myco-core/src/ledger.rs
   line: 12
   module: myco-core
-- name: NewItemMeta
-  kind: type
-  file: crates/myco-core/src/item.rs
-  line: 235
-  module: myco-core
-- name: NextCounters
-  kind: type
-  file: crates/myco-core/src/meta.rs
-  line: 40
-  module: myco-core
-- name: ParseActorError
-  kind: type
-  file: crates/myco-core/src/actor.rs
-  line: 42
-  module: myco-core
-- name: ParseGroupAxisError
-  kind: type
-  file: crates/myco-core/src/view.rs
-  line: 295
-  module: myco-core
-- name: ParseItemIdError
-  kind: type
-  file: crates/myco-core/src/id.rs
-  line: 152
-  module: myco-core
-- name: ParseItemKindError
-  kind: type
-  file: crates/myco-core/src/id.rs
-  line: 87
-  module: myco-core
-- name: ParsePriorityError
-  kind: type
-  file: crates/myco-core/src/priority.rs
-  line: 59
-  module: myco-core
-- name: ParseSortKeyError
-  kind: type
-  file: crates/myco-core/src/view.rs
-  line: 150
-  module: myco-core
-- name: ParseStatusError
-  kind: type
-  file: crates/myco-core/src/status.rs
-  line: 103
-  module: myco-core
-- name: ParseViewFormatError
-  kind: type
-  file: crates/myco-core/src/view.rs
-  line: 335
-  module: myco-core
-- name: Priority
-  kind: type
-  file: crates/myco-core/src/priority.rs
-  line: 13
-  module: myco-core
-- name: ProjectMeta
-  kind: type
-  file: crates/myco-core/src/meta.rs
-  line: 104
-  module: myco-core
-api_omitted: 259
+api_omitted: 375
 deps:
 - schemars
 - serde
@@ -217,9 +217,11 @@ deps:
 - handoff
 - id
 - item
+- kind
 - ledger
 - meta
 - priority
+- refs
 - status
 - view
 - walk
@@ -233,8 +235,8 @@ verify:
 - crates/myco-core/src/handoff.rs
 - crates/myco-core/src/id.rs
 - crates/myco-core/src/item.rs
+- crates/myco-core/src/kind.rs
 - crates/myco-core/src/ledger.rs
-- crates/myco-core/src/meta.rs
 provenance:
   files:
   - crates/myco-core/Cargo.toml
@@ -244,10 +246,12 @@ provenance:
   - crates/myco-core/src/handoff.rs
   - crates/myco-core/src/id.rs
   - crates/myco-core/src/item.rs
+  - crates/myco-core/src/kind.rs
   - crates/myco-core/src/ledger.rs
   - crates/myco-core/src/lib.rs
   - crates/myco-core/src/meta.rs
   - crates/myco-core/src/priority.rs
+  - crates/myco-core/src/refs.rs
   - crates/myco-core/src/status.rs
   - crates/myco-core/src/view.rs
   - crates/myco-core/src/walk.rs
@@ -255,17 +259,19 @@ provenance:
   - f75323e2b82195a4149a5fb91548e75ba386acbf
   - 604b979a927c5d66c866f7f0b061a5285483be02
   - 06e989397088667febfffba9ce2aa5e36a6d671b
-  - 36f393005367816f96b7a1000421dcdd8b97e071
+  - b20f89fd368fa78e5d5b241c35601cac7adeaa11
   - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
-  - b48e800b5a407388c4cd7b30bad5d13295e21f66
-  - a886a32d4e43262a036bdb4e0d65e0fa42e57699
-  - b3a42358373c65df10e2bfd9302c6ffe0c85da27
-  - 2b13c952931ff418cda19e233ae6d85622409583
-  - 3596fdfc8abae05aed72f1415ee33a6d601cde49
+  - ec34134e87bdf0b1515595800aa3a81ac74449dc
+  - a39bf6db7bd58adab2f441b16cba705044d27f43
+  - 9141235a6cb438570b3221e892f9cfb86b7af42a
+  - 35994c7e790eedc768987fd5c6b3e3d9b44338f3
+  - 9f186c5229b3ef9765e78f9f6c930903054f05b0
+  - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - b6f0e2f2ea7098c82a0bc8424159bb7c0bc8198c
+  - 2476ebf019d88b03ba989e3d6b56a0248b1e4592
   - 8151702a3a351e7e0190b10dc05471a8cf7de0b0
-  - f8ce0550ce9adf4bda53899aaa84ce9dcac0182d
-  - 19167458ecf5237d6a3366ba776195a0e5fad160
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
+  - 4665fc529b7ec9752c06f9fdbb388459859ded86
+  - 4cc27aecf26206465afb4fb0142882e4d8f87aae
+  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
+  generated_at: '1793854989'
   generator: kuda-template/0.1.2
