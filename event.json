@@ -1,1 +1,1 @@
-{"id":"","ws":"item-move","actor":"luis","ts":1793855586,"op":{"op":"release","glob":".kuda/**"}}
+{"id":"","ws":"item-move","actor":"luis","ts":1793855586,"op":{"op":"presence","status":"left"}}
