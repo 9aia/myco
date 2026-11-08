@@ -533,7 +533,7 @@ mod tests {
         // no remote configured → nothing tracked
         assert!(!tracks_branch(d.path(), "origin", "project"));
         assert!(git(d.path(), &["config", "remote.origin.url", "x"]));
-        // a `--single-branch` clone (arca): only main is tracked, so
+        // a `--single-branch` clone (cuora): only main is tracked, so
         // `origin/project` is stale by construction
         assert!(git(
             d.path(),
