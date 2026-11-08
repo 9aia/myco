@@ -38,7 +38,9 @@ is upgraded in place. `check` validates it as an
 verified/repaired instead of re-created. It is the safe "is this
 repo set up?" probe. `myco org init` re-runs it on every
 registered repo — the rollout path when scaffolding (like the
-`AGENTS.md` block) is introduced or updated.
+`AGENTS.md` block) is introduced or updated. Repos registered
+`ledger = "none"` (intentionally ledger-less org members) are
+skipped — see [org views](org-views.md#ledger-less-repos--one-org-wide-ledger).
 
 ## Overrides and discovery
 
