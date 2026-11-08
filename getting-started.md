@@ -75,7 +75,8 @@ human cockpit while agents drive the verbs. Every mutation runs
 through the same ops the CLI uses, so a keypress that changes the
 ledger lands as the same atomic commit (`--no-commit` opts out
 here too). The board auto-reloads when the ledger changes on disk
-— other `myco` invocations, `git pull`, hand-edits — no keypress
+— an OS filesystem watcher plus a content fingerprint catch other
+`myco` invocations, `git pull`, and hand-edits — no keypress
 needed; `R` forces one anyway.
 
 | Key                            | Action                                       |
