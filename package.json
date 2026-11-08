@@ -8,8 +8,11 @@
     "url": "git+https://github.com/9aia/myco.git"
   },
   "bin": {
-    "myco": "bin/myco"
+    "myco": "bin/myco.js"
   },
+  "files": [
+    "bin"
+  ],
   "engines": {
     "node": ">=10"
   }
