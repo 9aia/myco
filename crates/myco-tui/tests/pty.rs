@@ -98,15 +98,6 @@ fn wait_exit(child: &mut Box<dyn Child + Send + Sync>) -> portable_pty::ExitStat
     }
 }
 
-/// Read everything the pty emitted until EOF (child exit closes the
-/// slave side).
-fn output(master: &(dyn MasterPty + Send)) -> String {
-    let mut reader = master.try_clone_reader().unwrap();
-    let mut buf = Vec::new();
-    let _ = reader.read_to_end(&mut buf);
-    String::from_utf8_lossy(&buf).into_owned()
-}
-
 /// A pty session with a drainer thread: output accumulates in a
 /// shared buffer and Device Status Report queries (`ESC[6n`, sent
 /// when the TUI resumes after `$EDITOR`) get an automatic cursor
@@ -184,8 +175,12 @@ impl Drained {
 fn quits_cleanly_and_saves_session() {
     let f = fixture();
     let (mut master, mut child) = spawn_pty(command(&f));
-    // SGR mouse events (press/release/wheel) + a resize — the loop's
-    // Mouse and Resize arms
+    let d = drain(&mut master);
+    // first frame ⇒ the loop and its signal handlers are installed
+    d.wait_for(b"TODO");
+    // SGR mouse events (press/release/wheel), a real resize
+    // (SIGWINCH → Event::Resize), and a bracketed paste (→ the
+    // loop's catch-all arm)
     master
         .resize(PtySize {
             rows: 30,
@@ -194,17 +189,33 @@ fn quits_cleanly_and_saves_session() {
             pixel_height: 0,
         })
         .unwrap();
-    send(
-        &mut master,
-        "\x1b[<0;10;5M\x1b[<0;10;5m\x1b[<64;10;5M\x1b[<65;10;5Mq",
-    );
+    d.send("\x1b[<0;10;5M\x1b[<0;10;5m\x1b[<64;10;5M\x1b[<65;10;5M\x1b[I\x1b[O\x1b[200~pasted\x1b[201~");
+    std::thread::sleep(Duration::from_millis(800)); // ≥3 poll cycles
+    d.send("q");
     let status = wait_exit(&mut child);
-    assert!(status.success(), "exit {:?}", status.exit_code());
-    let out = output(&*master);
-    assert!(out.contains("TODO"), "no board drawn: {out:?}");
+    assert!(
+        status.success(),
+        "exit {:?}: {}",
+        status.exit_code(),
+        d.text()
+    );
+    assert!(d.text().contains("TODO"), "no board drawn");
     // `q` saves the session — the next launch would restore it
     let sessions = std::fs::read_dir(f.home.join("ui")).unwrap();
     assert!(sessions.count() > 0, "no session file written");
+}
+
+#[test]
+fn mid_run_pty_death_surfaces_an_error() {
+    let f = fixture();
+    // no drain() here — its cloned fds would keep the master alive;
+    // we need every master-side fd gone for the child to see EIO
+    let (master, mut child) = spawn_pty(command(&f));
+    // let the first frame draw — the loop is spinning on poll/read
+    std::thread::sleep(Duration::from_millis(800));
+    drop(master);
+    let status = wait_exit(&mut child);
+    assert!(!status.success());
 }
 
 #[test]
@@ -249,6 +260,58 @@ fn closed_pty_surfaces_an_error() {
     // master dropped → the child's reads/writes hit EIO; run()
     // must return Err rather than spin
     drop(master);
+    let status = wait_exit(&mut child);
+    assert!(!status.success());
+}
+
+#[test]
+fn editor_resume_after_pty_death_errors() {
+    let f = fixture();
+    // an editor that hangs briefly — we kill the pty while it's
+    // suspended, so the resume path's terminal ops fail through `?`.
+    // No drain() here: its cloned fds would keep the master alive.
+    let editor = f.cwd.join("hang-editor.sh");
+    std::fs::write(&editor, "#!/bin/sh\nsleep 3\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&editor, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let mut cmd = command(&f);
+    cmd.env("EDITOR", editor.to_str().unwrap());
+    let (mut master, mut child) = spawn_pty(cmd);
+    std::thread::sleep(Duration::from_millis(800)); // first frame up
+    send(&mut master, "E"); // suspend → editor sleeps
+    std::thread::sleep(Duration::from_millis(500));
+    drop(master);
+    let status = wait_exit(&mut child);
+    assert!(!status.success());
+}
+
+#[test]
+fn editor_unset_defaults_to_vi_and_fails() {
+    let f = fixture();
+    let mut cmd = command(&f);
+    // no $EDITOR anywhere → the `unwrap_or_else` "vi" fallback;
+    // vi isn't installed here, so the spawn fails fast
+    cmd.env_remove("EDITOR");
+    let (mut master, mut child) = spawn_pty(cmd);
+    std::thread::sleep(Duration::from_millis(800));
+    send(&mut master, "E");
+    let status = wait_exit(&mut child);
+    assert!(!status.success());
+}
+
+#[test]
+fn no_project_exits_with_error() {
+    let f = fixture();
+    // an empty cwd — discovery finds no `project/` worktree, so
+    // `Model::open` fails and `run()` returns before touching the
+    // terminal (covers the `?` on the open call)
+    let empty = tempfile::tempdir().unwrap();
+    let mut cmd = command(&f);
+    cmd.cwd(empty.path());
+    let (_master, mut child) = spawn_pty(cmd);
     let status = wait_exit(&mut child);
     assert!(!status.success());
 }

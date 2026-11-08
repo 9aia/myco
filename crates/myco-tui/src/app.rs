@@ -2749,6 +2749,17 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn reorder_at_the_boundary_is_a_noop() {
+        // a lone item can't move — `move_within` reports false and
+        // the mutation returns before save/commit
+        let mut m = model(|l| l.put_todo(t(1), None));
+        m.key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT));
+        m.key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::ALT));
+        assert!(m.status.is_empty(), "{}", m.status);
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+    }
+
+    #[test]
     fn mutations_noop_on_an_empty_board() {
         let mut m = model(|_| {});
         let alt_j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT);
@@ -2779,6 +2790,31 @@ pub(crate) mod tests {
         other.take(&loc);
         items::save_ledger(store(&m), &other).unwrap();
         m.key(key(' '));
+        assert!(m.status.contains("no such task"), "{}", m.status);
+        // defer's locate arm — same trick: T-001 gone from disk but
+        // still on the in-memory board
+        let mut other = items::load_ledger(store(&m)).unwrap();
+        if let Some(loc) = other.locate(ItemId::new(ItemKind::Task, 1)) {
+            other.take(&loc);
+        }
+        items::save_ledger(store(&m), &other).unwrap();
+        m.key(key('1')); // TODO board — the stale row is still selected
+        m.key(key('D'));
+        assert!(m.status.contains("no such task"), "{}", m.status);
+    }
+
+    #[test]
+    fn promote_on_a_deleted_item_reports_no_such_task() {
+        let mut m = model(|l| {
+            l.put_backlog(t(2).status(Status::Deferred), None);
+        });
+        // external delete — the board still shows the stale row
+        let mut other = items::load_ledger(store(&m)).unwrap();
+        let loc = other.locate(ItemId::new(ItemKind::Task, 2)).unwrap();
+        other.take(&loc);
+        items::save_ledger(store(&m), &other).unwrap();
+        m.key(key('2')); // BACKLOG board
+        m.key(key('p'));
         assert!(m.status.contains("no such task"), "{}", m.status);
     }
 
