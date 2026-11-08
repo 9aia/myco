@@ -894,7 +894,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `handoff` — Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only).
 * `interrupt` — A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Without an id, `--session <id>` is the teardown: every item claimed under that session reverts in one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.
 * `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call.
-* `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = "index"` spec (org-\*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
+* `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use; auto-reloads when the ledger changes on disk. `--view` with a `source = "index"` spec (org-\*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
 * `serve` — Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it.
 * `batch` — One-shot `serve` — NDJSON verb requests from stdin or `--file`, one JSON-RPC response line per request, dispatched through the same served surface. Per-line errors never fail the run; mutations keep per-request commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS the wire here too — requests that would read it are rejected.
 
@@ -1397,20 +1397,24 @@ The derived index: register repos, query/rebuild snapshots.
 
 ###### **Subcommands:**
 
-* `add` — Register a repo — `<path>` is a repo root (or its `project/` worktree). Takes an initial snapshot.
+* `add` — Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger-less repos register as `ledger = "none"` with no snapshot; `--org` marks the org/global ledger.
 * `remove` — Unregister a repo and drop its snapshot.
 * `list` — List registered repos with snapshot freshness.
 * `rebuild` — Re-scan a registered repo (all of them without `<path>`).
 
 ## `myco index add`
 
-Register a repo — `<path>` is a repo root (or its `project/` worktree). Takes an initial snapshot.
+Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger-less repos register as `ledger = "none"` with no snapshot; `--org` marks the org/global ledger.
 
-**Usage:** `myco index add <path>`
+**Usage:** `myco index add [OPTIONS] <path>`
 
 ###### **Arguments:**
 
 * `<PATH>` — Repo root (or project worktree) to register.
+
+###### **Options:**
+
+* `--org` — Designate this repo as the org/global ledger — the fallback target verbs in ledger-less registered repos resolve to (at most one; clears the mark elsewhere).
 
 ## `myco index remove`
 
@@ -1619,7 +1623,7 @@ Minimal context block to restart work on an item — the item, `blocks:` dep tit
 
 ## `myco ui`
 
-Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = "index"` spec (org-\*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
+Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use; auto-reloads when the ledger changes on disk. `--view` with a `source = "index"` spec (org-\*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
 
 **Usage:** `myco ui [OPTIONS]`
 
@@ -2279,7 +2283,8 @@ needed; `R` forces one anyway.
 | ------------------------------ | -------------------------------------------- |
 | `1` / `2` / `3`, `h` / `l`     | TODO / BACKLOG / FILES tabs                  |
 | `j` / `k`, `gg` / `G`, `{`/`}` | move · ends · section jumps                  |
-| `Enter`                        | full-pane item preview (`j`/`k` scroll, esc) |
+| `Enter`, `→`                  | item preview — `j`/`k` scroll, `←`/esc back   |
+| `←`                           | back — pops the drill-down stack (esc-like in preview, no-op on the board) |
 | `a`                            | add an item (TODO/BACKLOG only)              |
 | `Space` / `dd`, `D`, `p`       | done · defer to BACKLOG · promote to TODO    |
 | `Alt+j` / `Alt+k`              | reorder among siblings                       |
@@ -2288,6 +2293,7 @@ needed; `R` forces one anyway.
 | `E`, `R`, `?`                  | `$EDITOR` · reload · keybind help            |
 | `q`, `Ctrl-C`                  | quit                                         |
 | click, wheel                   | select item / tab · scroll                   |
+| double-click                   | open item preview                            |
 
 `--view org-board` (or any `source = "index"` view) swaps the repo
 ledger for the cross-repo index universe — rows are `repo:ID` and

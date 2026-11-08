@@ -82,7 +82,8 @@ needed; `R` forces one anyway.
 | ------------------------------ | -------------------------------------------- |
 | `1` / `2` / `3`, `h` / `l`     | TODO / BACKLOG / FILES tabs                  |
 | `j` / `k`, `gg` / `G`, `{`/`}` | move · ends · section jumps                  |
-| `Enter`                        | full-pane item preview (`j`/`k` scroll, esc) |
+| `Enter`, `→`                  | item preview — `j`/`k` scroll, `←`/esc back   |
+| `←`                           | back — pops the drill-down stack (esc-like in preview, no-op on the board) |
 | `a`                            | add an item (TODO/BACKLOG only)              |
 | `Space` / `dd`, `D`, `p`       | done · defer to BACKLOG · promote to TODO    |
 | `Alt+j` / `Alt+k`              | reorder among siblings                       |
@@ -91,6 +92,7 @@ needed; `R` forces one anyway.
 | `E`, `R`, `?`                  | `$EDITOR` · reload · keybind help            |
 | `q`, `Ctrl-C`                  | quit                                         |
 | click, wheel                   | select item / tab · scroll                   |
+| double-click                   | open item preview                            |
 
 `--view org-board` (or any `source = "index"` view) swaps the repo
 ledger for the cross-repo index universe — rows are `repo:ID` and
