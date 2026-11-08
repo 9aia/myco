@@ -10,8 +10,9 @@
 //! read under the lock means the TUI never saves a stale
 //! startup-snapshot ledger over a concurrent writer's changes.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use myco_core::Ledger;
@@ -192,6 +193,16 @@ pub struct Model {
     /// and by successful mutations, so the board's own writes
     /// don't retrigger a reload.
     watch_fp: u64,
+    /// Per-file content-hash cache for `fingerprint` — see
+    /// [`tree_fp`]. Keyed by path; an entry is reused while the
+    /// file's (mtime, len, dev, ino) are unchanged, so the
+    /// steady-state poll only stats.
+    fp_cache: HashMap<PathBuf, FpEntry>,
+    /// `fingerprint` call count — every [`FP_FULL_REHASH`]-th call
+    /// bypasses `fp_cache` and re-hashes every file's contents, so
+    /// a write preserving mtime *and* size still surfaces within
+    /// ~`FP_FULL_REHASH` polls (~2s at the 250ms tick).
+    fp_calls: u32,
     /// Preview pane scroll offset (`j`/`k`/`PgUp`/`PgDn`/`g`/`G`
     /// in Preview mode; clamped to the content at draw time).
     pub preview_scroll: u16,
@@ -288,6 +299,8 @@ impl Model {
             handoffs: Vec::new(),
             links: Vec::new(),
             watch_fp: 0,
+            fp_cache: HashMap::new(),
+            fp_calls: 0,
             preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
@@ -502,8 +515,9 @@ impl Model {
     /// on disk: another `myco` invocation, a `git pull`/checkout in
     /// the worktree, a hand-edit committed elsewhere, or (index
     /// boards) registry/snapshot writes under the data dir. The
-    /// scan hashes mtimes+sizes of the small markdown trees, so it
-    /// runs every poll cycle.
+    /// scan stats every file but only re-reads contents when
+    /// (mtime, len, dev, ino) move — plus a periodic full rehash —
+    /// so it stays cheap enough to run every poll cycle.
     pub fn tick(&mut self) {
         if self.fingerprint() != self.watch_fp {
             self.reload();
@@ -513,18 +527,25 @@ impl Model {
     /// Hash of everything the board reads: the `project/` worktree
     /// in repo mode; the index data dir (`repos.toml`,
     /// `index.redb`) plus every repo's worktree on an index board.
-    fn fingerprint(&self) -> u64 {
-        let mut h = std::collections::hash_map::DefaultHasher::new();
+    /// File *contents* feed the hash (via [`tree_fp`]'s cache), not
+    /// bare mtimes — a `touch` alone doesn't retrigger a reload.
+    /// Every [`FP_FULL_REHASH`]-th call forces a full content rehash
+    /// to bound the cache-miss window for metadata-preserving writes.
+    fn fingerprint(&mut self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        let mut h = DefaultHasher::new();
+        self.fp_calls += 1;
+        let force = self.fp_calls.is_multiple_of(FP_FULL_REHASH);
         match &self.orgs {
             Some(orgs) => {
-                tree_fp(&data_dir(), &mut h);
+                tree_fp(&data_dir(), &mut h, &mut self.fp_cache, force);
                 for o in orgs {
-                    tree_fp(&o.worktree, &mut h);
+                    tree_fp(&o.worktree, &mut h, &mut self.fp_cache, force);
                 }
             }
             None => {
                 if let Some(p) = &self.proj {
-                    tree_fp(&p.worktree, &mut h);
+                    tree_fp(&p.worktree, &mut h, &mut self.fp_cache, force);
                 }
             }
         }
@@ -1357,36 +1378,124 @@ impl Model {
     }
 }
 
-/// Hash `path` into `h` — metadata always, contents recursively
-/// for dirs (entries sorted for a deterministic hash). `.git` is
-/// skipped (a real `.git` dir's internals churn on unrelated git
-/// ops); missing paths hash a marker so creation counts as a
-/// change. Symlinks hash as files — never followed.
-fn tree_fp(path: &Path, h: &mut std::collections::hash_map::DefaultHasher) {
+/// Every this-many-th `fingerprint` call re-hashes all file
+/// contents, ignoring `fp_cache` — bounds the window in which a
+/// write preserving mtime *and* size goes unnoticed (~2s of polls).
+const FP_FULL_REHASH: u32 = 8;
+
+/// Cached content hash for one file — reused while the stat tuple
+/// still matches, so a steady-state fingerprint only stats.
+#[derive(Clone, Copy)]
+struct FpEntry {
+    mtime: Option<SystemTime>,
+    len: u64,
+    /// Filesystem identity — a delete+recreate landing on the same
+    /// (mtime, len) still misses the cache.
+    dev: u64,
+    ino: u64,
+    hash: u64,
+}
+
+/// Hash `path` into `h`. Each entry contributes its path plus a
+/// kind tag and *content*: directories recurse (entries sorted for
+/// a deterministic hash, `.git` skipped by name); regular files
+/// contribute a content hash of their bytes; symlinks contribute
+/// their link target — never followed, never read through.
+/// Missing paths hash a marker so creation counts as a change.
+///
+/// File content hashes come from `cache` when the file's
+/// (mtime, len, dev, ino) are unchanged; `force` (set every
+/// [`FP_FULL_REHASH`]-th fingerprint) re-reads everything. mtimes
+/// and sizes themselves are *not* hashed — a bare `touch` leaves
+/// the fingerprint untouched.
+fn tree_fp(
+    path: &Path,
+    h: &mut std::collections::hash_map::DefaultHasher,
+    cache: &mut HashMap<PathBuf, FpEntry>,
+    force: bool,
+) {
     use std::hash::Hash;
     let Ok(md) = std::fs::symlink_metadata(path) else {
         path.as_os_str().hash(h);
-        false.hash(h);
+        0u8.hash(h); // missing
         return;
     };
     path.as_os_str().hash(h);
-    md.is_dir().hash(h);
-    md.modified().ok().hash(h);
-    md.len().hash(h);
-    if !md.is_dir() {
-        return;
-    }
-    let Ok(rd) = std::fs::read_dir(path) else {
-        return;
-    };
-    let mut entries: Vec<_> = rd.flatten().collect();
-    entries.sort_by_key(|e| e.file_name());
-    for e in entries {
-        if e.file_name() == ".git" {
-            continue;
+    if md.is_dir() {
+        1u8.hash(h);
+        let Ok(rd) = std::fs::read_dir(path) else {
+            return;
+        };
+        let mut entries: Vec<_> = rd.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            if e.file_name() == ".git" {
+                continue;
+            }
+            tree_fp(&e.path(), h, cache, force);
         }
-        tree_fp(&e.path(), h);
+        return;
     }
+    if md.file_type().is_symlink() {
+        // hash the link itself — read_link, never read through
+        2u8.hash(h);
+        std::fs::read_link(path).ok().hash(h);
+        return;
+    }
+    3u8.hash(h);
+    let mtime = md.modified().ok();
+    let len = md.len();
+    #[cfg(unix)]
+    let (dev, ino) = {
+        use std::os::unix::fs::MetadataExt;
+        (md.dev(), md.ino())
+    };
+    #[cfg(not(unix))]
+    let (dev, ino) = (0, 0);
+    let cached = if force {
+        None
+    } else {
+        cache
+            .get(path)
+            .filter(|e| e.mtime == mtime && e.len == len && e.dev == dev && e.ino == ino)
+            .map(|e| e.hash)
+    };
+    let hash = match cached {
+        Some(hash) => hash,
+        None => {
+            let hash = file_hash(path, mtime, len);
+            cache.insert(
+                path.to_path_buf(),
+                FpEntry {
+                    mtime,
+                    len,
+                    dev,
+                    ino,
+                    hash,
+                },
+            );
+            hash
+        }
+    };
+    hash.hash(h);
+}
+
+/// Content hash of one file's bytes. Unreadable files fall back to
+/// hashing their metadata so a stat-visible change still moves the
+/// fingerprint.
+fn file_hash(path: &Path, mtime: Option<SystemTime>, len: u64) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    match std::fs::read(path) {
+        Ok(bytes) => bytes.hash(&mut h),
+        Err(_) => {
+            "unreadable".hash(&mut h);
+            mtime.hash(&mut h);
+            len.hash(&mut h);
+        }
+    }
+    h.finish()
 }
 
 /// `$MYCO_HOME` → `$XDG_DATA_HOME/myco` → `~/.local/share/myco` —
@@ -1551,6 +1660,8 @@ pub(crate) mod tests {
             handoffs: Vec::new(),
             links: Vec::new(),
             watch_fp: 0,
+            fp_cache: HashMap::new(),
+            fp_calls: 0,
             preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
@@ -2044,6 +2155,56 @@ pub(crate) mod tests {
         assert!(m.ledger.locate(ItemId::new(ItemKind::Task, 9)).is_some());
     }
 
+    /// Best-effort mtime pin via `touch -d` — where it's missing the
+    /// tests still pass, just through the metadata-change path.
+    fn pin_mtime(p: &Path, date: &str) {
+        let _ = std::process::Command::new("touch")
+            .arg("-d")
+            .arg(date)
+            .arg(p)
+            .status();
+    }
+
+    #[test]
+    fn fingerprint_detects_same_size_writes() {
+        let mut m = model(|_| {});
+        let wt = m.proj.as_ref().unwrap().worktree.clone();
+        let f = wt.join("notes.md");
+        std::fs::write(&f, "aaaa").unwrap();
+        pin_mtime(&f, "2001-02-03 04:05:06 UTC");
+        m.tick(); // absorb the new file — watch_fp is fresh
+                  // same-length rewrite with the same pinned mtime — the
+                  // per-file cache would reuse its hash indefinitely without
+                  // the periodic forced full rehash
+        std::fs::write(&f, "bbbb").unwrap();
+        pin_mtime(&f, "2001-02-03 04:05:06 UTC");
+        let mut detected = false;
+        for _ in 0..FP_FULL_REHASH as usize + 2 {
+            if m.fingerprint() != m.watch_fp {
+                detected = true;
+                break;
+            }
+        }
+        assert!(detected, "same-size write never moved the fingerprint");
+    }
+
+    #[test]
+    fn tick_ignores_a_bare_touch() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        let wt = m.proj.as_ref().unwrap().worktree.clone();
+        let todo = wt.join("TODO.md");
+        let before = std::fs::metadata(&todo).unwrap().modified().unwrap();
+        // content identical, mtime bumped — the content hash makes
+        // this a no-op, so no reload fires
+        pin_mtime(&todo, "2030-01-01 00:00:00 UTC");
+        let after = std::fs::metadata(&todo).unwrap().modified().unwrap();
+        assert_ne!(before, after, "touch didn't move the mtime");
+        // in-memory-only probe: a reload would drop it
+        m.ledger.put_todo(t(9), None);
+        m.tick();
+        assert!(m.ledger.locate(ItemId::new(ItemKind::Task, 9)).is_some());
+    }
+
     #[test]
     fn related_groups_edges_in_and_out() {
         let mut m = model(|l| {
@@ -2177,6 +2338,8 @@ pub(crate) mod tests {
             handoffs: Vec::new(),
             links: Vec::new(),
             watch_fp: 0,
+            fp_cache: HashMap::new(),
+            fp_calls: 0,
             preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
