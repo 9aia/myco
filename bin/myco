@@ -1,0 +1,21 @@
+#!/bin/sh
+# myco npm shim — the real binary is the Rust build under
+# $CARGO_HOME/bin (or ~/.cargo/bin). Bootstrap it via cargo on
+# first use if the postinstall didn't run (--ignore-scripts) or
+# cargo was missing then.
+set -e
+
+cargo_bin="${CARGO_HOME:-$HOME/.cargo}/bin/myco"
+
+if [ ! -x "$cargo_bin" ]; then
+    if ! command -v cargo >/dev/null 2>&1; then
+        echo "myco: binary not found and cargo is not installed." >&2
+        echo "Install Rust (https://rustup.rs), then run: npm rebuild -g @9aia/myco" >&2
+        echo "or build from source: https://github.com/9aia/myco" >&2
+        exit 1
+    fi
+    echo "myco: building the Rust binary (first run, ~1-2 min)…" >&2
+    cargo install --git https://github.com/9aia/myco myco --locked
+fi
+
+exec "$cargo_bin" "$@"

@@ -63,6 +63,7 @@ error `--fix` repairs, because every commit there is unreachable.
 ## Install
 
 ```sh
+npm install -g 9aia/myco    # shim → cargo install --git (needs Rust)
 cargo install --git https://github.com/9aia/myco myco
 cargo xtask install        # from a checkout → ~/.cargo/bin
 ```

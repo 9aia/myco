@@ -1,0 +1,19 @@
+{
+  "name": "@9aia/myco",
+  "version": "0.1.0",
+  "description": "myco — agent-first project management CLI. Rust binary; npm install bootstraps it via cargo.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/9aia/myco.git"
+  },
+  "bin": {
+    "myco": "bin/myco"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
