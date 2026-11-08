@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["index_universe","list_views","render_board","render_groups","render_list","run","spec_digest","view_json","warn"],"struct":["FilterFlags","Out","ViewFlags"]};
+window.SIDEBAR_ITEMS = {"fn":["emit_repos","filter_args","h","index_universe","list_views","live_counts","org_of","render_board","render_groups","render_list","render_repos","repo_row","repo_row_local","row_json","run","spec_args","spec_digest","view_json","warn"],"struct":["FilterPatch","Out","RepoRow","SpecPatchCli"]};

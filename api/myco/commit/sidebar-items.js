@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_MSG"],"fn":["run"]};
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_MSG"],"fn":["h"]};

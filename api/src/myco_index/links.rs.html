@@ -149,66 +149,78 @@
 <a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">fn </span>stamps(<span class="kw-2">&amp;</span><span class="self">self</span>, _r: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;BTreeMap&lt;Utf8PathBuf, FileStamp&gt;, Error&gt; {
 <a href=#150 id=150 data-nosnippet>150</a>            <span class="prelude-val">Ok</span>(<span class="self">self</span>.stored.clone())
 <a href=#151 id=151 data-nosnippet>151</a>        }
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">fn </span>record(<span class="kw-2">&amp;</span><span class="self">self</span>, _r: <span class="kw-2">&amp;</span>str, _p: <span class="kw-2">&amp;</span>Utf8Path, _s: <span class="kw-2">&amp;</span>FileStamp, _e: <span class="kw-2">&amp;</span>[Edge]) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
-<a href=#153 id=153 data-nosnippet>153</a>            <span class="macro">unimplemented!</span>()
-<a href=#154 id=154 data-nosnippet>154</a>        }
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">fn </span>restamp(<span class="kw-2">&amp;</span><span class="self">self</span>, _r: <span class="kw-2">&amp;</span>str, _p: <span class="kw-2">&amp;</span>Utf8Path, _s: <span class="kw-2">&amp;</span>FileStamp) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
-<a href=#156 id=156 data-nosnippet>156</a>            <span class="macro">unimplemented!</span>()
-<a href=#157 id=157 data-nosnippet>157</a>        }
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">fn </span>related(
-<a href=#159 id=159 data-nosnippet>159</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#160 id=160 data-nosnippet>160</a>            _r: <span class="kw-2">&amp;</span>str,
-<a href=#161 id=161 data-nosnippet>161</a>            _id: ItemId,
-<a href=#162 id=162 data-nosnippet>162</a>            _a: <span class="kw-2">&amp;</span>BTreeSet&lt;ItemId&gt;,
-<a href=#163 id=163 data-nosnippet>163</a>        ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Related&gt;, Error&gt; {
-<a href=#164 id=164 data-nosnippet>164</a>            <span class="macro">unimplemented!</span>()
-<a href=#165 id=165 data-nosnippet>165</a>        }
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">fn </span>reach(<span class="kw-2">&amp;</span><span class="self">self</span>, _r: <span class="kw-2">&amp;</span>str, _id: ItemId, _k: EdgeKind, _d: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;ItemId&gt;, Error&gt; {
-<a href=#167 id=167 data-nosnippet>167</a>            <span class="macro">unimplemented!</span>()
-<a href=#168 id=168 data-nosnippet>168</a>        }
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">fn </span>sweep(<span class="kw-2">&amp;</span><span class="self">self</span>, _r: <span class="kw-2">&amp;</span>str, _l: <span class="kw-2">&amp;</span>BTreeSet&lt;Utf8PathBuf&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;usize, Error&gt; {
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">fn </span>record(
+<a href=#153 id=153 data-nosnippet>153</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#154 id=154 data-nosnippet>154</a>            _r: <span class="kw-2">&amp;</span>str,
+<a href=#155 id=155 data-nosnippet>155</a>            _p: <span class="kw-2">&amp;</span>Utf8Path,
+<a href=#156 id=156 data-nosnippet>156</a>            _s: <span class="kw-2">&amp;</span>FileStamp,
+<a href=#157 id=157 data-nosnippet>157</a>            _e: <span class="kw-2">&amp;</span>[Edge],
+<a href=#158 id=158 data-nosnippet>158</a>        ) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
+<a href=#159 id=159 data-nosnippet>159</a>            <span class="macro">unimplemented!</span>()
+<a href=#160 id=160 data-nosnippet>160</a>        }
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">fn </span>restamp(<span class="kw-2">&amp;</span><span class="self">self</span>, _r: <span class="kw-2">&amp;</span>str, _p: <span class="kw-2">&amp;</span>Utf8Path, _s: <span class="kw-2">&amp;</span>FileStamp) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
+<a href=#162 id=162 data-nosnippet>162</a>            <span class="macro">unimplemented!</span>()
+<a href=#163 id=163 data-nosnippet>163</a>        }
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">fn </span>related(
+<a href=#165 id=165 data-nosnippet>165</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#166 id=166 data-nosnippet>166</a>            _r: <span class="kw-2">&amp;</span>str,
+<a href=#167 id=167 data-nosnippet>167</a>            _id: ItemId,
+<a href=#168 id=168 data-nosnippet>168</a>            _a: <span class="kw-2">&amp;</span>BTreeSet&lt;ItemId&gt;,
+<a href=#169 id=169 data-nosnippet>169</a>        ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Related&gt;, Error&gt; {
 <a href=#170 id=170 data-nosnippet>170</a>            <span class="macro">unimplemented!</span>()
 <a href=#171 id=171 data-nosnippet>171</a>        }
-<a href=#172 id=172 data-nosnippet>172</a>    }
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">fn </span>stamp(fp: u64) -&gt; FileStamp {
-<a href=#175 id=175 data-nosnippet>175</a>        FileStamp {
-<a href=#176 id=176 data-nosnippet>176</a>            mtime_ms: <span class="number">1</span>,
-<a href=#177 id=177 data-nosnippet>177</a>            size: <span class="number">1</span>,
-<a href=#178 id=178 data-nosnippet>178</a>            fingerprint: fp,
-<a href=#179 id=179 data-nosnippet>179</a>        }
-<a href=#180 id=180 data-nosnippet>180</a>    }
-<a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="attr">#[test]
-<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="kw">fn </span>fingerprint_is_stable_and_content_sensitive() {
-<a href=#184 id=184 data-nosnippet>184</a>        <span class="macro">assert_eq!</span>(fingerprint(<span class="string">b"hello"</span>), fingerprint(<span class="string">b"hello"</span>));
-<a href=#185 id=185 data-nosnippet>185</a>        <span class="macro">assert_ne!</span>(fingerprint(<span class="string">b"hello"</span>), fingerprint(<span class="string">b"hellp"</span>));
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="macro">assert_ne!</span>(fingerprint(<span class="string">b""</span>), fingerprint(<span class="string">b"x"</span>));
-<a href=#187 id=187 data-nosnippet>187</a>    }
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="attr">#[test]
-<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">fn </span>dirty_defaults_to_a_stamp_diff() {
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span><span class="kw-2">mut </span>stored = BTreeMap::new();
-<a href=#192 id=192 data-nosnippet>192</a>        stored.insert(Utf8PathBuf::from(<span class="string">"a.md"</span>), stamp(<span class="number">1</span>));
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>idx = Stub { stored };
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span><span class="kw-2">mut </span>live = BTreeMap::new();
-<a href=#195 id=195 data-nosnippet>195</a>        live.insert(Utf8PathBuf::from(<span class="string">"a.md"</span>), stamp(<span class="number">1</span>)); <span class="comment">// same → clean
-<a href=#196 id=196 data-nosnippet>196</a>        </span>live.insert(Utf8PathBuf::from(<span class="string">"b.md"</span>), stamp(<span class="number">2</span>)); <span class="comment">// new → dirty
-<a href=#197 id=197 data-nosnippet>197</a>        </span>live.insert(Utf8PathBuf::from(<span class="string">"c.md"</span>), stamp(<span class="number">3</span>)); <span class="comment">// stored absent → dirty
-<a href=#198 id=198 data-nosnippet>198</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>got = idx.dirty(<span class="string">"repo"</span>, <span class="kw-2">&amp;</span>live).unwrap();
-<a href=#199 id=199 data-nosnippet>199</a>        got.sort();
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="macro">assert_eq!</span>(got, [Utf8PathBuf::from(<span class="string">"b.md"</span>), Utf8PathBuf::from(<span class="string">"c.md"</span>)]);
-<a href=#201 id=201 data-nosnippet>201</a>    }
-<a href=#202 id=202 data-nosnippet>202</a>
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="attr">#[test]
-<a href=#204 id=204 data-nosnippet>204</a>    </span><span class="kw">fn </span>file_stamp_serde_roundtrip() {
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>s = FileStamp {
-<a href=#206 id=206 data-nosnippet>206</a>            mtime_ms: <span class="number">42</span>,
-<a href=#207 id=207 data-nosnippet>207</a>            size: <span class="number">7</span>,
-<a href=#208 id=208 data-nosnippet>208</a>            fingerprint: <span class="number">0xdead_beef</span>,
-<a href=#209 id=209 data-nosnippet>209</a>        };
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">let </span>json = serde_json::to_string(<span class="kw-2">&amp;</span>s).unwrap();
-<a href=#211 id=211 data-nosnippet>211</a>        <span class="macro">assert_eq!</span>(serde_json::from_str::&lt;FileStamp&gt;(<span class="kw-2">&amp;</span>json).unwrap(), s);
-<a href=#212 id=212 data-nosnippet>212</a>    }
-<a href=#213 id=213 data-nosnippet>213</a>}
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">fn </span>reach(
+<a href=#173 id=173 data-nosnippet>173</a>            <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#174 id=174 data-nosnippet>174</a>            _r: <span class="kw-2">&amp;</span>str,
+<a href=#175 id=175 data-nosnippet>175</a>            _id: ItemId,
+<a href=#176 id=176 data-nosnippet>176</a>            _k: EdgeKind,
+<a href=#177 id=177 data-nosnippet>177</a>            _d: usize,
+<a href=#178 id=178 data-nosnippet>178</a>        ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;ItemId&gt;, Error&gt; {
+<a href=#179 id=179 data-nosnippet>179</a>            <span class="macro">unimplemented!</span>()
+<a href=#180 id=180 data-nosnippet>180</a>        }
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">fn </span>sweep(<span class="kw-2">&amp;</span><span class="self">self</span>, _r: <span class="kw-2">&amp;</span>str, _l: <span class="kw-2">&amp;</span>BTreeSet&lt;Utf8PathBuf&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;usize, Error&gt; {
+<a href=#182 id=182 data-nosnippet>182</a>            <span class="macro">unimplemented!</span>()
+<a href=#183 id=183 data-nosnippet>183</a>        }
+<a href=#184 id=184 data-nosnippet>184</a>    }
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">fn </span>stamp(fp: u64) -&gt; FileStamp {
+<a href=#187 id=187 data-nosnippet>187</a>        FileStamp {
+<a href=#188 id=188 data-nosnippet>188</a>            mtime_ms: <span class="number">1</span>,
+<a href=#189 id=189 data-nosnippet>189</a>            size: <span class="number">1</span>,
+<a href=#190 id=190 data-nosnippet>190</a>            fingerprint: fp,
+<a href=#191 id=191 data-nosnippet>191</a>        }
+<a href=#192 id=192 data-nosnippet>192</a>    }
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="attr">#[test]
+<a href=#195 id=195 data-nosnippet>195</a>    </span><span class="kw">fn </span>fingerprint_is_stable_and_content_sensitive() {
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="macro">assert_eq!</span>(fingerprint(<span class="string">b"hello"</span>), fingerprint(<span class="string">b"hello"</span>));
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="macro">assert_ne!</span>(fingerprint(<span class="string">b"hello"</span>), fingerprint(<span class="string">b"hellp"</span>));
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="macro">assert_ne!</span>(fingerprint(<span class="string">b""</span>), fingerprint(<span class="string">b"x"</span>));
+<a href=#199 id=199 data-nosnippet>199</a>    }
+<a href=#200 id=200 data-nosnippet>200</a>
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="attr">#[test]
+<a href=#202 id=202 data-nosnippet>202</a>    </span><span class="kw">fn </span>dirty_defaults_to_a_stamp_diff() {
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">let </span><span class="kw-2">mut </span>stored = BTreeMap::new();
+<a href=#204 id=204 data-nosnippet>204</a>        stored.insert(Utf8PathBuf::from(<span class="string">"a.md"</span>), stamp(<span class="number">1</span>));
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>idx = Stub { stored };
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">let </span><span class="kw-2">mut </span>live = BTreeMap::new();
+<a href=#207 id=207 data-nosnippet>207</a>        live.insert(Utf8PathBuf::from(<span class="string">"a.md"</span>), stamp(<span class="number">1</span>)); <span class="comment">// same → clean
+<a href=#208 id=208 data-nosnippet>208</a>        </span>live.insert(Utf8PathBuf::from(<span class="string">"b.md"</span>), stamp(<span class="number">2</span>)); <span class="comment">// new → dirty
+<a href=#209 id=209 data-nosnippet>209</a>        </span>live.insert(Utf8PathBuf::from(<span class="string">"c.md"</span>), stamp(<span class="number">3</span>)); <span class="comment">// stored absent → dirty
+<a href=#210 id=210 data-nosnippet>210</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>got = idx.dirty(<span class="string">"repo"</span>, <span class="kw-2">&amp;</span>live).unwrap();
+<a href=#211 id=211 data-nosnippet>211</a>        got.sort();
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="macro">assert_eq!</span>(got, [Utf8PathBuf::from(<span class="string">"b.md"</span>), Utf8PathBuf::from(<span class="string">"c.md"</span>)]);
+<a href=#213 id=213 data-nosnippet>213</a>    }
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="attr">#[test]
+<a href=#216 id=216 data-nosnippet>216</a>    </span><span class="kw">fn </span>file_stamp_serde_roundtrip() {
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">let </span>s = FileStamp {
+<a href=#218 id=218 data-nosnippet>218</a>            mtime_ms: <span class="number">42</span>,
+<a href=#219 id=219 data-nosnippet>219</a>            size: <span class="number">7</span>,
+<a href=#220 id=220 data-nosnippet>220</a>            fingerprint: <span class="number">0xdead_beef</span>,
+<a href=#221 id=221 data-nosnippet>221</a>        };
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="kw">let </span>json = serde_json::to_string(<span class="kw-2">&amp;</span>s).unwrap();
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="macro">assert_eq!</span>(serde_json::from_str::&lt;FileStamp&gt;(<span class="kw-2">&amp;</span>json).unwrap(), s);
+<a href=#224 id=224 data-nosnippet>224</a>    }
+<a href=#225 id=225 data-nosnippet>225</a>}
 </code></pre></div></section></main></body></html>

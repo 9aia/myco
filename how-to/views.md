@@ -67,3 +67,41 @@ same per-field patch) alongside the rest of the verb surface;
 ```sh
 printf '{"id":1,"method":"view","params":{"name":"hot"}}\n' | myco batch
 ```
+
+## Verbs on top of views — `[verbs]`
+
+`[verbs.<name>]` declares a verb of your own (P-007): `myco <name>`
+then works like a builtin on every front end — CLI,
+`myco batch`, and `myco serve` (it joins `initialize`'s method
+list). Two kinds, both read-only:
+
+```toml
+# view-emit — a ViewSpec baked to one emit shape
+[verbs.hot]
+emit = "first"                     # table | json | ids | first
+filter = { pri_min = "high", status = ["open"] }
+sort = ["pri", "id"]
+
+# alias — argv baked for a read-only builtin
+[verbs.standup]
+target = "view"
+args = ["open"]
+```
+
+`myco hot` prints the top open high-priority item (`first` is
+`next`-shaped but can't claim); `myco standup` is `myco view
+open` with extra tokens appended (`myco standup --limit 3`).
+`ids` prints one id per line — pipeable. `--json` works on every
+kind.
+
+Load-time rules: a verb name colliding with a builtin warns and
+the builtin wins; an alias to a mutating or missing target warns
+and is skipped; a view-emit spec goes through the same
+`ViewSpec` validation as `[views]` — `myco check` lints the repo
+layer's `[verbs]` (`verb-invalid` findings). Repo verbs merge
+over user verbs on the same name (repo is shared surface);
+verbs are named with the bare-word space only — a config verb
+can't shadow inside a group.
+
+Composites and hiding builtins are deferred — see
+`proposal-0007`.

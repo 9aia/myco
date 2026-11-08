@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["canon","carried_meta","close_source","create_in","do_move","h_move","moved_json","repo_label","resolve_dest","same_repo"],"struct":["Moved"]};

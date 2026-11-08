@@ -7,8 +7,8 @@ injected), <code>ops</code> owns the scaffold + commit-per-mutation machinery, a
 <code>items</code> is store open/save + the verbs’ shared mutation/output
 tail — re-exporting the core symbols so call sites read
 <code>items::X</code> for either. <code>myco</code> (CLI) is a thin clap shell over
-this; <code>myco-tui</code> calls the same functions, so both front-ends
-produce identical writes and identical commits.</p>
+this; <code>myco-driver</code> (the pavo view driver) reads through the
+same functions, so every front-end sees identical state.</p>
 </div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="config/index.html" title="mod myco_ops::config">config</a></dt><dd>Config plumbing — ops owns the <em>policy</em> (which file is the
 repo layer, merged vs repo-only reads); the file format is
 injected by the composition root (<code>myco</code> wires TOML), the

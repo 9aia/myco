@@ -8,8 +8,10 @@ url: /myco/reference/config.md
 | field | type | required | notes |
 |---|---|---|---|
 | `project_dir` | `string` | optional | Path to the project worktree, relative to the repo root. |
+| `default_view` | `string` | optional | The named view bare `myco view` resolves when no name is given — a repo pins its landing view, a machine `~/myco.toml` pins a global one (scalar: repo layer wins). |
 | `views` | `map` | optional | Named declarative views — merged across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the *user* layer wins a name collision. |
-| `verbs` | `std::collections::BTreeMap<String, ConfigVerb>` | optional | Config-declared verbs (P-007) — merged like `views`, but the *repo* layer wins collisions (repo verbs are shared surface, personal verbs don't override them). Builtins win over both at resolution. |
+| `verbs` | `map` | optional | Config-declared verbs (P-007) — merged like `views`, but the *repo* layer wins collisions (repo verbs are shared surface, personal verbs don't override them). Builtins win over both at resolution. |
+| `kinds` | `Vec<KindSpec>` | optional | `[[kinds]]` — user item kinds layered over the prelude (P-008). A prelude name *shadows* that spec (prefix stays locked); new names extend the table. Merged like verbs: the repo layer wins a name collision — a repo's kind vocabulary is shared surface. |
 
 ## Constraints
 

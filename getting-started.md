@@ -13,7 +13,16 @@ The crates.io name `myco` belongs to an unrelated project —
 install from the repo:
 
 ```sh
-cargo install --git https://github.com/9aia/myco
+cargo install --git https://github.com/9aia/myco myco
+```
+
+The trailing `myco` selects the package — the repo is a workspace,
+so cargo needs to know which member to install. To also get the
+[pavo](https://github.com/9aia/pavo) view driver
+(`tamias-driver-myco`, see below):
+
+```sh
+cargo install --git https://github.com/9aia/myco myco-driver
 ```
 
 From a checkout of this repo: `cargo xtask install` builds and
@@ -49,30 +58,23 @@ the branch history is the audit trail. `--no-commit` (or the
 
 ## The interactive board
 
-`myco ui` opens a full-screen board over `TODO.md` and
-`BACKLOG.md` — the human cockpit while agents drive the verbs.
-Every mutation runs through the same ops the CLI uses, so a
-keypress that changes the ledger lands as the same atomic commit
-(`--no-commit` opts out here too).
-
-| Key                   | Action                                    |
-| --------------------- | ----------------------------------------- |
-| `1` / `2`, `h` / `l`  | switch TODO / BACKLOG tab                 |
-| `j` / `k`, `gg` / `G` | move, jump to first / last                |
-| `Enter`               | full-pane item preview (`esc` back)       |
-| `a`                   | add an item to the active board           |
-| `dd` / `Space`        | mark done                                 |
-| `D` / `p`             | defer to BACKLOG / promote back to TODO   |
-| `Alt+j` / `Alt+k`     | reorder among siblings                    |
-| `E` / `R`             | open the board file in `$EDITOR` / reload |
-| `q`                   | quit                                      |
-
-The TUI is a default cargo feature — for a lean binary without
-it, install with `--no-default-features`:
+`myco` is verb-first — agents drive it — but humans get a visual
+surface through [pavo](https://github.com/9aia/pavo), the org's
+view host. `tamias-driver-myco` (the `myco-driver` crate in this
+repo, installed above) serves the ledger as pavo views:
 
 ```sh
-cargo install --git https://github.com/9aia/myco --no-default-features
+cargo install --git https://github.com/9aia/pavo pavo   # the host, once
+cd your-repo
+pavo view myco:board     # TODO/BACKLOG tree — also myco:status,
+                         # myco:items, myco:issues, …
 ```
+
+Run `pavo view` inside the repo (or pass `--param
+dir=…/project`) so the driver knows which ledger to open. The
+driver is read-only — every mutation stays on a `myco` verb, and
+each verb lands as the same atomic commit (`--no-commit` opts
+out).
 
 ## Agent self-discovery
 

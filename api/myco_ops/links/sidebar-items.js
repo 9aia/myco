@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["sync"],"struct":["SyncReport"]};
+window.SIDEBAR_ITEMS = {"fn":["live_graph","sync"],"struct":["LiveGraph","RelatedItem","SyncReport"]};

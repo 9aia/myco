@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["run","run_reader"]};
+window.SIDEBAR_ITEMS = {"fn":["h","run_reader"]};

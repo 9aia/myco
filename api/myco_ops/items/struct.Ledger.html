@@ -13,10 +13,11 @@ changed since <a href="struct.Ledger.html#method.locate" title="method myco_ops:
 hand-rolled out of bounds.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.item_mut" class="method"><h4 class="code-header">pub fn <a href="#method.item_mut" class="fn">item_mut</a>(&amp;mut self, loc: &amp;<a class="struct" href="struct.TaskLoc.html" title="struct myco_ops::items::TaskLoc">TaskLoc</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;mut Item&gt;</h4></section></summary><div class="docblock"><p>Mutable access to the item at <code>loc</code> — <code>None</code> on a stale loc.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.take" class="method"><h4 class="code-header">pub fn <a href="#method.take" class="fn">take</a>(&amp;mut self, loc: &amp;<a class="struct" href="struct.TaskLoc.html" title="struct myco_ops::items::TaskLoc">TaskLoc</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;Item&gt;</h4></section></summary><div class="docblock"><p>Remove the item at <code>loc</code> — the whole subtree goes with it
-(<code>done</code> on a parent removes its children too). A section
-the removal emptied is dropped (an empty unsectioned run
-can’t even be emitted). <code>None</code> on a stale loc — nothing
-is removed.</p>
+(<code>done</code> on a parent removes its children too). An emptied
+<em>unsectioned</em> run is dropped (it can’t even be emitted);
+an emptied named section stays — a bare <code>##</code> heading emits
+and parses fine, and the heading is user structure, not
+item data. <code>None</code> on a stale loc — nothing is removed.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.move_within" class="method"><h4 class="code-header">pub fn <a href="#method.move_within" class="fn">move_within</a>(&amp;mut self, loc: &amp;mut <a class="struct" href="struct.TaskLoc.html" title="struct myco_ops::items::TaskLoc">TaskLoc</a>, delta: <a class="primitive" href="https://doc.rust-lang.org/1.99.1/std/primitive.isize.html">isize</a>) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.99.1/std/primitive.bool.html">bool</a></h4></section></summary><div class="docblock"><p>Swap the item at <code>loc</code> with a sibling — <code>delta</code> -1 moves up,
 +1 down. Works on nested children (siblings share the
 parent). Returns false at the list edges and on a stale

@@ -33,13 +33,55 @@ Design rules:
 | `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
 | `myco-ops` | ops | myco — ops I/O shell: project discovery, store open/save, commit-per-mutation, verb plumbing |
 | `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
+| `myco-driver` | adapter | tamias-driver-myco — pavo view driver over a repo's project/ ledger (reads via myco-ops) |
 | `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
 | `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
 | `myco-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `myco-store-md` | adapter | Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec |
 | `myco-testkit` | adapter | Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec |
-| `myco-tui` | adapter | myco — interactive board TUI (ratatui); a thin front-end over myco-ops |
-| `myco` | binary | myco — project management, grown not built: agent-first PM CLI |
+| `myco` | binary | myco — records engine for agent work — views + mutations; project management is the shipped prelude |
+
+## The engine and the prelude
+
+The shape that emerged rather than being designed: **myco is a
+records + views + mutations engine, and PM is its shipped prelude**
+(P-009). `myco init` seeds that prelude — the five `[[kinds]]`, the
+builtin views, the registry verbs — so editing config isn't
+customizing a PM tool, it's programming an engine whose default
+program happens to be project management.
+
+```text
+            engine (code)                      prelude (seeded config)
+  ┌────────────────────────────────┐    ┌───────────────────────────────┐
+  │ sources   repo │ index         │    │ [[kinds]]  task issue …       │
+  │ eval      filter→group→sort    │    │ [views]    board open hot …   │
+  │ emits     list board md json   │    │ [verbs]    alias view-emit …  │
+  │ dispatch  one registry table   │    └───────────────────────────────┘
+  └────────────────────────────────┘
+      owns, must never be data            declared, layered, shadowable
+```
+
+A read is `universe → eval → emit`:
+
+| stage | knob | values |
+| --- | --- | --- |
+| universe | `source` | `repo` (this worktree) · `index` (the registered-repo union) |
+| eval | `filter → group_by → sort → limit` | a `ViewSpec`, from config or flags |
+| emit | `format` | `list` · `board` · `md` · `json` · `repos` |
+
+Every feature gets asked one question — **engine or prelude?**
+Engine answers generalize (a new source, axis or format); prelude
+answers configure (which kinds, views and verbs ship seeded).
+
+### What stays code
+
+The moat is what must be *owned* rather than declared: the markdown
+file spec, atomic commit-per-mutation on `project`, the state
+machine, the id registry. `Item` keeps fixed semantics — a schema
+DSL over arbitrary fields would make this jq-over-markdown, a
+different and worse product. Mutations stay code as well: the
+prelude configures *what* exists, never *how* writes behave
+(ADR-0004, one registry).
 
 ## Boundary — work memory only
 

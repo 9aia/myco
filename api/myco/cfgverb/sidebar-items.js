@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cfg_root","emit","run","split_globals","warn_if_shadowed","wire"]};

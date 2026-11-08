@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["FILE_KINDS"],"enum":["PmDest"],"fn":["adopt_or_normalize","commit_pm_removal","convert_sections","first_heading","materialize","migrate_ids","migrate_pm","migrate_project","pm_dest","read_str","run"],"struct":["AdoptClaims","Stats"]};
+window.SIDEBAR_ITEMS = {"enum":["PmDest"],"fn":["adopt_or_normalize","adopt_title","commit_pm_removal","convert_sections","demote","file_specs","first_heading","h","materialize","migrate_ids","migrate_pm","migrate_project","pm_dest","pspec","read_str"],"struct":["AdoptClaims","Stats"]};

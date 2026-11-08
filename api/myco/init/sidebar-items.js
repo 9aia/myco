@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["IGNORE_COMMENT","IGNORE_ENTRY"],"fn":["ensure","ensure_gitignore","repo_name","run"],"struct":["InitOutcome"]};
+window.SIDEBAR_ITEMS = {"constant":["IGNORE_COMMENT","IGNORE_ENTRY","MYCO_TOML_SEED"],"fn":["ensure","ensure_gitignore","h","repo_name","seed_myco_toml"],"struct":["InitOutcome"]};

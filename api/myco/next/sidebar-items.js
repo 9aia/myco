@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["claim_owner","line","pick","run","spec"],"struct":["NextFlags"]};
+window.SIDEBAR_ITEMS = {"fn":["claim_owner","h","line","next_flags","pick","spec"],"struct":["NextFlags"]};

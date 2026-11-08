@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ItemKind"],"fn":["require_kind"],"struct":["ItemId","ParseItemIdError","ParseItemKindError"]};
+window.SIDEBAR_ITEMS = {"fn":["require_kind"],"struct":["ItemId","ItemKind","ParseItemIdError","ParseItemKindError"]};

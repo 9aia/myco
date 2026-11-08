@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["document","run","schema"]};
+window.SIDEBAR_ITEMS = {"fn":["document","h","schema"]};
