@@ -147,4 +147,19 @@
 <a href=#147 id=147 data-nosnippet>147</a>    status.map_err(|e| <span class="macro">format!</span>(<span class="string">"$EDITOR {editor}: {e}"</span>))<span class="question-mark">?</span>;
 <a href=#148 id=148 data-nosnippet>148</a>    <span class="prelude-val">Ok</span>(())
 <a href=#149 id=149 data-nosnippet>149</a>}
+<a href=#150 id=150 data-nosnippet>150</a>
+<a href=#151 id=151 data-nosnippet>151</a><span class="attr">#[cfg(test)]
+<a href=#152 id=152 data-nosnippet>152</a>#[allow(clippy::unwrap_used)]
+<a href=#153 id=153 data-nosnippet>153</a></span><span class="kw">mod </span>tests {
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="doccomment">/// The hook body itself — a caught panic still runs it, which
+<a href=#157 id=157 data-nosnippet>157</a>    /// exercises the terminal-restore path (a no-op without a tty).
+<a href=#158 id=158 data-nosnippet>158</a>    </span><span class="attr">#[test]
+<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="kw">fn </span>panic_hook_restores_the_terminal() {
+<a href=#160 id=160 data-nosnippet>160</a>        install_panic_hook();
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>r = std::panic::catch_unwind(|| <span class="macro">panic!</span>(<span class="string">"boom"</span>));
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="macro">assert!</span>(r.is_err());
+<a href=#163 id=163 data-nosnippet>163</a>    }
+<a href=#164 id=164 data-nosnippet>164</a>}
 </code></pre></div></section></main></body></html>

@@ -2231,23 +2231,32 @@ the branch history is the audit trail. `--no-commit` (or the
 
 ## The interactive board
 
-`myco ui` opens a full-screen board over `TODO.md` and
-`BACKLOG.md` — the human cockpit while agents drive the verbs.
-Every mutation runs through the same ops the CLI uses, so a
-keypress that changes the ledger lands as the same atomic commit
-(`--no-commit` opts out here too).
+`myco ui` opens a full-screen board over `TODO.md`, `BACKLOG.md`,
+and the file-backed kinds (issues, proposals, plans, ADRs) — the
+human cockpit while agents drive the verbs. Every mutation runs
+through the same ops the CLI uses, so a keypress that changes the
+ledger lands as the same atomic commit (`--no-commit` opts out
+here too). The board auto-reloads when the ledger changes on disk
+— other `myco` invocations, `git pull`, hand-edits — no keypress
+needed; `R` forces one anyway.
 
-| Key                   | Action                                    |
-| --------------------- | ----------------------------------------- |
-| `1` / `2`, `h` / `l`  | switch TODO / BACKLOG tab                 |
-| `j` / `k`, `gg` / `G` | move, jump to first / last                |
-| `Enter`               | full-pane item preview (`esc` back)       |
-| `a`                   | add an item to the active board           |
-| `dd` / `Space`        | mark done                                 |
-| `D` / `p`             | defer to BACKLOG / promote back to TODO   |
-| `Alt+j` / `Alt+k`     | reorder among siblings                    |
-| `E` / `R`             | open the board file in `$EDITOR` / reload |
-| `q`                   | quit                                      |
+| Key                            | Action                                       |
+| ------------------------------ | -------------------------------------------- |
+| `1` / `2` / `3`, `h` / `l`     | TODO / BACKLOG / FILES tabs                  |
+| `j` / `k`, `gg` / `G`, `{`/`}` | move · ends · section jumps                  |
+| `Enter`                        | full-pane item preview (`j`/`k` scroll, esc) |
+| `a`                            | add an item (TODO/BACKLOG only)              |
+| `Space` / `dd`, `D`, `p`       | done · defer to BACKLOG · promote to TODO    |
+| `Alt+j` / `Alt+k`              | reorder among siblings                       |
+| `/`, `F`                       | live filter · clear it                       |
+| `:`                            | command line — `:q` `:w` `:e` `:<id>` `:set` |
+| `E`, `R`, `?`                  | `$EDITOR` · reload · keybind help            |
+| `q`, `Ctrl-C`                  | quit                                         |
+| click, wheel                   | select item / tab · scroll                   |
+
+`--view org-board` (or any `source = "index"` view) swaps the repo
+ledger for the cross-repo index universe — rows are `repo:ID` and
+verbs write the owning repo's worktree.
 
 The TUI is a default cargo feature — for a lean binary without
 it, install with `--no-default-features`:
