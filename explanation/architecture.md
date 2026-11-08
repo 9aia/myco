@@ -37,6 +37,7 @@ Design rules:
 | `myco-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `myco-store-md` | adapter | Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec |
 | `myco-testkit` | adapter | Golden fixtures + conformance: frozen md emit snapshots and proptest round-trips for the project/ file spec |
+| `myco-tui` | adapter | myco — interactive board TUI (ratatui); a thin front-end over myco-ops |
 | `myco` | binary | myco — records engine for agent work — views + mutations; project management is the shipped prelude |
 
 

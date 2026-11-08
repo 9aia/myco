@@ -15,4 +15,5 @@ documented at source (doc comments).
 - [myco-shell](/myco/api/myco_shell/index.html) — adapter
 - [myco-store-md](/myco/api/myco_store_md/index.html) — adapter
 - [myco-testkit](/myco/api/myco_testkit/index.html) — adapter
+- [myco-tui](/myco/api/myco_tui/index.html) — adapter
 - [myco](/myco/api/myco/index.html) — binary
