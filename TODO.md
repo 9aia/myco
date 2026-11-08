@@ -12,3 +12,4 @@
 - [ ] T-048 task-placeholder-3 · pri:low · created:2026-11-08
 - [ ] T-049 task-placeholder-4 · pri:low · created:2026-11-08
 - [ ] T-050 task-placeholder-5 · pri:low · created:2026-11-08
+- [ ] T-051 task-placeholder-6 · pri:low · created:2026-11-08
