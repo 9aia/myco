@@ -1,1 +1,1 @@
-{"id":"","ws":"myco","actor":"luis","ts":1794169728,"op":{"op":"claim","glob":"docs/**","ttl_secs":3600}}
+{"id":"","ws":"myco","actor":"luis","ts":1794172767,"op":{"op":"presence","status":"left"}}
