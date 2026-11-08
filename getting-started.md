@@ -10,14 +10,21 @@ handoffs — that lives on its own orphan branch.
 ## Install
 
 The crates.io name `myco` belongs to an unrelated project —
-install from the repo:
+install from the repo. Pick one:
 
 ```sh
+npm install -g 9aia/myco      # easiest — bootstraps via cargo
 cargo install --git https://github.com/9aia/myco myco
 ```
 
-The trailing `myco` selects the package — the repo is a workspace,
-so cargo needs to know which member to install. To also get the
+The npm package is a thin shim: its postinstall (and first `myco`
+run, if scripts were skipped) runs `cargo install --git … myco`,
+so **Rust + cargo are still required** — the first build takes a
+minute or two.
+
+The trailing `myco` on the cargo command selects the package —
+the repo is a workspace, so cargo needs to know which member to
+install. To also get the
 [pavo](https://github.com/9aia/pavo) view driver
 (`tamias-driver-myco`, see below):
 
