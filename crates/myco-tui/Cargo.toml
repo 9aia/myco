@@ -16,6 +16,7 @@ myco-store-md.workspace = true
 ratatui.workspace = true
 crossterm.workspace = true
 camino.workspace = true
+notify = "8.2.2"
 
 [dev-dependencies]
 portable-pty = "0.9.0"

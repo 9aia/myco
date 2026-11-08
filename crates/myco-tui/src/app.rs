@@ -215,6 +215,17 @@ pub struct Model {
     /// a write preserving mtime *and* size still surfaces within
     /// ~`FP_FULL_REHASH` polls (~2s at the 250ms tick).
     fp_calls: u32,
+    /// OS filesystem watcher — `tick`'s fast path. `None` when the
+    /// platform/backend can't watch; the fingerprint fallback still
+    /// applies. Re-armed by `reload` (org membership can change).
+    watcher: Option<notify::RecommendedWatcher>,
+    /// Event channel paired with `watcher`.
+    watch_rx: Option<std::sync::mpsc::Receiver<notify::Result<notify::Event>>>,
+    /// `tick` counter — the first tick and every
+    /// [`FP_FALLBACK_TICKS`]-th re-run the fingerprint scan, covering
+    /// events a watcher can miss (queue overflow, mounts added
+    /// after launch).
+    tick_n: u32,
     /// Preview pane scroll offset (`j`/`k`/`PgUp`/`PgDn`/`g`/`G`
     /// in Preview mode; clamped to the content at draw time).
     pub preview_scroll: u16,
@@ -322,6 +333,9 @@ impl Model {
             watch_fp: 0,
             fp_cache: HashMap::new(),
             fp_calls: 0,
+            watcher: None,
+            watch_rx: None,
+            tick_n: 0,
             preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
@@ -334,6 +348,7 @@ impl Model {
         m.rebuild_rows();
         m.restore_session();
         m.watch_fp = m.fingerprint();
+        m.arm_watch();
         if let Some(name) = &view {
             m.status = format!("view: {name}");
         }
@@ -532,18 +547,82 @@ impl Model {
         self.rebuild_rows();
         self.reselect(sel_id, sel_repo.as_deref(), at);
         self.watch_fp = self.fingerprint();
+        self.arm_watch();
     }
 
     /// Event-loop heartbeat — reload when the watched trees changed
     /// on disk: another `myco` invocation, a `git pull`/checkout in
     /// the worktree, a hand-edit committed elsewhere, or (index
-    /// boards) registry/snapshot writes under the data dir. The
-    /// scan stats every file but only re-reads contents when
-    /// (mtime, len, dev, ino) move — plus a periodic full rehash —
-    /// so it stays cheap enough to run every poll cycle.
+    /// boards) registry/snapshot writes under the data dir. The OS
+    /// watcher ([`Self::arm_watch`]) is the fast path — its events
+    /// only *wake* a fingerprint scan, which arbitrates: own
+    /// mutations and other no-ops compare equal and skip the
+    /// reload. The scan also runs on the first tick and every
+    /// [`FP_FALLBACK_TICKS`]-th after that, covering events a
+    /// watcher can miss.
     pub fn tick(&mut self) {
+        self.tick_n += 1;
+        let dirty = self.drain_watch();
+        let scan_due = self.tick_n == 1 || self.tick_n.is_multiple_of(FP_FALLBACK_TICKS);
+        if !dirty && !scan_due {
+            return;
+        }
         if self.fingerprint() != self.watch_fp {
             self.reload();
+        }
+    }
+
+    /// Drain pending watcher events — `true` when any is relevant
+    /// (see [`watch_relevant`]). Channel errors count as relevant:
+    /// a dead watcher means we can no longer trust silence.
+    fn drain_watch(&mut self) -> bool {
+        let Some(rx) = &self.watch_rx else {
+            return false;
+        };
+        rx.try_iter().any(|ev| match ev {
+            Ok(e) => watch_relevant(&e),
+            Err(_) => true,
+        })
+    }
+
+    /// (Re)arm the filesystem watcher on the same roots
+    /// [`Self::fingerprint`] scans. Called after open and every
+    /// reload — org membership can change, and a fresh channel also
+    /// drops events describing the just-loaded state. Failure (or a
+    /// platform without a backend) leaves `watcher`/`watch_rx` as
+    /// `None`; the fingerprint fallback keeps working.
+    fn arm_watch(&mut self) {
+        self.watcher = None;
+        self.watch_rx = None;
+        let roots = self.watch_roots();
+        if roots.is_empty() {
+            return;
+        }
+        use notify::Watcher as _;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let Ok(mut w) = notify::recommended_watcher(tx) else {
+            return;
+        };
+        if roots
+            .iter()
+            .any(|r| w.watch(r, notify::RecursiveMode::Recursive).is_ok())
+        {
+            self.watcher = Some(w);
+            self.watch_rx = Some(rx);
+        }
+    }
+
+    /// The trees `fingerprint` scans — also what the watcher
+    /// covers: the `project/` worktree in repo mode; the index
+    /// data dir plus every repo's worktree on an index board.
+    fn watch_roots(&self) -> Vec<PathBuf> {
+        match &self.orgs {
+            Some(orgs) => {
+                let mut roots = vec![data_dir()];
+                roots.extend(orgs.iter().map(|o| o.worktree.clone()));
+                roots
+            }
+            None => self.proj.iter().map(|p| p.worktree.clone()).collect(),
         }
     }
 
@@ -1459,6 +1538,37 @@ impl Model {
 /// write preserving mtime *and* size goes unnoticed (~2s of polls).
 const FP_FULL_REHASH: u32 = 8;
 
+/// Every this-many-th `tick` re-runs the fingerprint scan even when
+/// the watcher reported nothing — ~5s at the 250ms poll. Covers
+/// events a watcher can miss (queue overflow, mounts appearing
+/// after launch); the first tick always scans to baseline.
+const FP_FALLBACK_TICKS: u32 = 20;
+
+/// Does a watcher event describe ledger state? Read access and
+/// pure-metadata modifies (`touch`, chmod — the fingerprint already
+/// ignores those) are skipped, as are events touching only `.git`
+/// internals — git's own churn (gc, fetch, index) isn't board data.
+/// Everything else — creates, removes, renames, data writes, rescan
+/// flags, path-less events, watcher errors — counts, so a missed
+/// notification can only delay, never hide.
+fn watch_relevant(ev: &notify::Event) -> bool {
+    use notify::event::{EventKind, Flag, ModifyKind};
+    if ev.flag() == Some(Flag::Rescan) {
+        return true;
+    }
+    if matches!(
+        ev.kind,
+        EventKind::Access(_) | EventKind::Modify(ModifyKind::Metadata(_))
+    ) {
+        return false;
+    }
+    let paths = &ev.paths;
+    paths.is_empty()
+        || !paths
+            .iter()
+            .all(|p| p.components().any(|c| c.as_os_str() == ".git"))
+}
+
 /// Cached content hash for one file — reused while the stat tuple
 /// still matches, so a steady-state fingerprint only stats.
 #[derive(Clone, Copy)]
@@ -1738,6 +1848,9 @@ pub(crate) mod tests {
             watch_fp: 0,
             fp_cache: HashMap::new(),
             fp_calls: 0,
+            watcher: None,
+            watch_rx: None,
+            tick_n: 0,
             preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
@@ -1748,6 +1861,7 @@ pub(crate) mod tests {
         };
         m.rebuild_rows();
         m.watch_fp = m.fingerprint();
+        m.arm_watch();
         // keep the tempdir alive for the test's duration
         std::mem::forget(dir);
         m
@@ -2284,6 +2398,27 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn watcher_events_wake_the_scan_without_waiting_for_fallback() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        m.tick(); // first tick baselines the fingerprint
+        let mut other = items::load_ledger(store(&m)).unwrap();
+        other.put_todo(t(2), None);
+        items::save_ledger(store(&m), &other).unwrap();
+        // the OS event should surface the write in a tick or two —
+        // far inside the FP_FALLBACK_TICKS window
+        let mut seen = false;
+        for _ in 0..10 {
+            m.tick();
+            if m.ledger.locate(ItemId::new(ItemKind::Task, 2)).is_some() {
+                seen = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(seen, "watcher event never woke a reload");
+    }
+
+    #[test]
     fn related_groups_edges_in_and_out() {
         let mut m = model(|l| {
             l.put_todo(t(1).blocks(ItemId::new(ItemKind::Task, 2)), None);
@@ -2553,6 +2688,9 @@ pub(crate) mod tests {
             watch_fp: 0,
             fp_cache: HashMap::new(),
             fp_calls: 0,
+            watcher: None,
+            watch_rx: None,
+            tick_n: 0,
             preview_scroll: 0,
             pending: None,
             board_area: Rect::default(),
@@ -2563,6 +2701,7 @@ pub(crate) mod tests {
         };
         m.rebuild_rows();
         m.watch_fp = m.fingerprint();
+        m.arm_watch();
         (m, cell)
     }
 

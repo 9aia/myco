@@ -21,11 +21,13 @@
 //! `q`/`Ctrl-C` quit — plus mouse:
 //! the wheel scrolls, a click selects an item row or a board tab,
 //! a double-click opens the row.
-//! The board also auto-reloads: every poll cycle fingerprints the
-//! watched trees (`project/` in repo mode; the index data dir +
-//! each repo's worktree on index boards) and reloads on change, so
-//! writes from other `myco` invocations, `git pull`, or hand-edits
-//! show up without a keypress.
+//! The board also auto-reloads: an OS filesystem watcher (inotify /
+//! kqueue / FSEvents via `notify`) covers the `project/` worktree in
+//! repo mode — or the index data dir + each repo's worktree on
+//! index boards — and wakes a content fingerprint scan on change,
+//! with a slow periodic scan as fallback. Writes from other `myco`
+//! invocations, `git pull`, or hand-edits show up without a
+//! keypress.
 
 mod app;
 mod render;
