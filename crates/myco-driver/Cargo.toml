@@ -26,5 +26,12 @@ serde_json.workspace = true
 # `version` is the crates.io fallback once pavo-protocol publishes.
 pavo-protocol = { git = "https://github.com/9aia/pavo", version = "0.1.0" }
 
+[dev-dependencies]
+# Conformance gate — `cargo test` runs pavo's wire-contract suite
+# against this crate's own `tamias-driver-myco serve` binary.
+# Git dep to match pavo-protocol above (path deps break
+# `cargo install --git` / fresh-clone resolution).
+pavo-testkit = { git = "https://github.com/9aia/pavo" }
+
 [lints]
 workspace = true

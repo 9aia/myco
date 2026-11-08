@@ -92,6 +92,11 @@ api:
   file: crates/myco-driver/src/main.rs
   line: 40
   module: myco-driver
+- name: driver_passes_pavo_conformance
+  kind: function
+  file: crates/myco-driver/tests/conformance.rs
+  line: 12
+  module: myco-driver
 - name: error_payload
   kind: function
   file: crates/myco-driver/src/data.rs
@@ -197,12 +202,7 @@ api:
   file: crates/myco-driver/src/main.rs
   line: 98
   module: myco-driver
-- name: manifest
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 284
-  module: myco-driver
-api_omitted: 23
+api_omitted: 24
 deps:
 - camino
 - myco-config
@@ -214,6 +214,7 @@ deps:
 - pavo-protocol
 - serde
 - serde_json
+- pavo-testkit
 - myco-core
 - myco-ops
 - myco-store
@@ -227,17 +228,20 @@ verify:
 - crates/myco-driver/src/data.rs
 - crates/myco-driver/src/main.rs
 - crates/myco-driver/src/views.rs
+- crates/myco-driver/tests/conformance.rs
 provenance:
   files:
   - crates/myco-driver/Cargo.toml
   - crates/myco-driver/src/data.rs
   - crates/myco-driver/src/main.rs
   - crates/myco-driver/src/views.rs
+  - crates/myco-driver/tests/conformance.rs
   hashes:
-  - 8abb804fc6678f6c8ed6b8c41a8114a7b2b6e744
+  - 1fc300154ce77cd28614d40a1b5bcddc7b9157aa
   - 0f275d5c8939904eba41c54b9bacb80a1fbc902b
   - 5fc2690f8c598f20071b740bf71c936ef538a1ba
   - 58fe6d94eea3f6797bdab2c3b78243afc4ac15c0
-  commit_sha: b74e0c8042eac0bbfd8d9a95c748c0635541a670
-  generated_at: '1794166472'
+  - bcf687da55f4d327b1667d16099ac7104b0abdb8
+  commit_sha: ac9c703181afb9708dd1d70c60432a286fa44eea
+  generated_at: '1794178209'
   generator: kuda-template/0.1.2
