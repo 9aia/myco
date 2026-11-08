@@ -1,1 +1,1 @@
-{"id":"","ws":"devin-win-shim","actor":"luis","ts":1794168982,"op":{"op":"claim","glob":"bin/**","ttl_secs":3600}}
+{"id":"","ws":"devin-win-shim","actor":"luis","ts":1794168983,"op":{"op":"claim","glob":"package.json","ttl_secs":3600}}
