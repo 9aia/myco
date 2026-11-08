@@ -34,6 +34,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco item`↴](#myco-item)
 * [`myco item show`↴](#myco-item-show)
 * [`myco item set`↴](#myco-item-set)
+* [`myco item move`↴](#myco-item-move)
 * [`myco absorb`↴](#myco-absorb)
 * [`myco absorb comments`↴](#myco-absorb-comments)
 * [`myco absorb jira`↴](#myco-absorb-jira)
@@ -58,7 +59,6 @@ This document contains the help content for the `myco` command-line program.
 * [`myco handoff`↴](#myco-handoff)
 * [`myco interrupt`↴](#myco-interrupt)
 * [`myco resume`↴](#myco-resume)
-* [`myco ui`↴](#myco-ui)
 * [`myco serve`↴](#myco-serve)
 * [`myco batch`↴](#myco-batch)
 
@@ -76,7 +76,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `proposal` — Design proposals under `proposals/` (`P-NNN`).
 * `plan` — Execution plans under `plans/` (`PL-NNN`).
 * `adr` — Architecture decision records under `adrs/` (`ADR-NNNN`).
-* `item` — Kind-agnostic item verbs — show / set.
+* `item` — Kind-agnostic item verbs — show / set / move.
 * `absorb` — Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps.
 * `index` — The derived index: register repos, query/rebuild snapshots.
 * `org` — Cross-repo scaffolding — re-run `init` on every registered repo. Cross-repo *views* are `myco view org-board|org-status` (index-sourced).
@@ -86,14 +86,13 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `check` — Validate the ledger (schemas, state machine, ids, refs) and the worktree it lives in (detached HEAD, wrong branch, unpushed commits); also validates the managed AGENTS.md block on the repo root. Findings carry a severity: `error` exits 1, `warning` is reported and costs nothing (ADR-0002). `--fix` applies safe repairs + commits, including reattaching a detached worktree.
 * `migrate` — Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch.
 * `commit` — Stage + commit worktree changes (conventional message).
-* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; bare `myco view` lists views.
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit.
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized.
 * `report` — Aging + velocity + blocked — how the ledger is trending.
 * `handoff` — Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only).
-* `interrupt` — A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.
+* `interrupt` — A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Without an id, `--session <id>` is the teardown: every item claimed under that session reverts in one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.
 * `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call.
-* `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = "index"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
 * `serve` — Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it.
 * `batch` — One-shot `serve` — NDJSON verb requests from stdin or `--file`, one JSON-RPC response line per request, dispatched through the same served surface. Per-line errors never fail the run; mutations keep per-request commits (`--no-commit`/`$MYCO_NO_COMMIT` apply). stdin IS the wire here too — requests that would read it are rejected.
 
@@ -528,7 +527,7 @@ Mark an ADR superseded by another — the old file gets `superseded_by:` + statu
 
 ## `myco item`
 
-Kind-agnostic item verbs — show / set.
+Kind-agnostic item verbs — show / set / move.
 
 **Usage:** `myco item <COMMAND>`
 
@@ -536,6 +535,7 @@ Kind-agnostic item verbs — show / set.
 
 * `show` — Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
 * `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it).
+* `move` — Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:` dropped — it names source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
 
 
 
@@ -572,6 +572,25 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--unblock <UNBLOCK>` — Remove a blocks dep — repeatable or comma-separated.
 * `--epic <EPIC>` — Epic name — `""` clears the epic.
 * `--milestone <MILESTONE>` — Milestone name — `""` clears the milestone.
+* `--session <SESSION>` — Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state.
+
+
+
+## `myco item move`
+
+Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:` dropped — it names source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
+
+**Usage:** `myco item move [OPTIONS] --to <to> <id>`
+
+###### **Arguments:**
+
+* `<ID>` — Any item id.
+
+###### **Options:**
+
+* `--to <TO>` — Destination — a repo root, its `project/` worktree, or a registered repo name.
+* `--note <NOTE>` — Extra context appended to the source's `moved to` handoff note.
+* `--actor <ACTOR>` — Who moved it (default `cli`).
 
 
 
@@ -775,7 +794,7 @@ Stage + commit worktree changes (conventional message).
 
 ## `myco view`
 
-Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; bare `myco view` lists views.
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 
 **Usage:** `myco view [OPTIONS] [name]`
 
@@ -786,7 +805,7 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 ###### **Options:**
 
 * `--list` — List defined views and exit.
-* `--md` — Emit a markdown table (board format).
+* `--md` — Emit a markdown table (board/repos formats).
 * `--all` — Show every row — no cap.
 * `--kind <KIND>` — Item kinds — task|issue|proposal|adr|plan (repeatable/comma-separated).
 * `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred (repeatable/comma-separated).
@@ -804,7 +823,7 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--group-by <GROUP_BY>` — Group axis — status|priority|kind|owner|epic|milestone|repo.
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction.
 * `--limit <N>` — Keep the first N items after sorting.
-* `--format <FORMAT>` — Renderer — list|board.
+* `--format <FORMAT>` — Renderer — list|board|repos.
 
 
 
@@ -830,6 +849,7 @@ The single highest-priority open item — "what should I work on" (a `view` eval
 * `--superseded` — Items superseded by another (ADRs).
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction. Default `pri,id`.
 * `--claim` — Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else `cli`); `--owner` names the claimer here and doesn't filter. Mutating: one commit.
+* `--session <SESSION>` — With `--claim`: tag the claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it).
 
 
 
@@ -873,19 +893,19 @@ Attach resumable state at session end — appends a dated entry to `handoffs/<ID
 
 ## `myco interrupt`
 
-A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.
+A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Without an id, `--session <id>` is the teardown: every item claimed under that session reverts in one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.
 
-**Usage:** `myco interrupt [OPTIONS] <id>`
+**Usage:** `myco interrupt [OPTIONS] [id]`
 
 ###### **Arguments:**
 
-* `<ID>` — Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`, `PL-NNN`).
+* `<ID>` — Any item id (`T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`, `PL-NNN`) — omit for the `--session` bulk teardown.
 
 ###### **Options:**
 
 * `--note <TEXT>` — Extra context appended to the `interrupted` note.
 * `--actor <ACTOR>` — Who interrupted it (default `cli`).
-* `--session <SESSION>` — Session provenance — a sepia session id, `cli:<pid>`, any id string.
+* `--session <SESSION>` — Session scope — a sepia session id, `cli:<pid>`, any id string. With `id`: interrupt only when the item's claim tag matches. Without `id`: teardown — interrupt every item claimed under it.
 
 
 
@@ -902,18 +922,6 @@ Minimal context block to restart work on an item — the item, `blocks:` dep tit
 ###### **Options:**
 
 * `--last <LAST>` — Only the latest N handoff entries (default 10).
-
-
-
-## `myco ui`
-
-Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = "index"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
-
-**Usage:** `myco ui [OPTIONS]`
-
-###### **Options:**
-
-* `--view <NAME>` — Open with a named view's filter narrowing every board; index-sourced views load the cross-repo universe.
 
 
 

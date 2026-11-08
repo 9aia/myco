@@ -67,8 +67,8 @@ printf '{"id":1,"method":"view","params":{"name":"hot"}}\n' | myco batch
 
 ## Verbs on top of views — `[verbs]`
 
-`[verbs.<name>]` declares a verb of your own (P-007): `myco
-<name>` then works like a builtin on every front end — CLI,
+`[verbs.<name>]` declares a verb of your own (P-007): `myco <name>`
+then works like a builtin on every front end — CLI,
 `myco batch`, and `myco serve` (it joins `initialize`'s method
 list). Two kinds, both read-only:
 
