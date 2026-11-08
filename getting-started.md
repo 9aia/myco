@@ -10,12 +10,16 @@ The crates.io name `myco` belongs to an unrelated project —
 install from the repo. Pick one:
 
 ```sh
-npm install -g 9aia/myco      # easiest — bootstraps via cargo
+npm install -g 9aia/myco      # easiest — first `myco` run builds via cargo
 cargo install --git https://github.com/9aia/myco myco
 ```
 
-The npm package is a thin shim: its postinstall (and first `myco`
-run, if scripts were skipped) runs `cargo install --git … myco`,
+On npm ≥ 12, git fetches are gated — add `--allow-git=root`:
+`npm install -g --allow-git=root 9aia/myco`.
+
+The npm package is a thin shim — the first `myco` run builds the
+Rust binary via `cargo install --git … myco` (there's no
+postinstall; npm breaks lifecycle-script cwds on git installs),
 so **Rust + cargo are still required** — the first build takes a
 minute or two.
 
