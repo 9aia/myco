@@ -34,3 +34,4 @@
 - [ ] T-070 task-placeholder-25 · pri:low · created:2026-11-08
 - [ ] T-071 task-placeholder-26 · pri:low · created:2026-11-08
 - [ ] T-072 task-placeholder-27 · pri:low · created:2026-11-08
+- [ ] T-073 task-placeholder-28 · pri:low · created:2026-11-08
