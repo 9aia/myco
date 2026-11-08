@@ -68,7 +68,8 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/myco-index-redb` | Index impl — redb snapshots + `repos.toml` under `~/.local/share/myco` |
 | `crates/myco-ops` | Ops I/O shell — discovery, store open/save, commit-per-mutation, verb plumbing; pure pieces live in core |
 | `crates/myco-testkit` | Golden fixtures + conformance for the file spec |
-| `crates/myco-driver` | `tamias-driver-myco` — pavo view driver (read-only) over `project/`; replaced the TUI |
+| `crates/myco-driver` | `tamias-driver-myco` — pavo view driver (read-only) over `project/` |
+| `crates/myco-tui` | `myco ui` — interactive board TUI (ratatui) over `myco-ops`; default `tui` feature on `myco-cli` |
 | `crates/myco-cli` | The `myco` binary — clap, `--json` everywhere, `manifest`/`gen-cli-docs` |
 | `xtask` | check / test / coverage / install / site |
 
