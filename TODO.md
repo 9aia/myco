@@ -6,3 +6,4 @@
 - [ ] T-041 npm distribution phase 2 — publish @9aia/myco to a registry (npmjs scope vs GitHub Packages) and/or ship prebuilt binaries via GitHub Releases + cargo-dist (dist-workspace.toml exists, ci=none). Phase 1 (git-install shim, e858b78) needs Rust; this removes that requirement · pri:low · created:2026-11-08
 - [ ] T-042 task-1-description-placeholder · pri:low · created:2026-11-08
 - [ ] T-043 task-2-description-placeholder · pri:low · created:2026-11-08
+- [ ] T-045 task-3 · pri:low · created:2026-11-08
