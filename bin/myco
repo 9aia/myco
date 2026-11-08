@@ -1,8 +1,10 @@
 #!/bin/sh
 # myco npm shim — the real binary is the Rust build under
-# $CARGO_HOME/bin (or ~/.cargo/bin). Bootstrap it via cargo on
-# first use if the postinstall didn't run (--ignore-scripts) or
-# cargo was missing then.
+# $CARGO_HOME/bin (or ~/.cargo/bin). There is deliberately no
+# postinstall: npm deletes the package cwd before lifecycle
+# scripts on git installs (npm#…), which crashed `node install.js`
+# at startup. The shim builds on first use instead — same command,
+# same result, no npm script quirks.
 set -e
 
 cargo_bin="${CARGO_HOME:-$HOME/.cargo}/bin/myco"
