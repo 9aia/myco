@@ -14,10 +14,13 @@
 //! reference (`9aia/pm`, `docs/tui.md` there) — the keymap is
 //! vim-style: `j/k` move, `h/l`/`1`/`2`/`3` boards, `Space`/`dd` done,
 //! `D` defer, `p` promote, `Alt+↑/↓` reorder, `a` add, `/` filter,
-//! `:` command line (`:q` `:w` `:e` `:<id>` `:set id`), `Enter`/`esc`
-//! preview (`j`/`k` scroll), `E` $EDITOR, `R` reload, `?` help,
+//! `:` command line (`:q` `:w` `:e` `:<id>` `:set id`), `Enter`/`→`/
+//! double-click open the preview (`j`/`k` scroll, `←`/`esc` back —
+//! `←` pops a drill-down stack of the boards/items you opened
+//! through), `E` $EDITOR, `R` reload, `?` help,
 //! `q`/`Ctrl-C` quit — plus mouse:
-//! the wheel scrolls, a click selects an item row or a board tab.
+//! the wheel scrolls, a click selects an item row or a board tab,
+//! a double-click opens the row.
 //! The board also auto-reloads: every poll cycle fingerprints the
 //! watched trees (`project/` in repo mode; the index data dir +
 //! each repo's worktree on index boards) and reloads on change, so

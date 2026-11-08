@@ -342,8 +342,8 @@ fn related_lines(m: &Model, item: &myco_core::Item) -> Vec<Line<'static>> {
 /// Normal-mode hint sets, widest first — `pick_hints` takes the
 /// first that fits so narrow terminals degrade instead of cropping.
 const HINTS: [&str; 3] = [
-    "j/k move · 1/2/3 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · / filter · : cmd · enter preview · E edit · R reload · ? help · q quit",
-    "j/k move · space done · a add · / filter · : cmd · enter · E edit · ? help · q quit",
+    "j/k move · 1/2/3 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · / filter · : cmd · enter/→ open · ← back · E edit · R reload · ? help · q quit",
+    "j/k move · space done · a add · / filter · : cmd · enter/→ · ← back · E edit · ? help · q quit",
     "? help · q quit",
 ];
 
@@ -354,7 +354,7 @@ fn pick_hints(mode: Mode, width: usize) -> &'static str {
         Mode::Add => "enter add · esc cancel",
         Mode::Filter => "enter keep · esc clear",
         Mode::Command => "enter run · esc cancel",
-        Mode::Preview => "j/k scroll · esc back",
+        Mode::Preview => "j/k scroll · ←/esc back",
         Mode::Help => "esc/?/q close",
         Mode::Normal => HINTS
             .iter()
@@ -432,10 +432,11 @@ fn help_lines() -> Vec<Line<'static>> {
         group("nav"),
         bind("j/k, ↑/↓", "move"),
         bind("gg/G · {/}", "ends · sections"),
-        bind("enter", "preview (j/k scroll)"),
+        bind("enter, →", "preview (j/k scroll)"),
+        bind("←", "back"),
         group("tabs"),
         bind("1 / 2 / 3", "TODO / BACKLOG / FILES"),
-        bind("h/l, ←/→", "switch board"),
+        bind("h/l", "switch board"),
         group("items (TODO/BACKLOG)"),
         bind("space, dd", "mark done"),
         bind("D", "defer → BACKLOG"),
@@ -447,6 +448,7 @@ fn help_lines() -> Vec<Line<'static>> {
         bind("R", "reload"),
         group("mouse"),
         bind("click, wheel", "select, scroll"),
+        bind("double-click", "open preview"),
         group("misc"),
         bind("/, F", "filter / clear"),
         bind(":", "command line"),
@@ -568,7 +570,7 @@ mod tests {
         // short but narrow: stays one column, crops
         assert_eq!(help_columns(&lines, Rect::new(0, 0, 30, 10)).len(), 1);
         // short and wide: folds into columns that fit the height
-        let cols = help_columns(&lines, Rect::new(0, 0, 120, 10));
+        let cols = help_columns(&lines, Rect::new(0, 0, 160, 10));
         assert!(cols.len() >= 2);
         assert!(cols.iter().all(|c| c.len() <= 8));
         assert_eq!(cols.iter().map(Vec::len).sum::<usize>(), lines.len());
@@ -582,7 +584,7 @@ mod tests {
         assert_eq!(pick_hints(Mode::Normal, len(HINTS[1])), HINTS[2]);
         // tiny terminals still get the minimal set (cropped, not absent)
         assert_eq!(pick_hints(Mode::Normal, 0), HINTS[2]);
-        assert_eq!(pick_hints(Mode::Preview, 0), "j/k scroll · esc back");
+        assert_eq!(pick_hints(Mode::Preview, 0), "j/k scroll · ←/esc back");
         // modal modes have their own one-liners
         assert_eq!(pick_hints(Mode::Add, 0), "enter add · esc cancel");
         assert_eq!(pick_hints(Mode::Filter, 0), "enter keep · esc clear");

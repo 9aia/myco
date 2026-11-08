@@ -12,7 +12,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use myco_core::Ledger;
@@ -83,7 +83,8 @@ impl Board {
 pub enum Mode {
     /// Browsing.
     Normal,
-    /// Full-pane item preview (`Enter`, `esc` back).
+    /// Full-pane item preview (`Enter`/`→`/double-click open,
+    /// `←`/`esc` back).
     Preview,
     /// `a` — typing a new item title; `Enter` commits, `esc` drops.
     Add,
@@ -133,6 +134,17 @@ pub enum Row {
         depth: usize,
         repo: Option<String>,
     },
+}
+
+/// One drill-down step — the Normal-mode context `←` restores
+/// after an open: board, the selected item (id + repo tag so it
+/// survives reloads — ids aren't unique across index repos), and
+/// the mode to land in.
+struct NavEntry {
+    board: Board,
+    item: Option<ItemId>,
+    repo: Option<String>,
+    mode: Mode,
 }
 
 /// The whole TUI state.
@@ -217,6 +229,15 @@ pub struct Model {
     /// Tab-bar rect when the frame is tall enough to draw one —
     /// for click-to-switch hit-testing.
     pub tabs_area: Option<Rect>,
+    /// Drill-down stack — every open (`Enter`/`→`/double-click)
+    /// pushes the context it leaves; `←` pops. `esc` exits the
+    /// preview but keeps the trail, so `←` still walks back
+    /// through boards the user drilled through.
+    nav: Vec<NavEntry>,
+    /// Last left-down `(column, row, at)` — crossterm has no
+    /// double-click event, so `mouse` times the downs itself
+    /// (~400ms on the same cell = open).
+    last_click: Option<(u16, u16, Instant)>,
 }
 
 impl Model {
@@ -306,6 +327,8 @@ impl Model {
             board_area: Rect::default(),
             viewport_top: 0,
             tabs_area: None,
+            nav: Vec::new(),
+            last_click: None,
         };
         m.load_files();
         m.rebuild_rows();
@@ -832,8 +855,10 @@ impl Model {
             KeyCode::Char('1') => self.switch_board(0),
             KeyCode::Char('2') => self.switch_board(1),
             KeyCode::Char('3') => self.switch_board(2),
-            KeyCode::Char('h') | KeyCode::Left => self.step_board(-1),
-            KeyCode::Char('l') | KeyCode::Right => self.step_board(1),
+            KeyCode::Char('h') => self.step_board(-1),
+            KeyCode::Char('l') => self.step_board(1),
+            KeyCode::Right => self.open_preview(),
+            KeyCode::Left => self.back(),
             KeyCode::Char('j') | KeyCode::Down if alt => self.mutate(|m| m.reorder(1)),
             KeyCode::Char('k') | KeyCode::Up if alt => self.mutate(|m| m.reorder(-1)),
             KeyCode::Char('j') | KeyCode::Down => self.move_sel(1),
@@ -867,12 +892,7 @@ impl Model {
                 self.filter.clear();
                 self.rebuild_rows();
             }
-            KeyCode::Enter => {
-                if self.selected().is_some() {
-                    self.mode = Mode::Preview;
-                    self.preview_scroll = 0;
-                }
-            }
+            KeyCode::Enter => self.open_preview(),
             KeyCode::Char('E') => self.open_editor(),
             KeyCode::Char('R') => self.reload(),
             KeyCode::Char('?') => self.mode = Mode::Help,
@@ -965,10 +985,51 @@ impl Model {
         }
     }
 
-    /// Preview mode: `esc`/`enter`/`q` back to the board;
+    /// `Enter`/`→`/double-click — push the current context and
+    /// open the selected item in the preview pane. No-op without
+    /// a selection, like `Enter` always was.
+    fn open_preview(&mut self) {
+        if self.selected().is_none() {
+            return;
+        }
+        self.nav.push(NavEntry {
+            board: self.board,
+            item: self.selected_id(),
+            repo: self.selected_repo().map(str::to_owned),
+            mode: self.mode,
+        });
+        self.mode = Mode::Preview;
+        self.preview_scroll = 0;
+    }
+
+    /// `←` — pop the nav stack back to the context that opened
+    /// the preview. Empty stack: in Preview it's just `esc` (back
+    /// to the board on the same item); in Normal it's a no-op —
+    /// `h`/`l` own board switching.
+    fn back(&mut self) {
+        match self.nav.pop() {
+            Some(entry) => {
+                self.board = entry.board;
+                self.mode = entry.mode;
+                let at = self.sel;
+                self.rebuild_rows();
+                self.reselect(entry.item, entry.repo.as_deref(), at);
+                self.preview_scroll = 0;
+            }
+            None => {
+                if self.mode == Mode::Preview {
+                    self.mode = Mode::Normal;
+                }
+            }
+        }
+    }
+
+    /// Preview mode: `esc`/`enter`/`q` back to the board (the nav
+    /// trail survives — `←` still walks it); `←` pops one level;
     /// `j`/`k`/`PgUp`/`PgDn`/`g`/`G` scroll the detail pane.
     fn key_preview(&mut self, k: KeyEvent) -> bool {
         match k.code {
+            KeyCode::Left => self.back(),
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => self.mode = Mode::Normal,
             KeyCode::Char('j') | KeyCode::Down => {
                 self.preview_scroll = self.preview_scroll.saturating_add(1);
@@ -1114,7 +1175,9 @@ impl Model {
     /// Mouse input (Normal mode only — acting on clicks under an
     /// overlay or mid-`a`/`/` edit would be surprising): the wheel
     /// moves the cursor over the board list, a left click picks a
-    /// board tab on the tab row or selects the item row under it.
+    /// board tab on the tab row or selects the item row under it,
+    /// and a second left-down on the same cell within ~400ms
+    /// opens that row like `→`.
     pub fn mouse(&mut self, ev: MouseEvent) {
         if self.mode != Mode::Normal {
             return;
@@ -1132,6 +1195,15 @@ impl Model {
                 }
             }
             MouseEventKind::Down(MouseButton::Left) => {
+                // crossterm emits no double-click kind — time the
+                // downs ourselves
+                let now = Instant::now();
+                let dbl = self.last_click.is_some_and(|(c, r, t)| {
+                    c == ev.column
+                        && r == ev.row
+                        && now.duration_since(t) < Duration::from_millis(400)
+                });
+                self.last_click = Some((ev.column, ev.row, now));
                 if let Some(tabs) = self.tabs_area {
                     if ev.row == tabs.y {
                         if let Some(i) =
@@ -1144,7 +1216,11 @@ impl Model {
                 }
                 if self.board_area.contains(pos) {
                     let row = self.viewport_top + usize::from(ev.row - self.board_area.y);
+                    let item = matches!(self.rows.get(row), Some(Row::Item { .. }));
                     self.select_row(row);
+                    if dbl && item {
+                        self.open_preview();
+                    }
                 }
             }
             _ => {}
@@ -1667,6 +1743,8 @@ pub(crate) mod tests {
             board_area: Rect::default(),
             viewport_top: 0,
             tabs_area: None,
+            nav: Vec::new(),
+            last_click: None,
         };
         m.rebuild_rows();
         m.watch_fp = m.fingerprint();
@@ -2289,6 +2367,141 @@ pub(crate) mod tests {
         assert_eq!(m.preview_scroll, 0);
     }
 
+    fn arrow(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn right_opens_preview_and_left_pops_back() {
+        let mut m = model(|l| {
+            l.put_todo(t(1), None);
+            l.put_todo(t(2), None);
+        });
+        m.key(key('j'));
+        m.key(arrow(KeyCode::Right));
+        assert_eq!(m.mode, Mode::Preview);
+        assert_eq!(m.nav.len(), 1);
+        assert_eq!(m.preview_scroll, 0);
+        // ← restores the board + selected item the open left
+        m.key(key('k')); // scroll inside the preview — harmless
+        m.key(arrow(KeyCode::Left));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.nav.is_empty());
+        assert_eq!(m.board, Board::Todo);
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+        // and → no longer switches boards — h/l own that
+        m.key(arrow(KeyCode::Right));
+        assert_eq!(m.mode, Mode::Preview);
+        m.key(arrow(KeyCode::Left));
+        m.key(arrow(KeyCode::Left)); // empty stack in Normal — no-op
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.board, Board::Todo);
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+    }
+
+    #[test]
+    fn left_with_empty_stack_in_preview_is_esc() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Preview);
+        assert_eq!(m.nav.len(), 1); // Enter pushed like →
+                                    // pop the pushed entry → back on the same item
+        m.key(arrow(KeyCode::Left));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+        // now empty: ← in Preview behaves like esc
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        m.nav.clear(); // simulate a trail that was never pushed
+        m.key(arrow(KeyCode::Left));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+    }
+
+    #[test]
+    fn esc_keeps_the_trail_for_left() {
+        let mut m = model(|l| {
+            l.put_todo(t(1), None);
+            l.put_todo(t(2), None);
+        });
+        m.key(arrow(KeyCode::Right));
+        assert_eq!(m.mode, Mode::Preview);
+        // esc exits the preview but the nav entry survives — ← in
+        // Normal still pops back to the context that opened it
+        m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.nav.len(), 1);
+        m.key(arrow(KeyCode::Left));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.selected().unwrap().id.number(), 1);
+        assert!(m.nav.is_empty());
+    }
+
+    #[test]
+    fn nav_back_survives_a_reload() {
+        let mut m = model(|l| {
+            l.put_todo(t(1), None);
+            l.put_todo(t(2), None);
+        });
+        m.key(key('j'));
+        m.key(arrow(KeyCode::Right));
+        // a mid-preview reload rebuilds rows — the entry stores
+        // the id, so ← still lands on T-002
+        m.reload();
+        m.key(arrow(KeyCode::Left));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+    }
+
+    #[test]
+    fn double_click_opens_the_row_under_it() {
+        let mut m = model(|l| {
+            l.todo.sections.push(Section::named("S"));
+            l.todo.sections[0].items = vec![t(1), t(2)];
+        });
+        m.board_area = Rect::new(0, 1, 80, 20);
+        m.viewport_top = 0;
+        // rows: H S, t1, t2 — y 3 → rows[2] = t2
+        m.mouse(click(4, 3));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+        // a second down on the same cell <400ms later opens it
+        m.mouse(click(4, 3));
+        assert_eq!(m.mode, Mode::Preview);
+        assert_eq!(m.nav.len(), 1);
+        // ← walks back to the row that was clicked
+        m.key(arrow(KeyCode::Left));
+        assert_eq!(m.mode, Mode::Normal);
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+    }
+
+    #[test]
+    fn slow_or_shifted_clicks_only_select() {
+        let mut m = model(|l| {
+            l.todo.sections.push(Section::named("S"));
+            l.todo.sections[0].items = vec![t(1), t(2)];
+        });
+        m.board_area = Rect::new(0, 1, 80, 20);
+        m.viewport_top = 0;
+        // a different cell is a fresh click, not a double
+        m.mouse(click(4, 2)); // t1
+        m.mouse(click(4, 3)); // t2
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.nav.is_empty());
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+        // same cell but >400ms ago — backdate the recorded click
+        m.last_click = Some((4, 3, Instant::now() - Duration::from_millis(500)));
+        m.mouse(click(4, 3));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.nav.is_empty());
+        // a double-click on a header row selects nothing and
+        // doesn't open whatever happened to be selected
+        m.mouse(click(4, 1)); // rows[0] = "S" header
+        m.mouse(click(4, 1));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.nav.is_empty());
+        assert_eq!(m.selected().unwrap().id.number(), 2);
+    }
+
     // ---- index-mode (`source = "index"` views) ------------------
 
     use myco_core::{BacklogDoc, GroupAxis, TodoDoc};
@@ -2345,6 +2558,8 @@ pub(crate) mod tests {
             board_area: Rect::default(),
             viewport_top: 0,
             tabs_area: None,
+            nav: Vec::new(),
+            last_click: None,
         };
         m.rebuild_rows();
         m.watch_fp = m.fingerprint();
@@ -2847,14 +3062,20 @@ pub(crate) mod tests {
             l.put_todo(t(1), None);
             l.put_todo(t(2), None);
         });
-        // h/l + arrow keys cycle boards
+        // h/l cycle boards — ←/→ are drill-down, not board keys
         m.key(key('l'));
         assert_eq!(m.board, Board::Backlog);
         m.key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
-        assert_eq!(m.board, Board::Todo);
+        assert_eq!(m.board, Board::Backlog); // empty stack: no-op
         m.key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-        assert_eq!(m.board, Board::Backlog);
+        assert_eq!(m.board, Board::Backlog); // empty board: no selection
         m.key(key('h'));
+        assert_eq!(m.board, Board::Todo);
+        // → opens the preview; ← pops back to the board
+        m.key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Preview);
+        m.key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Normal);
         assert_eq!(m.board, Board::Todo);
         // unbound key is a no-op
         m.key(KeyEvent::new(KeyCode::F(5), KeyModifiers::NONE));
