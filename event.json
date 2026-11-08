@@ -1,1 +1,1 @@
-{"id":"","ws":"devin","actor":"luis","ts":1794171646,"op":{"op":"claim","glob":"crates/myco-index-redb/**","ttl_secs":3600}}
+{"id":"","ws":"devin","actor":"luis","ts":1794171646,"op":{"op":"claim","glob":"crates/myco-ops/**","ttl_secs":3600}}
