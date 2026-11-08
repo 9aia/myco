@@ -1532,22 +1532,6 @@ pub static VERBS: &[Verb] = &[
         cli: Some(crate::continuity::h_resume),
         wire: Some(serve::w_resume),
     },
-    #[cfg(feature = "tui")]
-    Verb {
-        name: "ui",
-        about: "Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = \"index\"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.",
-        params: &[&[opt(
-            "view",
-            Val::Str,
-            "Open with a named view's filter narrowing every board; index-sourced views load the cross-repo universe.",
-        )
-        .vname("NAME")]],
-        kind_lock: None,
-        mutates: true,
-        hidden: false,
-        cli: Some(crate::h_ui),
-        wire: None,
-    },
     Verb {
         name: "serve",
         about: "Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it.",

@@ -1,0 +1,243 @@
+name: myco-driver
+path: crates/myco-driver/Cargo.toml
+purpose: tamias-driver-myco — pavo view driver over a repo's project/ ledger (reads via myco-ops)
+api:
+- name: CONFIG
+  kind: const
+  file: crates/myco-driver/src/data.rs
+  line: 46
+  module: myco-driver
+- name: FILE_COLS
+  kind: const
+  file: crates/myco-driver/src/views.rs
+  line: 160
+  module: myco-driver
+- name: FILE_VIEWS
+  kind: const
+  file: crates/myco-driver/src/views.rs
+  line: 140
+  module: myco-driver
+- name: Found
+  kind: type
+  file: crates/myco-driver/src/views.rs
+  line: 696
+  module: myco-driver
+- name: HandoffRow
+  kind: type
+  file: crates/myco-driver/src/data.rs
+  line: 63
+  module: myco-driver
+- name: ITEM_COLS
+  kind: const
+  file: crates/myco-driver/src/views.rs
+  line: 147
+  module: myco-driver
+- name: Snapshot
+  kind: type
+  file: crates/myco-driver/src/data.rs
+  line: 79
+  module: myco-driver
+- name: binding
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 110
+  module: myco-driver
+- name: body_payload
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 848
+  module: myco-driver
+- name: bound
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 46
+  module: myco-driver
+- name: capabilities_json
+  kind: function
+  file: crates/myco-driver/src/main.rs
+  line: 30
+  module: myco-driver
+- name: children_rows
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 819
+  module: myco-driver
+- name: col
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 54
+  module: myco-driver
+- name: config_layered
+  kind: function
+  file: crates/myco-driver/src/data.rs
+  line: 37
+  module: myco-driver
+- name: data
+  kind: module
+  file: crates/myco-driver/src/main.rs
+  line: 19
+  module: myco-driver
+- name: default
+  kind: function
+  file: crates/myco-driver/src/data.rs
+  line: 101
+  module: myco-driver
+- name: dispatch
+  kind: function
+  file: crates/myco-driver/src/main.rs
+  line: 40
+  module: myco-driver
+- name: error_payload
+  kind: function
+  file: crates/myco-driver/src/data.rs
+  line: 127
+  module: myco-driver
+- name: failed
+  kind: function
+  file: crates/myco-driver/src/data.rs
+  line: 117
+  module: myco-driver
+- name: files_rows
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 525
+  module: myco-driver
+- name: find_item
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 710
+  module: myco-driver
+- name: graph
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 94
+  module: myco-driver
+- name: graph_payload
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 863
+  module: myco-driver
+- name: handoffs_rows
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 918
+  module: myco-driver
+- name: item
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 702
+  module: myco-driver
+- name: item_detail
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 726
+  module: myco-driver
+- name: item_filters
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 380
+  module: myco-driver
+- name: item_root
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 973
+  module: myco-driver
+- name: item_row
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 413
+  module: myco-driver
+- name: item_tree
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 591
+  module: myco-driver
+- name: items_rows
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 487
+  module: myco-driver
+- name: known_query
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 325
+  module: myco-driver
+- name: kv
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 62
+  module: myco-driver
+- name: ledger_tree
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 549
+  module: myco-driver
+- name: load
+  kind: function
+  file: crates/myco-driver/src/data.rs
+  line: 157
+  module: myco-driver
+- name: main
+  kind: function
+  file: crates/myco-driver/src/main.rs
+  line: 95
+  module: myco-driver
+- name: manifest
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 284
+  module: myco-driver
+- name: manifest_json
+  kind: function
+  file: crates/myco-driver/src/main.rs
+  line: 26
+  module: myco-driver
+- name: md
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 103
+  module: myco-driver
+- name: myco-driver
+  kind: module
+  file: crates/myco-driver/Cargo.toml
+  line: 1
+  module: myco-driver
+api_omitted: 18
+deps:
+- camino
+- myco-config
+- myco-config-toml
+- myco-core
+- myco-ops
+- myco-store
+- myco-store-md
+- pavo-protocol
+- serde
+- serde_json
+- myco-core
+- myco-ops
+- myco-store
+- myco-store-md
+- myco-config
+- pavo_protocol
+- serde_json
+notes: ''
+verify:
+- crates/myco-driver/Cargo.toml
+- crates/myco-driver/src/data.rs
+- crates/myco-driver/src/main.rs
+- crates/myco-driver/src/views.rs
+provenance:
+  files:
+  - crates/myco-driver/Cargo.toml
+  - crates/myco-driver/src/data.rs
+  - crates/myco-driver/src/main.rs
+  - crates/myco-driver/src/views.rs
+  hashes:
+  - 4ee803505f4d87dee92e9b8e3b6298ea27e30cb1
+  - 0f275d5c8939904eba41c54b9bacb80a1fbc902b
+  - e5ec1f060f46a1db4fb37b98e4b0d5841b9f9ea7
+  - b533b3c16ee6ce0a22a42d173699d4e324838cae
+  commit_sha: 1ca3d24be2eb6d754104e57a1ccfc015b6613a5a
+  generated_at: '1794152824'
+  generator: kuda-template/0.1.2

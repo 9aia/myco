@@ -33,8 +33,10 @@ agent ──► myco <verb> ──► write md ──► commit on `project` bra
   is one atomic commit on the `project` branch (`--no-commit` opt-out)
 - **ports-and-adapters crates** — `myco-core` (pure domain) +
   `myco-config`/`myco-git`/`myco-shell` infra, `myco-store-md`,
-  `myco-index-redb`, `myco-testkit`, `myco-ops`, `myco-tui`;
-  `myco-template` is planned
+  `myco-index-redb`, `myco-testkit`, `myco-ops`, `myco-driver`
+  (`tamias-driver-myco`, the pavo view driver — the interactive
+  surface; `myco-tui` was retired for it); `myco-template` is
+  planned
 
 ## Position in the stack
 

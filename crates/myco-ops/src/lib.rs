@@ -8,8 +8,8 @@
 //! `items` is store open/save + the verbs' shared mutation/output
 //! tail — re-exporting the core symbols so call sites read
 //! `items::X` for either. `myco` (CLI) is a thin clap shell over
-//! this; `myco-tui` calls the same functions, so both front-ends
-//! produce identical writes and identical commits.
+//! this; `myco-driver` (the pavo view driver) reads through the
+//! same functions, so every front-end sees identical state.
 
 pub mod config;
 pub mod discover;

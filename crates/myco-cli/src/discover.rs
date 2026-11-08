@@ -1,7 +1,7 @@
-//! Re-export — lives in `myco_ops::discover` so `myco-tui` shares
-//! it. `discover` itself is cli-local: ops takes the config loader
-//! as a parameter and the composition root (this crate) names the
-//! impl, so call sites stay two-arg.
+//! Re-export — lives in `myco_ops::discover` so other front-ends
+//! (`myco-driver`) share it. `discover` itself is cli-local: ops
+//! takes the config loader as a parameter and the composition
+//! root (this crate) names the impl, so call sites stay two-arg.
 
 use std::path::Path;
 

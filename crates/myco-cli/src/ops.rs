@@ -1,4 +1,5 @@
-//! Re-export — lives in `myco_ops::ops` so `myco-tui` shares it.
+//! Re-export — lives in `myco_ops::ops` so other front-ends
+//! (`myco-driver`) share it.
 //! `store_at` is cli-local: the concrete `MdStore` factory —
 //! `myco-ops` is generic over [`myco_store::Store`], so the
 //! composition root (this crate) names the impl.

@@ -62,9 +62,11 @@ myco view open --limit 5 --md # named spec + flag overrides merge
 
 Flags merge over a named spec: a set flag replaces that field,
 unset fields keep the spec's value. `--format list|board`;
-`--live-only`/`--superseded` filter ADR chains. `myco ui --view
-<name>` opens the TUI with that view's *filter* narrowing every
-board (sort/group/format don't map onto columns).
+`--live-only`/`--superseded` filter ADR chains.
+
+(The interactive TUI — `myco ui` — was retired; the read surface is
+now the pavo driver `tamias-driver-myco`, views `myco:board`,
+`myco:items`, `myco:item`, `myco:graph`, …)
 
 ## Cross-repo — `index` + `view --source index`
 

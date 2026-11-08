@@ -6,6 +6,7 @@ modules:
 - myco-config
 - myco-config-toml
 - myco-core
+- myco-driver
 - myco-git
 - myco-index
 - myco-index-redb
@@ -14,13 +15,12 @@ modules:
 - myco-store
 - myco-store-md
 - myco-testkit
-- myco-tui
 - xtask
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: b1e28bfba940a5c2c3e41736f696c93cbbc5f8d9
-files_total: 131
+tree_digest: 59c235b0c39143718f4fb6e20699d320dea0ce94
+files_total: 130
 provenance:
   files:
   - Cargo.toml
@@ -29,6 +29,7 @@ provenance:
   - crates/myco-config/Cargo.toml
   - crates/myco-config-toml/Cargo.toml
   - crates/myco-core/Cargo.toml
+  - crates/myco-driver/Cargo.toml
   - crates/myco-git/Cargo.toml
   - crates/myco-index/Cargo.toml
   - crates/myco-index-redb/Cargo.toml
@@ -37,15 +38,15 @@ provenance:
   - crates/myco-store/Cargo.toml
   - crates/myco-store-md/Cargo.toml
   - crates/myco-testkit/Cargo.toml
-  - crates/myco-tui/Cargo.toml
   - xtask/Cargo.toml
   hashes:
-  - bd3017d804f22846f01beeba93ddff4cad52dfb9
-  - 6053e980b98202a4507d7c10bc9425521297d174
-  - daae184cb07bf25317144cf39a9d6177dd6b2a36
+  - db5a958e170c7f8457aaa087edf84312263c0567
+  - 77a5b97a0d124114a5a7de31247af77f2ceab091
+  - c4b4b7b35e9e22fb7e212cc0555f970f2327e589
   - 23f74adbbc8eef38ec170c5b09d557ad1af36096
   - 1a25ef123f1406c0e6eb8b48a0d2be5084a400e9
   - f75323e2b82195a4149a5fb91548e75ba386acbf
+  - 4ee803505f4d87dee92e9b8e3b6298ea27e30cb1
   - 432464a491cc0c5d00b71a63bd0392634e09f7b3
   - 98ad0e8e8540bb83e139ee0ceadf6fc80dcf5348
   - ed7878723f2aeca5305d834b0ab071f7ba611399
@@ -54,8 +55,7 @@ provenance:
   - 304a0f149ede87fc299a7c9bffd54e8cd151c35d
   - 25f507bd5a36d534979028b1f69ebc144b081884
   - df0b6d5c2130f3266885cbf75cf653df9869ea2c
-  - 60e2f2820ac8349ce88443232cff446b68839416
   - 3bb61ce46463344ee41a3f06bc39d58040459339
-  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
-  generated_at: '1793854989'
+  commit_sha: 1ca3d24be2eb6d754104e57a1ccfc015b6613a5a
+  generated_at: '1794152824'
   generator: kuda/0.1.0

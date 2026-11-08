@@ -51,7 +51,7 @@ myco <verb> --help     # every verb, self-documenting
 | Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
 | Restart work on an item | `myco resume T-NNN` (`item show`/`resume` take 1..n ids) |
 | Pick the top item | `myco next [--claim]` — open task/issue by `pri,id`; filter flags shared with `view` |
-| Views | `myco view [name]` (`board`/`open`/`epic`/`milestone` presets + `--epic`/`--milestone`/`--status`/`--group-by`/`--sort`/`--format` flags; `default_view` in myco.toml is the bare-`view` landing) · `myco report` · `myco ui` (interactive TUI) |
+| Views | `myco view [name]` (`board`/`open`/`epic`/`milestone` presets + `--epic`/`--milestone`/`--status`/`--group-by`/`--sort`/`--format` flags; `default_view` in myco.toml is the bare-`view` landing) · `myco report` · read-only viz via pavo (`tamias-driver-myco` → `pavo view myco:board`) |
 | Config verbs | `[verbs.<name>]` in myco.toml — `emit` (a baked `ViewSpec` → table/json/ids/first) or `target`+`args` (alias for a read-only builtin); works on CLI, batch, serve |
 | Served surface | `myco serve` (JSON-RPC 2.0 on stdio, for pipe-holding embedders) · `myco batch` (one-shot: NDJSON requests stdin/`--file` → NDJSON responses) |
 | Cross-repo | `myco index add <repo>` · `myco item move <ID> --to <repo>` (re-files an item in another repo's ledger; source closes `done` + `moved to` handoff) · `myco view org-status` · `myco view org-board` · `[views.x] source="index" format="repos"` → one row per repo (org/items/open/claimed/err) |

@@ -217,7 +217,7 @@ provenance:
   - crates/myco-git/src/lib.rs
   hashes:
   - 432464a491cc0c5d00b71a63bd0392634e09f7b3
-  - 8516943eb9ad9c1d04756e1e248e538d636ce650
-  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
-  generated_at: '1793854989'
+  - 8ce44d65db3f3c6f3b7c4fa3987b21bc858394f3
+  commit_sha: 1ca3d24be2eb6d754104e57a1ccfc015b6613a5a
+  generated_at: '1794152824'
   generator: kuda-template/0.1.2
