@@ -36,6 +36,39 @@ myco index rebuild ~/GitHub/9aia/sepia
 myco index remove ~/GitHub/9aia/sepia # unregister + drop snapshot
 ```
 
+## Ledger-less repos — one org-wide ledger
+
+The registry distinguishes three ledger states per repo, via the
+`ledger` key in `repos.toml` (absent = `local`, the conventional
+reading):
+
+- `local` — the repo's own `project/` worktree (the `worktree`
+  key, else `<path>/project`).
+- `none` — explicitly ledger-less: an org member with no
+  `project/` at all.
+- `org` — the org/global ledger: the *one* repo whose worktree
+  every ledger-less member resolves to.
+
+`myco index add` observes the state: a git repo with no
+qualifying worktree registers as `none` and takes no snapshot;
+`--org` marks the global ledger (and clears the mark on any
+other entry — at most one).
+
+```sh
+myco index add ~/GitHub/9aia/project --org   # the one global ledger
+myco index add ~/GitHub/handl-lang/engine    # ledger-less → "none"
+```
+
+Inside a registered `none` repo, verbs that need a project —
+`status`, `todo add`, `view`, writes included — resolve to the
+org ledger's worktree instead of failing. Unregistered repos
+still fail as before; `--dir`, `--root`, `MYCO_CONFIG`, and
+`project_dir` keep top precedence. `none` entries are omitted
+from index-sourced org views (no rows, no warnings), report
+`no-ledger` under `index rebuild`/`index list`, and are skipped
+by `org init` — the rollout never scaffolds `project/` into
+them. `ledger` is a plain hand-editable `repos.toml` key.
+
 ## Org views — `view --source index`
 
 Two built-in presets run on the index universe:

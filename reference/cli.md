@@ -667,7 +667,7 @@ The derived index: register repos, query/rebuild snapshots.
 
 ###### **Subcommands:**
 
-* `add` — Register a repo — `<path>` is a repo root (or its `project/` worktree). Takes an initial snapshot.
+* `add` — Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger-less repos register as `ledger = "none"` with no snapshot; `--org` marks the org/global ledger.
 * `remove` — Unregister a repo and drop its snapshot.
 * `list` — List registered repos with snapshot freshness.
 * `rebuild` — Re-scan a registered repo (all of them without `<path>`).
@@ -676,13 +676,17 @@ The derived index: register repos, query/rebuild snapshots.
 
 ## `myco index add`
 
-Register a repo — `<path>` is a repo root (or its `project/` worktree). Takes an initial snapshot.
+Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger-less repos register as `ledger = "none"` with no snapshot; `--org` marks the org/global ledger.
 
-**Usage:** `myco index add <path>`
+**Usage:** `myco index add [OPTIONS] <path>`
 
 ###### **Arguments:**
 
 * `<PATH>` — Repo root (or project worktree) to register.
+
+###### **Options:**
+
+* `--org` — Designate this repo as the org/global ledger — the fallback target verbs in ledger-less registered repos resolve to (at most one; clears the mark elsewhere).
 
 
 
