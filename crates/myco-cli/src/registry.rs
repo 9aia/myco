@@ -1535,7 +1535,7 @@ pub static VERBS: &[Verb] = &[
     #[cfg(feature = "tui")]
     Verb {
         name: "ui",
-        about: "Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use. `--view` with a `source = \"index\"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.",
+        about: "Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use; auto-reloads when the ledger changes on disk. `--view` with a `source = \"index\"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.",
         params: &[&[opt(
             "view",
             Val::Str,

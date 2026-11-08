@@ -18,6 +18,11 @@
 //! preview (`j`/`k` scroll), `E` $EDITOR, `R` reload, `?` help,
 //! `q`/`Ctrl-C` quit — plus mouse:
 //! the wheel scrolls, a click selects an item row or a board tab.
+//! The board also auto-reloads: every poll cycle fingerprints the
+//! watched trees (`project/` in repo mode; the index data dir +
+//! each repo's worktree on index boards) and reloads on change, so
+//! writes from other `myco` invocations, `git pull`, or hand-edits
+//! show up without a keypress.
 
 mod app;
 mod render;
@@ -105,6 +110,9 @@ pub fn run(
                 _ => {}
             }
         }
+        // auto-refresh — pick up writes that landed while we were
+        // idle (other myco invocations, git pull, hand-edits)
+        model.tick();
     }
     Ok(())
 }
@@ -138,4 +146,19 @@ fn run_editor(
     terminal.clear().map_err(|e| e.to_string())?;
     status.map_err(|e| format!("$EDITOR {editor}: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// The hook body itself — a caught panic still runs it, which
+    /// exercises the terminal-restore path (a no-op without a tty).
+    #[test]
+    fn panic_hook_restores_the_terminal() {
+        install_panic_hook();
+        let r = std::panic::catch_unwind(|| panic!("boom"));
+        assert!(r.is_err());
+    }
 }

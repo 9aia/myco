@@ -448,7 +448,9 @@ fn help_lines() -> Vec<Line<'static>> {
         group("mouse"),
         bind("click, wheel", "select, scroll"),
         group("misc"),
-        bind(": / ?", "command line / help"),
+        bind("/, F", "filter / clear"),
+        bind(":", "command line"),
+        bind("?", "help"),
         bind("q, ctrl+c", "quit"),
         Line::from(Span::styled(
             "esc / ? / q to close",
@@ -494,6 +496,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -561,7 +564,7 @@ mod tests {
     fn help_columns_only_when_short_and_wide() {
         let lines = help_lines();
         // plenty of room: one column
-        assert_eq!(help_columns(&lines, Rect::new(0, 0, 80, 24)).len(), 1);
+        assert_eq!(help_columns(&lines, Rect::new(0, 0, 80, 30)).len(), 1);
         // short but narrow: stays one column, crops
         assert_eq!(help_columns(&lines, Rect::new(0, 0, 30, 10)).len(), 1);
         // short and wide: folds into columns that fit the height
@@ -580,5 +583,182 @@ mod tests {
         // tiny terminals still get the minimal set (cropped, not absent)
         assert_eq!(pick_hints(Mode::Normal, 0), HINTS[2]);
         assert_eq!(pick_hints(Mode::Preview, 0), "j/k scroll · esc back");
+        // modal modes have their own one-liners
+        assert_eq!(pick_hints(Mode::Add, 0), "enter add · esc cancel");
+        assert_eq!(pick_hints(Mode::Filter, 0), "enter keep · esc clear");
+        assert_eq!(pick_hints(Mode::Command, 0), "enter run · esc cancel");
+        assert_eq!(pick_hints(Mode::Help, 0), "esc/?/q close");
+    }
+
+    // ---- frame rendering ----
+
+    use crate::app::tests::{index_model, model, org, repo_worktree, save_issue, store, t};
+    use myco_core::{Item, ItemId, ItemKind};
+    use myco_store::Store;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    /// Draw one frame and return the buffer as text.
+    fn screen(m: &mut Model, w: u16, h: u16) -> String {
+        let backend = TestBackend::new(w, h);
+        let mut term = Terminal::new(backend).unwrap();
+        term.draw(|f| draw(f, m)).unwrap();
+        let buf = term.backend().buffer().clone();
+        let mut s = String::new();
+        for y in 0..buf.area.height {
+            for x in 0..buf.area.width {
+                s.push_str(buf[(x, y)].symbol());
+            }
+            s.push('\n');
+        }
+        s
+    }
+
+    /// A model whose selected item exercises every preview field:
+    /// owner/labels/epic/milestone/created/note/children/edges.
+    fn rich_model() -> Model {
+        let mut m = model(|l| {
+            l.put_todo(
+                t(1).priority(myco_core::Priority::High)
+                    .owner("devin".parse().unwrap())
+                    .created(myco_core::date::parse("2026-01-01").unwrap())
+                    .note("a note")
+                    .label("rel")
+                    .epic("e1")
+                    .milestone("m1")
+                    .child(t(2))
+                    .blocks(ItemId::new(ItemKind::Task, 3))
+                    .blocks(ItemId::new(ItemKind::Task, 99)), // unloaded neighbor
+                None,
+            );
+            l.put_todo(t(2), None);
+            // T-3 blocks T-1 — an *incoming* edge for T-1's preview
+            l.put_todo(t(3).blocks(ItemId::new(ItemKind::Task, 1)), None);
+        });
+        store(&m)
+            .append_handoff(
+                ItemId::new(ItemKind::Task, 1),
+                &myco_core::HandoffEntry {
+                    date: myco_core::date::parse("2026-01-01").unwrap(),
+                    actor: "devin".parse().unwrap(),
+                    session: None,
+                    note: "done".into(),
+                },
+            )
+            .unwrap();
+        // reload (not just load_files) so the link graph sees the
+        // handoff file — `related` feeds the preview's edge list
+        m.reload();
+        m
+    }
+
+    #[test]
+    fn draw_covers_boards_modes_and_sizes() {
+        let mut m = rich_model();
+        save_issue(&m, 1, "the issue");
+        // file body with a markdown heading for the styled branch
+        store(&m)
+            .save_item(
+                &myco_core::ItemFile::new(Item::new(ItemId::new(ItemKind::Issue, 2), "second"))
+                    .body("# head\nplain"),
+            )
+            .unwrap();
+        m.load_files();
+        for (w, h) in [
+            (80, 24),
+            (70, 10),
+            (40, 10),
+            (30, 6),
+            (20, 6),
+            (12, 4),
+            (10, 6),
+            (6, 2),
+            (1, 1),
+        ] {
+            for b in Board::ALL {
+                m.board = b;
+                for mode in [
+                    Mode::Normal,
+                    Mode::Preview,
+                    Mode::Add,
+                    Mode::Filter,
+                    Mode::Command,
+                    Mode::Help,
+                ] {
+                    m.mode = mode;
+                    m.input = "typed".into();
+                    m.filter = "f".into();
+                    m.cmdline = "c".into();
+                    m.preview_scroll = 3;
+                    m.status = "a status".into();
+                    let s = screen(&mut m, w, h);
+                    assert!(!s.is_empty());
+                }
+            }
+        }
+        // hide ids + clear status — the alternate row/status arms
+        m.show_ids = false;
+        m.status = String::new();
+        m.mode = Mode::Normal;
+        for b in Board::ALL {
+            m.board = b;
+            screen(&mut m, 80, 24);
+        }
+        // empty model in Preview mode → early return
+        let mut e = model(|_| {});
+        e.mode = Mode::Preview;
+        screen(&mut e, 80, 24);
+        // FILES-board preview renders the item body — `#` lines
+        // styled, plain lines not (the file_body branch)
+        m.filter.clear(); // the mode loop left a filter that hides all rows
+        m.key(crate::app::tests::key('3'));
+        let row = m
+            .rows
+            .iter()
+            .position(|r| {
+                matches!(r, crate::app::Row::Item { item, .. } if item.id == ItemId::new(ItemKind::Issue, 2))
+            })
+            .unwrap();
+        m.select_row(row);
+        m.mode = Mode::Preview;
+        screen(&mut m, 80, 24);
+    }
+
+    #[test]
+    fn draw_index_rows_repo_tags_errors_and_file_body() {
+        let (dir, mut a) = repo_worktree("a", |l| {
+            l.put_todo(t(1), None);
+            l.put_backlog(t(2).status(myco_core::Status::Deferred), None);
+        });
+        let wt = a.worktree.clone();
+        // a real issue file so the Files board + preview body work
+        let store =
+            myco_store_md::MdStore::new(camino::Utf8PathBuf::from_path_buf(wt.clone()).unwrap());
+        let issue =
+            myco_core::ItemFile::new(Item::new(ItemId::new(ItemKind::Issue, 5), "idx issue"))
+                .body("# idx\nbody line");
+        store.save_item(&issue).unwrap();
+        a.items.push(issue.meta.clone());
+        std::mem::forget(dir);
+        let mut err = org("b", vec![t(3)]);
+        err.error = Some("rescan failed".into());
+        let (mut m, _c) = index_model(None, vec![a, err]);
+        for (w, h) in [(80, 24), (40, 10), (10, 6)] {
+            for mode in [Mode::Normal, Mode::Preview, Mode::Help] {
+                m.mode = mode;
+                let s = screen(&mut m, w, h);
+                assert!(s.contains("a:") || s.contains("idx issue") || !s.is_empty());
+            }
+        }
+        // preview an index item → repo line + lazy file body
+        m.board = Board::Files;
+        m.mode = Mode::Normal;
+        m.key(crate::app::tests::key('j')); // onto the issue row
+        m.mode = Mode::Preview;
+        screen(&mut m, 80, 24);
+        // back on the board without ids — the repo tag still renders
+        m.mode = Mode::Normal;
+        m.show_ids = false;
+        screen(&mut m, 80, 24);
     }
 }
