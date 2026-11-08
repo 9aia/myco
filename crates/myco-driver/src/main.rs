@@ -64,6 +64,9 @@ fn dispatch(req: Request) -> Response {
                 data: payload,
             })
         }
+        Request::Render { kind, .. } => Response::err(format!(
+            "tamias-driver-myco claims no renderers (kind '{kind}')"
+        )),
     }
 }
 

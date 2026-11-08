@@ -689,6 +689,7 @@ dependencies = [
 [[package]]
 name = "pavo-protocol"
 version = "0.1.0"
+source = "git+https://github.com/9aia/pavo#d25e39c743bba449d3302e793bfaed8a4086cb25"
 dependencies = [
  "serde",
  "serde_json",

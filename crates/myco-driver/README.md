@@ -45,9 +45,11 @@ live_graph` — the same edge set `item show` uses, deliberately not
 the persisted redb index), and drops the lock. No `myco serve`
 child process, no writes — mutations stay on the `myco` verbs.
 
-`pavo-protocol` is a path dependency on the sibling pavo checkout
-(`../../../pavo/crates/pavo-protocol`) until it is published; the
-`version` key is the crates.io fallback.
+`pavo-protocol` is a git dependency on the pavo repo so installs
+work without a sibling checkout; the `version` key is the
+crates.io fallback once it is published. For local pavo
+development, patch it back to the path dep (or `[patch]` it in
+`.cargo/config.toml`).
 
 ## Views
 

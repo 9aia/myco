@@ -155,9 +155,9 @@ pub enum EmitMode {
 pub struct Config {
     /// Path to the project worktree, relative to the repo root.
     pub project_dir: Option<String>,
-    /// The named view `view`/`ui` resolve when no name is given —
-    /// a repo pins its landing view, a machine `~/myco.toml` pins
-    /// a global one (scalar: repo layer wins).
+    /// The named view bare `myco view` resolves when no name is
+    /// given — a repo pins its landing view, a machine `~/myco.toml`
+    /// pins a global one (scalar: repo layer wins).
     pub default_view: Option<String>,
     /// Named declarative views — merged across config layers
     /// (P-006): repo `myco.toml` presets are shared, user-config

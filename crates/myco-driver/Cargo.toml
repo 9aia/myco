@@ -20,10 +20,11 @@ myco-store-md.workspace = true
 camino.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-# The public wire contract — sibling-checkout path dep until
-# pavo-protocol is published (the whole 9aia org lives side-by-side
-# under one parent dir; `version` is the crates.io fallback).
-pavo-protocol = { path = "../../../pavo/crates/pavo-protocol", version = "0.1.0" }
+# The public wire contract — git dep so `cargo install --git` and
+# `cargo xtask install` work without a sibling ../pavo checkout
+# (path deps break workspace resolution on a fresh clone).
+# `version` is the crates.io fallback once pavo-protocol publishes.
+pavo-protocol = { git = "https://github.com/9aia/pavo", version = "0.1.0" }
 
 [lints]
 workspace = true

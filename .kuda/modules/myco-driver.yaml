@@ -20,7 +20,7 @@ api:
 - name: Found
   kind: type
   file: crates/myco-driver/src/views.rs
-  line: 696
+  line: 697
   module: myco-driver
 - name: HandoffRow
   kind: type
@@ -45,7 +45,7 @@ api:
 - name: body_payload
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 848
+  line: 849
   module: myco-driver
 - name: bound
   kind: function
@@ -60,7 +60,7 @@ api:
 - name: children_rows
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 819
+  line: 820
   module: myco-driver
 - name: col
   kind: function
@@ -82,6 +82,11 @@ api:
   file: crates/myco-driver/src/data.rs
   line: 101
   module: myco-driver
+- name: degraded_snapshot_yields_error_payloads
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 1045
+  module: myco-driver
 - name: dispatch
   kind: function
   file: crates/myco-driver/src/main.rs
@@ -92,6 +97,11 @@ api:
   file: crates/myco-driver/src/data.rs
   line: 127
   module: myco-driver
+- name: every_binding_is_a_known_query
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 1036
+  module: myco-driver
 - name: failed
   kind: function
   file: crates/myco-driver/src/data.rs
@@ -100,12 +110,12 @@ api:
 - name: files_rows
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 525
+  line: 526
   module: myco-driver
 - name: find_item
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 710
+  line: 711
   module: myco-driver
 - name: graph
   kind: function
@@ -115,52 +125,57 @@ api:
 - name: graph_payload
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 863
+  line: 864
   module: myco-driver
 - name: handoffs_rows
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 918
+  line: 919
   module: myco-driver
 - name: item
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 702
+  line: 703
   module: myco-driver
 - name: item_detail
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 726
+  line: 727
   module: myco-driver
 - name: item_filters
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 380
+  line: 381
+  module: myco-driver
+- name: item_query_needs_id
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 1060
   module: myco-driver
 - name: item_root
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 973
+  line: 974
   module: myco-driver
 - name: item_row
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 413
+  line: 414
   module: myco-driver
 - name: item_tree
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 591
+  line: 592
   module: myco-driver
 - name: items_rows
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 487
+  line: 488
   module: myco-driver
 - name: known_query
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 325
+  line: 326
   module: myco-driver
 - name: kv
   kind: function
@@ -170,7 +185,7 @@ api:
 - name: ledger_tree
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 549
+  line: 550
   module: myco-driver
 - name: load
   kind: function
@@ -180,29 +195,14 @@ api:
 - name: main
   kind: function
   file: crates/myco-driver/src/main.rs
-  line: 95
+  line: 98
   module: myco-driver
 - name: manifest
   kind: function
   file: crates/myco-driver/src/views.rs
   line: 284
   module: myco-driver
-- name: manifest_json
-  kind: function
-  file: crates/myco-driver/src/main.rs
-  line: 26
-  module: myco-driver
-- name: md
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 103
-  module: myco-driver
-- name: myco-driver
-  kind: module
-  file: crates/myco-driver/Cargo.toml
-  line: 1
-  module: myco-driver
-api_omitted: 18
+api_omitted: 23
 deps:
 - camino
 - myco-config
@@ -234,10 +234,10 @@ provenance:
   - crates/myco-driver/src/main.rs
   - crates/myco-driver/src/views.rs
   hashes:
-  - 4ee803505f4d87dee92e9b8e3b6298ea27e30cb1
+  - 8abb804fc6678f6c8ed6b8c41a8114a7b2b6e744
   - 0f275d5c8939904eba41c54b9bacb80a1fbc902b
-  - e5ec1f060f46a1db4fb37b98e4b0d5841b9f9ea7
-  - b533b3c16ee6ce0a22a42d173699d4e324838cae
-  commit_sha: 1ca3d24be2eb6d754104e57a1ccfc015b6613a5a
-  generated_at: '1794152824'
+  - 5fc2690f8c598f20071b740bf71c936ef538a1ba
+  - 58fe6d94eea3f6797bdab2c3b78243afc4ac15c0
+  commit_sha: b74e0c8042eac0bbfd8d9a95c748c0635541a670
+  generated_at: '1794166472'
   generator: kuda-template/0.1.2

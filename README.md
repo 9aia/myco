@@ -48,9 +48,10 @@ coordination), **kuda** (code memory), **peregrin** (orchestration),
 ## Status
 
 Working — the full verb surface is implemented (`myco manifest`
-lists it), including the `myco ui` board TUI and `myco serve`
-(JSON-RPC 2.0 over stdio, ADR-0001) with its one-shot `myco batch`.
-`myco-template` is the one crate still planned.
+lists it), including `myco serve` (JSON-RPC 2.0 over stdio,
+ADR-0001) with its one-shot `myco batch`, and `tamias-driver-myco`
+(the pavo view driver — the interactive surface). `myco-template`
+is the one crate still planned.
 
 `myco check` validates the ledger **and the worktree it lives in**:
 two severities (ADR-0002) — `error` fails the gate, `warning` is

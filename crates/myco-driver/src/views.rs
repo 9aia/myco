@@ -315,6 +315,7 @@ pub fn manifest() -> DriverManifest {
             extra: Default::default(),
         },
         views: specs(),
+        renderers: Vec::new(),
     }
 }
 
