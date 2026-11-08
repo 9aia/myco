@@ -17,7 +17,7 @@ the index trail into the section’s item tree: <code>[2]</code> is the
 third top-level item, <code>[2,0]</code> its first child.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.commit.html" title="fn myco_ops::items::commit">commit</a></dt><dd>The standard mutation tail — one atomic commit on the worktree.
 <code>actor</code> is the verb’s actor (<code>--actor</code>/<code>--owner</code> where the verb
 takes one) — stamped as the <code>Actor:</code> trailer; <code>None</code> → <code>cli</code>.</dd><dt><a class="fn" href="fn.compact.html" title="fn myco_ops::items::compact">compact</a></dt><dd><code>T-001 open pri:high owner:devin #core title</code> — the compact
-human list line. Thin wrapper over [<code>Item::compact</code>].</dd><dt><a class="fn" href="fn.find_item.html" title="fn myco_ops::items::find_item">find_<wbr>item</a></dt><dd>Locate an item anywhere in the ledger — TODO.md, BACKLOG.md, or
+human list line. Thin wrapper over <a href="../../myco_core/item/struct.Item.html#method.compact" title="method myco_core::item::Item::compact"><code>Item::compact</code></a>.</dd><dt><a class="fn" href="fn.find_item.html" title="fn myco_ops::items::find_item">find_<wbr>item</a></dt><dd>Locate an item anywhere in the ledger — TODO.md, BACKLOG.md, or
 an item file (live or <code>archive/</code>). Returns the item, its
 location label, and the body for file-backed items.</dd><dt><a class="fn" href="fn.item_for_edit.html" title="fn myco_ops::items::item_for_edit">item_<wbr>for_<wbr>edit</a></dt><dd>Load a file-backed item for mutation. Archived items are
 refused — <code>save_item</code> writes to the live dir, so editing one

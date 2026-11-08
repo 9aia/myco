@@ -96,7 +96,7 @@ single screenful still exits instantly). An empty
 `MYCO_PAGER`/`PAGER` disables paging; piped output always prints
 directly.
 
-For a visual single-repo board — TODO/BACKLOG tree, item detail,
-per-kind tables — see
-[`tamias-driver-myco`](../getting-started.md#the-interactive-board)
-through pavo (`pavo view myco:board`).
+For a fully interactive board — TODO/BACKLOG tabs, item preview,
+done/defer/promote by key, including index-sourced `org-*` views
+(`myco ui --view org-board`) — see
+[`myco ui`](../getting-started.md#the-interactive-board).
