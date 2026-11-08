@@ -21,16 +21,19 @@ and the intended end state.
 
 ### A — npm shim over `cargo install --git` (SHIPPED, e858b78)
 
-`package.json` + `bin/myco` + `install.js` at the repo root. The
-postinstall — and the shim itself when scripts are gated — runs
-`cargo install --git https://github.com/9aia/myco myco --locked
---force`.
+`package.json` + `bin/myco` at the repo root. The shim runs
+`cargo install --git https://github.com/9aia/myco myco --locked`
+on first use. No postinstall — npm deletes the package cwd before
+lifecycle scripts on git installs, which crashed `node install.js`
+at startup (found via container repro); the shim is the single
+bootstrap path and covers every case.
 
 - **Pros:** zero infra, works today, always builds the pushed
-  HEAD, verified end-to-end (incl. fresh `CARGO_HOME` bootstrap).
-- **Cons:** requires Rust + cargo on the machine; first build is
-  ~1–2 min; npm's allowScripts may gate the postinstall (the shim
-  covers it); shell shim — Linux/macOS only.
+  HEAD, verified end-to-end in a clean container (npm install →
+  shim → cargo build → `myco`).
+- **Cons:** requires Rust + cargo; first `myco` run builds ~1–2
+  min; npm ≥12 gates git fetches (`--allow-git=root` needed);
+  shell shim — Linux/macOS only.
 
 ### B — publish `@9aia/myco` to a registry
 
