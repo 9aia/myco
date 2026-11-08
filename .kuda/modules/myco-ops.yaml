@@ -40,7 +40,7 @@ api:
 - name: Filter
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 247
+  line: 273
   module: myco-ops
 - name: LOCK_FILE
   kind: const
@@ -70,7 +70,7 @@ api:
 - name: NewItem
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 313
+  line: 339
   module: myco-ops
 - name: Origin
   kind: type
@@ -167,6 +167,11 @@ api:
   file: crates/myco-ops/src/discover.rs
   line: 35
   module: myco-ops
+- name: canon_path
+  kind: function
+  file: crates/myco-ops/src/discover.rs
+  line: 644
+  module: myco-ops
 - name: canonical_dir
   kind: function
   file: crates/myco-ops/src/discover.rs
@@ -180,7 +185,7 @@ api:
 - name: commit
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 218
+  line: 244
   module: myco-ops
 - name: commit_msg
   kind: function
@@ -197,12 +202,7 @@ api:
   file: crates/myco-ops/src/ops.rs
   line: 215
   module: myco-ops
-- name: commit_paths_clean_tree_is_noop
-  kind: function
-  file: crates/myco-ops/src/ops.rs
-  line: 382
-  module: myco-ops
-api_omitted: 152
+api_omitted: 163
 deps:
 - camino
 - myco-core
@@ -221,9 +221,9 @@ deps:
 - myco-store
 - serde_json
 - myco-store-md
-- camino
 - myco-index
 - myco-index-redb
+- camino
 - myco-config
 notes: ''
 verify:
@@ -250,13 +250,13 @@ provenance:
   hashes:
   - 1aba36dd24389e2d11c0aa5c6d0ca852bfa19545
   - eaff06f7145e1435cf37a599f48e49139ce531db
-  - 5e619e79514ce69642632c578150f2c5930ced6d
-  - aefa812456449d09698f518a0e1b3405b7a41923
+  - e32236a7fbef4a549c16f14a53f3e811399afd31
+  - 698cce0437a87a3c3e3f1e319c26c21d8d9e1e0d
   - bb111f50f606d42de0c35753652c03d307a3fec2
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
   - e248b05ad5b56504620f470e9228488ab51a23df
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: 1ca3d24be2eb6d754104e57a1ccfc015b6613a5a
-  generated_at: '1794152824'
+  commit_sha: 38b65716068d43d92fce6b2b380b9ccc804da786
+  generated_at: '1794173597'
   generator: kuda-template/0.1.2

@@ -76,6 +76,7 @@ markdown stays canonical.
 
 ```bash
 myco index add <repo-path>     # register + snapshot (root or project/ path)
+myco index add <repo> --org    # designate the org/global ledger
 myco index list                # registered repos + snapshot freshness
 myco index rebuild [<path>]    # re-scan one or all
 myco index remove <path>       # unregister
@@ -95,6 +96,25 @@ prefix `repo:ID`, JSON items gain a `"repo"` field. Snapshots have no
 handoffs — the `⚡`/`interrupted` flag is repo-source only.
 `org init` (re-scaffold every registered repo) is the only `org`
 subcommand left.
+
+### Ledger-less repos — the org-ledger pattern
+
+One org can run a **single global ledger**: a dedicated repo
+registered with `myco index add <path> --org` holds the one
+`project/` worktree for every member repo. Member repos have no
+`project/` at all — registering one (`index add` on a git repo
+without a qualifying worktree) marks it `ledger = "none"` in
+`repos.toml` and takes no snapshot.
+
+Inside a registered ledger-less repo, verbs that need a project
+(`status`, `todo add`, `view`, …) resolve to the org ledger's
+worktree instead of failing — writes land in the global ledger.
+Unregistered repos still fail as before, and `--dir`/`--root`/
+`myco.toml project_dir` overrides keep top precedence. Ledger-less
+entries are omitted from index views (no rows, no warnings) and are
+skipped by `index rebuild` (`no-ledger`) and `org init` (never
+scaffolds `project/` into them). `ledger` is a plain `repos.toml`
+key — `local` (default), `org`, `none` — hand-editable.
 
 ## When which
 

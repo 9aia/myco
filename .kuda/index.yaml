@@ -20,8 +20,8 @@ modules:
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: 9b07a3eebe51fd4ec2beda3e7313d9a7080454c0
-files_total: 135
+tree_digest: f0add34c1f1b99a7da23a03de3faa6ebc1aca42d
+files_total: 137
 provenance:
   files:
   - Cargo.toml
@@ -40,10 +40,11 @@ provenance:
   - crates/myco-store-md/Cargo.toml
   - crates/myco-testkit/Cargo.toml
   - crates/myco-tui/Cargo.toml
+  - package.json
   - xtask/Cargo.toml
   hashes:
   - ad8595c6b4f67cc57fb235be5b90251955100304
-  - fd47c0c1b93e3afff53d27b44acc468fe3af8a2d
+  - f149a326a1d233d13a88613cc34ef6cc564dac79
   - daae184cb07bf25317144cf39a9d6177dd6b2a36
   - 23f74adbbc8eef38ec170c5b09d557ad1af36096
   - 1a25ef123f1406c0e6eb8b48a0d2be5084a400e9
@@ -57,8 +58,9 @@ provenance:
   - 304a0f149ede87fc299a7c9bffd54e8cd151c35d
   - 25f507bd5a36d534979028b1f69ebc144b081884
   - df0b6d5c2130f3266885cbf75cf653df9869ea2c
-  - 60e2f2820ac8349ce88443232cff446b68839416
+  - 6d5d340af137d4d38d20f37e063ca423735d0b32
+  - 8bff61b145c701208864f3d424121159d9078c8c
   - 3bb61ce46463344ee41a3f06bc39d58040459339
-  commit_sha: 61a5993db8664b10d45ad2669bb4bb0adc089dd0
-  generated_at: '1794167343'
+  commit_sha: 38b65716068d43d92fce6b2b380b9ccc804da786
+  generated_at: '1794173597'
   generator: kuda/0.1.0

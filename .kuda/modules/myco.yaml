@@ -202,7 +202,7 @@ api:
   file: crates/myco-cli/src/serve.rs
   line: 38
   module: myco
-api_omitted: 923
+api_omitted: 927
 deps:
 - camino
 - clap
@@ -249,11 +249,11 @@ verify:
 - Cargo.toml
 - crates/myco-cli/Cargo.toml
 - crates/myco-cli/src/main.rs
+- package.json
 - .agents/skills/skill-creator/eval-viewer/generate_review.py
 - .agents/skills/skill-creator/scripts/aggregate_benchmark.py
 - .agents/skills/skill-creator/scripts/generate_report.py
 - .agents/skills/skill-creator/scripts/improve_description.py
-- .agents/skills/skill-creator/scripts/package_skill.py
 provenance:
   files:
   - .agents/skills/skill-creator/eval-viewer/generate_review.py
@@ -323,6 +323,7 @@ provenance:
   - crates/myco-cli/tests/parity.rs
   - crates/myco-cli/tests/serve.rs
   - crates/myco-cli/tests/views.rs
+  - package.json
   hashes:
   - 7fa5978631fed1ed545591dbb2b0eb21ce3f3d08
   - e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
@@ -357,22 +358,22 @@ provenance:
   - 624e1ab16140855241d45033ebb33a64f1b7e85f
   - 560edfd501c44ba360b6a88f1897ad8543ea457f
   - 381726343dc289ca966e7dfbf5bf027ae3d04b1f
-  - 40fd1b681f6ef8049ecb9db1957084c3266102c9
-  - 4c03351ca9b5570442094cf3c8ff737e6554d791
+  - bccd1312b7c7ed43ca8f4a1dee6226a787fec70e
+  - 51224457c1748f0aa3712a89b0f435af9ab2c1ea
   - b719b47ab3002b01c6a3b18f1b89d2ef2c02c8ec
   - 8848edc08ccf6975edd7be9341878d1ff7806983
   - 3d99be9ea0a34846fdef8b2a4bedf46c959f89f3
-  - c90c60c39d0fb7003707f119c717ba208d7a6241
+  - cd46e0a5c8395febed46ffc57b5c27009d19b5d8
   - 831325260258889ac9cbd4c5a008022d1888a366
   - cd0cf5732dd7733210059ead57985f3400fce9dc
-  - 6e0c6edfd92ab350abef7069bea69822632ebc1f
+  - 6e0f9a9b397aa006385a237210f41289c7011384
   - 6f64076cc847f95ac2f3a8eb51eb6df0eff015db
   - c19e697847a9729f9beba0d77b1f310588d07c3a
   - f2658c12900461dd123f49a479bfdb66d374ee47
-  - 5a089c550f9dd02e9c10269082c105ed992d4130
+  - 7f6a735e5e219ff89fb4a3cbb110617f39dd1ac7
   - c329af7ef72f8af98b379c75735d07b566154bdb
   - 708073c26ba96e6cdc0a2c1b9050ee53896be78f
-  - 622818ff7e3aa8ba331799b56031e38f17ea3d0a
+  - 720a46da050ee91c930a64d4bdbc8fb92bf6255f
   - 4699cb3c6ef39eaffc7b84950c13b63f6050f289
   - 3d672666134744d58dafc5ffa4d82f103aa7e187
   - f5a1140ca9086edf1ce4ccad092e8342142d0261
@@ -391,6 +392,7 @@ provenance:
   - 800c97209612a2f7cd885b5e84b6d3622ecf4bc9
   - a43956a72d4e2eec983cc53446e62a5dea4db50b
   - 2b65ad8589374ca829298e1422fb4ab7eb946cfe
-  commit_sha: 61a5993db8664b10d45ad2669bb4bb0adc089dd0
-  generated_at: '1794167343'
+  - 8bff61b145c701208864f3d424121159d9078c8c
+  commit_sha: 38b65716068d43d92fce6b2b380b9ccc804da786
+  generated_at: '1794173597'
   generator: kuda-template/0.1.2

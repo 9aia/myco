@@ -174,7 +174,21 @@ pub fn open_with<S: Store>(
     cfg: crate::config::ConfigLoader,
     mk: impl FnOnce(&Path, &myco_core::KindTable) -> Result<S, String>,
 ) -> Result<(discover::Project, LockedStore<S>), String> {
-    let proj = discover::discover(dir, root, cfg)?;
+    open_with_index(dir, root, cfg, None, mk)
+}
+
+/// [`open_with`] with the repo index at discovery's disposal —
+/// the org-ledger fallback: a *registered* repo with no ledger
+/// of its own resolves to the `ledger = "org"` entry's worktree.
+/// `None` keeps discovery strict (unregistered repos fail).
+pub fn open_with_index<S: Store>(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: crate::config::ConfigLoader,
+    index: Option<&dyn myco_index::Index>,
+    mk: impl FnOnce(&Path, &myco_core::KindTable) -> Result<S, String>,
+) -> Result<(discover::Project, LockedStore<S>), String> {
+    let proj = discover::discover_with(dir, root, cfg, index)?;
     // a detached worktree would swallow the write — refuse before
     // the store opens (`check --fix` repairs the worktree itself)
     ops::ensure_committable(&proj.worktree)?;
@@ -199,7 +213,19 @@ pub fn open_read_with<S: Store>(
     cfg: crate::config::ConfigLoader,
     mk: impl FnOnce(&Path, &myco_core::KindTable) -> Result<S, String>,
 ) -> Result<(discover::Project, LockedStore<S>), String> {
-    let proj = discover::discover(dir, root, cfg)?;
+    open_read_with_index(dir, root, cfg, None, mk)
+}
+
+/// [`open_read_with`] with the repo index — see
+/// [`open_with_index`].
+pub fn open_read_with_index<S: Store>(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: crate::config::ConfigLoader,
+    index: Option<&dyn myco_index::Index>,
+    mk: impl FnOnce(&Path, &myco_core::KindTable) -> Result<S, String>,
+) -> Result<(discover::Project, LockedStore<S>), String> {
+    let proj = discover::discover_with(dir, root, cfg, index)?;
     let kinds = crate::config::kinds_for(&proj.root, cfg);
     let lock = ops::lock_shared(&proj.worktree)?;
     let store = mk(&proj.worktree, &kinds)?;

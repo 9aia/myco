@@ -23,6 +23,32 @@ use myco_core::{Item, ItemId};
 
 pub use links::{fingerprint, FileStamp, LinkIndex, Related};
 
+/// A registered repo's ledger relationship — the `ledger` key in
+/// `repos.toml`. Absent in registries written before the field
+/// existed → [`LedgerMode::Local`], the conventional reading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LedgerMode {
+    /// The repo's own ledger — `worktree`, else `<path>/project`.
+    #[default]
+    Local,
+    /// The org/global ledger — the one fallback target
+    /// ledger-less repos resolve to. At most one entry should
+    /// carry it (`myco index add --org` keeps it singular).
+    Org,
+    /// Explicitly ledger-less — an org member with no `project/`
+    /// worktree; verbs run inside it fall back to the `org`
+    /// entry's ledger, and index views contribute no items.
+    None,
+}
+
+impl LedgerMode {
+    /// `local` — the serde-skipped default.
+    pub fn is_local(&self) -> bool {
+        matches!(self, LedgerMode::Local)
+    }
+}
+
 /// A registered repo — an entry in the index's registry.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RepoEntry {
@@ -37,15 +63,20 @@ pub struct RepoEntry {
     /// field existed).
     #[serde(default)]
     pub worktree: Utf8PathBuf,
+    /// Ledger relationship — `local` (own ledger), `org` (the
+    /// org/global ledger), `none` (explicitly ledger-less).
+    #[serde(default, skip_serializing_if = "LedgerMode::is_local")]
+    pub ledger: LedgerMode,
 }
 
 impl RepoEntry {
-    /// New registry entry.
+    /// New registry entry — `local` ledger, conventional worktree.
     pub fn new(path: Utf8PathBuf, name: impl Into<String>) -> Self {
         RepoEntry {
             path,
             name: name.into(),
             worktree: Utf8PathBuf::new(),
+            ledger: LedgerMode::Local,
         }
     }
 
@@ -55,14 +86,30 @@ impl RepoEntry {
         self
     }
 
+    /// Mark the ledger relationship (`org` / `none`).
+    pub fn with_ledger(mut self, ledger: LedgerMode) -> Self {
+        self.ledger = ledger;
+        self
+    }
+
+    /// `false` for explicitly ledger-less (`ledger = "none"`)
+    /// repos — they hold no snapshot and contribute no items.
+    pub fn has_ledger(&self) -> bool {
+        self.ledger != LedgerMode::None
+    }
+
     /// The worktree to scan — the registered `worktree`, else the
-    /// conventional `<path>/project`.
-    pub fn worktree_path(&self) -> Utf8PathBuf {
-        if self.worktree.as_str().is_empty() {
+    /// conventional `<path>/project`; `None` for ledger-less
+    /// repos.
+    pub fn worktree_path(&self) -> Option<Utf8PathBuf> {
+        if self.ledger == LedgerMode::None {
+            return None;
+        }
+        Some(if self.worktree.as_str().is_empty() {
             self.path.join("project")
         } else {
             self.worktree.clone()
-        }
+        })
     }
 }
 
@@ -170,6 +217,30 @@ mod tests {
                 ItemId::new(ItemKind::Issue, 2)
             ]
         );
+    }
+
+    #[test]
+    fn entry_ledger_serde_backcompat() {
+        // registries written before `ledger` existed deserialize
+        // as `local` — the conventional `<path>/project` reading
+        let e: RepoEntry =
+            serde_json::from_str(r#"{"path":"/r","name":"r","worktree":""}"#).unwrap();
+        assert_eq!(e.ledger, LedgerMode::Local);
+        assert_eq!(e.worktree_path(), Some(Utf8PathBuf::from("/r/project")));
+        // `none`/`org` round-trip; `local` stays out of the file
+        let none = RepoEntry::new(Utf8PathBuf::from("/r"), "r").with_ledger(LedgerMode::None);
+        assert_eq!(none.worktree_path(), None);
+        assert!(!none.has_ledger());
+        let org = RepoEntry::new(Utf8PathBuf::from("/o"), "o")
+            .with_worktree(Utf8PathBuf::from("/o/project"))
+            .with_ledger(LedgerMode::Org);
+        let json = serde_json::to_string(&org).unwrap();
+        assert!(json.contains("\"org\""), "{json}");
+        let back: RepoEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, org);
+        // a local entry writes no `ledger` key at all
+        let local = RepoEntry::new(Utf8PathBuf::from("/l"), "l");
+        assert!(!serde_json::to_string(&local).unwrap().contains("ledger"));
     }
 
     #[test]

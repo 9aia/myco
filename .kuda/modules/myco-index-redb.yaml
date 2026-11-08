@@ -70,27 +70,27 @@ api:
 - name: alive
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 870
+  line: 899
   module: myco-index-redb
 - name: concurrent_registers_dont_lose_entries
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 789
+  line: 790
   module: myco-index-redb
 - name: contended_open_reports_index_busy
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 774
+  line: 775
   module: myco-index-redb
 - name: contended_open_retries_until_free
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 758
+  line: 759
   module: myco-index-redb
 - name: corrupt_snapshot_reads_as_missing
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 805
+  line: 806
   module: myco-index-redb
 - name: data_dir
   kind: function
@@ -100,12 +100,12 @@ api:
 - name: data_dir_env_override
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 705
+  line: 706
   module: myco-index-redb
 - name: data_dir_falls_back_to_home_then_errors
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 729
+  line: 730
   module: myco-index-redb
 - name: db
   kind: function
@@ -125,42 +125,42 @@ api:
 - name: drop_edges
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 345
+  line: 346
   module: myco-index-redb
 - name: edge_key
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 329
+  line: 330
   module: myco-index-redb
 - name: edges_are_repo_scoped_and_remove_purges
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 1068
+  line: 1097
   module: myco-index-redb
 - name: entry
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 647
+  line: 648
   module: myco-index-redb
 - name: file_key
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 324
+  line: 325
   module: myco-index-redb
 - name: fstamp
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 854
+  line: 883
   module: myco-index-redb
 - name: idx
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 641
+  line: 642
   module: myco-index-redb
 - name: iid
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 866
+  line: 895
   module: myco-index-redb
 - name: load_registry
   kind: function
@@ -175,7 +175,7 @@ api:
 - name: malformed_registry_is_codec_error
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 721
+  line: 722
   module: myco-index-redb
 - name: myco-index-redb
   kind: module
@@ -200,9 +200,9 @@ api:
 - name: reach
   kind: function
   file: crates/myco-index-redb/src/lib.rs
-  line: 536
+  line: 537
   module: myco-index-redb
-api_omitted: 30
+api_omitted: 31
 deps:
 - camino
 - myco-core
@@ -227,7 +227,7 @@ provenance:
   - crates/myco-index-redb/src/lib.rs
   hashes:
   - ed7878723f2aeca5305d834b0ab071f7ba611399
-  - 05d3a1521607819fe4b0df848a4b62b328716b13
-  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
-  generated_at: '1793854989'
+  - 38bacde0829eb100ab7b39ace84412bdf0381aab
+  commit_sha: 38b65716068d43d92fce6b2b380b9ccc804da786
+  generated_at: '1794173597'
   generator: kuda-template/0.1.2

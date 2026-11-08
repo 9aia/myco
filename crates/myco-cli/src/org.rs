@@ -35,8 +35,16 @@ pub struct RepoView {
 /// Load every registered repo's snapshot, auto-rebuilding stale
 /// ones (head mismatch or missing). The per-repo `git`/fs work is
 /// parallel — redb opens lock the file, so index I/O stays serial.
+/// `ledger = "none"` entries are ledger-less by design: they are
+/// omitted outright — no snapshot, no error, no rescan, no row —
+/// so org views skip them instead of warning.
 pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
-    let repos = index.repos().map_err(|e| e.to_string())?;
+    let repos = index
+        .repos()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|r| r.has_ledger())
+        .collect::<Vec<_>>();
     let heads = indexcmd::par_map(&repos, indexcmd::current_head);
     let mut cached = Vec::with_capacity(repos.len());
     for r in &repos {
@@ -52,7 +60,7 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
     for (i, c) in cached.iter().enumerate() {
         let name = repos[i].name.clone();
         let path = repos[i].path.clone();
-        let worktree = repos[i].worktree_path();
+        let worktree = repos[i].worktree_path().unwrap_or_default();
         if fresh(i) {
             out.push(RepoView {
                 name,
@@ -91,11 +99,22 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
 
 /// `init` over every registered repo — per-repo outcomes, errors
 /// collected (one bad repo doesn't stop the rollout).
+/// `ledger = "none"` entries are skipped outright: the rollout
+/// refreshes repos that *have* (or should have, per the legacy
+/// `local` reading) ledgers — it must never scaffold a
+/// `project/` branch into an intentionally ledger-less org
+/// member. Mark such repos `none` in `repos.toml` (or re-run
+/// `myco index add` on them — ledger-less repos auto-register
+/// `none`).
 fn init_all(index: &impl Index, json_out: bool, no_commit: bool) -> Result<i32, String> {
     let repos = index.repos().map_err(|e| e.to_string())?;
     let mut out = Vec::new();
     let mut failures = 0usize;
     for r in &repos {
+        if !r.has_ledger() {
+            out.push(json!({"path": r.path, "status": "no-ledger"}));
+            continue;
+        }
         let p = r.path.as_std_path().to_path_buf();
         match crate::init::ensure(None, Some(&p), no_commit) {
             Ok(o) => out.push(json!({
@@ -116,7 +135,9 @@ fn init_all(index: &impl Index, json_out: bool, no_commit: bool) -> Result<i32, 
         return Ok(if failures == 0 { 0 } else { 1 });
     }
     for (r, o) in repos.iter().zip(&out) {
-        if let Some(e) = o.get("error").and_then(|v| v.as_str()) {
+        if o.get("status").and_then(|v| v.as_str()) == Some("no-ledger") {
+            println!("{:<24} no ledger — skipped", r.path.as_str());
+        } else if let Some(e) = o.get("error").and_then(|v| v.as_str()) {
             println!("{:<24} ⚠ {e}", r.path.as_str());
         } else {
             let mut notes = Vec::new();

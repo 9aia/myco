@@ -1430,12 +1430,20 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "index.add",
-        about: "Register a repo — `<path>` is a repo root (or its `project/` worktree). Takes an initial snapshot.",
-        params: &[&[pos(
-            "path",
-            Val::Path,
-            "Repo root (or project worktree) to register.",
-        )]],
+        about: "Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger-less repos register as `ledger = \"none\"` with no snapshot; `--org` marks the org/global ledger.",
+        params: &[
+            &[
+                pos(
+                    "path",
+                    Val::Path,
+                    "Repo root (or project worktree) to register.",
+                ),
+                flag(
+                    "org",
+                    "Designate this repo as the org/global ledger — the fallback target verbs in ledger-less registered repos resolve to (at most one; clears the mark elsewhere).",
+                ),
+            ],
+        ],
         kind_lock: None,
         mutates: true,
         hidden: false,

@@ -54,7 +54,7 @@ myco <verb> --help     # every verb, self-documenting
 | Views | `myco view [name]` (`board`/`open`/`epic`/`milestone` presets + `--epic`/`--milestone`/`--status`/`--group-by`/`--sort`/`--format` flags; `default_view` in myco.toml is the bare-`view` landing) · `myco report` · read-only viz via pavo (`tamias-driver-myco` → `pavo view myco:board`) |
 | Config verbs | `[verbs.<name>]` in myco.toml — `emit` (a baked `ViewSpec` → table/json/ids/first) or `target`+`args` (alias for a read-only builtin); works on CLI, batch, serve |
 | Served surface | `myco serve` (JSON-RPC 2.0 on stdio, for pipe-holding embedders) · `myco batch` (one-shot: NDJSON requests stdin/`--file` → NDJSON responses) |
-| Cross-repo | `myco index add <repo>` · `myco item move <ID> --to <repo>` (re-files an item in another repo's ledger; source closes `done` + `moved to` handoff) · `myco view org-status` · `myco view org-board` · `[views.x] source="index" format="repos"` → one row per repo (org/items/open/claimed/err) |
+| Cross-repo | `myco index add <repo>` (ledger-less repos register `ledger = "none"`, no snapshot; `--org` marks the one global ledger) · `myco item move <ID> --to <repo>` (re-files an item in another repo's ledger; source closes `done` + `moved to` handoff) · `myco view org-status` · `myco view org-board` · `[views.x] source="index" format="repos"` → one row per repo (org/items/open/claimed/err). In a registered ledger-less repo, project verbs resolve to the org ledger's worktree |
 | Housekeeping | `myco init` · `check` · `migrate` · `commit` · `org init` |
 
 ## The daily loop

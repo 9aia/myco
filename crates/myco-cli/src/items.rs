@@ -17,20 +17,48 @@ pub use myco_ops::items::*;
 pub type LockedStore = myco_ops::items::LockedStore<MdStore>;
 
 /// [`myco_ops::items::open_with`] wired to `MdStore` — verb call
-/// sites stay two-arg.
+/// sites stay two-arg. On discovery failure the repo index gets
+/// a retry: the org-ledger fallback resolves *registered*
+/// ledger-less repos to the org entry's worktree (the index
+/// opens only on that path — see [`crate::discover`]).
 pub fn open(
     dir: Option<&Path>,
     root: Option<&Path>,
 ) -> Result<(myco_ops::discover::Project, LockedStore), String> {
-    myco_ops::items::open_with(dir, root, crate::ops::CONFIG, crate::ops::store_at)
+    match myco_ops::items::open_with(dir, root, crate::ops::CONFIG, crate::ops::store_at) {
+        Ok(ok) => Ok(ok),
+        Err(e) => match crate::indexcmd::open_index() {
+            Ok(index) => myco_ops::items::open_with_index(
+                dir,
+                root,
+                crate::ops::CONFIG,
+                Some(&index),
+                crate::ops::store_at,
+            ),
+            Err(_) => Err(e),
+        },
+    }
 }
 
-/// [`myco_ops::items::open_read_with`] wired to `MdStore`.
+/// [`myco_ops::items::open_read_with`] wired to `MdStore` — same
+/// org-ledger fallback retry as [`open`].
 pub fn open_read(
     dir: Option<&Path>,
     root: Option<&Path>,
 ) -> Result<(myco_ops::discover::Project, LockedStore), String> {
-    myco_ops::items::open_read_with(dir, root, crate::ops::CONFIG, crate::ops::store_at)
+    match myco_ops::items::open_read_with(dir, root, crate::ops::CONFIG, crate::ops::store_at) {
+        Ok(ok) => Ok(ok),
+        Err(e) => match crate::indexcmd::open_index() {
+            Ok(index) => myco_ops::items::open_read_with_index(
+                dir,
+                root,
+                crate::ops::CONFIG,
+                Some(&index),
+                crate::ops::store_at,
+            ),
+            Err(_) => Err(e),
+        },
+    }
 }
 
 /// `--pri/--owner/--label/--blocks/--epic/--milestone` → the

@@ -258,6 +258,7 @@ impl Index for RedbIndex {
             Some(r) => {
                 r.name = repo.name.clone();
                 r.worktree = repo.worktree.clone();
+                r.ledger = repo.ledger;
             }
             None => reg.repo.push(repo.clone()),
         }
@@ -834,7 +835,35 @@ mod tests {
         let repos = i.repos().unwrap();
         assert_eq!(repos.len(), 1);
         assert_eq!(repos[0].name, "x2");
-        assert_eq!(repos[0].worktree_path(), Utf8PathBuf::from("/elsewhere/pm"));
+        assert_eq!(
+            repos[0].worktree_path(),
+            Some(Utf8PathBuf::from("/elsewhere/pm"))
+        );
+    }
+
+    #[test]
+    fn register_updates_ledger_mode() {
+        let (_d, i) = idx();
+        i.register(&entry("x")).unwrap();
+        // re-registering as ledger-less persists `ledger = "none"`
+        // in repos.toml — the org pattern's explicit state
+        i.register(
+            &RepoEntry::new(Utf8PathBuf::from("/repos/x"), "x")
+                .with_ledger(myco_index::LedgerMode::None),
+        )
+        .unwrap();
+        let repos = i.repos().unwrap();
+        assert_eq!(repos[0].ledger, myco_index::LedgerMode::None);
+        assert_eq!(repos[0].worktree_path(), None);
+        let src = std::fs::read_to_string(i.registry_path()).unwrap();
+        assert!(src.contains("ledger = \"none\""), "{src}");
+        // …and back to local drops the key again
+        i.register(&entry("x")).unwrap();
+        let repos = i.repos().unwrap();
+        assert_eq!(repos[0].ledger, myco_index::LedgerMode::Local);
+        assert!(!std::fs::read_to_string(i.registry_path())
+            .unwrap()
+            .contains("ledger"));
     }
 
     #[test]

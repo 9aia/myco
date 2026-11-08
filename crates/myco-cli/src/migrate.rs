@@ -454,7 +454,10 @@ fn migrate_project(
     root_hint: Option<&Path>,
     no_commit: bool,
 ) -> Result<(serde_json::Value, i32), String> {
-    let proj = discover::discover(dir, root_hint)?;
+    // strict discovery, no org-ledger fallback — migrate
+    // rewrites *this* repo's ledger; silently landing on the org
+    // ledger would rewrite the wrong tree
+    let proj = myco_ops::discover::discover(dir, root_hint, crate::ops::CONFIG)?;
     let wt = &proj.worktree;
     let _lock = ops::lock_worktree(wt)?;
     let store = ops::store_at(wt, myco_core::kind::prelude_table())?;

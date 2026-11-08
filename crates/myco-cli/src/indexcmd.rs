@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use myco_index::{Index, RepoEntry, RepoSnapshot};
+use myco_index::{Index, LedgerMode, RepoEntry, RepoSnapshot};
 use myco_index_redb::RedbIndex;
 use serde_json::json;
 
@@ -31,36 +31,77 @@ pub fn now() -> String {
 }
 
 /// `<path>` → the repo root + project worktree. Accepts a repo
-/// root (`<path>/project` must qualify) or the worktree itself.
-/// `--dir` discovery doesn't qualify its path, so the check is
-/// repeated here — `index add` on a plain dir must fail.
+/// root (`<path>/project` must qualify), the worktree itself, or
+/// — for `index add`'s ledger-less path — any dir inside a git
+/// repo (the returned worktree is the conventional
+/// `<root>/project`, which may not exist; callers check
+/// [`discover::qualifies`]). `--dir` discovery doesn't qualify
+/// its path, so the check is repeated here — `index add` on a
+/// plain dir must fail.
 ///
 /// Both paths come back canonicalized — `root` keys the registry
 /// and snapshots, so symlinked aliases of one repo must collapse
 /// to a single entry (`remove`/`rebuild` canonicalize too).
 pub fn repo_at(path: &Path) -> Result<discover::Project, String> {
-    let mut proj = if let Ok(p) = discover::discover(None, Some(path)) {
-        p
-    } else {
-        match discover::discover(Some(path), None) {
-            Ok(p) if discover::qualifies(&p.worktree) => p,
-            _ => {
-                return Err(format!(
-                    "{}: not a myco repo — needs a project/ worktree",
-                    path.display()
-                ));
-            }
-        }
+    // strict discovery — the cli wrapper's org-ledger fallback
+    // must never answer here: `index add <member>` registering
+    // the org ledger's worktree under the member's key would be
+    // a silent wrong-repo write
+    let strict = |dir: Option<&Path>, root: Option<&Path>| {
+        myco_ops::discover::discover(dir, root, crate::ops::CONFIG)
     };
-    proj.root = proj
-        .root
+    if let Ok(mut proj) = strict(None, Some(path)) {
+        proj.root = proj
+            .root
+            .canonicalize()
+            .map_err(|e| format!("{}: {e}", proj.root.display()))?;
+        proj.worktree = proj
+            .worktree
+            .canonicalize()
+            .map_err(|e| format!("{}: {e}", proj.worktree.display()))?;
+        return Ok(proj);
+    }
+    if let Ok(p) = strict(Some(path), None) {
+        if discover::qualifies(&p.worktree) {
+            let mut proj = p;
+            proj.root = proj
+                .root
+                .canonicalize()
+                .map_err(|e| format!("{}: {e}", proj.root.display()))?;
+            proj.worktree = proj
+                .worktree
+                .canonicalize()
+                .map_err(|e| format!("{}: {e}", proj.worktree.display()))?;
+            return Ok(proj);
+        }
+    }
+    // ledger-less: any git repo registers without a snapshot —
+    // `h_add` reads the registry to tell "no ledger yet" from
+    // "custom worktree still qualifies"
+    let repo = myco_git::repo_root(path)
+        .ok()
+        .or_else(|| path.parent().and_then(|p| myco_git::repo_root(p).ok()))
+        .ok_or_else(|| {
+            format!(
+                "{}: not a myco repo — not inside a git repository",
+                path.display()
+            )
+        })?;
+    let root = myco_git::main_worktree_compat(&repo).unwrap_or(repo);
+    let root = root
         .canonicalize()
-        .map_err(|e| format!("{}: {e}", proj.root.display()))?;
-    proj.worktree = proj
-        .worktree
-        .canonicalize()
-        .map_err(|e| format!("{}: {e}", proj.worktree.display()))?;
-    Ok(proj)
+        .map_err(|e| format!("{}: {e}", root.display()))?;
+    let worktree = root.join(discover::DIR);
+    // an existing-but-invalid project/ dir is the init-time
+    // conflict, not a ledger-less repo — refuse like `init` does
+    if worktree.exists() && !discover::qualifies(&worktree) {
+        return Err(format!(
+            "{} exists but is not a myco project worktree — \
+             move it away or run `myco init`",
+            worktree.display()
+        ));
+    }
+    Ok(discover::Project { root, worktree })
 }
 
 /// Scan a repo's worktree into a snapshot.
@@ -84,7 +125,9 @@ pub fn scan_repo(proj: &discover::Project) -> Result<RepoSnapshot, String> {
 /// `<root>/project`). `None` when the worktree is gone or has no
 /// HEAD. Used by `index list` and `org`'s auto-rebuild.
 pub fn current_head(entry: &RepoEntry) -> Option<String> {
-    myco_git::head_commit(entry.worktree_path().as_std_path())
+    entry
+        .worktree_path()
+        .and_then(|w| myco_git::head_commit(w.as_std_path()))
 }
 
 /// Map `items` across scoped worker threads, preserving order —
@@ -129,7 +172,9 @@ pub fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec
 /// fs + git only, safe to run in parallel. Callers persist via
 /// `index.save_snapshot` serially (the index locks per open).
 pub fn scan_one(entry: &RepoEntry) -> Result<RepoSnapshot, String> {
-    let wt = entry.worktree_path();
+    let Some(wt) = entry.worktree_path() else {
+        return Err(format!("{}: registered without a ledger", entry.path));
+    };
     // a vanished (or never-was) worktree must error, not scan —
     // the store returns empty defaults for missing dirs, which
     // would overwrite a good snapshot with a phantom empty one
@@ -251,36 +296,120 @@ fn snap_json(s: &RepoSnapshot) -> serde_json::Value {
     })
 }
 
-/// The `index add` verb.
+/// The `index add` verb — registers the repo and takes a first
+/// snapshot *when it has a ledger*. A git repo with no qualifying
+/// `project/` worktree registers as `ledger = "none"` (the org
+/// pattern's explicit ledger-less state) with no snapshot;
+/// `--org` marks the repo the org/global ledger instead — the
+/// fallback target discovery resolves ledger-less members to —
+/// and clears the mark on every other entry (at most one).
 pub fn h_add(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let index = open_index()?;
     let json_out = ctx.json;
+    let org_flag = a.flag("org");
     let path = PathBuf::from(a.text("path")?);
     {
         let proj = repo_at(&path)?;
-        let snap = scan_repo(&proj)?;
-        // root + worktree are canonicalized by repo_at — the
-        // registered key and the snapshot key agree, and the
-        // worktree path rides along for `current_head`/`rebuild`
-        let wt = Utf8PathBuf::from_path_buf(proj.worktree.clone())
+        let root_key = Utf8PathBuf::from_path_buf(proj.root.clone())
             .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
-        let entry = RepoEntry::new(snap.path.clone(), snap.name.clone()).with_worktree(wt.clone());
-        index.register(&entry).map_err(|e| e.to_string())?;
-        index.save_snapshot(&snap).map_err(|e| e.to_string())?;
-        // the link index rides the same scan (P-005)
-        let lrep = sync_links(&index, snap.path.as_str(), &wt)?;
-        if json_out {
-            ops::print_json(&json!({"registered": entry, "snapshot": snap_json(&snap),
-                    "links": {"files": lrep.files, "edges": lrep.edges}}));
+        let existing = index
+            .repos()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|r| r.path == root_key);
+
+        // the observed ledger: the discovered/conventional
+        // worktree when it qualifies, else a registered custom
+        // worktree that still does — `none` when neither does
+        let observed = if discover::qualifies(&proj.worktree) {
+            Some(proj.worktree.clone())
         } else {
-            println!(
-                "registered {} ({}) — {} items @ {}, {} edges",
-                snap.name,
-                snap.path,
-                snap.items.len(),
-                &snap.head_commit[..snap.head_commit.len().min(7)],
-                lrep.edges,
-            );
+            existing
+                .as_ref()
+                .and_then(|e| e.worktree_path())
+                .map(|w| w.as_std_path().to_path_buf())
+                .filter(|w| discover::qualifies(w))
+        };
+        let ledger = if org_flag {
+            if observed.is_none() {
+                return Err(format!(
+                    "{}: --org needs a repo with a project/ worktree",
+                    proj.root.display()
+                ));
+            }
+            LedgerMode::Org
+        } else if observed.is_none() {
+            LedgerMode::None
+        } else if existing.is_some_and(|e| e.ledger == LedgerMode::Org) {
+            // re-adding the org repo keeps its designation
+            LedgerMode::Org
+        } else {
+            LedgerMode::Local
+        };
+
+        match observed {
+            Some(wt) => {
+                // root + worktree are canonicalized by repo_at —
+                // the registered key and the snapshot key agree,
+                // and the worktree path rides along for
+                // `current_head`/`rebuild`
+                let wt_u8 = Utf8PathBuf::from_path_buf(wt.clone())
+                    .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
+                let proj = discover::Project {
+                    root: proj.root.clone(),
+                    worktree: wt,
+                };
+                let snap = scan_repo(&proj)?;
+                let entry = RepoEntry::new(snap.path.clone(), snap.name.clone())
+                    .with_worktree(wt_u8.clone())
+                    .with_ledger(ledger);
+                index.register(&entry).map_err(|e| e.to_string())?;
+                index.save_snapshot(&snap).map_err(|e| e.to_string())?;
+                // the link index rides the same scan (P-005)
+                let lrep = sync_links(&index, snap.path.as_str(), &wt_u8)?;
+                if json_out {
+                    ops::print_json(&json!({"registered": entry, "snapshot": snap_json(&snap),
+                            "links": {"files": lrep.files, "edges": lrep.edges}}));
+                } else {
+                    println!(
+                        "registered {} ({}) — {} items @ {}, {} edges",
+                        snap.name,
+                        snap.path,
+                        snap.items.len(),
+                        &snap.head_commit[..snap.head_commit.len().min(7)],
+                        lrep.edges,
+                    );
+                }
+            }
+            None => {
+                // ledger-less — the dir basename is the name
+                // (`meta.toml` lives in the ledger that isn't
+                // there)
+                let name = proj
+                    .root
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "repo".into());
+                let entry = RepoEntry::new(root_key.clone(), name).with_ledger(ledger);
+                index.register(&entry).map_err(|e| e.to_string())?;
+                if json_out {
+                    ops::print_json(&json!({"registered": entry, "snapshot": null}));
+                } else {
+                    println!("registered {} ({}) — no ledger", entry.name, entry.path);
+                }
+            }
+        }
+
+        // at most one org ledger — designating clears the mark
+        // everywhere else
+        if ledger == LedgerMode::Org {
+            for r in index.repos().map_err(|e| e.to_string())? {
+                if r.ledger == LedgerMode::Org && r.path != root_key {
+                    index
+                        .register(&r.with_ledger(LedgerMode::Local))
+                        .map_err(|e| e.to_string())?;
+                }
+            }
         }
         Ok(0)
     }
@@ -323,14 +452,19 @@ pub fn h_list(ctx: &Ctx, _a: &Args) -> Result<i32, String> {
         let mut out = Vec::new();
         for (r, head) in repos.iter().zip(&heads) {
             let snap = index.snapshot(&r.path).map_err(|e| e.to_string())?;
-            let stale = match (&snap, head) {
-                (Some(s), Some(h)) => s.head_commit != *h,
-                (Some(_), None) => true, // worktree gone
-                (None, _) => true,       // never scanned
-            };
+            // ledger-less entries hold no snapshot by design —
+            // "no-ledger", never "stale"
+            let no_ledger = !r.has_ledger();
+            let stale = !no_ledger
+                && match (&snap, head) {
+                    (Some(s), Some(h)) => s.head_commit != *h,
+                    (Some(_), None) => true, // worktree gone
+                    (None, _) => true,       // never scanned
+                };
             out.push(json!({
                 "path": r.path,
                 "name": r.name,
+                "ledger": r.ledger,
                 "head_commit": snap.as_ref().map(|s| s.head_commit.clone()),
                 "scanned_at": snap.as_ref().map(|s| s.scanned_at.clone()),
                 "items": snap.as_ref().map(|s| s.items.len()),
@@ -343,7 +477,13 @@ pub fn h_list(ctx: &Ctx, _a: &Args) -> Result<i32, String> {
                 snap.as_ref()
                     .map(|s| s.items.len().to_string())
                     .unwrap_or_else(|| "-".into()),
-                if stale { "stale" } else { "fresh" },
+                if no_ledger {
+                    "no-ledger"
+                } else if stale {
+                    "stale"
+                } else {
+                    "fresh"
+                },
             ));
         }
         if json_out {
@@ -375,20 +515,34 @@ pub fn h_rebuild(ctx: &Ctx, a: &Args) -> Result<i32, String> {
             }
             return Ok(0);
         }
+        // ledger-less entries hold no snapshot by design —
+        // reported as `no-ledger`, never scanned, never failed
+        let (skipped, scannable): (Vec<RepoEntry>, Vec<RepoEntry>) =
+            entries.into_iter().partition(|e| !e.has_ledger());
+        if !json_out {
+            for e in &skipped {
+                println!("{} — no ledger (skipped)", e.path);
+            }
+        }
+        let mut results: Vec<serde_json::Value> = skipped
+            .iter()
+            .map(|e| json!({"path": e.path, "status": "no-ledger"}))
+            .collect();
         // parallel rescans; serial saves + ordered reporting
-        let snaps = par_map(&entries, scan_one);
-        let mut results = Vec::new();
+        let snaps = par_map(&scannable, scan_one);
         let mut failures = Vec::new();
-        for (entry, snap) in entries.iter().zip(snaps) {
+        for (entry, snap) in scannable.iter().zip(snaps) {
             match snap.and_then(|s| {
                 index
                     .save_snapshot(&s)
                     .map_err(|e| e.to_string())
                     .map(|_| s)
                     // the link index rides the same rebuild
-                    // (P-005): edges re-derived per dirty file
-                    .and_then(|s| {
-                        sync_links(&index, s.path.as_str(), &entry.worktree_path()).map(|l| (s, l))
+                    // (P-005): edges re-derived per dirty file —
+                    // `scannable` entries all have a worktree
+                    .and_then(|s| match entry.worktree_path() {
+                        Some(wt) => sync_links(&index, s.path.as_str(), &wt).map(|l| (s, l)),
+                        None => Ok((s, Default::default())),
                     })
             }) {
                 Ok((s, lrep)) => {
@@ -529,7 +683,10 @@ mod tests {
             // registered key is the canonical root; the worktree
             // path rides along for freshness checks
             assert_eq!(repos[0].path, canon_root);
-            assert_eq!(repos[0].worktree_path(), canon_root.join(discover::DIR));
+            assert_eq!(
+                repos[0].worktree_path(),
+                Some(canon_root.join(discover::DIR))
+            );
             // the whole repo vanishes — remove must still match
             std::fs::remove_dir_all(d.path().join("project")).unwrap();
             run_verb(
@@ -538,6 +695,102 @@ mod tests {
             )
             .unwrap();
             assert!(index.repos().unwrap().is_empty());
+        });
+    }
+
+    /// A plain git repo — no `project/` worktree at all.
+    fn repo_without_project() -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        d
+    }
+
+    #[test]
+    fn add_registers_ledgerless_repo_without_snapshot() {
+        let idx_dir = tempfile::tempdir().unwrap();
+        let ds = idx_dir.path().to_str().unwrap().to_string();
+        temp_env::with_var("MYCO_HOME", Some(ds.as_str()), || {
+            let d = repo_without_project();
+            run_verb("index.add", &[d.path().to_string_lossy().into_owned()]).unwrap();
+            let index = RedbIndex::open().unwrap();
+            let repos = index.repos().unwrap();
+            assert_eq!(repos.len(), 1);
+            // the explicit ledger-less state — no worktree, no
+            // snapshot, basename as the name
+            assert_eq!(repos[0].ledger, LedgerMode::None);
+            assert_eq!(repos[0].worktree_path(), None);
+            assert_eq!(
+                repos[0].name,
+                d.path().file_name().unwrap().to_string_lossy().into_owned()
+            );
+            assert!(index.snapshot(&repos[0].path).unwrap().is_none());
+            // rebuild reports `no-ledger`, doesn't fail
+            let out = run_verb("index.rebuild", &[]).unwrap();
+            assert_eq!(out, 0);
+            // org views omit the ledger-less repo entirely
+            let views = crate::org::load_fresh(&index).unwrap();
+            assert!(views.is_empty());
+        });
+    }
+
+    #[test]
+    fn add_org_designates_single_ledger() {
+        let idx_dir = tempfile::tempdir().unwrap();
+        let ds = idx_dir.path().to_str().unwrap().to_string();
+        temp_env::with_var("MYCO_HOME", Some(ds.as_str()), || {
+            let a = repo_with_project();
+            let b = repo_with_project();
+            run_verb(
+                "index.add",
+                &[a.path().to_string_lossy().into_owned(), "--org".into()],
+            )
+            .unwrap();
+            let index = RedbIndex::open().unwrap();
+            let repos = index.repos().unwrap();
+            assert_eq!(repos.len(), 1);
+            assert_eq!(repos[0].ledger, LedgerMode::Org);
+            // designating a second repo moves the mark — at most one
+            run_verb(
+                "index.add",
+                &[b.path().to_string_lossy().into_owned(), "--org".into()],
+            )
+            .unwrap();
+            let repos = index.repos().unwrap();
+            assert_eq!(repos.len(), 2);
+            let orgs: Vec<&RepoEntry> = repos
+                .iter()
+                .filter(|r| r.ledger == LedgerMode::Org)
+                .collect();
+            assert_eq!(orgs.len(), 1);
+            assert_eq!(
+                orgs[0].path,
+                Utf8PathBuf::from_path_buf(b.path().canonicalize().unwrap()).unwrap()
+            );
+            // --org on a ledger-less repo refuses
+            let c = repo_without_project();
+            let e = run_verb(
+                "index.add",
+                &[c.path().to_string_lossy().into_owned(), "--org".into()],
+            )
+            .unwrap_err();
+            assert!(e.contains("--org"), "{e}");
+        });
+    }
+
+    #[test]
+    fn add_preserves_org_designation_on_plain_readd() {
+        let idx_dir = tempfile::tempdir().unwrap();
+        let ds = idx_dir.path().to_str().unwrap().to_string();
+        temp_env::with_var("MYCO_HOME", Some(ds.as_str()), || {
+            let d = repo_with_project();
+            let p = d.path().to_string_lossy().into_owned();
+            run_verb("index.add", &[p.clone(), "--org".into()]).unwrap();
+            // a plain re-add doesn't silently drop the org mark
+            run_verb("index.add", &[p]).unwrap();
+            let index = RedbIndex::open().unwrap();
+            assert_eq!(index.repos().unwrap()[0].ledger, LedgerMode::Org);
         });
     }
 }

@@ -22,15 +22,30 @@ api:
   file: crates/myco-tui/src/app.rs
   line: 48
   module: myco-tui
+- name: Drained
+  kind: type
+  file: crates/myco-tui/tests/pty.rs
+  line: 106
+  module: myco-tui
+- name: Fixture
+  kind: type
+  file: crates/myco-tui/tests/pty.rs
+  line: 19
+  module: myco-tui
 - name: Guard
   kind: type
   file: crates/myco-tui/src/lib.rs
-  line: 41
+  line: 46
   module: myco-tui
 - name: HINTS
   kind: const
   file: crates/myco-tui/src/render.rs
   line: 344
+  module: myco-tui
+- name: LOCK
+  kind: const
+  file: crates/myco-tui/src/app.rs
+  line: 2390
   module: myco-tui
 - name: MUTED
   kind: const
@@ -50,7 +65,7 @@ api:
 - name: OrgCell
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 2044
+  line: 2147
   module: myco-tui
 - name: OrgLoader
   kind: type
@@ -70,27 +85,47 @@ api:
 - name: add_item
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1290
+  line: 1335
   module: myco-tui
 - name: add_mode_commits_title
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1719
+  line: 1796
+  module: myco-tui
+- name: add_mode_key_edges
+  kind: function
+  file: crates/myco-tui/src/app.rs
+  line: 3022
+  module: myco-tui
+- name: add_on_backlog_creates_a_deferred_item
+  kind: function
+  file: crates/myco-tui/src/app.rs
+  line: 2831
+  module: myco-tui
+- name: alt_arrows_reorder_and_alt_j_k_too
+  kind: function
+  file: crates/myco-tui/src/app.rs
+  line: 2711
   module: myco-tui
 - name: app
   kind: module
   file: crates/myco-tui/src/lib.rs
-  line: 22
+  line: 27
   module: myco-tui
 - name: apply_filter
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 623
+  line: 662
   module: myco-tui
 - name: apply_ledger
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 878
+  line: 923
+  module: myco-tui
+- name: apply_ledger_ignores_an_unknown_repo
+  kind: function
+  file: crates/myco-tui/src/app.rs
+  line: 3178
   module: myco-tui
 - name: bind
   kind: function
@@ -100,7 +135,12 @@ api:
 - name: board_path
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 709
+  line: 748
+  module: myco-tui
+- name: board_path_targets_each_board
+  kind: function
+  file: crates/myco-tui/src/app.rs
+  line: 2632
   module: myco-tui
 - name: centered
   kind: function
@@ -115,94 +155,54 @@ api:
 - name: chrome_yields_to_the_viewport
   kind: function
   file: crates/myco-tui/src/render.rs
-  line: 506
+  line: 509
   module: myco-tui
 - name: click
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1672
+  line: 1749
   module: myco-tui
 - name: click_selects_items_and_wheel_moves
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1682
+  line: 1759
+  module: myco-tui
+- name: closed_pty_surfaces_an_error
+  kind: function
+  file: crates/myco-tui/tests/pty.rs
+  line: 257
   module: myco-tui
 - name: cmd
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1733
+  line: 1810
   module: myco-tui
 - name: colon_id_and_go_jump_the_cursor
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1756
+  line: 1833
   module: myco-tui
 - name: colon_q_quits
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1799
+  line: 1876
   module: myco-tui
 - name: colon_set_toggles_ids
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1772
+  line: 1849
   module: myco-tui
 - name: colon_unknown_and_esc_cancel
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1784
+  line: 1861
   module: myco-tui
 - name: colon_w_reloads_from_disk
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1743
+  line: 1820
   module: myco-tui
-- name: config_layered
-  kind: function
-  file: crates/myco-tui/src/app.rs
-  line: 39
-  module: myco-tui
-- name: ctrl_c_quits_from_every_mode
-  kind: function
-  file: crates/myco-tui/src/app.rs
-  line: 1620
-  module: myco-tui
-- name: data_dir
-  kind: function
-  file: crates/myco-tui/src/app.rs
-  line: 1317
-  module: myco-tui
-- name: dd_remembers_the_prefix_and_dones
-  kind: function
-  file: crates/myco-tui/src/app.rs
-  line: 1576
-  module: myco-tui
-- name: defer_and_promote_cross_boards
-  kind: function
-  file: crates/myco-tui/src/app.rs
-  line: 1586
-  module: myco-tui
-- name: defer_selected
-  kind: function
-  file: crates/myco-tui/src/app.rs
-  line: 1204
-  module: myco-tui
-- name: done_lands_on_the_next_item_not_the_top
-  kind: function
-  file: crates/myco-tui/src/app.rs
-  line: 1917
-  module: myco-tui
-- name: done_selected
-  kind: function
-  file: crates/myco-tui/src/app.rs
-  line: 1175
-  module: myco-tui
-- name: draw
-  kind: function
-  file: crates/myco-tui/src/render.rs
-  line: 28
-  module: myco-tui
-api_omitted: 109
+api_omitted: 180
 deps:
 - camino
 - crossterm
@@ -213,7 +213,9 @@ deps:
 - myco-store
 - myco-store-md
 - ratatui
+- portable-pty
 - tempfile
+- portable_pty
 - myco-core
 - myco-ops
 - myco-store
@@ -230,6 +232,7 @@ verify:
 - crates/myco-tui/src/lib.rs
 - crates/myco-tui/src/main.rs
 - crates/myco-tui/src/render.rs
+- crates/myco-tui/tests/pty.rs
 provenance:
   files:
   - crates/myco-tui/Cargo.toml
@@ -237,12 +240,14 @@ provenance:
   - crates/myco-tui/src/lib.rs
   - crates/myco-tui/src/main.rs
   - crates/myco-tui/src/render.rs
+  - crates/myco-tui/tests/pty.rs
   hashes:
-  - 60e2f2820ac8349ce88443232cff446b68839416
-  - b2a9a129bf40a1b6d9ae97627df8df3bed8042fa
-  - 81f77fb48a4e5b98c6fe8b188ef1290dbefbe3f5
+  - 6d5d340af137d4d38d20f37e063ca423735d0b32
+  - d41d99c1857fd5df9215e4d09957fb9b1aa1b5ff
+  - 65d31235f54beb98117f7e9a26dd20794833f66d
   - 7ac02453b56f59bc259c4117c493f3c16730bff7
-  - b2dadecd33b473fe32c90ec2773071b202f4c84b
-  commit_sha: 61a5993db8664b10d45ad2669bb4bb0adc089dd0
-  generated_at: '1794167343'
+  - 5fc943d2d1bd2d4b3bbd0f48fdaa7a84d9840655
+  - f10d5a65021d46fa251eeff7fd0b935e705dfa34
+  commit_sha: 38b65716068d43d92fce6b2b380b9ccc804da786
+  generated_at: '1794173597'
   generator: kuda-template/0.1.2

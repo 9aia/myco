@@ -145,17 +145,44 @@ pub fn discover(
     root: Option<&Path>,
     cfg: ConfigLoader,
 ) -> Result<Project, String> {
+    discover_with(dir, root, cfg, None)
+}
+
+/// [`discover`] with the repo index available — the last-resort
+/// fallback for the org-ledger pattern: when plain discovery
+/// fails inside a *registered* repo that has no ledger of its
+/// own, the org entry's worktree answers instead. `None` (or an
+/// unreadable index) keeps discovery exactly as strict as before
+/// — unregistered repos still fail.
+pub fn discover_with(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: ConfigLoader,
+    index: Option<&dyn myco_index::Index>,
+) -> Result<Project, String> {
     let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
-    discover_in(&cwd, dir, root, cfg)
+    discover_in_index(&cwd, dir, root, cfg, index)
 }
 
 /// [`discover`] with an explicit cwd — the workhorse, and what
-/// tests drive (no process-global `set_current_dir` races).
+/// tests drive (no process-global `set_current_dir` races). No
+/// index: the org-ledger fallback stays off.
+#[cfg(test)]
 fn discover_in(
     cwd: &Path,
     dir: Option<&Path>,
     root: Option<&Path>,
     cfg: ConfigLoader,
+) -> Result<Project, String> {
+    discover_in_index(cwd, dir, root, cfg, None)
+}
+
+fn discover_in_index(
+    cwd: &Path,
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: ConfigLoader,
+    index: Option<&dyn myco_index::Index>,
 ) -> Result<Project, String> {
     // --dir: an explicit worktree path — still must qualify,
     // otherwise verbs would stage/commit inside whatever repo
@@ -183,17 +210,21 @@ fn discover_in(
         return Ok(Project { root, worktree });
     }
 
-    // --root: conventional <root>/project
+    // --root: conventional <root>/project — `--root` names the
+    // repo, not its ledger, so the org fallback still applies
     if let Some(r) = root {
         let root = canonicalize(r)?;
         let worktree = root.join(DIR);
-        if !qualifies(&worktree) {
-            return Err(format!(
-                "{} is not a myco project worktree — run `myco init`",
-                worktree.display()
-            ));
+        if qualifies(&worktree) {
+            return Ok(Project { root, worktree });
         }
-        return Ok(Project { root, worktree });
+        if let Some(p) = index.and_then(|i| org_fallback(&root, i)) {
+            return Ok(p);
+        }
+        return Err(format!(
+            "{} is not a myco project worktree — run `myco init`",
+            worktree.display()
+        ));
     }
 
     let cwd = canon(cwd);
@@ -236,7 +267,68 @@ fn discover_in(
         }
     }
 
+    // org-ledger fallback — only *registered* repos get here;
+    // unregistered ledger-less repos still fail
+    if let Some(index) = index {
+        if let Ok(top) = myco_git::repo_root(&cwd) {
+            if let Some(p) = org_fallback(&top, index) {
+                return Ok(p);
+            }
+        }
+    }
+
     Err(no_project_error(&cwd))
+}
+
+/// The registry-backed fallback — `repo` is the git toplevel cwd
+/// (or `--root`) resolved to. Two hits, in order:
+///
+/// 1. the repo's own registered ledger when it qualifies —
+///    covers custom `worktree`s the cwd walk can't see;
+/// 2. the `ledger = "org"` entry's worktree — the org/global
+///    ledger ledger-less members resolve to.
+///
+/// `None` when the repo isn't registered, has no qualifying
+/// ledger anywhere, or no org ledger is designated/valid — the
+/// caller then reports the ordinary "no project" error.
+fn org_fallback(repo: &Path, index: &dyn myco_index::Index) -> Option<Project> {
+    let repos = index.repos().ok()?;
+    // registry keys are canonical repo roots — match the arg and
+    // its main worktree (cwd may sit in a linked worktree whose
+    // toplevel isn't the registered root)
+    let mut keys = vec![canon(repo)];
+    if let Some(m) = myco_git::main_worktree_compat(repo) {
+        let m = canon(&m);
+        if !keys.contains(&m) {
+            keys.push(m);
+        }
+    }
+    let entry = keys.iter().find_map(|k| {
+        repos
+            .iter()
+            .find(|r| canon(Path::new(r.path.as_str())) == *k)
+    })?;
+    if let Some(wt) = entry.worktree_path() {
+        let wt = wt.as_std_path();
+        if qualifies(wt) {
+            return Some(Project {
+                root: entry.path.as_std_path().to_path_buf(),
+                worktree: canon(wt),
+            });
+        }
+    }
+    let org = repos
+        .iter()
+        .find(|r| r.ledger == myco_index::LedgerMode::Org)?;
+    let wt = org.worktree_path()?;
+    let wt = wt.as_std_path();
+    if !qualifies(wt) {
+        return None;
+    }
+    Some(Project {
+        root: org.path.as_std_path().to_path_buf(),
+        worktree: canon(wt),
+    })
 }
 
 /// Tailor the dead-end message — `init` can only help inside a repo.
@@ -532,5 +624,215 @@ mod tests {
             Path::new("/tmp").canonicalize().unwrap().join("custom")
         );
         assert_eq!(worktree_path(None, d.path()), d.path().join("project"));
+    }
+
+    // --- org-ledger fallback ------------------------------------------------
+
+    use myco_index::{Index, LedgerMode, RepoEntry};
+    use myco_index_redb::RedbIndex;
+
+    /// A plain git repo with no `project/` — the ledger-less
+    /// member shape.
+    fn repo_without_project() -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        d
+    }
+
+    fn canon_path(p: &Path) -> camino::Utf8PathBuf {
+        camino::Utf8PathBuf::from_path_buf(p.canonicalize().unwrap()).unwrap()
+    }
+
+    /// The org pattern: one `ledger = "org"` repo holding the
+    /// ledger, member repos registered `none`.
+    #[test]
+    fn org_fallback_resolves_ledgerless_member() {
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            let org = repo_with_project();
+            let member = repo_without_project();
+            let stray = repo_without_project(); // registered nowhere
+            let idx_dir = tempfile::tempdir().unwrap();
+            let index = RedbIndex::open_at(
+                camino::Utf8PathBuf::from_path_buf(idx_dir.path().join("idx")).unwrap(),
+            )
+            .unwrap();
+            index
+                .register(
+                    &RepoEntry::new(canon_path(org.path()), "org")
+                        .with_worktree(canon_path(&org.path().join("project")))
+                        .with_ledger(LedgerMode::Org),
+                )
+                .unwrap();
+            index
+                .register(
+                    &RepoEntry::new(canon_path(member.path()), "member")
+                        .with_ledger(LedgerMode::None),
+                )
+                .unwrap();
+
+            // inside the member → the org ledger's worktree
+            let p =
+                discover_in_index(member.path(), None, None, test_loader(), Some(&index)).unwrap();
+            assert_eq!(
+                p.worktree,
+                org.path().join("project").canonicalize().unwrap()
+            );
+            assert_eq!(p.root, org.path().canonicalize().unwrap());
+
+            // --root naming the member resolves the same way
+            let p = discover_in_index(
+                member.path(),
+                None,
+                Some(member.path()),
+                test_loader(),
+                Some(&index),
+            )
+            .unwrap();
+            assert_eq!(
+                p.worktree,
+                org.path().join("project").canonicalize().unwrap()
+            );
+
+            // the unregistered repo still fails — registration is
+            // the opt-in
+            assert!(
+                discover_in_index(stray.path(), None, None, test_loader(), Some(&index)).is_err()
+            );
+            // …and so does the member without an index
+            assert!(discover_in_index(member.path(), None, None, test_loader(), None).is_err());
+        });
+    }
+
+    #[test]
+    fn explicit_overrides_beat_org_fallback() {
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            let org = repo_with_project();
+            let member = repo_without_project();
+            let other = repo_with_project();
+            let idx_dir = tempfile::tempdir().unwrap();
+            let index = RedbIndex::open_at(
+                camino::Utf8PathBuf::from_path_buf(idx_dir.path().join("idx")).unwrap(),
+            )
+            .unwrap();
+            index
+                .register(
+                    &RepoEntry::new(canon_path(org.path()), "org")
+                        .with_worktree(canon_path(&org.path().join("project")))
+                        .with_ledger(LedgerMode::Org),
+                )
+                .unwrap();
+            index
+                .register(
+                    &RepoEntry::new(canon_path(member.path()), "member")
+                        .with_ledger(LedgerMode::None),
+                )
+                .unwrap();
+
+            // `--dir` names the worktree outright — the org ledger
+            // must not answer instead
+            let p = discover_in_index(
+                member.path(),
+                Some(&other.path().join("project")),
+                None,
+                test_loader(),
+                Some(&index),
+            )
+            .unwrap();
+            assert_eq!(p.root, other.path().canonicalize().unwrap());
+            assert_eq!(
+                p.worktree,
+                other.path().join("project").canonicalize().unwrap()
+            );
+
+            // `--root` names the repo — its own qualifying
+            // `project/` wins over the member's org fallback
+            let p = discover_in_index(
+                member.path(),
+                None,
+                Some(other.path()),
+                test_loader(),
+                Some(&index),
+            )
+            .unwrap();
+            assert_eq!(p.root, other.path().canonicalize().unwrap());
+
+            // `project_dir` in the member's own myco.toml is an
+            // override too — a qualifying repo-local ledger dir
+            // beats the org fallback even though the registry says
+            // `none`
+            let ledger = member.path().join("ledger");
+            std::fs::create_dir(&ledger).unwrap();
+            std::fs::write(ledger.join("TODO.md"), "# TODO\n").unwrap();
+            std::fs::write(
+                member.path().join("myco.toml"),
+                "project_dir = \"ledger\"\n",
+            )
+            .unwrap();
+            let p =
+                discover_in_index(member.path(), None, None, test_loader(), Some(&index)).unwrap();
+            assert_eq!(p.root, member.path().canonicalize().unwrap());
+            assert_eq!(p.worktree, ledger.canonicalize().unwrap());
+        });
+    }
+
+    #[test]
+    fn org_fallback_prefers_own_registered_worktree() {
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            let member = repo_without_project();
+            // a custom ledger dir outside the repo root — the cwd
+            // walk can't see it, the registry can (TODO.md qualifies)
+            let custom = tempfile::tempdir().unwrap();
+            std::fs::write(custom.path().join("TODO.md"), "# TODO\n").unwrap();
+            let idx_dir = tempfile::tempdir().unwrap();
+            let index = RedbIndex::open_at(
+                camino::Utf8PathBuf::from_path_buf(idx_dir.path().join("idx")).unwrap(),
+            )
+            .unwrap();
+            index
+                .register(
+                    &RepoEntry::new(canon_path(member.path()), "member")
+                        .with_worktree(canon_path(custom.path()))
+                        .with_ledger(LedgerMode::Local),
+                )
+                .unwrap();
+            let p =
+                discover_in_index(member.path(), None, None, test_loader(), Some(&index)).unwrap();
+            assert_eq!(p.worktree, custom.path().canonicalize().unwrap());
+            assert_eq!(p.root, member.path().canonicalize().unwrap());
+        });
+    }
+
+    #[test]
+    fn org_fallback_needs_a_valid_org_entry() {
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            let member = repo_without_project();
+            let idx_dir = tempfile::tempdir().unwrap();
+            let index = RedbIndex::open_at(
+                camino::Utf8PathBuf::from_path_buf(idx_dir.path().join("idx")).unwrap(),
+            )
+            .unwrap();
+            index
+                .register(
+                    &RepoEntry::new(canon_path(member.path()), "member")
+                        .with_ledger(LedgerMode::None),
+                )
+                .unwrap();
+            // no org entry designated → ordinary failure
+            assert!(
+                discover_in_index(member.path(), None, None, test_loader(), Some(&index)).is_err()
+            );
+            // an org entry whose worktree doesn't qualify → same
+            let dead = repo_without_project();
+            index
+                .register(
+                    &RepoEntry::new(canon_path(dead.path()), "dead").with_ledger(LedgerMode::Org),
+                )
+                .unwrap();
+            assert!(
+                discover_in_index(member.path(), None, None, test_loader(), Some(&index)).is_err()
+            );
+        });
     }
 }
