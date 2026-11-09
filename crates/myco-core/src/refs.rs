@@ -2,8 +2,9 @@
 //!
 //! Every `project/` file contributes a set of [`Edge`]s, always
 //! with `src` = the item the file speaks for: `blocks:`/
-//! `superseded_by:` frontmatter declares edges verbatim, `X-NNN`
-//! tokens in prose become `references` edges, and a
+//! `supersedes:`/`superseded_by:`/`links:` frontmatter declares
+//! edges verbatim, `X-NNN` tokens in prose become `references`
+//! edges, and a
 //! `handoffs/<ID>.md` filename is a `handoff` edge (a filename
 //! fact — callers record it, nothing to scan).
 //!
@@ -34,7 +35,8 @@ pub const MAX_MENTIONS: usize = 64;
 /// `*_by` forms are the reverse views — extract only ever produces
 /// [`Handoff`](EdgeKind::Handoff), [`Blocks`](EdgeKind::Blocks),
 /// [`Supersedes`](EdgeKind::Supersedes),
-/// [`SupersededBy`](EdgeKind::SupersededBy), and
+/// [`SupersededBy`](EdgeKind::SupersededBy),
+/// [`Associated`](EdgeKind::Associated), and
 /// [`References`](EdgeKind::References); the index materializes
 /// the mirror at query time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -53,6 +55,11 @@ pub enum EdgeKind {
     Supersedes,
     /// `src` declares `superseded_by: dst`.
     SupersededBy,
+    /// `src` declares `links: dst` — a kind-agnostic association
+    /// (its plan, its proposal, …). Symmetric: the mirror is the
+    /// kind itself, so incoming and outgoing land in one
+    /// `associated` group.
+    Associated,
     /// `src`'s text mentions `dst`.
     References,
     /// Reverse of [`References`](EdgeKind::References) —
@@ -62,12 +69,13 @@ pub enum EdgeKind {
 
 impl EdgeKind {
     /// All kinds, in declaration order.
-    pub const ALL: [EdgeKind; 7] = [
+    pub const ALL: [EdgeKind; 8] = [
         EdgeKind::Handoff,
         EdgeKind::Blocks,
         EdgeKind::BlockedBy,
         EdgeKind::Supersedes,
         EdgeKind::SupersededBy,
+        EdgeKind::Associated,
         EdgeKind::References,
         EdgeKind::ReferencedBy,
     ];
@@ -81,6 +89,7 @@ impl EdgeKind {
             EdgeKind::BlockedBy => "blocked_by",
             EdgeKind::Supersedes => "supersedes",
             EdgeKind::SupersededBy => "superseded_by",
+            EdgeKind::Associated => "associated",
             EdgeKind::References => "references",
             EdgeKind::ReferencedBy => "referenced_by",
         }
@@ -104,6 +113,7 @@ impl EdgeKind {
             EdgeKind::BlockedBy => EdgeKind::Blocks,
             EdgeKind::Supersedes => EdgeKind::SupersededBy,
             EdgeKind::SupersededBy => EdgeKind::Supersedes,
+            EdgeKind::Associated => EdgeKind::Associated,
             EdgeKind::References => EdgeKind::ReferencedBy,
             EdgeKind::ReferencedBy => EdgeKind::References,
             EdgeKind::Handoff => EdgeKind::Handoff,
@@ -185,6 +195,9 @@ pub fn extract(body: &str, meta: Option<&Item>, id: ItemId, kinds: &KindTable) -
         }
         if let Some(s) = m.superseded_by {
             edges.insert(Edge::new(id, s, EdgeKind::SupersededBy));
+        }
+        for l in &m.links {
+            edges.insert(Edge::new(id, *l, EdgeKind::Associated));
         }
     }
     for dst in mentions(body) {
@@ -272,13 +285,18 @@ mod tests {
         assert!(EdgeKind::BlockedBy.mirror() == EdgeKind::Blocks);
         assert!(!EdgeKind::BlockedBy.extracted());
         assert!(EdgeKind::SupersededBy.extracted());
+        // associated is symmetric — mirror is itself
+        assert_eq!(EdgeKind::Associated.mirror(), EdgeKind::Associated);
+        assert!(EdgeKind::Associated.extracted());
     }
 
     #[test]
     fn extract_frontmatter_edges() {
+        let plan = ItemId::new(ItemKind::Plan, 1);
         let meta = Item::new(t(1), "x")
             .blocks(t(2))
             .blocks(i(3))
+            .links(plan)
             .supersedes(ItemId::new(ItemKind::Adr, 1))
             .superseded_by(ItemId::new(ItemKind::Adr, 9));
         let edges = extract("", Some(&meta), t(1), &kinds());
@@ -287,6 +305,7 @@ mod tests {
             BTreeSet::from([
                 Edge::new(t(1), t(2), EdgeKind::Blocks),
                 Edge::new(t(1), i(3), EdgeKind::Blocks),
+                Edge::new(t(1), plan, EdgeKind::Associated),
                 Edge::new(t(1), ItemId::new(ItemKind::Adr, 1), EdgeKind::Supersedes),
                 Edge::new(t(1), ItemId::new(ItemKind::Adr, 9), EdgeKind::SupersededBy),
             ])

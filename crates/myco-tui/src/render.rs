@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
-use crate::app::{Board, Mode, Model, Row};
+use crate::app::{Board, LinkHit, Mode, Model, Row};
 
 const ACCENT: Color = Color::Indexed(69); // pm's nav blue
 const MUTED: Color = Color::Indexed(241);
@@ -197,10 +197,12 @@ fn draw_board(f: &mut Frame, m: &mut Model, area: Rect) {
     m.viewport_top = state.offset();
 }
 
-fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
-    let Some(item) = m.selected() else {
+fn draw_preview(f: &mut Frame, m: &mut Model, area: Rect) {
+    m.link_hits.clear();
+    let Some((item, body, repo)) = m.preview_content() else {
         return;
     };
+    let width = area.width as usize;
     let mut lines = vec![
         Line::from(Span::styled(
             item.id.to_string(),
@@ -220,10 +222,10 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
             Span::raw(item.priority.token().to_string()),
         ]),
     ];
-    if let Some(r) = m.selected_repo() {
+    if let Some(r) = &repo {
         lines.push(Line::from(vec![
             Span::styled("repo   ", Style::default().fg(MUTED)),
-            Span::raw(r.to_string()),
+            Span::raw(r.clone()),
         ]));
     }
     if let Some(o) = &item.owner {
@@ -258,7 +260,27 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
             Span::raw(format!(" {d}")),
         ]));
     }
-    lines.extend(related_lines(m, item));
+    // The related block is the clickable zone — each dst id gets
+    // its own line and a hit rect. `rel_len` bounds the chrome we
+    // must keep single-line so buffer indices map to screen rows.
+    let rel_start = lines.len();
+    let rel = related_lines(m, &item, repo.as_deref());
+    let rel_len = rel_start + rel.len();
+    let mut link_meta: Vec<(usize, myco_core::ItemId, Option<String>)> = Vec::new();
+    for (i, (line, link)) in rel.into_iter().enumerate() {
+        if let Some((id, lr)) = link {
+            link_meta.push((rel_start + i, id, lr));
+        }
+        lines.push(line);
+    }
+    if !link_meta.is_empty() {
+        // Everything above and inside the related block must be
+        // exactly one visual row per buffer line, or the hit rows
+        // drift. Fit (truncate, never wrap) the chrome lines.
+        for line in lines.iter_mut().take(rel_len) {
+            *line = fit_line(std::mem::take(line), width);
+        }
+    }
     if !item.children.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
@@ -278,7 +300,7 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
         lines.push(Line::from(note.clone()));
     }
     // File-backed items render their body (pm's note preview).
-    if let Some(body) = m.file_body(item.id) {
+    if let Some(body) = body {
         lines.push(Line::from(""));
         for l in body.lines() {
             let style = if l.starts_with('#') {
@@ -293,6 +315,23 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
     // the pane scrolls (`j`/`k`/… in Preview mode), clamped to the
     // content so `G` lands on the last line
     let scroll = (m.preview_scroll as usize).min(lines.len().saturating_sub(1)) as u16;
+    // Record where each link landed — buffer index minus scroll is
+    // the visual row because the chrome above was fit to one line.
+    for (idx, id, lr) in link_meta {
+        let y = area.y as isize + idx as isize - scroll as isize;
+        if y >= area.y as isize && y < area.bottom() as isize {
+            m.link_hits.push(LinkHit {
+                rect: Rect {
+                    x: area.x,
+                    y: y as u16,
+                    width: area.width,
+                    height: 1,
+                },
+                id,
+                repo: lr,
+            });
+        }
+    }
     f.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
@@ -301,45 +340,79 @@ fn draw_preview(f: &mut Frame, m: &Model, area: Rect) {
     );
 }
 
+/// Truncate a line to `width` columns — same `…` tail as
+/// `ellipsize`, for lines that must stay one visual row.
+fn fit_line(line: Line<'static>, width: usize) -> Line<'static> {
+    Line::from(ellipsize(line.spans, width))
+}
+
+/// A related-section row: the rendered line plus the link a click
+/// on it resolves (`(item id, repo hint)`), `None` for chrome.
+type RelatedRow = (Line<'static>, Option<(myco_core::ItemId, Option<String>)>);
+
 /// The preview's "related" section — edges in/out grouped by
-/// kind (P-005, the I-019 related-files view). `other` resolves
-/// to `ID title` when the neighbor is loaded; a `handoff` self
-/// edge shows the file path instead of the item's own id.
-fn related_lines(m: &Model, item: &myco_core::Item) -> Vec<Line<'static>> {
+/// kind (P-005, the I-019 related-files view). Each dst gets its
+/// own line; item ids are styled as links and returned with the
+/// `(id, repo)` a click resolves. `other` resolves to
+/// `ID title` when the neighbor is loaded; a `handoff` self edge
+/// shows the file path instead of the item's own id.
+fn related_lines(m: &Model, item: &myco_core::Item, repo: Option<&str>) -> Vec<RelatedRow> {
     let related = m.related(item.id);
     if related.is_empty() {
         return Vec::new();
     }
-    let mut lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "related",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        )),
+    let mut out = vec![
+        (Line::from(""), None),
+        (
+            Line::from(Span::styled(
+                "related",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )),
+            None,
+        ),
     ];
     for kind in myco_core::EdgeKind::ALL {
-        let dsts: Vec<String> = related
+        let dsts: Vec<myco_core::ItemId> = related
             .iter()
             .filter(|(k, _)| *k == kind)
-            .map(|(_, other)| {
-                if kind == myco_core::EdgeKind::Handoff {
-                    return format!("handoffs/{other}.md");
-                }
-                match m.item_title(*other) {
-                    Some(title) if !title.is_empty() => format!("{other} {title}"),
-                    _ => other.to_string(),
-                }
-            })
+            .map(|(_, other)| *other)
             .collect();
         if dsts.is_empty() {
             continue;
         }
-        lines.push(Line::from(vec![
-            Span::styled(format!("  {:<13}", kind.name()), Style::default().fg(MUTED)),
-            Span::raw(dsts.join(" · ")),
-        ]));
+        for (i, other) in dsts.iter().enumerate() {
+            // kind label on the group's first line only — the rest
+            // indent under it
+            let label = if i == 0 {
+                format!("  {:<13}", kind.name())
+            } else {
+                " ".repeat(15)
+            };
+            let (text, link) = if kind == myco_core::EdgeKind::Handoff {
+                (format!("handoffs/{other}.md"), None)
+            } else {
+                let title = m.item_title(*other).filter(|t| !t.is_empty());
+                let text = match title {
+                    Some(t) => format!("{other} {t}"),
+                    None => other.to_string(),
+                };
+                (text, Some((*other, repo.map(str::to_owned))))
+            };
+            let style = if link.is_some() {
+                Style::default().fg(ACCENT)
+            } else {
+                Style::default()
+            };
+            out.push((
+                Line::from(vec![
+                    Span::styled(label, Style::default().fg(MUTED)),
+                    Span::styled(text, style),
+                ]),
+                link,
+            ));
+        }
     }
-    lines
+    out
 }
 
 /// Normal-mode hint sets, widest first — `pick_hints` takes the
@@ -454,6 +527,7 @@ fn help_lines() -> Vec<Line<'static>> {
         group("mouse"),
         bind("click, wheel", "select, scroll"),
         bind("double-click", "open preview"),
+        bind("click id", "open linked item"),
         group("misc"),
         bind("/, F", "filter / clear"),
         bind(":", "command line"),
@@ -795,5 +869,55 @@ mod tests {
         m.mode = Mode::Normal;
         m.show_ids = false;
         screen(&mut m, 80, 24);
+    }
+
+    #[test]
+    fn preview_related_ids_record_click_hits() {
+        use crossterm::event::{
+            KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        };
+        let mut m = model(|l| {
+            l.put_todo(t(1).links(ItemId::new(ItemKind::Task, 2)), None);
+            l.put_todo(t(2), None);
+        });
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Preview);
+        screen(&mut m, 80, 24);
+        // the link line for T-002 got a hit rect
+        let hit = m
+            .link_hits
+            .iter()
+            .find(|h| h.id == ItemId::new(ItemKind::Task, 2))
+            .expect("no hit for T-002");
+        let (x, y) = (hit.rect.x + 3, hit.rect.y);
+        // clicking it opens T-002's preview; ← walks back to T-001
+        m.mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: x,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(m.mode, Mode::Preview);
+        assert_eq!(
+            m.preview_content().unwrap().0.id,
+            ItemId::new(ItemKind::Task, 2)
+        );
+        m.key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert_eq!(
+            m.preview_content().unwrap().0.id,
+            ItemId::new(ItemKind::Task, 1)
+        );
+        // a click off the links does nothing
+        screen(&mut m, 80, 24);
+        m.mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert_eq!(
+            m.preview_content().unwrap().0.id,
+            ItemId::new(ItemKind::Task, 1)
+        );
     }
 }

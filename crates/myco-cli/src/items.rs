@@ -61,14 +61,15 @@ pub fn open_read(
     }
 }
 
-/// `--pri/--owner/--label/--blocks/--epic/--milestone` → the
-/// `NewItemMeta` every `add`/`new` verb applies.
+/// `--pri/--owner/--label/--blocks/--links/--epic/--milestone` →
+/// the `NewItemMeta` every `add`/`new` verb applies.
 pub fn meta_args(a: &crate::registry::Args) -> Result<NewItemMeta, String> {
     Ok(NewItemMeta {
         priority: a.parsed("pri")?,
         owner: a.parsed("owner")?,
         labels: a.many("label"),
         blocks: a.many_parsed("blocks")?,
+        links: a.many_parsed("links")?,
         epic: a.opt("epic").map(str::to_string),
         milestone: a.opt("milestone").map(str::to_string),
     })

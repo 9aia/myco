@@ -731,8 +731,8 @@ const GROUPS: &[Group] = &[
 
 // ---------------------------------------------------------------- param bundles
 
-/// `--pri/--owner/--label/--blocks/--epic/--milestone` — every
-/// `add`/`new` verb's metadata flags.
+/// `--pri/--owner/--label/--blocks/--links/--epic/--milestone` —
+/// every `add`/`new` verb's metadata flags.
 const META: &[Param] = &[
     opt("pri", Val::Pri, "Priority: low|med|high|crit.").alias("priority"),
     opt(
@@ -745,6 +745,13 @@ const META: &[Param] = &[
         "blocks",
         Val::Id,
         "Ids this item blocks — comma-separated or repeatable.",
+    )
+    .multi()
+    .delim(),
+    opt(
+        "links",
+        Val::Id,
+        "Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.",
     )
     .multi()
     .delim(),
@@ -1375,7 +1382,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "item.show",
-        about: "Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.",
+        about: "Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/associated/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.",
         params: &[IDS],
         kind_lock: None,
         mutates: false,
@@ -1402,6 +1409,13 @@ pub static VERBS: &[Verb] = &[
             opt("unblock", Val::Id, "Remove a blocks dep — repeatable or comma-separated.")
                 .multi()
                 .delim(),
+            opt("links", Val::Str, "Add (`+PL-1` or `PL-1`) or remove (`-PL-1`) a link — repeatable or comma-separated.")
+                .multi()
+                .hyphen()
+                .delim(),
+            opt("unlink", Val::Id, "Remove a link — repeatable or comma-separated.")
+                .multi()
+                .delim(),
             opt("epic", Val::Str, "Epic name — `\"\"` clears the epic."),
             opt("milestone", Val::Str, "Milestone name — `\"\"` clears the milestone."),
             opt("session", Val::Str, "Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state."),
@@ -1419,7 +1433,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "item.move",
-        about: "Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:` dropped — it names source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.",
+        about: "Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.",
         params: &[&[
             pos("id", Val::Id, "Any item id."),
             opt(

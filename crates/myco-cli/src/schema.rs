@@ -119,8 +119,8 @@ pub fn document() -> serde_json::Value {
                 "format": "`+++` TOML frontmatter + free-form markdown body",
                 "frontmatter_keys": [
                     "id", "title", "status", "created", "owner", "priority",
-                    "labels", "blocks", "note", "superseded_by", "supersedes",
-                    "epic", "milestone",
+                    "labels", "blocks", "links", "note", "superseded_by",
+                    "supersedes", "epic", "milestone",
                 ],
             },
             "handoffs": {
@@ -143,8 +143,8 @@ pub fn document() -> serde_json::Value {
         "line_grammar": {
             "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] \
                       [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] \
-                      [· epic:<name>] [· ms:<name>] [· note:<text>]",
-            "token_order": ["status", "pri", "owner", "created", "#label", "blocks", "epic", "ms", "note"],
+                      [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] [· note:<text>]",
+            "token_order": ["status", "pri", "owner", "created", "#label", "blocks", "links", "epic", "ms", "note"],
             "separator": "·",
             "defaults": {"status": "doc default (open|deferred|done)", "pri": "med"},
             "label_pattern": "[A-Za-z0-9_-]+",

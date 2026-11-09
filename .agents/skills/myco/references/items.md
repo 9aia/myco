@@ -40,7 +40,7 @@ still resolves it).
 
 ```bash
 myco todo add "title" [--section S] [--pri high] [--owner devin] \
-    [--label x] [--blocks T-1] [--epic v2] [--milestone 0.2]
+    [--label x] [--blocks T-1] [--links PL-1] [--epic v2] [--milestone 0.2]
 myco todo done T-NNN          # → done, subtree → DONE.md (asks on a tty)
 myco todo defer T-NNN         # → deferred, line → BACKLOG.md
 myco todo list                # backlog list / promote T-NNN likewise
@@ -60,13 +60,14 @@ myco adr supersede ADR-1 --by ADR-2             # reciprocal links
 
 myco item show T-NNN          # any kind, live or archived
 myco item set T-NNN --status in-progress --owner devin \
-    --label +urgent --unlabel stale --blocks +I-3 --epic v2
+    --label +urgent --unlabel stale --blocks +I-3 --links +PL-1 --epic v2
 myco item move T-NNN --to /path/to/other-repo   # cross-repo transfer
 ```
 
 `item set` mutates metadata in place; `--status` is the only field
-routed through the state machine. `--label`/`--blocks` take `+`/`-`
-prefixes; `--epic ""` clears. `--status done` is terminal — it
+routed through the state machine. `--label`/`--blocks`/`--links`
+take `+`/`-` prefixes (`--unlink` also removes a link);
+`--epic ""` clears. `--status done` is terminal — it
 confirms on a tty (`--yes`/`$MYCO_YES` skips; non-interactive runs
 never prompt). Same for `todo done` and `item move`.
 
@@ -74,8 +75,8 @@ never prompt). Same for `todo done` and `item move`.
 the destination repo root, its `project/` worktree, or a registered
 repo name (`myco index list`). The destination copy gets the next id
 in *its* sequence (kind, title, body, pri/owner/labels/epic/
-milestone carried; `blocks:` is dropped — it names source-ledger
-ids), plus a `moved from <repo>:<ID>` handoff. The source gets a
+milestone carried; `blocks:`/`links:` are dropped — they name
+source-ledger ids), plus a `moved from <repo>:<ID>` handoff. The source gets a
 `moved to <repo>:<ID>` handoff, then closes `done` — a task's line
 leaves TODO.md and its handoff drops to `handoffs/archive/`; a
 file-backed item keeps its file at status `done`. Two commits, one
@@ -87,6 +88,10 @@ per worktree; `--note` adds context to the source handoff.
 - `--owner <actor>` — `devin`, `human:luis`, … (who owns it)
 - `--label <tag>` — `#label`, repeatable
 - `--blocks <ids>` — "this item blocks those" dependencies
+- `--links <ids>` — kind-agnostic associations (its plan, the
+  proposal that spawned it, …) — shows as `associated` in
+  `item show` related output and the `myco ui` preview, where
+  ids are clickable
 - `--epic` / `--milestone` — `[A-Za-z0-9_.-]+` grouping names, feed
   `myco view epic` / `myco view milestone` / `view board --epic/--milestone`
 

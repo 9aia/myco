@@ -4,7 +4,8 @@
 //! ```text
 //! <id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>]
 //!     [· created:<date>] [· #<label>]… [· blocks:<id>[,<id>]…]
-//!     [· epic:<name>] [· ms:<name>] [· note:<text>]
+//!     [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>]
+//!     [· note:<text>]
 //! ```
 //!
 //! Metadata tokens come after the title, `·`-separated, in the
@@ -97,6 +98,7 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
     let mut owner = None;
     let mut created = None;
     let mut blocks_seen = false;
+    let mut links_seen = false;
     let mut epic = None;
     let mut milestone = None;
     let mut note = None;
@@ -162,6 +164,20 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
                         .insert(bid.parse::<ItemId>().map_err(|e| format!("{e}"))?);
                 }
             }
+            "links" => {
+                if links_seen {
+                    return Err(bad("duplicate links: token"));
+                }
+                links_seen = true;
+                for lid in value.split(',') {
+                    let lid = lid.trim();
+                    if lid.is_empty() {
+                        return Err(bad("empty id in links: list"));
+                    }
+                    item.links
+                        .insert(lid.parse::<ItemId>().map_err(|e| format!("{e}"))?);
+                }
+            }
             "epic" => {
                 if epic.is_some() {
                     return Err(bad("duplicate epic: token"));
@@ -188,7 +204,7 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
             }
             other => {
                 return Err(bad(format!(
-                    "unknown metadata key {other:?} — expected status|pri|owner|created|blocks|epic|ms|note or #label"
+                    "unknown metadata key {other:?} — expected status|pri|owner|created|blocks|links|epic|ms|note or #label"
                 )));
             }
         }
@@ -196,6 +212,9 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
 
     if item.blocks.contains(&id) {
         return Err(bad(format!("{id} can't block itself")));
+    }
+    if item.links.contains(&id) {
+        return Err(bad(format!("{id} can't link itself")));
     }
     item.status = status.unwrap_or(spec.default_status);
     item.priority = priority.unwrap_or_default();
@@ -244,10 +263,13 @@ pub(crate) fn check_item(item: &Item, file: &'static str) -> Result<(), EmitErro
         }
     }
     if item.blocks.contains(&item.id)
+        || item.links.contains(&item.id)
         || item.supersedes == Some(item.id)
         || item.superseded_by == Some(item.id)
     {
-        return Err(err("self-reference — can't block or supersede itself"));
+        return Err(err(
+            "self-reference — can't block, link, or supersede itself",
+        ));
     }
     Ok(())
 }
@@ -280,6 +302,10 @@ pub(crate) fn text(item: &Item, spec: &LineSpec) -> Result<String, EmitError> {
     if !item.blocks.is_empty() {
         let ids: Vec<String> = item.blocks.iter().map(ItemId::to_string).collect();
         tokens.push(format!("blocks:{}", ids.join(",")));
+    }
+    if !item.links.is_empty() {
+        let ids: Vec<String> = item.links.iter().map(ItemId::to_string).collect();
+        tokens.push(format!("links:{}", ids.join(",")));
     }
     if let Some(epic) = &item.epic {
         tokens.push(format!("epic:{epic}"));
@@ -330,6 +356,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_links_token() {
+        let i = item("T-012 task · links:PL-001, P-013 · blocks:T-010");
+        assert!(i.links.contains(&ItemId::new(ItemKind::Plan, 1)));
+        assert!(i.links.contains(&ItemId::new(ItemKind::Proposal, 13)));
+        assert_eq!(i.links.len(), 2);
+        // emit order: links sits between blocks and epic, ids sorted
+        let s = text(&i, &TODO).unwrap();
+        assert!(s.contains("blocks:T-010 · links:P-013,PL-001"), "{s}");
+        assert_eq!(parse_text(&s, &TODO).unwrap(), i);
+    }
+
+    #[test]
     fn parse_minimal() {
         let i = item("T-003 title only");
         assert_eq!(i.status, Status::Open);
@@ -364,6 +402,11 @@ mod tests {
             ("T-001 t · blocks:XYZ", "bad block id"),
             ("T-001 t · blocks:T-1 · blocks:T-2", "dup blocks"),
             ("T-001 t · blocks:T-1,T-2", "blocks itself"),
+            ("T-001 t · links:", "empty links"),
+            ("T-001 t · links:T-1,,T-2", "empty id in links"),
+            ("T-001 t · links:XYZ", "bad link id"),
+            ("T-001 t · links:T-1 · links:T-2", "dup links"),
+            ("T-001 t · links:T-001", "links itself"),
             ("T-001 t · epic:", "empty epic"),
             ("T-001 t · epic:has space", "bad epic name"),
             ("T-001 t · epic:a · epic:b", "dup epic"),

@@ -1,0 +1,172 @@
+name: docs
+path: docs/package.json
+purpose: documentation corpus — pages as records, backticked refs as edges
+api:
+- name: Architecture
+  kind: record
+  file: docs/explanation/architecture.md
+  line: 1
+  module: docs
+- name: Command-Line Help for `myco`
+  kind: record
+  file: docs/reference/cli.md
+  line: 1
+  module: docs
+- name: Config — `myco.toml`
+  kind: record
+  file: docs/reference/config.md
+  line: 1
+  module: docs
+- name: Crate API
+  kind: record
+  file: docs/reference/crate-api.md
+  line: 1
+  module: docs
+- name: Getting started
+  kind: record
+  file: docs/getting-started.md
+  line: 1
+  module: docs
+- name: Hand off work between sessions
+  kind: record
+  file: docs/how-to/handoff.md
+  line: 1
+  module: docs
+- name: Import external work
+  kind: record
+  file: docs/how-to/import-work.md
+  line: 1
+  module: docs
+- name: Managed `AGENTS.md` blocks
+  kind: record
+  file: docs/reference/agents-md-block.md
+  line: 1
+  module: docs
+- name: Migrate a legacy ledger
+  kind: record
+  file: docs/how-to/migrate.md
+  line: 1
+  module: docs
+- name: Release model
+  kind: record
+  file: docs/explanation/release-model.md
+  line: 1
+  module: docs
+- name: Run the daily agent loop
+  kind: record
+  file: docs/how-to/agent-loop.md
+  line: 1
+  module: docs
+- name: See work across repos
+  kind: record
+  file: docs/how-to/org-views.md
+  line: 1
+  module: docs
+- name: Session continuity with sepia
+  kind: record
+  file: docs/how-to/session-continuity.md
+  line: 1
+  module: docs
+- name: Set up myco on a repository
+  kind: record
+  file: docs/how-to/init-repo.md
+  line: 1
+  module: docs
+- name: Shape the board with named views
+  kind: record
+  file: docs/how-to/views.md
+  line: 1
+  module: docs
+- name: The ledger file spec
+  kind: record
+  file: docs/explanation/file-spec.md
+  line: 1
+  module: docs
+- name: The worktree model
+  kind: record
+  file: docs/explanation/worktree-model.md
+  line: 1
+  module: docs
+- name: Your first item
+  kind: record
+  file: docs/tutorials/first-item.md
+  line: 1
+  module: docs
+- name: myco docs
+  kind: record
+  file: docs/README.md
+  line: 1
+  module: docs
+deps: []
+notes: ''
+verify:
+- docs/package.json
+- docs/README.md
+- docs/explanation/architecture.md
+- docs/explanation/file-spec.md
+- docs/explanation/release-model.md
+- docs/explanation/worktree-model.md
+- docs/gen-api-index.py
+- docs/gen-api.py
+- docs/gen-config-docs.py
+- docs/gen-crate-map.py
+provenance:
+  files:
+  - docs/README.md
+  - docs/explanation/architecture.md
+  - docs/explanation/file-spec.md
+  - docs/explanation/release-model.md
+  - docs/explanation/worktree-model.md
+  - docs/gen-api-index.py
+  - docs/gen-api.py
+  - docs/gen-config-docs.py
+  - docs/gen-crate-map.py
+  - docs/getting-started.md
+  - docs/how-to/agent-loop.md
+  - docs/how-to/handoff.md
+  - docs/how-to/import-work.md
+  - docs/how-to/init-repo.md
+  - docs/how-to/migrate.md
+  - docs/how-to/org-views.md
+  - docs/how-to/session-continuity.md
+  - docs/how-to/views.md
+  - docs/index.md
+  - docs/package.json
+  - docs/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md
+  - docs/reference/agents-md-block.md
+  - docs/reference/cli.md
+  - docs/reference/config.md
+  - docs/reference/crate-api.md
+  - docs/tutorials/first-item.md
+  - docs/vite.config.ts
+  hashes:
+  - 37875be414594018d1777b6d0ae9ff5ee9abaff4
+  - df482b2bec05527ec174b12cb363036a7f165ca2
+  - ff010365642167dda5ed0f8fc70250c7f6bee46e
+  - 9dcef9a50856c14828376f3627d51220c0a9fb1f
+  - 7292a355bd32c42b55880e0b3c5e82cbf8605315
+  - 33012524fba6dafdf3bb0dae2578ba070c12a7ce
+  - 16f3fa46a9d43a7380f82f180c8e66a35303eda4
+  - 5bf7b6328f8f69dcb99cc21aeea655bf0486adb6
+  - 710dd5e260de45f47719035e55463e966c9a357f
+  - a76a0d6b2eb10fdc9668dade20ce1df364ba2443
+  - 83be80a8733d6e74a39c34cc82575adfb2e7a14f
+  - abe16ac796f2bfa0e0923fb952eef8cd36dc1ec5
+  - 2a92f8bc6de519d7f56ca07dd095bc68f44426b9
+  - 7fc26398cc5e042c70e958f860978bc9dc1c6b9e
+  - 7b54eff20702bc7855da3e3dceab643ad671a1ed
+  - 1ca3b1780aeca623dd24902d74297c6c670c702a
+  - 8a52300ad3c64405753aa9d8a0902f4357662a34
+  - 66a015472d280525e6e8705d8fa057e7c86360fd
+  - 3e8c357c268c199694a760fd4b23fd94ab1fb3c5
+  - 0ded149bb23144edb4c17246b6200460fb509c0b
+  - 175fa4f47aecdc02e902d243a1c29914eb2ee258
+  - 2c598a8339f9727f5082514f921f61e72ed40dbe
+  - 6976122b8ea163092e789b3320473c298c6b324e
+  - 6fb184856e5ff43337a75acaedf86cc5a87b969c
+  - a053d47e8def4496e069ca3a3c51eebe2bb96ae1
+  - 7d6bd5f9eedd462c9186d3732497da9cc0083b06
+  - 469a0c695c609805c8771b4301839917207b7efb
+  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
+  generated_at: '1794254004'
+  generator: kuda-template/0.1.2

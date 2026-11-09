@@ -78,8 +78,8 @@ no-hook safety net.
 myco resume T-012 [--last 5]
 ```
 
-Minimal context block for one item: the item itself, `blocks:` dep
-titles, the latest handoff entries, the open checklist. The
+Minimal context block for one item: the item itself, `blocks:`/`links:`
+assoc titles, the latest handoff entries, the open checklist. The
 single-item `status --prompt`.
 
 **Resume-into-prompt pattern**: when picking up a task (from a handoff,

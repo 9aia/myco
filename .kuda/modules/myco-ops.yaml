@@ -25,22 +25,37 @@ api:
 - name: DEFAULT_ACTOR
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 156
+  line: 161
   module: myco-ops
 - name: DEFAULT_PAGER
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 253
+  line: 449
   module: myco-ops
 - name: DIR
   kind: const
   file: crates/myco-ops/src/discover.rs
   line: 21
   module: myco-ops
+- name: FILE
+  kind: const
+  file: crates/myco-ops/src/history.rs
+  line: 24
+  module: myco-ops
 - name: Filter
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 273
+  line: 329
+  module: myco-ops
+- name: HistoryEntry
+  kind: type
+  file: crates/myco-ops/src/history.rs
+  line: 34
+  module: myco-ops
+- name: Journal
+  kind: type
+  file: crates/myco-ops/src/history.rs
+  line: 46
   module: myco-ops
 - name: LOCK_FILE
   kind: const
@@ -55,7 +70,17 @@ api:
 - name: LockedStore
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 64
+  line: 113
+  module: myco-ops
+- name: MAX_ENTRIES
+  kind: const
+  file: crates/myco-ops/src/history.rs
+  line: 29
+  module: myco-ops
+- name: MULTI_COMMIT_SUBJECTS
+  kind: const
+  file: crates/myco-ops/src/ops.rs
+  line: 266
   module: myco-ops
 - name: NamedVerb
   kind: type
@@ -70,7 +95,7 @@ api:
 - name: NewItem
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 339
+  line: 419
   module: myco-ops
 - name: Origin
   kind: type
@@ -100,7 +125,17 @@ api:
 - name: Target
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 78
+  line: 127
+  module: myco-ops
+- name: UndoOutcome
+  kind: type
+  file: crates/myco-ops/src/ops.rs
+  line: 249
+  module: myco-ops
+- name: VERSION
+  kind: const
+  file: crates/myco-ops/src/history.rs
+  line: 26
   module: myco-ops
 - name: WorktreeLock
   kind: type
@@ -110,37 +145,42 @@ api:
 - name: all_ids
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 102
+  line: 151
   module: myco-ops
 - name: alloc_id
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 99
+  line: 148
   module: myco-ops
 - name: append_handoff
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 150
+  line: 205
+  module: myco-ops
+- name: archive_done
+  kind: function
+  file: crates/myco-ops/src/items.rs
+  line: 87
   module: myco-ops
 - name: archive_item
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 132
+  line: 187
   module: myco-ops
 - name: autocommit
   kind: function
   file: crates/myco-ops/src/ops.rs
-  line: 191
+  line: 196
   module: myco-ops
 - name: autocommit_stamps_actor_trailer
   kind: function
   file: crates/myco-ops/src/ops.rs
-  line: 410
+  line: 606
   module: myco-ops
 - name: backlog
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 111
+  line: 160
   module: myco-ops
 - name: bad_entries_warn_and_skip
   kind: function
@@ -162,53 +202,14 @@ api:
   file: crates/myco-ops/src/view.rs
   line: 274
   module: myco-ops
-- name: canon
-  kind: function
-  file: crates/myco-ops/src/discover.rs
-  line: 35
-  module: myco-ops
-- name: canon_path
-  kind: function
-  file: crates/myco-ops/src/discover.rs
-  line: 644
-  module: myco-ops
-- name: canonical_dir
-  kind: function
-  file: crates/myco-ops/src/discover.rs
-  line: 122
-  module: myco-ops
-- name: canonicalize
-  kind: function
-  file: crates/myco-ops/src/discover.rs
-  line: 115
-  module: myco-ops
-- name: commit
-  kind: function
-  file: crates/myco-ops/src/items.rs
-  line: 244
-  module: myco-ops
-- name: commit_msg
-  kind: function
-  file: crates/myco-ops/src/ops.rs
-  line: 165
-  module: myco-ops
-- name: commit_msg_appends_actor_trailer
-  kind: function
-  file: crates/myco-ops/src/ops.rs
-  line: 397
-  module: myco-ops
-- name: commit_paths
-  kind: function
-  file: crates/myco-ops/src/ops.rs
-  line: 215
-  module: myco-ops
-api_omitted: 163
+api_omitted: 204
 deps:
 - camino
 - myco-core
 - myco-git
 - myco-index
 - myco-store
+- serde
 - serde_json
 - time
 - myco-config
@@ -221,6 +222,7 @@ deps:
 - myco-store
 - serde_json
 - myco-store-md
+- serde
 - myco-index
 - myco-index-redb
 - camino
@@ -230,6 +232,7 @@ verify:
 - crates/myco-ops/Cargo.toml
 - crates/myco-ops/src/config.rs
 - crates/myco-ops/src/discover.rs
+- crates/myco-ops/src/history.rs
 - crates/myco-ops/src/items.rs
 - crates/myco-ops/src/lib.rs
 - crates/myco-ops/src/links.rs
@@ -241,6 +244,7 @@ provenance:
   - crates/myco-ops/Cargo.toml
   - crates/myco-ops/src/config.rs
   - crates/myco-ops/src/discover.rs
+  - crates/myco-ops/src/history.rs
   - crates/myco-ops/src/items.rs
   - crates/myco-ops/src/lib.rs
   - crates/myco-ops/src/links.rs
@@ -248,15 +252,16 @@ provenance:
   - crates/myco-ops/src/verb.rs
   - crates/myco-ops/src/view.rs
   hashes:
-  - 1aba36dd24389e2d11c0aa5c6d0ca852bfa19545
+  - d7573e374a2172c1a1e272176f8217878c1d8275
   - eaff06f7145e1435cf37a599f48e49139ce531db
   - e32236a7fbef4a549c16f14a53f3e811399afd31
-  - 698cce0437a87a3c3e3f1e319c26c21d8d9e1e0d
-  - bb111f50f606d42de0c35753652c03d307a3fec2
+  - d68f4d02abaec478c8ca1ab8258a72a98ba5bbbf
+  - 435970b4c6a3d81bc9bdd4ffe97e85d8ba7c0f9c
+  - 692efc8e5656308c8cd3fd2f4d6d6e8fe2f229cd
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
-  - e248b05ad5b56504620f470e9228488ab51a23df
+  - 24b9910925fdd3a237b722338f2010e023b0055a
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: 38b65716068d43d92fce6b2b380b9ccc804da786
-  generated_at: '1794173597'
+  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
+  generated_at: '1794254004'
   generator: kuda-template/0.1.2

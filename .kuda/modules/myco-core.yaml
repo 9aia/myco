@@ -15,7 +15,7 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-core/src/refs.rs
-  line: 65
+  line: 72
   module: myco-core
 - name: ALL
   kind: const
@@ -57,15 +57,20 @@ api:
   file: crates/myco-core/src/lib.rs
   line: 102
   module: myco-core
+- name: DoneDoc
+  kind: type
+  file: crates/myco-core/src/doc.rs
+  line: 89
+  module: myco-core
 - name: Edge
   kind: type
   file: crates/myco-core/src/refs.rs
-  line: 128
+  line: 138
   module: myco-core
 - name: EdgeKind
   kind: type
   file: crates/myco-core/src/refs.rs
-  line: 44
+  line: 46
   module: myco-core
 - name: EmitMode
   kind: type
@@ -165,12 +170,12 @@ api:
 - name: Item
   kind: type
   file: crates/myco-core/src/item.rs
-  line: 92
+  line: 97
   module: myco-core
 - name: ItemFile
   kind: type
   file: crates/myco-core/src/doc.rs
-  line: 87
+  line: 108
   module: myco-core
 - name: ItemId
   kind: type
@@ -185,7 +190,7 @@ api:
 - name: ItemMeta
   kind: type
   file: crates/myco-core/src/item.rs
-  line: 83
+  line: 88
   module: myco-core
 - name: KindSpec
   kind: type
@@ -197,12 +202,7 @@ api:
   file: crates/myco-core/src/kind.rs
   line: 182
   module: myco-core
-- name: Ledger
-  kind: type
-  file: crates/myco-core/src/ledger.rs
-  line: 12
-  module: myco-core
-api_omitted: 375
+api_omitted: 378
 deps:
 - schemars
 - serde
@@ -259,19 +259,19 @@ provenance:
   - f75323e2b82195a4149a5fb91548e75ba386acbf
   - 604b979a927c5d66c866f7f0b061a5285483be02
   - 06e989397088667febfffba9ce2aa5e36a6d671b
-  - b20f89fd368fa78e5d5b241c35601cac7adeaa11
+  - e7e29dca7946d7bbcd82dbc8ee2b4c6cfc4c1174
   - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
   - ec34134e87bdf0b1515595800aa3a81ac74449dc
-  - a39bf6db7bd58adab2f441b16cba705044d27f43
+  - d6335b5518ac54be464a131427ac9f879177e284
   - 9141235a6cb438570b3221e892f9cfb86b7af42a
   - 35994c7e790eedc768987fd5c6b3e3d9b44338f3
-  - 12d463905534def309e08da24117a9edc5e4909e
+  - 1a2799c032cd7b6dacfa7cb3e07e48f1fdc84f8c
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - b6f0e2f2ea7098c82a0bc8424159bb7c0bc8198c
-  - 2476ebf019d88b03ba989e3d6b56a0248b1e4592
+  - e62184d264d30354071a59cf2b664a41e01e0334
   - 8151702a3a351e7e0190b10dc05471a8cf7de0b0
   - 4665fc529b7ec9752c06f9fdbb388459859ded86
   - 4cc27aecf26206465afb4fb0142882e4d8f87aae
-  commit_sha: 61a5993db8664b10d45ad2669bb4bb0adc089dd0
-  generated_at: '1794167343'
+  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
+  generated_at: '1794254004'
   generator: kuda-template/0.1.2

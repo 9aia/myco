@@ -167,13 +167,42 @@ pub enum Row {
 
 /// One drill-down step — the Normal-mode context `←` restores
 /// after an open: board, the selected item (id + repo tag so it
-/// survives reloads — ids aren't unique across index repos), and
-/// the mode to land in.
+/// survives reloads — ids aren't unique across index repos), the
+/// mode to land in, and the preview override being left (a link
+/// jump previews an item that isn't the board cursor's).
 struct NavEntry {
     board: Board,
     item: Option<ItemId>,
     repo: Option<String>,
     mode: Mode,
+    preview: Option<PreviewTarget>,
+}
+
+/// A resolved preview target — what a related-id click opens.
+/// `item`/`body` are captured at click time so archived items and
+/// DONE.md tasks (which the boards never load) still render.
+#[derive(Debug, Clone)]
+pub struct PreviewTarget {
+    /// The item being previewed.
+    pub id: ItemId,
+    /// Owning repo on index boards.
+    pub repo: Option<String>,
+    /// The resolved item.
+    pub item: Item,
+    /// File body for file-backed kinds (`None` for ledger items).
+    pub body: Option<String>,
+}
+
+/// A clickable related-id rect recorded by the last preview draw —
+/// `mouse` hit-tests clicks against these.
+#[derive(Debug, Clone)]
+pub struct LinkHit {
+    /// Screen rect of the link's line.
+    pub rect: Rect,
+    /// The item the link opens.
+    pub id: ItemId,
+    /// Repo hint for index boards (the previewed item's repo).
+    pub repo: Option<String>,
 }
 
 /// The whole TUI state.
@@ -266,6 +295,12 @@ pub struct Model {
     /// Preview pane scroll offset (`j`/`k`/`PgUp`/`PgDn`/`g`/`G`
     /// in Preview mode; clamped to the content at draw time).
     pub preview_scroll: u16,
+    /// Explicit preview target — `Some` after a related-id click
+    /// (the previewed item needn't be a board row); `None` means
+    /// the preview follows the board cursor like always.
+    preview_override: Option<PreviewTarget>,
+    /// Clickable related-id rects from the last preview draw.
+    pub link_hits: Vec<LinkHit>,
     /// Multi-key prefix: `g` armed for `gg`, `d` for `dd`.
     pending: Option<char>,
     /// The gated mutation under [`Mode::Confirm`] — `None` outside
@@ -379,6 +414,8 @@ impl Model {
             watch_rx: None,
             tick_n: 0,
             preview_scroll: 0,
+            preview_override: None,
+            link_hits: Vec::new(),
             pending: None,
             confirm: None,
             board_area: Rect::default(),
@@ -614,6 +651,7 @@ impl Model {
         self.load_files();
         self.rebuild_rows();
         self.reselect(sel_id, sel_repo.as_deref(), at);
+        self.preview_override = None;
         self.watch_fp = self.fingerprint();
         self.arm_watch();
     }
@@ -1153,9 +1191,123 @@ impl Model {
             item: self.selected_id(),
             repo: self.selected_repo().map(str::to_owned),
             mode: self.mode,
+            preview: None,
         });
+        self.preview_override = None;
         self.mode = Mode::Preview;
         self.preview_scroll = 0;
+    }
+
+    /// Resolve `id` to a preview target — link clicks land here.
+    /// Index boards search every repo's loaded items (ids aren't
+    /// unique across repos, so `repo` disambiguates); repo mode
+    /// falls back to `find_item` for items the boards never load
+    /// (DONE.md tasks, archived files).
+    fn resolve_link(&self, id: ItemId, repo: Option<&str>) -> Result<PreviewTarget, String> {
+        if let Some(orgs) = &self.orgs {
+            for o in orgs.iter().filter(|o| repo.is_none_or(|r| o.name == r)) {
+                if let Some(item) = o.items.iter().flat_map(Item::subtree).find(|i| i.id == id) {
+                    return Ok(PreviewTarget {
+                        id,
+                        repo: Some(o.name.clone()),
+                        item: item.clone(),
+                        body: self.org_file_body(o, id),
+                    });
+                }
+            }
+            return Err(format!("{id}: not in the index"));
+        }
+        for i in self.top_items().flat_map(Item::subtree) {
+            if i.id == id {
+                return Ok(PreviewTarget {
+                    id,
+                    repo: None,
+                    item: i.clone(),
+                    body: None,
+                });
+            }
+        }
+        if let Some(f) = self.files.iter().find(|f| f.meta.id == id) {
+            return Ok(PreviewTarget {
+                id,
+                repo: None,
+                item: f.meta.clone(),
+                body: Some(f.body.clone()),
+            });
+        }
+        if let Some(store) = &self.store {
+            if let Some((item, _, body)) = items::find_item(store, id)? {
+                return Ok(PreviewTarget {
+                    id,
+                    repo: None,
+                    item,
+                    body,
+                });
+            }
+        }
+        Err(format!("{id}: no such item"))
+    }
+
+    /// File body for `id` inside one index repo — only file-backed
+    /// kinds have bodies; ledger kinds return `None`.
+    fn org_file_body(&self, o: &OrgRepo, id: ItemId) -> Option<String> {
+        let file_backed = self
+            .kinds()
+            .spec_of(id.kind())
+            .is_some_and(|s| s.storage == myco_core::Storage::Dir);
+        if !file_backed {
+            return None;
+        }
+        store_at(&o.worktree, myco_core::kind::prelude_table())
+            .ok()
+            .and_then(|s| s.item(id).ok().map(|f| f.body))
+    }
+
+    /// What the preview pane renders — the override target after a
+    /// link click, else the board cursor's item with its file body.
+    /// Returns `(item, body, repo)`; `repo` tags link hits on index
+    /// boards.
+    pub fn preview_content(&self) -> Option<(Item, Option<String>, Option<String>)> {
+        if let Some(t) = &self.preview_override {
+            return Some((t.item.clone(), t.body.clone(), t.repo.clone()));
+        }
+        let item = self.selected()?.clone();
+        let body = self.file_body(item.id);
+        let repo = self.selected_repo().map(str::to_owned);
+        Some((item, body, repo))
+    }
+
+    /// A related-id click — push the current context and preview
+    /// `id` in place (the board cursor stays put). A click on the
+    /// already-previewed item is a no-op beyond ensuring Preview.
+    fn open_link(&mut self, id: ItemId, repo: Option<String>) {
+        let current = self
+            .preview_override
+            .as_ref()
+            .map(|t| (t.id, t.repo.clone()))
+            .or_else(|| {
+                self.selected()
+                    .map(|i| (i.id, self.selected_repo().map(str::to_owned)))
+            });
+        if current == Some((id, repo.clone())) {
+            self.mode = Mode::Preview;
+            return;
+        }
+        match self.resolve_link(id, repo.as_deref()) {
+            Ok(target) => {
+                self.nav.push(NavEntry {
+                    board: self.board,
+                    item: self.selected_id(),
+                    repo: self.selected_repo().map(str::to_owned),
+                    mode: self.mode,
+                    preview: self.preview_override.clone(),
+                });
+                self.preview_override = Some(target);
+                self.mode = Mode::Preview;
+                self.preview_scroll = 0;
+            }
+            Err(e) => self.say_err(e),
+        }
     }
 
     /// `←` — pop the nav stack back to the context that opened
@@ -1167,6 +1319,7 @@ impl Model {
             Some(entry) => {
                 self.board = entry.board;
                 self.mode = entry.mode;
+                self.preview_override = entry.preview;
                 let at = self.sel;
                 self.rebuild_rows();
                 self.reselect(entry.item, entry.repo.as_deref(), at);
@@ -1353,18 +1506,38 @@ impl Model {
         false
     }
 
-    /// Mouse input (Normal mode only — acting on clicks under an
-    /// overlay or mid-`a`/`/` edit would be surprising): the wheel
-    /// moves the cursor over the board list, a left click picks a
-    /// board tab on the tab row or selects the item row under it,
-    /// and a second left-down on the same cell within ~400ms
-    /// opens that row like `→`.
+    /// Mouse input (Normal mode: board tabs and item rows; Preview
+    /// mode: the wheel scrolls the detail pane and clicks open
+    /// related-id links — acting on clicks under an overlay or
+    /// mid-`a`/`/` edit would be surprising): the wheel moves the
+    /// cursor over the board list, a left click picks a board tab
+    /// on the tab row or selects the item row under it, and a
+    /// second left-down on the same cell within ~400ms opens that
+    /// row like `→`.
     pub fn mouse(&mut self, ev: MouseEvent) {
         self.dismiss_error();
+        let pos = (ev.column, ev.row).into();
+        if self.mode == Mode::Preview {
+            match ev.kind {
+                MouseEventKind::ScrollUp => {
+                    self.preview_scroll = self.preview_scroll.saturating_sub(1);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.preview_scroll = self.preview_scroll.saturating_add(1);
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(hit) = self.link_hits.iter().find(|h| h.rect.contains(pos)) {
+                        let (id, repo) = (hit.id, hit.repo.clone());
+                        self.open_link(id, repo);
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
         if self.mode != Mode::Normal {
             return;
         }
-        let pos = (ev.column, ev.row).into();
         match ev.kind {
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
                 if self.board_area.contains(pos) {
@@ -2150,6 +2323,8 @@ pub(crate) mod tests {
             watch_rx: None,
             tick_n: 0,
             preview_scroll: 0,
+            preview_override: None,
+            link_hits: Vec::new(),
             pending: None,
             confirm: None,
             board_area: Rect::default(),
@@ -3275,6 +3450,8 @@ pub(crate) mod tests {
             watch_rx: None,
             tick_n: 0,
             preview_scroll: 0,
+            preview_override: None,
+            link_hits: Vec::new(),
             pending: None,
             confirm: None,
             board_area: Rect::default(),

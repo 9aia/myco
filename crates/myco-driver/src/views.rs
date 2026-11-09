@@ -202,7 +202,7 @@ pub fn specs() -> Vec<ViewSpec> {
             "graph",
             "Graph",
             "/myco/graph",
-            "The live link graph — blocks/supersedes/references edges across ledger items, file items, and handoffs. `pavo view myco:graph --format dot`.",
+            "The live link graph — blocks/supersedes/links/references edges across ledger items, file items, and handoffs. `pavo view myco:graph --format dot`.",
             &["summary", "graph"],
             col(
                 "Myco graph",
@@ -400,6 +400,14 @@ fn item_row(
             .collect::<Vec<_>>()
             .join(" "));
     }
+    if !i.links.is_empty() {
+        row["links"] = json!(i
+            .links
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" "));
+    }
     row
 }
 
@@ -485,7 +493,15 @@ fn files_rows(snap: &Snapshot, kind_name: &str) -> Value {
             }
             // drop columns the file views don't declare
             if let Some(m) = row.as_object_mut() {
-                for k in ["source", "depth", "parent", "epic", "milestone", "blocks"] {
+                for k in [
+                    "source",
+                    "depth",
+                    "parent",
+                    "epic",
+                    "milestone",
+                    "blocks",
+                    "links",
+                ] {
                     m.remove(k);
                 }
             }
@@ -723,6 +739,14 @@ fn item_detail(snap: &Snapshot, params: &Map<String, Value>) -> Value {
     if !i.blocks.is_empty() {
         out["blocks"] = json!(i
             .blocks
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" "));
+    }
+    if !i.links.is_empty() {
+        out["links"] = json!(i
+            .links
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>()

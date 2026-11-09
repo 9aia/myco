@@ -7,7 +7,7 @@
 //!
 //! `NNNN` = id number padded to 4 digits. TOML frontmatter in
 //! `+++` fences (id, title, status, created, owner, priority,
-//! labels, blocks, note, superseded_by, supersedes, epic,
+//! labels, blocks, links, note, superseded_by, supersedes, epic,
 //! milestone — extendable: unknown keys are ignored on read for
 //! forward-compat); body = free-form markdown (verbatim; kind
 //! templates are `myco-template`'s job).
@@ -133,6 +133,8 @@ struct FrontmatterIn {
     labels: Vec<String>,
     #[serde(default)]
     blocks: Vec<String>,
+    #[serde(default)]
+    links: Vec<String>,
     note: Option<String>,
     superseded_by: Option<String>,
     supersedes: Option<String>,
@@ -181,6 +183,8 @@ struct FrontmatterOut<'a> {
     labels: Vec<&'a str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     blocks: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    links: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     note: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -278,12 +282,20 @@ pub fn parse_item_file(src: &str, spec: &KindSpec, path: &str) -> Result<ItemFil
                 .map_err(|e: myco_core::ParseItemIdError| fm_err(e.to_string()))?,
         );
     }
+    let mut links = BTreeSet::new();
+    for l in fm.links {
+        links.insert(
+            l.parse::<ItemId>()
+                .map_err(|e: myco_core::ParseItemIdError| fm_err(e.to_string()))?,
+        );
+    }
     let mut item = Item::new(id, fm.title);
     item.status = fm.status;
     item.priority = fm.priority.unwrap_or_default();
     item.owner = owner;
     item.labels = labels;
     item.blocks = blocks;
+    item.links = links;
     item.created = created;
     item.note = fm.note;
     item.superseded_by = fm
@@ -309,8 +321,14 @@ pub fn parse_item_file(src: &str, spec: &KindSpec, path: &str) -> Result<ItemFil
     }
     item.epic = fm.epic;
     item.milestone = fm.milestone;
-    if item.blocks.contains(&id) || item.supersedes == Some(id) || item.superseded_by == Some(id) {
-        return Err(fm_err(format!("{id} can't block or supersede itself")));
+    if item.blocks.contains(&id)
+        || item.links.contains(&id)
+        || item.supersedes == Some(id)
+        || item.superseded_by == Some(id)
+    {
+        return Err(fm_err(format!(
+            "{id} can't block, link, or supersede itself"
+        )));
     }
     // body: everything after the closing fence, canonicalized —
     // leading blank lines go, the first content line's own
@@ -351,6 +369,7 @@ pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
         priority: file.meta.priority,
         labels: file.meta.labels.iter().map(String::as_str).collect(),
         blocks: file.meta.blocks.iter().map(ItemId::to_string).collect(),
+        links: file.meta.links.iter().map(ItemId::to_string).collect(),
         note: file.meta.note.as_deref(),
         superseded_by: file.meta.superseded_by.map(|i| i.to_string()),
         supersedes: file.meta.supersedes.map(|i| i.to_string()),
@@ -504,6 +523,26 @@ mod tests {
         // bad id values are frontmatter errors
         let bad = "+++\nid = \"ADR-0001\"\ntitle = \"x\"\nstatus = \"open\"\nsuperseded_by = \"nope\"\n+++\n";
         assert!(parse_item_file(bad, &spec(ItemKind::Adr), "x.md").is_err());
+    }
+
+    #[test]
+    fn links_roundtrip_and_self_reject() {
+        let src = "+++\nid = \"T-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\nlinks = [\"P-013\", \"PL-001\"]\n+++\n";
+        let file = parse_item_file(src, &spec(ItemKind::Task), "x.md").unwrap();
+        assert!(file.meta.links.contains(&ItemId::new(ItemKind::Plan, 1)));
+        assert!(file
+            .meta
+            .links
+            .contains(&ItemId::new(ItemKind::Proposal, 13)));
+        assert_eq!(emit_item_file(&file).unwrap(), src);
+        // a self-link is a frontmatter error
+        let bad =
+            "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\nlinks = [\"I-001\"]\n+++\n";
+        assert!(parse_item_file(bad, &spec(ItemKind::Issue), "x.md").is_err());
+        // a bad id value is too
+        let bad =
+            "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\nlinks = [\"nope\"]\n+++\n";
+        assert!(parse_item_file(bad, &spec(ItemKind::Issue), "x.md").is_err());
     }
 
     #[test]

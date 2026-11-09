@@ -521,22 +521,28 @@ struct ResumeData {
     item: myco_core::Item,
     location: String,
     blocks_titles: Vec<serde_json::Value>,
+    links_titles: Vec<serde_json::Value>,
     shown: Vec<HandoffEntry>,
     total: usize,
     checklist: Vec<String>,
 }
 
-/// Gather the resume context — the item, `blocks:` dep titles,
-/// the latest handoff entries, the open checklist.
+/// Gather the resume context — the item, `blocks:`/`links:` dep
+/// titles, the latest handoff entries, the open checklist.
 fn resume_data(store: &impl Store, id: ItemId, last: Option<usize>) -> Result<ResumeData, String> {
     let Some((item, location, body)) = items::find_item(store, id)? else {
         return Err(format!("{id}: no such item"));
     };
-    let mut blocks_titles = Vec::new();
-    for b in &item.blocks {
-        let title = items::find_item(store, *b)?.map(|(i, _, _)| i.title);
-        blocks_titles.push(json!({"id": b.to_string(), "title": title}));
-    }
+    let dep_titles = |ids: &std::collections::BTreeSet<myco_core::ItemId>| {
+        ids.iter()
+            .map(|b| {
+                let title = items::find_item(store, *b)?.map(|(i, _, _)| i.title);
+                Ok(json!({"id": b.to_string(), "title": title}))
+            })
+            .collect::<Result<Vec<_>, String>>()
+    };
+    let blocks_titles = dep_titles(&item.blocks)?;
+    let links_titles = dep_titles(&item.links)?;
     let entries = store.read_handoffs(id).map_err(|e| e.to_string())?;
     let total = entries.len();
     let n = last.unwrap_or(DEFAULT_LAST);
@@ -554,19 +560,21 @@ fn resume_data(store: &impl Store, id: ItemId, last: Option<usize>) -> Result<Re
         item,
         location,
         blocks_titles,
+        links_titles,
         shown,
         total,
         checklist,
     })
 }
 
-/// `ResumeData` → the `{item, location, blocks_titles,
+/// `ResumeData` → the `{item, location, blocks_titles, links_titles,
 /// handoffs[], open_checklist}` payload shape.
 fn resume_value(d: &ResumeData) -> serde_json::Value {
     json!({
         "item": d.item,
         "location": d.location,
         "blocks_titles": d.blocks_titles,
+        "links_titles": d.links_titles,
         "handoffs": d.shown,
         "handoffs_total": d.total,
         "open_checklist": d.checklist,
@@ -574,8 +582,8 @@ fn resume_value(d: &ResumeData) -> serde_json::Value {
 }
 
 /// The resume payload — `{item, location, blocks_titles,
-/// handoffs[], open_checklist}` — shared by `--json` and
-/// `myco serve`.
+/// links_titles, handoffs[], open_checklist}` — shared by
+/// `--json` and `myco serve`.
 pub fn resume_json(
     store: &impl Store,
     id: ItemId,
@@ -596,6 +604,16 @@ fn resume_block(d: &ResumeData) -> String {
                 "\n  {} {}",
                 b["id"].as_str().unwrap_or_default(),
                 b["title"].as_str().unwrap_or("(missing)")
+            ));
+        }
+    }
+    if !d.links_titles.is_empty() {
+        out.push_str("\nlinks:");
+        for l in &d.links_titles {
+            out.push_str(&format!(
+                "\n  {} {}",
+                l["id"].as_str().unwrap_or_default(),
+                l["title"].as_str().unwrap_or("(missing)")
             ));
         }
     }

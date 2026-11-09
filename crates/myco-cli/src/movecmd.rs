@@ -1,7 +1,7 @@
 //! `myco item move` — the cross-repo transfer. The item is
 //! re-created in the destination ledger's own id sequence (kind,
 //! title, body, `pri`/`owner`/`#label`/`epic`/`ms` carried;
-//! `blocks:` dropped — it names source-ledger ids), both ledgers
+//! `blocks:`/`links:` dropped — they name source-ledger ids), both ledgers
 //! get a provenance handoff (`moved from`/`moved to`), then the
 //! source walks to `done`: a file-backed item keeps its file with
 //! status `done`; a task's line leaves the ledger and its handoff
@@ -95,15 +95,16 @@ fn repo_label(store: &impl Store, root: &Path) -> String {
         .unwrap_or_else(|| "repo".into())
 }
 
-/// The metadata that survives the crossing. `blocks:` is dropped
-/// on purpose — it names source-ledger ids and would dangle in
-/// the destination (`check` would flag it).
+/// The metadata that survives the crossing. `blocks:`/`links:` are
+/// dropped on purpose — they name source-ledger ids and would
+/// dangle in the destination (`check` would flag them).
 fn carried_meta(src: &Item) -> NewItemMeta {
     NewItemMeta {
         priority: Some(src.priority),
         owner: src.owner.clone(),
         labels: src.labels.iter().cloned().collect(),
         blocks: Vec::new(),
+        links: Vec::new(),
         epic: src.epic.clone(),
         milestone: src.milestone.clone(),
     }

@@ -2,7 +2,7 @@
 //!
 //! Checks: strict parses (miette-rendered spans), `meta.toml`
 //! counters ≥ max id per kind, duplicate ids across the ledger,
-//! dangling `blocks:` refs, kind/dir filename mismatches, `[x]`/
+//! dangling `blocks:`/`links:` refs, kind/dir filename mismatches, `[x]`/
 //! `status:done` items (the rule: done items are deleted — git
 //! keeps history), title/frontmatter id mismatches (a file whose
 //! title or H1 still carries its old `ADR-0008:` number), stale
@@ -72,7 +72,8 @@ pub struct Finding {
     /// 1-based column (0 when not column-specific).
     pub col: usize,
     /// Stable machine code — `parse`, `done-item`, `counter-behind`,
-    /// `duplicate-id`, `dangling-blocks`, `dangling-ref`, `filename`,
+    /// `duplicate-id`, `dangling-blocks`, `dangling-links`,
+    /// `dangling-supersede`, `dangling-ref`, `filename`,
     /// `missing-file`, `unexpected-file`, `emit-drift`,
     /// `orphan-handoff`, `id-title-mismatch`, `unreadable-file`,
     /// `config`, `view-invalid`, `verb-invalid`, `kind-invalid`,
@@ -251,7 +252,7 @@ fn repoint_frontmatter(src: &str, map: &BTreeMap<ItemId, ItemId>) -> Option<Stri
         }
         if in_fm && t != "+++" {
             let key = t.split('=').next().map(str::trim).unwrap_or("");
-            if matches!(key, "blocks" | "superseded_by" | "supersedes") {
+            if matches!(key, "blocks" | "links" | "superseded_by" | "supersedes") {
                 let mut l = line.to_string();
                 for (old, new) in map {
                     let (o, n) = (format!("\"{old}\""), format!("\"{new}\""));
@@ -269,8 +270,8 @@ fn repoint_frontmatter(src: &str, map: &BTreeMap<ItemId, ItemId>) -> Option<Stri
     changed.then_some(out)
 }
 
-/// Rewrite `· blocks:<csv>` tokens in TODO/BACKLOG item lines.
-/// `None` when nothing changed.
+/// Rewrite `· blocks:<csv>` / `· links:<csv>` tokens in
+/// TODO/BACKLOG item lines. `None` when nothing changed.
 fn repoint_blocks_tokens(src: &str, map: &BTreeMap<ItemId, ItemId>) -> Option<String> {
     let mut out = String::with_capacity(src.len());
     let mut changed = false;
@@ -281,9 +282,17 @@ fn repoint_blocks_tokens(src: &str, map: &BTreeMap<ItemId, ItemId>) -> Option<St
         for tok in parts {
             rebuilt.push('·');
             let t = tok.trim_start();
-            if let Some(rest) = t.strip_prefix("blocks:") {
+            let key = if t.starts_with("blocks:") {
+                "blocks:"
+            } else if t.starts_with("links:") {
+                "links:"
+            } else {
+                ""
+            };
+            if !key.is_empty() {
+                let rest = &t[key.len()..];
                 rebuilt.push_str(&tok[..tok.len() - t.len()]);
-                rebuilt.push_str("blocks:");
+                rebuilt.push_str(key);
                 for (j, idtok) in rest.split(',').enumerate() {
                     if j > 0 {
                         rebuilt.push(',');
@@ -1207,6 +1216,20 @@ fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
                 ));
             }
         }
+        // `links:` is a declared ref too — same error class
+        // (ADR-0002), its own code so reports name the field.
+        if !ids_incomplete {
+            for lnk in &l.item.links {
+                if !ids.contains_key(lnk) {
+                    a.findings.push(Finding::at(
+                        &l.loc,
+                        "dangling-links",
+                        format!("{} links {lnk} which doesn't exist", l.item.id),
+                        false,
+                    ));
+                }
+            }
+        }
     }
     // `supersedes:`/`superseded_by:` are declared refs too —
     // same error class as dangling-blocks (ADR-0002).
@@ -1364,6 +1387,7 @@ fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
             });
             for l in &items {
                 let touches = l.item.blocks.iter().any(|b| id_map.contains_key(b))
+                    || l.item.links.iter().any(|x| id_map.contains_key(x))
                     || l.item
                         .superseded_by
                         .is_some_and(|i| id_map.contains_key(&i))

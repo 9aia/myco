@@ -32,6 +32,11 @@ api:
   file: crates/myco-testkit/src/lib.rs
   line: 111
   module: myco-testkit
+- name: done_doc
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 259
+  module: myco-testkit
 - name: file_kind
   kind: function
   file: crates/myco-testkit/src/lib.rs
@@ -50,7 +55,7 @@ api:
 - name: fixtures_exist
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 358
+  line: 367
   module: myco-testkit
 - name: fixtures_under
   kind: function
@@ -65,7 +70,7 @@ api:
 - name: handoff_entry
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 286
+  line: 295
   module: myco-testkit
 - name: handoffs_emit
   kind: function
@@ -85,7 +90,7 @@ api:
 - name: item_file
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 303
+  line: 312
   module: myco-testkit
 - name: item_id
   kind: function
@@ -145,7 +150,7 @@ api:
 - name: project_meta
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 259
+  line: 268
   module: myco-testkit
 - name: section_name
   kind: function
@@ -160,7 +165,7 @@ api:
 - name: session
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 280
+  line: 289
   module: myco-testkit
 - name: snap_name
   kind: function
@@ -185,7 +190,7 @@ api:
 - name: tests
   kind: module
   file: crates/myco-testkit/src/lib.rs
-  line: 354
+  line: 363
   module: myco-testkit
 - name: title
   kind: function
@@ -197,12 +202,7 @@ api:
   file: crates/myco-testkit/src/lib.rs
   line: 241
   module: myco-testkit
-- name: todo_emit
-  kind: function
-  file: crates/myco-testkit/tests/golden.rs
-  line: 18
-  module: myco-testkit
-api_omitted: 1
+api_omitted: 2
 deps:
 - myco-core
 - myco-store
@@ -230,10 +230,10 @@ provenance:
   - crates/myco-testkit/tests/roundtrip.rs
   hashes:
   - df0b6d5c2130f3266885cbf75cf653df9869ea2c
-  - 3558519ba577569d88ccfd8539f18214c95ac8dd
+  - b706f420e15600d299f14beb65976e682071d42d
   - 133e73e3ea23e7e14db384409507f1fb6c051caa
   - 77e5524b8d718ad6be29c918e5a76630ae2c1d18
-  - f91e8ddc5c19546dd6598c55f2aa33c087f8ba50
-  commit_sha: 00c736d9efc103d1f2efb84c0d776df0b1c1f426
-  generated_at: '1793854989'
+  - 73a0338011456bb4f14655e18c811934553dcbd9
+  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
+  generated_at: '1794254004'
   generator: kuda-template/0.1.2

@@ -1,5 +1,6 @@
 ---
 source: crates/myco-testkit/tests/invalid.rs
+assertion_line: 14
 expression: err.to_string()
 ---
-TODO.md:3:1: unknown metadata key "foo" — expected status|pri|owner|created|blocks|epic|ms|note or #label
+TODO.md:3:1: unknown metadata key "foo" — expected status|pri|owner|created|blocks|links|epic|ms|note or #label

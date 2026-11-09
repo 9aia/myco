@@ -422,6 +422,37 @@ fn check_flags_nested_duplicate_and_dangling() {
     assert!(codes.contains(&"dangling-blocks"), "{codes:?}");
 }
 
+#[test]
+fn check_flags_dangling_links() {
+    let (d, wt) = project();
+    let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 0);
+    std::fs::write(
+        wt.join("TODO.md"),
+        "# TODO — x\n\n- [ ] T-001 a · links:PL-099\n- [ ] T-002 b\n",
+    )
+    .unwrap();
+    let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 1);
+    let v = json(&out);
+    let codes: Vec<&str> = v["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["code"].as_str().unwrap())
+        .collect();
+    assert!(codes.contains(&"dangling-links"), "{codes:?}");
+    // a resolvable link is clean
+    run(d.path(), &["plan", "new", "the plan"]);
+    std::fs::write(
+        wt.join("TODO.md"),
+        "# TODO — x\n\n- [ ] T-001 a · links:PL-001\n- [ ] T-002 b\n",
+    )
+    .unwrap();
+    let out = run(d.path(), &["check"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+}
+
 // ---------- issue ----------
 
 #[test]
@@ -729,6 +760,32 @@ fn item_set_semantics() {
     );
     assert!(json(&out)["item"]["blocks"].is_null());
     let out = run(d.path(), &["item", "set", "T-001", "--blocks", "bogus"]);
+    assert_eq!(code(&out), 2);
+
+    // links add/remove — signed values and --unlink
+    run(d.path(), &["issue", "new", "a bug"]);
+    run(d.path(), &["proposal", "new", "an idea"]);
+    run(d.path(), &["item", "set", "T-001", "--links", "+P-001"]);
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--links", "I-001", "--json"],
+    );
+    assert_eq!(code(&out), 0);
+    let v = json(&out);
+    let links = v["item"]["links"].as_array().unwrap();
+    assert_eq!(links.len(), 2, "{links:?}");
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--unlink", "P-001", "--json"],
+    );
+    assert_eq!(code(&out), 0);
+    let v = json(&out);
+    let links = v["item"]["links"].as_array().unwrap();
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0], "I-001");
+    let line = read(&wt, "TODO.md");
+    assert!(line.contains("links:I-001"), "{line}");
+    let out = run(d.path(), &["item", "set", "T-001", "--links", "bogus"]);
     assert_eq!(code(&out), 2);
 
     // pri + owner

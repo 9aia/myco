@@ -20,6 +20,8 @@ pub(crate) struct SetFlags {
     pub(crate) unlabel: Vec<String>,
     pub(crate) blocks: Vec<String>,
     pub(crate) unblock: Vec<ItemId>,
+    pub(crate) links: Vec<String>,
+    pub(crate) unlink: Vec<ItemId>,
     pub(crate) epic: Option<String>,
     pub(crate) milestone: Option<String>,
 }
@@ -35,6 +37,8 @@ pub(crate) fn set_flags(a: &Args) -> Result<SetFlags, String> {
         unlabel: a.many("unlabel"),
         blocks: a.many("blocks"),
         unblock: a.many_parsed("unblock")?,
+        links: a.many("links"),
+        unlink: a.many_parsed("unlink")?,
         epic: a.opt("epic").map(str::to_string),
         milestone: a.opt("milestone").map(str::to_string),
     })
@@ -58,6 +62,8 @@ impl SetFlags {
             && self.unlabel.is_empty()
             && self.blocks.is_empty()
             && self.unblock.is_empty()
+            && self.links.is_empty()
+            && self.unlink.is_empty()
             && self.epic.is_none()
             && self.milestone.is_none()
     }
@@ -118,6 +124,20 @@ fn apply_set(item: &mut Item, flags: &SetFlags) -> Result<(), String> {
     }
     for id in &flags.unblock {
         item.blocks.remove(id);
+    }
+    for raw in &flags.links {
+        let (add, s) = signed(raw);
+        let id: ItemId = s
+            .parse()
+            .map_err(|e: myco_core::ParseItemIdError| e.to_string())?;
+        if add {
+            item.links.insert(id);
+        } else {
+            item.links.remove(&id);
+        }
+    }
+    for id in &flags.unlink {
+        item.links.remove(id);
     }
     for (what, flag, slot) in [
         ("epic", &flags.epic, &mut item.epic),

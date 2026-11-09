@@ -40,6 +40,11 @@ pub struct Item {
     /// `blocks:` — ids this item blocks. Sorted set.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub blocks: BTreeSet<ItemId>,
+    /// `links:` — ids this item is associated with (its plan, the
+    /// proposal that spawned it, …). Kind-agnostic and symmetric —
+    /// a declared edge, not a prose mention. Sorted set.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub links: BTreeSet<ItemId>,
     /// `created:` — `YYYY-MM-DD` when known. Absent (not `null`)
     /// in JSON — every other `Option` field skips the same way.
     #[serde(
@@ -111,6 +116,7 @@ impl Item {
             owner: None,
             labels: BTreeSet::new(),
             blocks: BTreeSet::new(),
+            links: BTreeSet::new(),
             created: None,
             note: None,
             superseded_by: None,
@@ -174,6 +180,12 @@ impl Item {
     /// Add a `blocks:` dep.
     pub fn blocks(mut self, id: ItemId) -> Self {
         self.blocks.insert(id);
+        self
+    }
+
+    /// Add a `links:` association.
+    pub fn links(mut self, id: ItemId) -> Self {
+        self.links.insert(id);
         self
     }
 
@@ -246,6 +258,8 @@ pub struct NewItemMeta {
     pub labels: Vec<String>,
     /// `blocks:` ids.
     pub blocks: Vec<ItemId>,
+    /// `links:` ids.
+    pub links: Vec<ItemId>,
     /// `epic:` group name.
     pub epic: Option<String>,
     /// `ms:` milestone name.
@@ -281,6 +295,9 @@ impl NewItemMeta {
         }
         for b in &self.blocks {
             item.blocks.insert(*b);
+        }
+        for l in &self.links {
+            item.links.insert(*l);
         }
         item.epic = self.epic.clone();
         item.milestone = self.milestone.clone();
