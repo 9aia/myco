@@ -92,8 +92,8 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `check` — Validate the ledger (schemas, state machine, ids, refs) and the worktree it lives in (detached HEAD, wrong branch, unpushed commits); also validates the managed AGENTS.md block on the repo root. Findings carry a severity: `error` exits 1, `warning` is reported and costs nothing (ADR-0002). `--fix` applies safe repairs + commits, including reattaching a detached worktree.
 * `migrate` — Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch.
 * `commit` — Stage + commit worktree changes (conventional message).
-* `undo` — Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the commit stays in the reflog. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`).
-* `redo` — Redo the last undo — restores the commit `myco undo` moved away from (`git reset --hard HEAD@{1})`. Refuses when the last ledger action wasn't an undo, on a dirty worktree, and after any commit/pull since the undo.
+* `undo` — Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the undone commit is journaled for `redo`. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`). `--list` shows the redoable stack without mutating.
+* `redo` — Redo the last undo — pops the undo journal and restores the commit `myco undo` moved away from (`git reset --hard <target>`). Repeatable while entries remain; the stack self-invalidates when the ledger moves (any commit/pull/manual git op since the undo). Refuses on a dirty worktree.
 * `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit.
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized.
@@ -868,19 +868,20 @@ Stage + commit worktree changes (conventional message).
 
 ## `myco undo`
 
-Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the commit stays in the reflog. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`).
+Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the undone commit is journaled for `redo`. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`). `--list` shows the redoable stack without mutating.
 
 **Usage:** `myco undo [OPTIONS]`
 
 ###### **Options:**
 
 * `--force` — Undo even when the tip commit is already published on the remote.
+* `--list` — List the redoable commits (newest first) instead of undoing.
 
 
 
 ## `myco redo`
 
-Redo the last undo — restores the commit `myco undo` moved away from (`git reset --hard HEAD@{1})`. Refuses when the last ledger action wasn't an undo, on a dirty worktree, and after any commit/pull since the undo.
+Redo the last undo — pops the undo journal and restores the commit `myco undo` moved away from (`git reset --hard <target>`). Repeatable while entries remain; the stack self-invalidates when the ledger moves (any commit/pull/manual git op since the undo). Refuses on a dirty worktree.
 
 **Usage:** `myco redo`
 

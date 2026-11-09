@@ -47,9 +47,15 @@ when, replayable and greppable, with no separate audit store.
 `--no-commit` / `$MYCO_NO_COMMIT` opts out per run; `myco commit`
 squashes a batch into one. `myco undo` rewinds the tip one commit
 (`HEAD~1`) — the exact inverse of the last verb — refusing dirty
-worktrees, the root commit, and published tips unless `--force`;
-the undone commit stays in the reflog, and `myco redo` restores
-it (`HEAD@{1}`) while the last action is still that undo.
+worktrees, the root commit, and published tips unless `--force`.
+Each undo is journaled in `<git-common-dir>/myco-history.json` —
+a small stack of undone commits, each anchored on the HEAD it was
+undone from — and `myco redo` pops it (`git reset --hard <target>`),
+repeatable while entries remain. The stack self-invalidates: any
+commit, pull, or manual git op breaks the anchor and clears it.
+The journal is derived state — corrupt or missing reads as empty,
+never an error — and lives outside `project/`, so it is never
+committed to the ledger.
 
 That sentence is only true while the worktree is attached. A
 `project/` worktree on a **detached HEAD** commits onto no branch:
