@@ -2,7 +2,7 @@
 
 > project management, grown not built
 
-Records engine for agent work — views + mutations; project management is the shipped prelude
+Agent-first project management — markdown ledger canonical, git the audit trail; a records + views + mutations engine underneath
 
 ## Table of Contents
 

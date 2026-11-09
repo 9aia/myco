@@ -15,11 +15,11 @@
 <a href=#15 id=15 data-nosnippet>15</a>//!
 <a href=#16 id=16 data-nosnippet>16</a>//! Item-line tokens (`·`-separated, after the title): `status:`,
 <a href=#17 id=17 data-nosnippet>17</a>//! `pri:` (low|med|high|crit), `owner:`, `created:` (YYYY-MM-DD),
-<a href=#18 id=18 data-nosnippet>18</a>//! `#label`s, `blocks:T-NNN[,…]`, `epic:&lt;name&gt;`, `ms:&lt;name&gt;`,
-<a href=#19 id=19 data-nosnippet>19</a>//! `note:&lt;free text&gt;` (the dedup/provenance slot absorb fills).
-<a href=#20 id=20 data-nosnippet>20</a>//! Canonical order is that order; defaults (`status:open`/
-<a href=#21 id=21 data-nosnippet>21</a>//! `deferred`, `pri:med`, unset owner/created/labels/blocks/
-<a href=#22 id=22 data-nosnippet>22</a>//! epic/ms/note) are omitted.
+<a href=#18 id=18 data-nosnippet>18</a>//! `#label`s, `blocks:T-NNN[,…]`, `links:T-NNN[,…]`, `epic:&lt;name&gt;`,
+<a href=#19 id=19 data-nosnippet>19</a>//! `ms:&lt;name&gt;`, `note:&lt;free text&gt;` (the dedup/provenance slot
+<a href=#20 id=20 data-nosnippet>20</a>//! absorb fills). Canonical order is that order; defaults
+<a href=#21 id=21 data-nosnippet>21</a>//! (`status:open`/`deferred`, `pri:med`, unset owner/created/
+<a href=#22 id=22 data-nosnippet>22</a>//! labels/blocks/links/epic/ms/note) are omitted.
 <a href=#23 id=23 data-nosnippet>23</a>//!
 <a href=#24 id=24 data-nosnippet>24</a>//! Engine: `markdown` (wooorm markdown-rs) parses everything to
 <a href=#25 id=25 data-nosnippet>25</a>//! mdast for structure + spans. Emit is canonical, hand-written

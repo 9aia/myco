@@ -87,7 +87,7 @@ needed; `R` forces one anyway.
 | `←`                           | back — pops the drill-down stack (esc-like in preview, no-op on the board) |
 | `a`                            | add an item (TODO/BACKLOG only)              |
 | `Space` / `dd`, `D`, `p`       | done · defer to BACKLOG · promote to TODO (done/undo ask `y`/`n`) |
-| `u`                            | undo the last mutation (asks `y`/`n`)        |
+| `u` / `U`                      | undo / redo ledger commits — `U` repeats while the redo stack lasts (asks `y`/`n`) |
 | `Alt+j` / `Alt+k`              | reorder among siblings                       |
 | `/`, `F`                       | live filter · clear it                       |
 | `:`                            | command line — `:q` `:w` `:e` `:<id>` `:set` |

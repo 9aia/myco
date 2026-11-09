@@ -38,7 +38,7 @@ each, filenames padded to four digits.
 
 ## <section>
 
-- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · epic:v2 · ms:1.0 · note:<text>
+- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · note:<text>
   - [ ] T-013 a sub-task — children are the same grammar, indented 2 spaces/level
 ```
 
@@ -53,8 +53,11 @@ each, filenames padded to four digits.
 * `done`/`defer` on a parent act on the whole subtree; on a
   child, just that node.
 * Token order is canonical (`status`, `pri`, `owner`, `created`,
-  `#label`, `blocks`, `epic`, `ms`, `note`) so emit produces
-  minimal diffs. `ms` is the milestone token — kept short.
+  `#label`, `blocks`, `links`, `epic`, `ms`, `note`) so emit
+  produces minimal diffs. `ms` is the milestone token — kept
+  short. `links:` declares kind-agnostic associations — the plan,
+  proposal, or ADR an item belongs to (`myco item set --links` /
+  `--unlink`).
 * Patterns: actors `[A-Za-z0-9._:-]+`, labels `[A-Za-z0-9_-]+`,
   epic/ms names `[A-Za-z0-9_.-]+`, priority `low|med|high|crit`.
 
@@ -71,6 +74,7 @@ created = "2026-10-29"
 priority = "medium"
 labels = ["design"]
 blocks = ["T-008"]
+links = ["PL-001", "P-013"]
 epic = "v2"
 milestone = "1.0"
 +++
@@ -82,7 +86,7 @@ sections per kind.
 ```
 
 Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
-`priority`, `labels`, `blocks`, `note`, `superseded_by`,
+`priority`, `labels`, `blocks`, `links`, `note`, `superseded_by`,
 `supersedes`, `epic`, `milestone`. Archiving moves the file to
 `<dir>/archive/` — `myco item show` still finds archived items.
 

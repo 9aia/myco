@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["capabilities_json","dispatch","main","manifest_json","serve"],"mod":["data","views"]};
+window.SIDEBAR_ITEMS = {"fn":["capabilities_json","dispatch","main","serve"],"mod":["data","views"]};
