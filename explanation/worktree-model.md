@@ -48,7 +48,8 @@ when, replayable and greppable, with no separate audit store.
 squashes a batch into one. `myco undo` rewinds the tip one commit
 (`HEAD~1`) — the exact inverse of the last verb — refusing dirty
 worktrees, the root commit, and published tips unless `--force`;
-the undone commit stays in the reflog.
+the undone commit stays in the reflog, and `myco redo` restores
+it (`HEAD@{1}`) while the last action is still that undo.
 
 That sentence is only true while the worktree is attached. A
 `project/` worktree on a **detached HEAD** commits onto no branch:

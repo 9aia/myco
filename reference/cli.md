@@ -55,6 +55,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco migrate`↴](#myco-migrate)
 * [`myco commit`↴](#myco-commit)
 * [`myco undo`↴](#myco-undo)
+* [`myco redo`↴](#myco-redo)
 * [`myco view`↴](#myco-view)
 * [`myco next`↴](#myco-next)
 * [`myco status`↴](#myco-status)
@@ -92,6 +93,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `migrate` — Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch.
 * `commit` — Stage + commit worktree changes (conventional message).
 * `undo` — Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the commit stays in the reflog. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`).
+* `redo` — Redo the last undo — restores the commit `myco undo` moved away from (`git reset --hard HEAD@{1})`. Refuses when the last ledger action wasn't an undo, on a dirty worktree, and after any commit/pull since the undo.
 * `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit.
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized.
@@ -873,6 +875,14 @@ Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~
 ###### **Options:**
 
 * `--force` — Undo even when the tip commit is already published on the remote.
+
+
+
+## `myco redo`
+
+Redo the last undo — restores the commit `myco undo` moved away from (`git reset --hard HEAD@{1})`. Refuses when the last ledger action wasn't an undo, on a dirty worktree, and after any commit/pull since the undo.
+
+**Usage:** `myco redo`
 
 
 
