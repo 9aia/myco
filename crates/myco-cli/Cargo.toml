@@ -1,6 +1,6 @@
 [package]
 name = "myco"
-description = "myco — records engine for agent work — views + mutations; project management is the shipped prelude"
+description = "myco — agent-first project management; a records + views + mutations engine, PM is the shipped prelude"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
