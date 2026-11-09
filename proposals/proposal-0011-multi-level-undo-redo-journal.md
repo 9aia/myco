@@ -1,7 +1,7 @@
 +++
 id = "P-011"
 title = "multi-level undo/redo journal"
-status = "open"
+status = "in-progress"
 created = "2026-11-09"
 priority = "medium"
 +++
