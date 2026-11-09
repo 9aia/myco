@@ -214,8 +214,13 @@ pub struct Model {
     /// Item rows render their `T-NNN` id span — `:set id` /
     /// `:set noid` (vim aliases `numbers`/`nonumbers` accepted).
     pub show_ids: bool,
-    /// Status-bar message (last action / error).
+    /// Status-bar message (last action / error) — a toast:
+    /// [`Model::say`] timestamps it and `tick` expires it after
+    /// [`STATUS_TTL`].
     pub status: String,
+    /// When `status` was last set — drives the [`STATUS_TTL`]
+    /// expiry in `tick`.
+    status_at: Instant,
     /// Editor to open on the next loop turn (`E`).
     pub pending_editor: Option<PathBuf>,
     /// File-backed items for the `Files` board.
@@ -356,6 +361,7 @@ impl Model {
             cmdline: String::new(),
             show_ids: true,
             status: String::new(),
+            status_at: Instant::now(),
             pending_editor: None,
             files: Vec::new(),
             handoffs: Vec::new(),
@@ -468,7 +474,7 @@ impl Model {
             Err(e) => errs.push(format!("handoffs: {e}")),
         }
         if !errs.is_empty() {
-            self.status = format!("files: {}", errs.join("; "));
+            self.say(format!("files: {}", errs.join("; ")));
         }
     }
 
@@ -553,6 +559,14 @@ impl Model {
             .map(|f| f.body.clone())
     }
 
+    /// Post a status-bar toast — `tick` clears it after
+    /// [`STATUS_TTL`]. All transient messages go through here so the
+    /// timestamp stays honest.
+    fn say(&mut self, msg: impl Into<String>) {
+        self.status = msg.into();
+        self.status_at = Instant::now();
+    }
+
     /// Reload the ledger docs *and* the file-backed items from disk
     /// (`R`, post-editor); an index board re-runs the loader —
     /// `load_fresh` rescans every repo whose project HEAD moved.
@@ -565,13 +579,13 @@ impl Model {
             if let Some(loader) = &mut self.org_loader {
                 match loader() {
                     Ok(fresh) => *orgs = fresh,
-                    Err(e) => self.status = format!("reload: {e}"),
+                    Err(e) => self.say(format!("reload: {e}")),
                 }
             }
         } else if let Some(store) = &self.store {
             match items::load_ledger(store) {
                 Ok(ledger) => self.ledger = ledger,
-                Err(e) => self.status = format!("reload: {e}"),
+                Err(e) => self.say(format!("reload: {e}")),
             }
         }
         self.load_files();
@@ -593,6 +607,9 @@ impl Model {
     /// watcher can miss.
     pub fn tick(&mut self) {
         self.tick_n += 1;
+        if !self.status.is_empty() && self.status_at.elapsed() >= STATUS_TTL {
+            self.status.clear();
+        }
         let dirty = self.drain_watch();
         let scan_due = self.tick_n == 1 || self.tick_n.is_multiple_of(FP_FALLBACK_TICKS);
         if !dirty && !scan_due {
@@ -936,7 +953,7 @@ impl Model {
     fn open_editor(&mut self) {
         match self.board_path() {
             Some(p) => self.pending_editor = Some(p),
-            None => self.status = "nothing to edit — select a file-backed item".into(),
+            None => self.say("nothing to edit — select a file-backed item"),
         }
     }
 
@@ -989,9 +1006,9 @@ impl Model {
             KeyCode::Char('u') => self.request_undo(),
             KeyCode::Char('a') => {
                 if self.orgs.is_some() {
-                    self.status = "add writes one repo — run `myco ui` inside it".into();
+                    self.say("add writes one repo — run `myco ui` inside it");
                 } else if self.board == Board::Files {
-                    self.status = "add is a TODO/BACKLOG op — `myco <kind> new` for files".into();
+                    self.say("add is a TODO/BACKLOG op — `myco <kind> new` for files");
                 } else {
                     self.mode = Mode::Add;
                     self.input.clear();
@@ -1021,7 +1038,7 @@ impl Model {
     /// from disk, so a failed verb never kills the session.
     fn mutate(&mut self, f: impl FnOnce(&mut Self) -> Result<(), String>) {
         if self.board == Board::Files {
-            self.status = "FILES is read-only — task verbs apply to TODO/BACKLOG".into();
+            self.say("FILES is read-only — task verbs apply to TODO/BACKLOG");
             return;
         }
         match f(self) {
@@ -1033,7 +1050,7 @@ impl Model {
                 // resync — the write may have partially landed, or
                 // another writer moved the rows under us
                 self.reload();
-                self.status = e;
+                self.say(e);
             }
         }
     }
@@ -1227,16 +1244,16 @@ impl Model {
             "e" => self.open_editor(),
             "go" => match arg.parse::<ItemId>() {
                 Ok(id) => self.jump_to(id),
-                Err(_) => self.status = format!(":go expects an id, got {arg:?}"),
+                Err(_) => self.say(format!(":go expects an id, got {arg:?}")),
             },
             "set" => match arg {
                 "id" | "numbers" => self.show_ids = true,
                 "noid" | "nonumbers" => self.show_ids = false,
-                _ => self.status = ":set takes id / noid".into(),
+                _ => self.say(":set takes id / noid"),
             },
             _ => match cmd.parse::<ItemId>() {
                 Ok(id) => self.jump_to(id),
-                Err(_) => self.status = format!("unknown command :{cmd}"),
+                Err(_) => self.say(format!("unknown command :{cmd}")),
             },
         }
         false
@@ -1252,7 +1269,7 @@ impl Model {
         {
             self.reselect(Some(id), None, self.sel);
         } else {
-            self.status = format!("{id}: not on this board");
+            self.say(format!("{id}: not on this board"));
         }
     }
 
@@ -1480,7 +1497,7 @@ impl Model {
         let wt = match self.undo_target() {
             Ok(wt) => wt,
             Err(e) => {
-                self.status = e;
+                self.say(e);
                 return;
             }
         };
@@ -1544,7 +1561,7 @@ impl Model {
                 for w in &out.warnings {
                     msg.push_str(&format!(" — warning: {w}"));
                 }
-                self.status = msg;
+                self.say(msg);
             }
             Err(e) => {
                 self.reload();
@@ -1561,7 +1578,7 @@ impl Model {
                     });
                     self.mode = Mode::Confirm;
                 } else {
-                    self.status = e;
+                    self.say(e);
                 }
             }
         }
@@ -1580,7 +1597,7 @@ impl Model {
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
         if loc.backlog {
-            self.status = format!("{id} is deferred — `p` promotes it first");
+            self.say(format!("{id} is deferred — `p` promotes it first"));
             return Ok(());
         }
         let mut item = ledger
@@ -1596,7 +1613,7 @@ impl Model {
         items::save_done(&store, &done)?;
         items::commit(&wt, &format!("chore: done {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
-        self.status = format!("done {id} — {}", item.title);
+        self.say(format!("done {id} — {}", item.title));
         let at = self.sel;
         self.rebuild_rows();
         self.reselect(None, repo.as_deref(), at);
@@ -1615,7 +1632,7 @@ impl Model {
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
         if loc.backlog {
-            self.status = format!("{id} is already deferred");
+            self.say(format!("{id} is already deferred"));
             return Ok(());
         }
         let mut item = ledger
@@ -1627,7 +1644,7 @@ impl Model {
         items::save_ledger(&store, &ledger)?;
         items::commit(&wt, &format!("chore: defer {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
-        self.status = format!("deferred {id} → BACKLOG.md");
+        self.say(format!("deferred {id} → BACKLOG.md"));
         let at = self.sel;
         self.rebuild_rows();
         self.reselect(None, repo.as_deref(), at);
@@ -1646,7 +1663,7 @@ impl Model {
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
         if !loc.backlog {
-            self.status = format!("{id} isn't in BACKLOG.md");
+            self.say(format!("{id} isn't in BACKLOG.md"));
             return Ok(());
         }
         let mut item = ledger
@@ -1658,7 +1675,7 @@ impl Model {
         items::save_ledger(&store, &ledger)?;
         items::commit(&wt, &format!("chore: promote {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
-        self.status = format!("promoted {id} → TODO.md");
+        self.say(format!("promoted {id} → TODO.md"));
         self.rebuild_rows();
         self.reselect(Some(id), repo.as_deref(), self.sel);
         Ok(())
@@ -1681,7 +1698,7 @@ impl Model {
         items::save_ledger(&store, &ledger)?;
         items::commit(&wt, &format!("chore: reorder {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
-        self.status = format!("reordered {id}");
+        self.say(format!("reordered {id}"));
         self.rebuild_rows();
         self.reselect(Some(id), repo.as_deref(), self.sel);
         Ok(())
@@ -1708,7 +1725,7 @@ impl Model {
         items::save_ledger(&store, &ledger)?;
         items::commit(&wt, &format!("chore: add {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
-        self.status = format!("added {}", items::compact(&item));
+        self.say(format!("added {}", items::compact(&item)));
         self.rebuild_rows();
         self.reselect(Some(id), repo.as_deref(), self.sel);
         Ok(())
@@ -1725,6 +1742,10 @@ const FP_FULL_REHASH: u32 = 8;
 /// events a watcher can miss (queue overflow, mounts appearing
 /// after launch); the first tick always scans to baseline.
 const FP_FALLBACK_TICKS: u32 = 20;
+
+/// Status-bar messages are toasts — `tick` clears one this long
+/// after [`Model::say`] set it (~16 ticks at the 250ms poll).
+const STATUS_TTL: Duration = Duration::from_secs(4);
 
 /// Does a watcher event describe ledger state? Read access and
 /// pure-metadata modifies (`touch`, chmod — the fingerprint already
@@ -2032,6 +2053,7 @@ pub(crate) mod tests {
             cmdline: String::new(),
             show_ids: true,
             status: String::new(),
+            status_at: Instant::now(),
             pending_editor: None,
             files: Vec::new(),
             handoffs: Vec::new(),
@@ -2781,6 +2803,20 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn status_toasts_expire_on_tick() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        m.say("done T-001");
+        assert_eq!(m.status, "done T-001");
+        // fresh — a tick inside the TTL keeps it
+        m.tick();
+        assert_eq!(m.status, "done T-001");
+        // stale — the next tick clears it back to the hints
+        m.status_at = Instant::now() - STATUS_TTL - Duration::from_millis(1);
+        m.tick();
+        assert!(m.status.is_empty());
+    }
+
+    #[test]
     fn tick_ignores_a_bare_touch() {
         let mut m = model(|l| l.put_todo(t(1), None));
         let wt = m.proj.as_ref().unwrap().worktree.clone();
@@ -3081,6 +3117,7 @@ pub(crate) mod tests {
             cmdline: String::new(),
             show_ids: true,
             status: String::new(),
+            status_at: Instant::now(),
             pending_editor: None,
             files: Vec::new(),
             handoffs: Vec::new(),
