@@ -692,6 +692,10 @@ const GROUPS: &[Group] = &[
         about: "BACKLOG.md parked items — add / promote / list.",
     },
     Group {
+        name: "done",
+        about: "DONE.md — the done-task archive `todo done` lands in.",
+    },
+    Group {
         name: "issue",
         about: "Tracked issues, one file each under `issues/`.",
     },
@@ -756,8 +760,8 @@ const META: &[Param] = &[
     ),
 ];
 
-/// `--status/--owner/--label/--limit` — every `list` verb's
-/// filters.
+/// `--status/--owner/--label/--pri/--epic/--milestone/--query/
+/// --limit` — every `list` verb's filters.
 const LIST: &[Param] = &[
     opt("status", Val::Status, "Keep only items with this status."),
     opt("owner", Val::Str, "Keep only items owned by this actor."),
@@ -767,6 +771,14 @@ const LIST: &[Param] = &[
         "Keep only items carrying all of these labels (repeatable).",
     )
     .multi(),
+    opt("pri", Val::Pri, "Keep only items at this priority."),
+    opt("epic", Val::Str, "Keep only items in this epic."),
+    opt("milestone", Val::Str, "Keep only items in this milestone."),
+    opt(
+        "query",
+        Val::Str,
+        "Keep only items whose id, title, or a label contains this text (case-insensitive).",
+    ),
     opt(
         "limit",
         Val::Count,
@@ -788,6 +800,14 @@ const FILE_LIST: &[Param] = &[
         "Keep only items carrying all of these labels (repeatable).",
     )
     .multi(),
+    opt("pri", Val::Pri, "Keep only items at this priority."),
+    opt("epic", Val::Str, "Keep only items in this epic."),
+    opt("milestone", Val::Str, "Keep only items in this milestone."),
+    opt(
+        "query",
+        Val::Str,
+        "Keep only items whose id, title, or a label contains this text (case-insensitive).",
+    ),
     opt(
         "limit",
         Val::Count,
@@ -1019,6 +1039,19 @@ pub static VERBS: &[Verb] = &[
         wire: None,
     },
     Verb {
+        name: "undo",
+        about: "Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the commit stays in the reflog. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`).",
+        params: &[&[flag(
+            "force",
+            "Undo even when the tip commit is already published on the remote.",
+        )]],
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::undo::h),
+        wire: Some(serve::w_undo),
+    },
+    Verb {
         name: "absorb.comments",
         about: "Sweep code comments into the ledger via ripgrep (`rg` must be installed — respects `.gitignore`; `project/`, `docs/`, `target/` are excluded).",
         params: &[&[
@@ -1083,8 +1116,12 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "todo.done",
-        about: "Mark done — walks the state machine to `done`, then removes the line (git history keeps the record). Done on a parent removes the whole subtree — children die with it.",
-        params: &[TASK_ID],
+        about: "Mark done — walks the state machine to `done`, removes the line, and archives the subtree into DONE.md. Done on a parent archives the whole subtree — children die with it. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).",
+        params: &[TASK_ID, &[flag(
+            "yes",
+            "Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
+        )
+        .cli()]],
         kind_lock: Some(myco_core::ItemKind::Task),
         mutates: true,
         hidden: false,
@@ -1151,6 +1188,16 @@ pub static VERBS: &[Verb] = &[
         hidden: false,
         cli: Some(crate::backlog::h_list),
         wire: Some(serve::w_backlog_list),
+    },
+    Verb {
+        name: "done.list",
+        about: "List done tasks — the DONE.md archive `todo done`/`item set --status done` land in. Read-only; done is terminal.",
+        params: &[LIST],
+        kind_lock: Some(myco_core::ItemKind::Task),
+        mutates: false,
+        hidden: false,
+        cli: Some(crate::done::h_list),
+        wire: Some(serve::w_done_list),
     },
     Verb {
         name: "issue.new",
@@ -1322,7 +1369,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "item.set",
-        about: "Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it).",
+        about: "Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` archives the subtree into DONE.md — terminal, so it confirms on a tty: `--yes`/`$MYCO_YES` skips).",
         params: &[&[
             pos("id", Val::Id, "Any item id."),
             opt("status", Val::Status, "New status — one legal step from the current one."),
@@ -1342,6 +1389,11 @@ pub static VERBS: &[Verb] = &[
             opt("epic", Val::Str, "Epic name — `\"\"` clears the epic."),
             opt("milestone", Val::Str, "Milestone name — `\"\"` clears the milestone."),
             opt("session", Val::Str, "Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state."),
+            flag(
+                "yes",
+                "Skip the `--status done` confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
+            )
+            .cli(),
         ]],
         kind_lock: None,
         mutates: true,
@@ -1366,6 +1418,11 @@ pub static VERBS: &[Verb] = &[
                 "Extra context appended to the source's `moved to` handoff note.",
             ),
             opt("actor", Val::Actor, "Who moved it (default `cli`)."),
+            flag(
+                "yes",
+                "Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
+            )
+            .cli(),
         ]],
         kind_lock: None,
         mutates: true,

@@ -8,8 +8,8 @@
 //! read the ledger without the skill.
 
 use myco_core::{
-    BacklogDoc, HandoffEntry, Item, ItemFile, ItemKind, NextCounters, Priority, ProjectMeta,
-    Section, Status, TodoDoc,
+    BacklogDoc, DoneDoc, HandoffEntry, Item, ItemFile, ItemKind, NextCounters, Priority,
+    ProjectMeta, Section, Status, TodoDoc,
 };
 use serde_json::json;
 
@@ -52,6 +52,7 @@ pub fn document() -> serde_json::Value {
             "ItemFile": schema::<ItemFile>(),
             "TodoDoc": schema::<TodoDoc>(),
             "BacklogDoc": schema::<BacklogDoc>(),
+            "DoneDoc": schema::<DoneDoc>(),
             "Section": schema::<Section>(),
             "ProjectMeta": schema::<ProjectMeta>(),
             "NextCounters": schema::<NextCounters>(),
@@ -87,7 +88,7 @@ pub fn document() -> serde_json::Value {
                 "title": "# TODO — <repo>",
                 "section": "## <name>",
                 "line": "- [ ] T-NNN <title>[ · <token>]…",
-                "checkbox": "[ ] open — done items are removed, git history keeps them",
+                "checkbox": "[ ] open — done items move to DONE.md",
                 "children": "a `- [ ]` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
                 "default_status": "open",
             },
@@ -97,6 +98,15 @@ pub fn document() -> serde_json::Value {
                 "line": "- T-NNN <title>[ · <token>]…",
                 "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
                 "default_status": "deferred",
+            },
+            "DONE.md": {
+                "format": "markdown",
+                "schema": "DoneDoc",
+                "title": "# Done",
+                "line": "- T-NNN <title>[ · <token>]…",
+                "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
+                "default_status": "done",
+                "note": "append-only done-task archive — `todo done`/`item set --status done` land here; done is terminal",
             },
             "index.md": {"format": "markdown", "verbatim": true},
             "kinds": {
@@ -136,7 +146,7 @@ pub fn document() -> serde_json::Value {
                       [· epic:<name>] [· ms:<name>] [· note:<text>]",
             "token_order": ["status", "pri", "owner", "created", "#label", "blocks", "epic", "ms", "note"],
             "separator": "·",
-            "defaults": {"status": "doc default (open|deferred)", "pri": "med"},
+            "defaults": {"status": "doc default (open|deferred|done)", "pri": "med"},
             "label_pattern": "[A-Za-z0-9_-]+",
             "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms names — `ms` is the milestone token)",
             "actor_pattern": "[A-Za-z0-9._:-]+ (no leading/trailing ':', no '::')",

@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use myco_core::{Item, ItemFile, ItemId, ItemKind, Status};
+use myco_core::{Item, ItemFile, ItemId, ItemKind, Priority, Status};
 use myco_store::Store;
 use serde_json::json;
 
@@ -39,6 +39,55 @@ pub fn save_ledger(store: &impl Store, ledger: &Ledger) -> Result<(), String> {
     store
         .save_backlog(&ledger.backlog)
         .map_err(|e| e.to_string())
+}
+
+/// `DONE.md` — the done-task archive (`todo done` lands here).
+pub fn load_done(store: &impl Store) -> Result<myco_core::DoneDoc, String> {
+    store.done().map_err(|e| e.to_string())
+}
+
+/// Write `DONE.md` back through the store.
+pub fn save_done(store: &impl Store, doc: &myco_core::DoneDoc) -> Result<(), String> {
+    store.save_done(doc).map_err(|e| e.to_string())
+}
+
+/// Append `item` (subtree included — every node must already be
+/// `Status::Done`, emit rejects anything else) to the done doc's
+/// flat unsectioned list. Duplicate ids — the item's whole
+/// subtree — are refused: an id lives in exactly one place.
+pub fn done_push(doc: &mut myco_core::DoneDoc, item: Item) -> Result<(), String> {
+    let live: std::collections::BTreeSet<_> = doc
+        .items()
+        .flat_map(|i| i.subtree())
+        .map(|i| i.id)
+        .collect();
+    if item.subtree().any(|i| live.contains(&i.id)) {
+        return Err(format!("{}: already in DONE.md", item.id));
+    }
+    // the flat list lives in the unsectioned run — it must stay
+    // at index 0 (hand-edited `##` sections may precede nothing)
+    match doc.sections.first_mut() {
+        Some(s) if s.name.is_none() => s.items.push(item),
+        _ => doc.sections.insert(
+            0,
+            myco_core::Section {
+                name: None,
+                items: vec![item],
+            },
+        ),
+    }
+    Ok(())
+}
+
+/// Archive a done task subtree into `DONE.md` — load, push, save.
+/// Callers that must validate *before* any write stage the doc
+/// themselves (`load_done` → [`done_push`] → `save_ledger` →
+/// `save_done`) — this convenience form loads fresh, so a dup id
+/// surfaces only after earlier writes landed.
+pub fn archive_done(store: &impl Store, item: Item) -> Result<(), String> {
+    let mut doc = load_done(store)?;
+    done_push(&mut doc, item)?;
+    save_done(store, &doc)
 }
 
 /// Load a file-backed item for mutation. Archived items are
@@ -113,6 +162,12 @@ impl<S: Store> Store for LockedStore<S> {
     }
     fn save_backlog(&self, doc: &myco_core::BacklogDoc) -> Result<(), myco_store::Error> {
         self.store.save_backlog(doc)
+    }
+    fn done(&self) -> Result<myco_core::DoneDoc, myco_store::Error> {
+        self.store.done()
+    }
+    fn save_done(&self, doc: &myco_core::DoneDoc) -> Result<(), myco_store::Error> {
+        self.store.save_done(doc)
     }
     fn item(&self, id: ItemId) -> Result<ItemFile, myco_store::Error> {
         self.store.item(id)
@@ -267,8 +322,9 @@ pub fn report(
     Ok(0)
 }
 
-/// `--status/--owner/--label` list filter + `--limit` — the parsed
-/// form of the CLI's `ListFlags`, usable by any front-end.
+/// `--status/--owner/--label/--pri/--epic/--milestone/--query`
+/// list filter + `--limit` — the parsed form of the CLI's
+/// `ListFlags`, usable by any front-end.
 #[derive(Debug, Clone, Default)]
 pub struct Filter {
     /// Keep only items with this status.
@@ -277,6 +333,15 @@ pub struct Filter {
     pub owner: Option<String>,
     /// Keep only items carrying all of these labels.
     pub labels: Vec<String>,
+    /// Keep only items at this priority.
+    pub pri: Option<Priority>,
+    /// Keep only items in this epic.
+    pub epic: Option<String>,
+    /// Keep only items in this milestone.
+    pub milestone: Option<String>,
+    /// Keep only items whose id, title, or a label contains this
+    /// text (case-insensitive).
+    pub query: Option<String>,
     /// Keep only the first N items after filtering.
     pub limit: Option<usize>,
 }
@@ -290,6 +355,21 @@ impl Filter {
                 .as_deref()
                 .is_none_or(|o| item.owner.as_ref().map(myco_core::Actor::as_str) == Some(o))
             && self.labels.iter().all(|l| item.labels.contains(l))
+            && self.pri.is_none_or(|p| item.priority == p)
+            && self
+                .epic
+                .as_deref()
+                .is_none_or(|e| item.epic.as_deref() == Some(e))
+            && self
+                .milestone
+                .as_deref()
+                .is_none_or(|m| item.milestone.as_deref() == Some(m))
+            && self.query.as_deref().is_none_or(|q| {
+                let q = q.to_lowercase();
+                item.id.to_string().to_lowercase().contains(&q)
+                    || item.title.to_lowercase().contains(&q)
+                    || item.labels.iter().any(|l| l.to_lowercase().contains(&q))
+            })
     }
 
     /// `limit` as a `.take()` bound.
@@ -472,6 +552,12 @@ pub fn find_item(
         if let Some(item) = ledger.item(&loc) {
             return Ok(Some((item.clone(), file.to_string(), None)));
         }
+    }
+    // DONE.md — finished tasks stay resolvable (`item show`,
+    // dependents, links) after they leave the live ledger
+    let done = load_done(store)?;
+    if let Some(item) = done.items().flat_map(|i| i.subtree()).find(|i| i.id == id) {
+        return Ok(Some((item.clone(), "DONE.md".to_string(), None)));
     }
     match store.item(id) {
         Ok(f) => {

@@ -341,21 +341,32 @@ fn check_orphans_and_malformed_handoffs() {
     let (d, wt) = project();
     run(d.path(), &["todo", "add", "t"]);
     run(d.path(), &["handoff", "T-001", "--note", "keep me"]);
-    // done removes the task — the handoff file becomes an orphan
+    // done archives the task into DONE.md — the item still
+    // exists there, so its handoff is NOT an orphan (same rule
+    // as archived item files)
     run(
         d.path(),
         &["item", "set", "T-001", "--status", "in-progress"],
     );
     run(d.path(), &["item", "set", "T-001", "--status", "done"]);
     let out = run(d.path(), &["check", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stdout(&out));
+    assert!(!codes(&out).contains(&"orphan-handoff".into()));
+    // a handoff whose item is truly gone IS an orphan
+    std::fs::write(
+        wt.join("handoffs/T-999.md"),
+        "+++\nitem = \"T-999\"\n+++\n\n# Handoffs — T-999\n\n## 2025-01-01 · cli\norphan note\n",
+    )
+    .unwrap();
+    let out = run(d.path(), &["check", "--json"]);
     assert_eq!(code(&out), 1);
     assert!(codes(&out).contains(&"orphan-handoff".into()));
     // --fix moves it to handoffs/archive/ — knowledge kept, dir clean
     let out = run(d.path(), &["check", "--fix"]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
-    assert!(!wt.join("handoffs/T-001.md").exists());
-    let archived = read(&wt, "handoffs/archive/T-001.md");
-    assert!(archived.contains("keep me"), "{archived}");
+    assert!(!wt.join("handoffs/T-999.md").exists());
+    let archived = read(&wt, "handoffs/archive/T-999.md");
+    assert!(archived.contains("orphan note"), "{archived}");
     // an archived item's handoff is NOT an orphan
     run(d.path(), &["issue", "new", "i"]);
     run(d.path(), &["handoff", "I-001", "--note", "n"]);

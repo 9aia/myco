@@ -5,12 +5,12 @@ use std::collections::BTreeSet;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use myco_core::{
-    BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, KindSpec, KindTable, ProjectMeta,
-    TodoDoc,
+    BacklogDoc, DoneDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, KindSpec, KindTable,
+    ProjectMeta, TodoDoc,
 };
 use myco_store::{Error, HandoffFile, Store};
 
-use crate::{backlog, handoff, itemfile, meta, todo};
+use crate::{backlog, done, handoff, itemfile, meta, todo};
 
 /// The subdir of each item dir holding archived (done, shelved)
 /// item files — `issues/archive/issue-NNNN-*.md`.
@@ -206,6 +206,10 @@ impl Store for MdStore {
         ids.extend(todo.items().flat_map(|i| i.subtree()).map(|i| i.id));
         let backlog = self.backlog()?;
         ids.extend(backlog.items().flat_map(|i| i.subtree()).map(|i| i.id));
+        // done ids stay reserved too — DONE.md is the archive,
+        // not a licence to reissue
+        let done = self.done()?;
+        ids.extend(done.items().flat_map(|i| i.subtree()).map(|i| i.id));
         for spec in self.kinds.file_backed() {
             // archived ids stay reserved — ids are never reused
             for archived in [false, true] {
@@ -239,6 +243,18 @@ impl Store for MdStore {
 
     fn save_backlog(&self, doc: &BacklogDoc) -> Result<(), Error> {
         write_atomic(&self.path("BACKLOG.md"), &backlog::emit_backlog(doc)?)
+    }
+
+    fn done(&self) -> Result<DoneDoc, Error> {
+        match self.read("DONE.md") {
+            Ok(src) => Ok(done::parse_done(&src)?),
+            Err(Error::NotFound { .. }) => Ok(DoneDoc::default()),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn save_done(&self, doc: &DoneDoc) -> Result<(), Error> {
+        write_atomic(&self.path("DONE.md"), &done::emit_done(doc)?)
     }
 
     fn item(&self, id: ItemId) -> Result<ItemFile, Error> {

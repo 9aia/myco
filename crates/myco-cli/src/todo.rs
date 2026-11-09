@@ -67,7 +67,8 @@ pub fn add_item(
 }
 
 /// The `todo done` mutation — walks to `done`, removes the line
-/// (subtree included). Caller commits. Returns the removed item.
+/// (subtree included), and archives the subtree into `DONE.md`.
+/// Caller commits. Returns the removed item.
 pub fn done_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
     items::require_kind(id, ItemKind::Task, "todo done")?;
     let mut ledger = items::load_ledger(store)?;
@@ -79,13 +80,20 @@ pub fn done_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
             "{id} is deferred (BACKLOG.md) — `myco backlog promote` it first"
         ));
     }
+    // load + stage the archive before any write — a parse error
+    // or duplicate id fails the verb with the ledger untouched
+    let mut done = items::load_done(store)?;
     // take removes the whole subtree — children die with
     // their parent; done on a child removes just the child
     let mut item = ledger
         .take(&loc)
         .ok_or_else(|| format!("{id}: no such task"))?;
     items::walk_to(&mut item, Status::Done)?;
+    // DONE.md emit is done-only — the whole subtree archives done
+    items::walk_descendants_to(&mut item, Status::Done)?;
+    items::done_push(&mut done, item.clone())?;
     items::save_ledger(store, &ledger)?;
+    items::save_done(store, &done)?;
     Ok(item)
 }
 
@@ -150,8 +158,16 @@ pub fn h_add(ctx: &Ctx, a: &Args) -> Result<i32, String> {
 
 /// The `todo done` verb.
 pub fn h_done(ctx: &Ctx, a: &Args) -> Result<i32, String> {
-    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let id = a.req::<ItemId>("id")?;
+    if crate::confirm::needed(a.flag("yes"))
+        && !crate::confirm::ask(&format!(
+            "done {id} — archives it + its subtree into DONE.md?"
+        ))
+    {
+        eprintln!("myco: cancelled");
+        return Ok(1);
+    }
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let item = done_item(&store, id)?;
     let committed = items::commit(
         &proj.worktree,

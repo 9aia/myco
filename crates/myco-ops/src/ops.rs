@@ -96,6 +96,7 @@ pub fn index_template(name: &str) -> String {
          Markdown here is canonical; `myco` verbs are the write path.\n\n\
          - [TODO](TODO.md) — active task list\n\
          - [BACKLOG](BACKLOG.md) — unshaped ideas\n\
+         - [DONE](DONE.md) — done tasks archive\n\
          - [issues/](issues/) — tracked issues, one md file each\n\
          - [proposals/](proposals/) — design proposals (`P-###`)\n\
          - [plans/](plans/) — execution plans (`PL-###`)\n\
@@ -122,6 +123,10 @@ pub fn scaffold(store: &impl Store, root: &Path, name: &str) -> Result<Vec<Strin
     if missing("BACKLOG.md") {
         store.save_backlog(&BacklogDoc::default())?;
         created.push("BACKLOG.md".to_string());
+    }
+    if missing("DONE.md") {
+        store.save_done(&myco_core::DoneDoc::default())?;
+        created.push("DONE.md".to_string());
     }
     if missing("index.md") {
         store.save_index(&index_template(name))?;
@@ -237,6 +242,94 @@ pub fn commit_paths(
     myco_git::git_ident(dir, &commit)
         .map_err(|e| e.to_string())
         .map(|_| true)
+}
+
+/// What [`undo_last`] reverted — the `undo` verb's report payload.
+#[derive(Debug)]
+pub struct UndoOutcome {
+    /// The commit that was reset away.
+    pub hash: String,
+    /// Its subject line.
+    pub subject: String,
+    /// Its author date (`%as`).
+    pub date: String,
+    /// Caveats — e.g. multi-commit verbs leave sibling commits a
+    /// worktree-scoped reset can't reach.
+    pub warnings: Vec<String>,
+}
+
+/// Subjects of verbs that also commit *outside* this worktree —
+/// `init`/`check --fix`/`migrate` land legs on the main branch,
+/// `item move` commits in a second repo. Undoing their
+/// project-side tip can't revert the whole verb; the caller gets
+/// a warning instead of a silent half-undo.
+const MULTI_COMMIT_SUBJECTS: &[&str] = &[
+    "chore: init",
+    "chore: migrate",
+    "chore: move",
+    "chore: check --fix",
+];
+
+/// `myco undo` — move the worktree's branch tip back one commit
+/// (`git reset --hard HEAD~1`). Every mutating verb is exactly one
+/// commit on the ledger branch, so the reset *is* the inverse
+/// mutation — including file deletions (`todo done`'s removed
+/// line comes back whole). The commit stays reachable through the
+/// reflog; nothing is garbage-collected.
+///
+/// Guards, in order: the caller holds [`lock_worktree`]; the
+/// checkout must not be detached ([`ensure_committable`]); the
+/// worktree must be clean — `--no-commit` writes are uncommitted
+/// ledger state a hard reset would silently destroy; `HEAD~1`
+/// must exist (the orphan root has nothing behind it); and a tip
+/// already published on `origin` is refused unless `force` —
+/// rewriting pushed audit-trail history is the one real hazard.
+///
+/// `dir` is the `project/` worktree (or any dir inside it).
+pub fn undo_last(dir: &Path, force: bool) -> Result<UndoOutcome, String> {
+    ensure_committable(dir)?;
+    let entry = myco_git::log(dir, Some(1))
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .next()
+        .ok_or_else(|| "nothing to undo — the ledger branch has no commits".to_string())?;
+    if myco_git::git_out(dir, &["rev-parse", "--verify", "HEAD~1"]).is_err() {
+        return Err(format!(
+            "nothing to undo — {} is the root commit",
+            entry.hash
+        ));
+    }
+    if myco_git::has_changes(dir).map_err(|e| e.to_string())? {
+        return Err(
+            "uncommitted changes in the worktree — `myco commit` them or clean the tree first; \
+             undo only rewinds committed state"
+                .into(),
+        );
+    }
+    if let Some(branch) = myco_git::worktree_branch(dir) {
+        let remote = format!("refs/remotes/origin/{branch}");
+        let published = myco_git::tracks_branch(dir, "origin", &branch)
+            && myco_git::commits_ahead(dir, &remote) == Some(0);
+        if published && !force {
+            return Err(format!(
+                "the tip commit is already published on origin/{branch} — undo would rewrite \
+                 pushed history; pass --force to override"
+            ));
+        }
+    }
+    myco_git::git_out(dir, &["reset", "--hard", "HEAD~1"])
+        .map_err(|e| format!("git reset failed in {}: {e}", dir.display()))?;
+    let warnings = MULTI_COMMIT_SUBJECTS
+        .iter()
+        .filter(|p| entry.subject.starts_with(**p))
+        .map(|p| format!("{p}… also commits outside this worktree — those sibling commits remain"))
+        .collect();
+    Ok(UndoOutcome {
+        hash: entry.hash,
+        subject: entry.subject,
+        date: entry.date,
+        warnings,
+    })
 }
 
 /// Pretty JSON to stdout.
@@ -447,5 +540,103 @@ mod tests {
         )
         .unwrap();
         assert_eq!(author.trim(), "t");
+    }
+
+    /// A plain git repo on `main` with `n` commits of `f{i}.txt`.
+    fn repo(n: usize) -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q", "-b", "main"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        for i in 0..n {
+            std::fs::write(d.path().join(format!("f{i}.txt")), "x").unwrap();
+            git(d.path(), &["add", "-A"]);
+            git(d.path(), &["commit", "-qm", &format!("chore: c{i}")]);
+        }
+        d
+    }
+
+    fn head(dir: &Path) -> String {
+        String::from_utf8(
+            Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .to_string()
+    }
+
+    #[test]
+    fn undo_rewinds_the_tip_one_commit() {
+        let d = repo(3);
+        let before = head(d.path());
+        let out = undo_last(d.path(), false).unwrap();
+        assert_eq!(out.subject, "chore: c2");
+        assert_ne!(head(d.path()), before);
+        // the reset is a hard rewind — the tip's file is gone,
+        // the parent commit's survives
+        assert!(!d.path().join("f2.txt").exists());
+        assert!(d.path().join("f1.txt").exists());
+        // nothing is lost — the undone commit stays in the reflog
+        let reflog = String::from_utf8(
+            Command::new("git")
+                .arg("-C")
+                .arg(d.path())
+                .args(["log", "-g", "--format=%s"])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap();
+        assert!(reflog.contains("chore: c2"), "{reflog}");
+    }
+
+    #[test]
+    fn undo_guards() {
+        // no commits at all
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q", "-b", "main"]);
+        assert!(undo_last(d.path(), false)
+            .unwrap_err()
+            .contains("no commits"));
+        // the orphan root has nothing behind it
+        let d = repo(1);
+        assert!(undo_last(d.path(), false)
+            .unwrap_err()
+            .contains("root commit"));
+        // uncommitted --no-commit writes would die in the reset
+        let d = repo(2);
+        std::fs::write(d.path().join("f0.txt"), "dirty").unwrap();
+        assert!(undo_last(d.path(), false)
+            .unwrap_err()
+            .contains("uncommitted changes"));
+        // a multi-commit verb warns — the sibling legs remain
+        let d = repo(2);
+        git(d.path(), &["commit", "-q", "--amend", "-m", "chore: init"]);
+        let out = undo_last(d.path(), false).unwrap();
+        assert_eq!(out.warnings.len(), 1, "{:?}", out.warnings);
+        assert!(out.warnings[0].contains("outside this worktree"));
+    }
+
+    #[test]
+    fn undo_refuses_a_published_tip_unless_forced() {
+        let d = repo(2);
+        let remote = tempfile::tempdir().unwrap();
+        git(remote.path(), &["init", "-q", "--bare"]);
+        git(
+            d.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        );
+        git(d.path(), &["push", "-qu", "origin", "main"]);
+        let err = undo_last(d.path(), false).unwrap_err();
+        assert!(err.contains("published"), "{err}");
+        // --force rewinds anyway — the caller owns the hazard
+        undo_last(d.path(), true).unwrap();
+        assert!(!d.path().join("f1.txt").exists());
     }
 }

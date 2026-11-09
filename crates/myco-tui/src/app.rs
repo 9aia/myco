@@ -96,6 +96,30 @@ pub enum Mode {
     Command,
     /// `?` — keybind overlay; `esc`/`?`/`q` closes.
     Help,
+    /// `y`/`n` gate before a destructive write — `Space`/`dd` done
+    /// and `u` undo ask first. The prompt + pending verb live in
+    /// `Model::confirm`.
+    Confirm,
+}
+
+/// Which gated mutation a [`Mode::Confirm`] prompt is holding —
+/// `y`/`Enter` runs it, `n`/`esc`/`q` drops it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConfirmAction {
+    /// `Space`/`dd` — `done_selected` through `mutate`.
+    Done,
+    /// `u` — `ops::undo_last` on the target repo's worktree.
+    Undo,
+}
+
+/// A mutation waiting on `y`/`n` — set when a Normal-mode key asks
+/// before a destructive write, cleared when the prompt resolves.
+/// `None` outside [`Mode::Confirm`].
+pub(crate) struct PendingConfirm {
+    /// The prompt text the popup renders.
+    pub(crate) prompt: String,
+    /// What `y`/`Enter` runs.
+    pub(crate) action: ConfirmAction,
 }
 
 /// One registered repo's slice of the index universe — what an
@@ -231,6 +255,9 @@ pub struct Model {
     pub preview_scroll: u16,
     /// Multi-key prefix: `g` armed for `gg`, `d` for `dd`.
     pending: Option<char>,
+    /// The gated mutation under [`Mode::Confirm`] — `None` outside
+    /// it. `pub(crate)` so `render` can draw the prompt.
+    pub(crate) confirm: Option<PendingConfirm>,
     /// Board-list rect from the last frame — `render::draw` writes
     /// it so mouse clicks and wheel hits map to rows.
     pub board_area: Rect,
@@ -338,6 +365,7 @@ impl Model {
             tick_n: 0,
             preview_scroll: 0,
             pending: None,
+            confirm: None,
             board_area: Rect::default(),
             viewport_top: 0,
             tabs_area: None,
@@ -923,6 +951,7 @@ impl Model {
             Mode::Filter => return self.key_filter(k),
             Mode::Command => return self.key_command(k),
             Mode::Help => return self.key_help(k),
+            Mode::Confirm => return self.key_confirm(k),
             Mode::Normal => {}
         }
         let alt = k.modifiers.contains(KeyModifiers::ALT);
@@ -947,11 +976,12 @@ impl Model {
             KeyCode::Char('G') => self.sel = self.last_item_row().unwrap_or(0),
             KeyCode::Char('{') => self.jump_section(-1),
             KeyCode::Char('}') => self.jump_section(1),
-            KeyCode::Char('d') if was_d => self.mutate(|m| m.done_selected()),
+            KeyCode::Char('d') if was_d => self.request_done(),
             KeyCode::Char('d') => self.pending = Some('d'),
             KeyCode::Char('D') => self.mutate(|m| m.defer_selected()),
             KeyCode::Char('p') => self.mutate(|m| m.promote_selected()),
-            KeyCode::Char(' ') => self.mutate(|m| m.done_selected()),
+            KeyCode::Char(' ') => self.request_done(),
+            KeyCode::Char('u') => self.request_undo(),
             KeyCode::Char('a') => {
                 if self.orgs.is_some() {
                     self.status = "add writes one repo — run `myco ui` inside it".into();
@@ -1230,6 +1260,29 @@ impl Model {
         false
     }
 
+    /// Confirm mode — `y`/`Enter` runs the gated mutation, `n`/
+    /// `esc`/`q` backs out to Normal; every other key is swallowed
+    /// so the pending action can't drift.
+    fn key_confirm(&mut self, k: KeyEvent) -> bool {
+        match k.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                let pending = self.confirm.take();
+                self.mode = Mode::Normal;
+                match pending.map(|p| p.action) {
+                    Some(ConfirmAction::Done) => self.mutate(|m| m.done_selected()),
+                    Some(ConfirmAction::Undo) => self.undo_last(),
+                    None => {}
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('q') => {
+                self.confirm = None;
+                self.mode = Mode::Normal;
+            }
+            _ => {}
+        }
+        false
+    }
+
     fn key_add(&mut self, k: KeyEvent) -> bool {
         match k.code {
             KeyCode::Esc => self.mode = Mode::Normal,
@@ -1391,8 +1444,111 @@ impl Model {
         self.switch_board(idx);
     }
 
-    /// `Space`/`dd` — the `todo done` verb: walk to done, remove the
-    /// line (and its subtree), one commit.
+    /// `Space`/`dd` — ask before the destructive done: the prompt
+    /// names the item, `y` runs [`Self::done_selected`] through
+    /// `mutate`. The `Files` board and an empty selection keep the
+    /// old direct path — the read-only hint and the silent no-op
+    /// respectively.
+    fn request_done(&mut self) {
+        let target = if self.board == Board::Files {
+            None
+        } else {
+            self.selected().map(|i| (i.id, i.title.clone()))
+        };
+        let Some((id, title)) = target else {
+            self.mutate(|m| m.done_selected());
+            return;
+        };
+        self.confirm = Some(PendingConfirm {
+            prompt: format!("done {id} — {title}: permanently removes it + its subtree? [y/n]"),
+            action: ConfirmAction::Done,
+        });
+        self.mode = Mode::Confirm;
+    }
+
+    /// `u` — arm the undo confirm. The target worktree resolves
+    /// *now* so a bad target reports in the status bar instead of
+    /// after `y`; the last commit's subject (when the repo answers
+    /// `git log`) goes in the prompt.
+    fn request_undo(&mut self) {
+        let wt = match self.undo_target() {
+            Ok(wt) => wt,
+            Err(e) => {
+                self.status = e;
+                return;
+            }
+        };
+        let subject = myco_git::log(&wt, Some(1))
+            .ok()
+            .and_then(|l| l.into_iter().next())
+            .map(|e| e.subject);
+        let what = match (self.selected_repo(), subject) {
+            (Some(r), Some(s)) => format!("undo last commit in {r} — {s}?"),
+            (Some(r), None) => format!("undo last commit in {r}?"),
+            (None, Some(s)) => format!("undo last commit — {s}?"),
+            (None, None) => "undo last commit?".to_string(),
+        };
+        self.confirm = Some(PendingConfirm {
+            prompt: format!("{what} [y/n]"),
+            action: ConfirmAction::Undo,
+        });
+        self.mode = Mode::Confirm;
+    }
+
+    /// The `project/` worktree `u` undoes in — the selected row's
+    /// owning repo on an index board (the launch repo when no row
+    /// is selected), the launch repo in repo mode.
+    fn undo_target(&self) -> Result<PathBuf, String> {
+        if let Some(orgs) = &self.orgs {
+            if let Some(name) = self.selected_repo() {
+                let org = orgs
+                    .iter()
+                    .find(|o| o.name == name)
+                    .ok_or_else(|| format!("{name}: repo not in the index"))?;
+                return Ok(org.worktree.clone());
+            }
+            return self
+                .proj
+                .as_ref()
+                .map(|p| p.worktree.clone())
+                .ok_or_else(|| "no repo item under the cursor and no launch repo".to_string());
+        }
+        self.proj
+            .as_ref()
+            .map(|p| p.worktree.clone())
+            .ok_or_else(|| "no project worktree".to_string())
+    }
+
+    /// Confirmed `u` — `ops::undo_last` rewinds the target repo's
+    /// `project/` tip one commit (`git reset --hard HEAD~1`; pure
+    /// git, no ledger store path). Mirrors `mutate`'s resync
+    /// discipline: reload either way, the status bar tells the
+    /// outcome — including `undo_last`'s own guard refusals
+    /// (dirty tree, pushed tip, root commit).
+    fn undo_last(&mut self) {
+        let result = self.undo_target().and_then(|wt| {
+            let _lock = ops::lock_worktree(&wt)?;
+            ops::undo_last(&wt, false)
+        });
+        match result {
+            Ok(out) => {
+                self.reload();
+                let hash: String = out.hash.chars().take(12).collect();
+                let mut msg = format!("undid {hash} — {}", out.subject);
+                for w in &out.warnings {
+                    msg.push_str(&format!(" — warning: {w}"));
+                }
+                self.status = msg;
+            }
+            Err(e) => {
+                self.reload();
+                self.status = e;
+            }
+        }
+    }
+
+    /// `Space`/`dd` — the `todo done` verb: walk to done, archive
+    /// the subtree into DONE.md, remove the line, one commit.
     fn done_selected(&mut self) -> Result<(), String> {
         let Some(id) = self.selected_id() else {
             return Ok(());
@@ -1411,7 +1567,13 @@ impl Model {
             .take(&loc)
             .ok_or_else(|| format!("{id}: stale task location"))?;
         items::walk_to(&mut item, Status::Done)?;
+        // DONE.md emit is done-only — archive the subtree like
+        // `myco todo done` does; staged before any write
+        items::walk_descendants_to(&mut item, Status::Done)?;
+        let mut done = items::load_done(&store)?;
+        items::done_push(&mut done, item.clone())?;
         items::save_ledger(&store, &ledger)?;
+        items::save_done(&store, &done)?;
         items::commit(&wt, &format!("chore: done {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
         self.status = format!("done {id} — {}", item.title);
@@ -1803,6 +1965,15 @@ pub(crate) mod tests {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
     }
 
+    /// `Space` + `y` — done is gated behind Confirm; this drives
+    /// the pair and asserts the mode round-trips.
+    pub(crate) fn done(m: &mut Model) {
+        m.key(key(' '));
+        assert_eq!(m.mode, Mode::Confirm);
+        m.key(key('y'));
+        assert_eq!(m.mode, Mode::Normal);
+    }
+
     /// The model's read store — the repo-mode fixtures always
     /// have one.
     pub(crate) fn store(m: &Model) -> &MdStore {
@@ -1853,6 +2024,7 @@ pub(crate) mod tests {
             tick_n: 0,
             preview_scroll: 0,
             pending: None,
+            confirm: None,
             board_area: Rect::default(),
             viewport_top: 0,
             tabs_area: None,
@@ -1953,13 +2125,139 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn dd_remembers_the_prefix_and_dones() {
+    fn dd_remembers_the_prefix_and_asks_first() {
         let mut m = model(|l| l.put_todo(t(1), None));
         m.key(key('d'));
         assert!(m.selected().is_some()); // still there — only armed
         m.key(key('d'));
+        assert_eq!(m.mode, Mode::Confirm); // gated — nothing removed yet
+        assert!(m.selected().is_some());
+        m.key(key('y'));
         assert!(m.selected().is_none());
         assert!(m.ledger.locate(ItemId::new(ItemKind::Task, 1)).is_none());
+    }
+
+    #[test]
+    fn confirm_cancel_keys_write_nothing() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        m.key(key(' '));
+        assert_eq!(m.mode, Mode::Confirm);
+        // the prompt names the item
+        let p = m.confirm.as_ref().unwrap().prompt.clone();
+        assert!(p.contains("T-001") && p.contains("t1"), "{p}");
+        // stray keys are swallowed — no cursor move, no quit
+        assert!(!m.key(key('j')));
+        assert_eq!(m.mode, Mode::Confirm);
+        // n backs out — the item is untouched
+        assert!(!m.key(key('n')));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.confirm.is_none());
+        assert!(m.ledger.locate(ItemId::new(ItemKind::Task, 1)).is_some());
+        // esc / q / N cancel the same way
+        for cancel in [
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            key('q'),
+            key('N'),
+        ] {
+            m.key(key(' '));
+            assert_eq!(m.mode, Mode::Confirm);
+            assert!(!m.key(cancel));
+            assert_eq!(m.mode, Mode::Normal);
+            assert!(m.confirm.is_none());
+        }
+        // Enter confirms like y
+        m.key(key(' '));
+        m.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.ledger.locate(ItemId::new(ItemKind::Task, 1)).is_none());
+    }
+
+    #[test]
+    fn undo_asks_then_errors_on_a_non_git_worktree() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        m.key(key('u'));
+        assert_eq!(m.mode, Mode::Confirm);
+        let p = m.confirm.as_ref().unwrap().prompt.clone();
+        assert!(p.contains("undo last commit"), "{p}");
+        // cancelling writes nothing
+        assert!(!m.key(key('n')));
+        assert_eq!(m.mode, Mode::Normal);
+        // confirming hits undo_last's guards — the fixture
+        // worktree isn't a git repo, so the error lands in the
+        // status bar and the board resyncs
+        m.key(key('u'));
+        m.key(key('y'));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(!m.status.is_empty(), "expected an undo error");
+    }
+
+    #[test]
+    fn undo_rewinds_the_last_commit() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        let wt = m.proj.as_ref().unwrap().worktree.clone();
+        let git = |args: &[&str]| {
+            let st = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&wt)
+                .args(args)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(st.success(), "git {args:?}");
+        };
+        git(&["init", "-q"]);
+        git(&["config", "user.email", "t@t"]);
+        git(&["config", "user.name", "t"]);
+        git(&["config", "commit.gpgsign", "false"]);
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "chore: first"]);
+        // a second commit — the undo target
+        let mut other = items::load_ledger(store(&m)).unwrap();
+        other.put_todo(t(2), None);
+        items::save_ledger(store(&m), &other).unwrap();
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "chore: second"]);
+
+        m.key(key('u'));
+        assert_eq!(m.mode, Mode::Confirm);
+        // the prompt carries the tip's subject
+        let p = m.confirm.as_ref().unwrap().prompt.clone();
+        assert!(p.contains("chore: second"), "{p}");
+        m.key(key('y'));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.status.starts_with("undid"), "{}", m.status);
+        // HEAD~1's ledger is what's on disk and on the board now
+        let disk = items::load_ledger(store(&m)).unwrap();
+        assert!(disk.locate(ItemId::new(ItemKind::Task, 2)).is_none());
+        assert!(disk.locate(ItemId::new(ItemKind::Task, 1)).is_some());
+        assert_eq!(
+            m.rows
+                .iter()
+                .filter(|r| matches!(r, Row::Item { .. }))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn index_undo_targets_the_selected_rows_repo() {
+        let (dir, a) = repo_worktree("a", |l| l.put_todo(t(1), None));
+        let a_wt = a.worktree.clone();
+        std::mem::forget(dir);
+        let (mut m, _c) = index_model(None, vec![a, org("b", vec![t(7)])]);
+        // cursor on a's T-001 → a's worktree; not a git repo, so
+        // the prompt falls back to the repo tag alone
+        assert_eq!(m.undo_target().unwrap(), a_wt);
+        m.key(key('u'));
+        assert_eq!(m.mode, Mode::Confirm);
+        let p = m.confirm.as_ref().unwrap().prompt.clone();
+        assert!(p.contains("in a"), "{p}");
+        assert!(!m.key(key('n')));
+        // cursor on b's T-007 → b's worktree
+        m.key(key('j'));
+        assert_eq!(m.selected_repo(), Some("b"));
+        assert_eq!(m.undo_target().unwrap(), PathBuf::from("/nope/b/project"));
     }
 
     #[test]
@@ -2017,6 +2315,16 @@ pub(crate) mod tests {
             (
                 Box::new(|m: &mut Model| m.mode = Mode::Preview),
                 Mode::Preview,
+            ),
+            (
+                Box::new(|m: &mut Model| {
+                    m.confirm = Some(PendingConfirm {
+                        prompt: "sure? [y/n]".into(),
+                        action: ConfirmAction::Done,
+                    });
+                    m.mode = Mode::Confirm;
+                }),
+                Mode::Confirm,
             ),
         ] {
             let mut m = model(|_| {});
@@ -2259,7 +2567,11 @@ pub(crate) mod tests {
             "garbage\n",
         )
         .unwrap();
+        // space only arms the confirm — `y` runs the mutation that
+        // hits the corrupt ledger
         assert!(!m.key(key(' ')));
+        assert_eq!(m.mode, Mode::Confirm);
+        assert!(!m.key(key('y')));
         assert!(!m.status.is_empty());
         assert_eq!(m.mode, Mode::Normal);
         // …and it recovers once the ledger does
@@ -2271,7 +2583,7 @@ pub(crate) mod tests {
         });
         fixed.put_todo(t(1), None);
         items::save_ledger(store(&m), &fixed).unwrap();
-        m.key(key(' '));
+        done(&mut m);
         assert!(m.status.starts_with("done T-001"), "{}", m.status);
         assert!(m.selected().is_none());
     }
@@ -2284,7 +2596,7 @@ pub(crate) mod tests {
         let mut other = items::load_ledger(store(&m)).unwrap();
         other.put_todo(t(2), None);
         items::save_ledger(store(&m), &other).unwrap();
-        m.key(key(' ')); // done T-1
+        done(&mut m); // done T-1
         let disk = items::load_ledger(store(&m)).unwrap();
         assert!(disk.locate(ItemId::new(ItemKind::Task, 1)).is_none());
         assert!(disk.locate(ItemId::new(ItemKind::Task, 2)).is_some());
@@ -2302,11 +2614,11 @@ pub(crate) mod tests {
         });
         m.key(key('j'));
         assert_eq!(m.selected().unwrap().id.number(), 2);
-        m.key(key(' '));
+        done(&mut m);
         // T-3 slid up into T-2's slot — the cursor follows it
         assert_eq!(m.selected().unwrap().id.number(), 3);
         // at the end of the board it falls back to the item before
-        m.key(key(' '));
+        done(&mut m);
         assert_eq!(m.selected().unwrap().id.number(), 1);
     }
 
@@ -2341,7 +2653,7 @@ pub(crate) mod tests {
         // the board's own mutation refreshes the fingerprint — a
         // following tick doesn't reload. Probe: an in-memory-only
         // item survives tick (a reload would drop it).
-        m.key(key(' '));
+        done(&mut m);
         m.ledger.put_todo(t(9), None);
         m.tick();
         assert!(m.ledger.locate(ItemId::new(ItemKind::Task, 9)).is_some());
@@ -2693,6 +3005,7 @@ pub(crate) mod tests {
             tick_n: 0,
             preview_scroll: 0,
             pending: None,
+            confirm: None,
             board_area: Rect::default(),
             viewport_top: 0,
             tabs_area: None,
@@ -2813,7 +3126,7 @@ pub(crate) mod tests {
         let (mut m, _c) = index_model(None, vec![a, org("b", vec![t(7)])]);
         // `dd` on a's T-001 → the task leaves a's ledger on disk;
         // b's fake path is never touched
-        m.key(key(' '));
+        done(&mut m);
         assert!(m.status.starts_with("done T-001"), "{}", m.status);
         assert_eq!(row_tags(&m), vec![tag("T-007", "b")]);
         let store = MdStore::new(Utf8PathBuf::from_path_buf(wt).unwrap());
@@ -3303,7 +3616,7 @@ pub(crate) mod tests {
         assert!(m.status.contains("BACKLOG"), "{}", m.status);
         // BACKLOG board: space on a deferred item, D on a deferred item
         m.key(key('2'));
-        m.key(key(' '));
+        done(&mut m);
         assert!(m.status.contains("deferred"), "{}", m.status);
         m.key(key('D'));
         assert!(m.status.contains("already deferred"), "{}", m.status);
@@ -3312,7 +3625,7 @@ pub(crate) mod tests {
         let loc = other.locate(ItemId::new(ItemKind::Task, 2)).unwrap();
         other.take(&loc);
         items::save_ledger(store(&m), &other).unwrap();
-        m.key(key(' '));
+        done(&mut m);
         assert!(m.status.contains("no such task"), "{}", m.status);
         // defer's locate arm — same trick: T-001 gone from disk but
         // still on the in-memory board
@@ -3346,7 +3659,7 @@ pub(crate) mod tests {
         let (mut m, _c) = index_model(None, vec![org("a", vec![t(1)]), org("b", vec![t(2)])]);
         m.key(key('j')); // T-002 in repo b — /nope worktree
         assert_eq!(m.selected_repo(), Some("b"));
-        m.key(key(' '));
+        done(&mut m);
         assert!(m.status.contains("not a directory"), "{}", m.status);
     }
 

@@ -1041,3 +1041,127 @@ fn issue_body_from_file_and_stdin() {
     let out = run(d.path(), &["issue", "new", "x", "--body", "/nope.md"]);
     assert_eq!(code(&out), 2);
 }
+
+// ---------- DONE.md / filters / undo ----------
+
+#[test]
+fn done_archives_the_subtree_into_done_md() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "parent", "--pri", "high"]);
+    run(d.path(), &["todo", "add", "child", "--parent", "T-001"]);
+    // done on the parent archives the whole subtree
+    let out = run(d.path(), &["todo", "done", "T-001", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let todo = read(&wt, "TODO.md");
+    assert!(!todo.contains("T-00"), "{todo}");
+    let done = read(&wt, "DONE.md");
+    assert!(done.contains("- T-001 parent"), "{done}");
+    // the child rode along, nested under its parent — both done
+    assert!(done.contains("  - T-002 child"), "{done}");
+    // one commit carried the whole mutation
+    assert_eq!(git(&wt, &["log", "-1", "--format=%s"]), "chore: done T-001");
+
+    // done list reads the archive — children flatten like
+    // `todo list`; item show still resolves each
+    let out = run(d.path(), &["done", "list", "--json"]);
+    let v = json(&out);
+    let ids: Vec<&str> = v
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["T-001", "T-002"], "{v}");
+    let out = run(d.path(), &["item", "show", "T-002", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(json(&out)["location"], "DONE.md");
+    assert_eq!(json(&out)["item"]["status"], "done");
+
+    // check is clean — the archive is canonical ledger state
+    let out = run(d.path(), &["check"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+}
+
+#[test]
+fn list_filters_cover_pri_epic_milestone_query() {
+    let (d, _wt) = project();
+    run(
+        d.path(),
+        &[
+            "todo",
+            "add",
+            "alpha task",
+            "--pri",
+            "high",
+            "--epic",
+            "v2",
+            "--milestone",
+            "m1",
+            "--label",
+            "core",
+        ],
+    );
+    run(d.path(), &["todo", "add", "beta task", "--pri", "low"]);
+    run(d.path(), &["todo", "add", "gamma", "--epic", "v2"]);
+
+    let titles = |args: &[&str]| -> Vec<String> {
+        let mut a = vec!["todo", "list", "--json"];
+        a.extend_from_slice(args);
+        let v = json(&run(d.path(), &a));
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["title"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(titles(&["--pri", "high"]), ["alpha task"]);
+    assert_eq!(titles(&["--epic", "v2"]).len(), 2);
+    assert_eq!(titles(&["--milestone", "m1"]), ["alpha task"]);
+    // query is case-insensitive over id/title/labels
+    assert_eq!(titles(&["--query", "ALPHA"]), ["alpha task"]);
+    assert_eq!(titles(&["--query", "t-001"]), ["alpha task"]);
+    assert_eq!(titles(&["--query", "core"]), ["alpha task"]);
+    // filters compose
+    assert_eq!(
+        titles(&["--epic", "v2", "--pri", "low"]),
+        Vec::<String>::new()
+    );
+    // the archive filters the same way
+    run(d.path(), &["todo", "done", "T-002"]);
+    let out = run(d.path(), &["done", "list", "--query", "beta", "--json"]);
+    assert_eq!(json(&out).as_array().unwrap().len(), 1);
+    let out = run(d.path(), &["done", "list", "--status", "open", "--json"]);
+    assert_eq!(json(&out).as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn undo_rewinds_the_last_verb() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "temporary"]);
+    assert!(read(&wt, "TODO.md").contains("T-001"));
+    let tip = git(&wt, &["log", "-1", "--format=%s"]);
+    assert_eq!(tip, "chore: add T-001");
+
+    let out = run(d.path(), &["undo", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["undone"]["subject"], "chore: add T-001");
+    // the mutation is gone — file state AND history tip
+    assert!(!read(&wt, "TODO.md").contains("T-001"));
+    assert_eq!(
+        git(&wt, &["log", "-1", "--format=%s"]),
+        "chore: init project ledger"
+    );
+
+    // keep undoing — init's own commits unwind too; the orphan
+    // root is where it stops
+    let mut last = String::new();
+    for _ in 0..4 {
+        let out = run(d.path(), &["undo"]);
+        if code(&out) != 0 {
+            last = stderr(&out);
+            break;
+        }
+    }
+    assert!(last.contains("root commit"), "{last}");
+}

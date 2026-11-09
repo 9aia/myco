@@ -12,8 +12,9 @@
 //! same ledger ops the CLI verbs use, so writes and commits are
 //! identical to `myco todo done` et al. Ported from pm's Bubble Tea
 //! reference (`9aia/pm`, `docs/tui.md` there) — the keymap is
-//! vim-style: `j/k` move, `h/l`/`1`/`2`/`3` boards, `Space`/`dd` done,
-//! `D` defer, `p` promote, `Alt+↑/↓` reorder, `a` add, `/` filter,
+//! vim-style: `j/k` move, `h/l`/`1`/`2`/`3` boards, `Space`/`dd` done
+//! and `u` undo (both ask `y`/`n` first), `D` defer, `p` promote,
+//! `Alt+↑/↓` reorder, `a` add, `/` filter,
 //! `:` command line (`:q` `:w` `:e` `:<id>` `:set id`), `Enter`/`→`/
 //! double-click open the preview (`j`/`k` scroll, `←`/`esc` back —
 //! `←` pops a drill-down stack of the boards/items you opened

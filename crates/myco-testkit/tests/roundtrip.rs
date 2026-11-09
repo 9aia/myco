@@ -3,8 +3,8 @@
 #![allow(clippy::unwrap_used)]
 
 use myco_store_md::{
-    emit_backlog, emit_handoff_file, emit_item_file, emit_meta, emit_todo, parse_backlog,
-    parse_handoff_file, parse_item_file, parse_meta, parse_todo,
+    emit_backlog, emit_done, emit_handoff_file, emit_item_file, emit_meta, emit_todo,
+    parse_backlog, parse_done, parse_handoff_file, parse_item_file, parse_meta, parse_todo,
 };
 use myco_testkit::strat;
 use proptest::prelude::*;
@@ -26,6 +26,14 @@ proptest! {
         let back = parse_backlog(&out).unwrap();
         prop_assert_eq!(&back, &doc);
         prop_assert_eq!(emit_backlog(&back).unwrap(), out);
+    }
+
+    #[test]
+    fn done_roundtrip(doc in strat::done_doc()) {
+        let out = emit_done(&doc).unwrap();
+        let back = parse_done(&out).unwrap();
+        prop_assert_eq!(&back, &doc);
+        prop_assert_eq!(emit_done(&back).unwrap(), out);
     }
 
     #[test]

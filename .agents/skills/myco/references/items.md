@@ -31,17 +31,20 @@ done     → (terminal)
 ```
 
 Tasks move files as they transition: `deferred` moves the line
-TODO→BACKLOG, `open` moves it back, `done` deletes the line (git
-history keeps the record).
+TODO→BACKLOG, `open` moves it back, `done` removes the line and
+archives the subtree into `DONE.md` (done is terminal — the
+archive is the record; `myco done list` reads it, `item show`
+still resolves it).
 
 ## Verbs
 
 ```bash
 myco todo add "title" [--section S] [--pri high] [--owner devin] \
     [--label x] [--blocks T-1] [--epic v2] [--milestone 0.2]
-myco todo done T-NNN          # → done, line removed
+myco todo done T-NNN          # → done, subtree → DONE.md (asks on a tty)
 myco todo defer T-NNN         # → deferred, line → BACKLOG.md
 myco todo list                # backlog list / promote T-NNN likewise
+myco done list                # the DONE.md archive — same filters as todo list
 
 myco issue new "title" [--text|--body FILE|-]   # issues/issue-NNNN-slug.md
 myco issue comment I-NNN "note"                 # dated note, append-only
@@ -63,7 +66,9 @@ myco item move T-NNN --to /path/to/other-repo   # cross-repo transfer
 
 `item set` mutates metadata in place; `--status` is the only field
 routed through the state machine. `--label`/`--blocks` take `+`/`-`
-prefixes; `--epic ""` clears.
+prefixes; `--epic ""` clears. `--status done` is terminal — it
+confirms on a tty (`--yes`/`$MYCO_YES` skips; non-interactive runs
+never prompt). Same for `todo done` and `item move`.
 
 `item move` re-files an item in another repo's ledger: `--to` takes
 the destination repo root, its `project/` worktree, or a registered

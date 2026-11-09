@@ -797,6 +797,61 @@ fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
         }
     }
 
+    // --- DONE.md ---------------------------------------------------
+    // the done-task archive — parses like BACKLOG.md but
+    // done-only. Ids join the ledger set (dup detection + ref
+    // resolution) while items skip the live-item checks — an
+    // archived `blocks:` may legitimately dangle.
+    match read(wt, "DONE.md") {
+        Read::Unreadable(m) => {
+            a.findings
+                .push(Finding::at("DONE.md", "unreadable-file", m, false));
+            ids_incomplete = true;
+        }
+        Read::Missing => {
+            a.findings.push(Finding::at(
+                "DONE.md",
+                "missing-file",
+                "DONE.md missing — `myco init` creates it",
+                true,
+            ));
+            if let Ok(text) = myco_store_md::emit_done(&myco_core::DoneDoc::default()) {
+                a.fixes.push(Fix::Write {
+                    rel: "DONE.md".into(),
+                    contents: text,
+                });
+            }
+        }
+        Read::Ok(src) => match myco_store_md::parse_done(&src) {
+            Ok(doc) => {
+                for it in doc.items().flat_map(|i| i.subtree()) {
+                    ids.entry(it.id).or_default().push("DONE.md".into());
+                }
+                if myco_store_md::emit_done(&doc)
+                    .map(|e| normalize(&src) != e)
+                    .unwrap_or(true)
+                {
+                    a.findings.push(Finding::at(
+                        "DONE.md",
+                        "emit-drift",
+                        "DONE.md isn't canonical — re-emit",
+                        true,
+                    ));
+                    if let Ok(text) = myco_store_md::emit_done(&doc) {
+                        a.fixes.push(Fix::Write {
+                            rel: "DONE.md".into(),
+                            contents: text,
+                        });
+                    }
+                }
+            }
+            Err(e) => {
+                a.findings.push(Finding::parse(&e, false));
+                ids_incomplete = true;
+            }
+        },
+    }
+
     // --- index.md ---------------------------------------------------
     match read(wt, "index.md") {
         Read::Unreadable(m) => {

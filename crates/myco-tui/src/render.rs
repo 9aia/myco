@@ -56,6 +56,9 @@ pub fn draw(f: &mut Frame, m: &mut Model) {
     if m.mode == Mode::Help {
         draw_help(f, area);
     }
+    if m.mode == Mode::Confirm {
+        draw_confirm(f, area, m);
+    }
 }
 
 /// Tab captions for `width` columns — full names when they fit,
@@ -342,8 +345,8 @@ fn related_lines(m: &Model, item: &myco_core::Item) -> Vec<Line<'static>> {
 /// Normal-mode hint sets, widest first — `pick_hints` takes the
 /// first that fits so narrow terminals degrade instead of cropping.
 const HINTS: [&str; 3] = [
-    "j/k move · 1/2/3 boards · space done · D defer · p promote · alt+↑/↓ reorder · a add · / filter · : cmd · enter/→ open · ← back · E edit · R reload · ? help · q quit",
-    "j/k move · space done · a add · / filter · : cmd · enter/→ · ← back · E edit · ? help · q quit",
+    "j/k move · 1/2/3 boards · space done · D defer · p promote · u undo · alt+↑/↓ reorder · a add · / filter · : cmd · enter/→ open · ← back · E edit · R reload · ? help · q quit",
+    "j/k move · space done · u undo · a add · / filter · : cmd · enter/→ · ← back · E edit · ? help · q quit",
     "? help · q quit",
 ];
 
@@ -356,6 +359,7 @@ fn pick_hints(mode: Mode, width: usize) -> &'static str {
         Mode::Command => "enter run · esc cancel",
         Mode::Preview => "j/k scroll · ←/esc back",
         Mode::Help => "esc/?/q close",
+        Mode::Confirm => "y confirm · n/esc cancel",
         Mode::Normal => HINTS
             .iter()
             .copied()
@@ -438,7 +442,7 @@ fn help_lines() -> Vec<Line<'static>> {
         bind("1 / 2 / 3", "TODO / BACKLOG / FILES"),
         bind("h/l", "switch board"),
         group("items (TODO/BACKLOG)"),
-        bind("space, dd", "mark done"),
+        bind("space, dd", "mark done (asks first)"),
         bind("D", "defer → BACKLOG"),
         bind("p", "promote → TODO"),
         bind("alt+j/k, ↑/↓", "reorder"),
@@ -446,6 +450,7 @@ fn help_lines() -> Vec<Line<'static>> {
         bind("a", "add item"),
         bind("E", "open in $EDITOR"),
         bind("R", "reload"),
+        bind("u", "undo commit (asks)"),
         group("mouse"),
         bind("click, wheel", "select, scroll"),
         bind("double-click", "open preview"),
@@ -495,6 +500,34 @@ fn draw_help(f: &mut Frame, area: Rect) {
     for (lines, rect) in cols.iter().zip(rects.iter()) {
         f.render_widget(Paragraph::new(lines.clone()), *rect);
     }
+}
+
+/// The confirm popup — a centered box holding the pending prompt;
+/// the `y`/`n` hint also shows in the status bar via `pick_hints`.
+fn draw_confirm(f: &mut Frame, area: Rect, m: &Model) {
+    let Some(p) = &m.confirm else {
+        return;
+    };
+    let width = (p.prompt.chars().count() as u16 + 4).min(area.width);
+    let popup = centered(area, width, 5);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(ACCENT))
+        .title(Span::styled(" confirm ", Style::default().fg(ACCENT)));
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(Span::raw(p.prompt.clone())),
+            Line::from(Span::styled(
+                "y confirm · n/esc cancel",
+                Style::default().fg(MUTED),
+            )),
+        ])
+        .wrap(Wrap { trim: false }),
+        inner,
+    );
 }
 
 #[cfg(test)]

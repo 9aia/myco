@@ -38,6 +38,7 @@
 //! notes; `handoffs/archive/` holds files whose item was removed.
 
 mod backlog;
+mod done;
 mod error;
 mod handoff;
 mod itemfile;
@@ -49,6 +50,7 @@ mod store;
 mod todo;
 
 pub use backlog::{emit_backlog, parse_backlog};
+pub use done::{emit_done, parse_done};
 pub use error::{EmitError, ParseError};
 pub use handoff::{
     emit_entry, emit_handoff_file, handoff_filename, parse_handoff_file, parse_handoff_filename,

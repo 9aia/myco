@@ -18,7 +18,7 @@ use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
 use myco_core::{
-    eval, eval_scoped, Actor, GroupAxis, ItemId, ItemKind, Priority, Scoped, SortKey, Status,
+    eval, eval_scoped, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, Scoped, SortKey, Status,
     ViewFormat, ViewSource, ViewSpec,
 };
 use myco_ops::view::Origin;
@@ -529,6 +529,19 @@ pub(crate) fn w_check(s: &Server, _a: &crate::registry::Args) -> Result<Value, F
     check::check_json(&proj).map_err(Fail::Verb)
 }
 
+/// `undo` — `{force?}`; rewinds the project tip one commit. No
+/// store needed — the reset is pure git.
+pub(crate) fn w_undo(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let force = a.flag("force");
+    let proj = crate::discover::discover(s.dir(), s.root()).map_err(Fail::Verb)?;
+    let _lock = crate::ops::lock_worktree(&proj.worktree).map_err(Fail::Verb)?;
+    let out = crate::ops::undo_last(&proj.worktree, force).map_err(Fail::Verb)?;
+    Ok(json!({
+        "undone": {"hash": out.hash, "subject": out.subject, "date": out.date},
+        "warnings": out.warnings,
+    }))
+}
+
 /// `item.show` — `{id}` (a single id per request).
 pub(crate) fn w_item_show(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let id = a.one::<ItemId>("id").map_err(Fail::BadParams)?;
@@ -558,6 +571,20 @@ fn w_doc_list(s: &Server, a: &crate::registry::Args, backlog: bool) -> Result<Va
     let f = items::list_args(a).map_err(Fail::BadParams)?;
     let (_proj, store) = s.open_read()?;
     let found = todo::list_items(&store, backlog, &f)?;
+    Ok(items_json(&found))
+}
+
+/// `done.list` — the DONE.md archive, same list filters.
+pub(crate) fn w_done_list(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let f = items::list_args(a).map_err(Fail::BadParams)?;
+    let (_proj, store) = s.open_read()?;
+    let all = crate::done::done_items(&store)?;
+    let found: Vec<Item> = myco_core::tree_view(&all)
+        .into_iter()
+        .filter(|(_, i)| f.matches(i))
+        .take(f.take())
+        .map(|(_, i)| i.clone())
+        .collect();
     Ok(items_json(&found))
 }
 

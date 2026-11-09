@@ -79,6 +79,27 @@ impl BacklogDoc {
     }
 }
 
+/// `DONE.md` — `# Done` plus optional `##` sections of `- T-NNN …`
+/// items (no checkbox; items are `Done`). The append-only archive
+/// `todo done`/`item set --status done` land in — done tasks leave
+/// TODO.md but stay readable here (`myco done list`, `item show`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct DoneDoc {
+    /// Sections in file order.
+    pub sections: Vec<Section>,
+}
+
+impl DoneDoc {
+    /// Every top-level item across all sections, in file order —
+    /// nested children stay inside their parents (flatten with
+    /// [`Item::subtree`]).
+    pub fn items(&self) -> impl Iterator<Item = &Item> {
+        self.sections.iter().flat_map(|s| s.items.iter())
+    }
+}
+
 /// One `issues|proposals|adrs|plans/*.md` file — TOML frontmatter
 /// in `+++` fences + a free-form markdown body.
 #[derive(Debug, Clone, PartialEq, Eq)]

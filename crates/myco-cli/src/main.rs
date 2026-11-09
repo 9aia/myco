@@ -27,9 +27,11 @@ mod board;
 mod cfgverb;
 mod check;
 mod commit;
+mod confirm;
 mod continuity;
 mod digest;
 mod discover;
+mod done;
 mod indexcmd;
 mod init;
 mod issue;
@@ -50,6 +52,7 @@ mod serve;
 mod status;
 mod templates;
 mod todo;
+mod undo;
 mod view;
 
 fn manifest() -> serde_json::Value {

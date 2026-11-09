@@ -271,11 +271,18 @@ pub(crate) fn moved_json(m: &Moved) -> serde_json::Value {
 /// The `item move` verb.
 pub fn h_move(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let id = a.req::<ItemId>("id")?;
+    let to = a.text("to")?;
+    if crate::confirm::needed(a.flag("yes"))
+        && !crate::confirm::ask(&format!("move {id} → {to}? the source closes."))
+    {
+        eprintln!("myco: cancelled");
+        return Ok(1);
+    }
     let m = do_move(
         ctx.dir.as_deref(),
         ctx.root.as_deref(),
         id,
-        a.text("to")?,
+        to,
         a.opt("note"),
         a.parsed("actor")?,
         ctx.no_commit,

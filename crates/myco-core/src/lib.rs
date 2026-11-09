@@ -22,7 +22,7 @@ pub mod view;
 pub mod walk;
 
 pub use actor::{is_valid_actor, Actor, ParseActorError};
-pub use doc::{canonical_body, BacklogDoc, ItemFile, Section, TodoDoc};
+pub use doc::{canonical_body, BacklogDoc, DoneDoc, ItemFile, Section, TodoDoc};
 pub use handoff::{is_valid_session, HandoffEntry};
 pub use id::{require_kind, ItemId, ItemKind, ParseItemIdError, ParseItemKindError};
 pub use item::{is_valid_group_name, is_valid_label, tree_view, Item, ItemMeta, NewItemMeta};

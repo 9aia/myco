@@ -184,13 +184,21 @@ pub(crate) fn set_item(
 
 /// The `item set` verb.
 pub fn h_set(ctx: &Ctx, a: &Args) -> Result<i32, String> {
-    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let id = a.req::<ItemId>("id")?;
     let flags = set_flags(a)?;
     let session = a.opt("session").map(str::to_string);
     if flags.is_noop() && session.is_none() {
         return Err("item set: nothing to change — pass at least one flag".into());
     }
+    // done is terminal — the one `item set` worth confirming
+    if flags.status == Some(Status::Done)
+        && crate::confirm::needed(a.flag("yes"))
+        && !crate::confirm::ask(&format!("set {id} → done? done is terminal."))
+    {
+        eprintln!("myco: cancelled");
+        return Ok(1);
+    }
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let (item, location, claim) = set_item(&store, id, &flags, session)?;
     let committed = items::commit(
         &proj.worktree,
@@ -422,6 +430,7 @@ pub(crate) fn mutate_item(
         // backlog nodes into TODO.md (children unpark).
         // Nested children that keep their doc stay nested.
         let status_change = flags.status.is_some();
+        let mut done_doc = None;
         let Some(target) = ledger.item_mut(&loc) else {
             return Err(format!("{id}: no such task"));
         };
@@ -432,7 +441,17 @@ pub(crate) fn mutate_item(
             };
             match current.status {
                 Status::Done => {
-                    ledger.take(&loc);
+                    let mut item = ledger
+                        .take(&loc)
+                        .ok_or_else(|| format!("{id}: no such task"))?;
+                    // DONE.md emit is done-only — archive the
+                    // whole subtree done, like `todo done`
+                    items::walk_descendants_to(&mut item, Status::Done)?;
+                    // stage before any write — a dup/parse
+                    // failure leaves the ledger untouched
+                    let mut doc = items::load_done(store)?;
+                    items::done_push(&mut doc, item)?;
+                    done_doc = Some(doc);
                 }
                 Status::Deferred => {
                     let mut item = ledger
@@ -469,6 +488,9 @@ pub(crate) fn mutate_item(
         }
         let item = ledger.locate(id).and_then(|l| ledger.item(&l).cloned());
         items::save_ledger(store, &ledger)?;
+        if let Some(doc) = done_doc {
+            items::save_done(store, &doc)?;
+        }
         Ok((item, "tasks".to_string()))
     } else {
         let mut file = items::item_for_edit(store, id)?;

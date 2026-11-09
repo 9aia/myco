@@ -74,13 +74,17 @@ pub fn meta_args(a: &crate::registry::Args) -> Result<NewItemMeta, String> {
     })
 }
 
-/// `--status/--owner/--label/--limit` → the `Filter` every `list`
-/// verb shares.
+/// `--status/--owner/--label/--pri/--epic/--milestone/--query/
+/// --limit` → the `Filter` every `list` verb shares.
 pub fn list_args(a: &crate::registry::Args) -> Result<Filter, String> {
     Ok(Filter {
         status: a.parsed("status")?,
         owner: a.opt("owner").map(str::to_string),
         labels: a.many("label"),
+        pri: a.parsed("pri")?,
+        epic: a.opt("epic").map(str::to_string),
+        milestone: a.opt("milestone").map(str::to_string),
+        query: a.opt("query").map(str::to_string),
         limit: a.parsed("limit")?,
     })
 }

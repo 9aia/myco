@@ -23,9 +23,9 @@ pub const FILE_KINDS: [ItemKind; 4] = [
 pub struct Scan {
     /// Project name (`meta.toml` → `TODO.md` title → dir name).
     pub name: String,
-    /// Every item — TODO/BACKLOG lines + file metas, live + archived.
+    /// Every item — TODO/BACKLOG/DONE lines + file metas, live + archived.
     pub items: Vec<Item>,
-    /// Ids whose files live under `archive/`.
+    /// Ids in cold storage — `archive/` dirs and DONE.md.
     pub archived: BTreeSet<ItemId>,
 }
 
@@ -60,6 +60,14 @@ pub fn scan(store: &impl Store) -> Result<Scan, String> {
     items.extend(store.todo().map_err(|e| e.to_string())?.items().cloned());
     items.extend(store.backlog().map_err(|e| e.to_string())?.items().cloned());
     let mut archived = BTreeSet::new();
+    // DONE.md — the done archive: ids join `archived` so live()
+    // views skip them while the snapshot still carries the record
+    for top in store.done().map_err(|e| e.to_string())?.items() {
+        for i in top.subtree() {
+            archived.insert(i.id);
+        }
+        items.push(top.clone());
+    }
     for kind in FILE_KINDS {
         for f in store.list_items(kind).map_err(|e| e.to_string())? {
             items.push(f.meta);

@@ -9,7 +9,8 @@
 use std::collections::BTreeSet;
 
 use myco_core::{
-    BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, KindTable, ProjectMeta, TodoDoc,
+    BacklogDoc, DoneDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, KindTable, ProjectMeta,
+    TodoDoc,
 };
 
 /// Project-state persistence.
@@ -49,6 +50,13 @@ pub trait Store {
 
     /// Write `BACKLOG.md` atomically.
     fn save_backlog(&self, doc: &BacklogDoc) -> Result<(), Error>;
+
+    /// `DONE.md` — the done-task archive. Scaffolded by `init`;
+    /// absent still reads as an empty doc.
+    fn done(&self) -> Result<DoneDoc, Error>;
+
+    /// Write `DONE.md` atomically.
+    fn save_done(&self, doc: &DoneDoc) -> Result<(), Error>;
 
     /// Load one item file by id (`I-003` → `issues/issue-0003-*.md`).
     /// A same-id file in both live and `archive/` is a duplicate-id

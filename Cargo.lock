@@ -1227,6 +1227,7 @@ dependencies = [
  "myco-config",
  "myco-config-toml",
  "myco-core",
+ "myco-git",
  "myco-ops",
  "myco-store",
  "myco-store-md",

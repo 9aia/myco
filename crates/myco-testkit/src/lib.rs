@@ -57,8 +57,8 @@ fn collect(root: &Path, dir: &Path, out: &mut Vec<String>) {
 /// the canonical grammar can express (see each fn's docs).
 pub mod strat {
     use myco_core::{
-        Actor, BacklogDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, NextCounters, Priority,
-        ProjectMeta, Section, Status, TodoDoc,
+        Actor, BacklogDoc, DoneDoc, HandoffEntry, Item, ItemFile, ItemId, ItemKind, NextCounters,
+        Priority, ProjectMeta, Section, Status, TodoDoc,
     };
     use proptest::prelude::*;
     use time::Date;
@@ -253,6 +253,15 @@ pub mod strat {
             i
         }))
         .prop_map(|sections| BacklogDoc { sections })
+    }
+
+    /// A `DoneDoc` — every item (children included) `Done`.
+    pub fn done_doc() -> impl Strategy<Value = DoneDoc> {
+        sections(line_item(&[]).prop_map(|mut i| {
+            status_tree(&mut i, Status::Done);
+            i
+        }))
+        .prop_map(|sections| DoneDoc { sections })
     }
 
     /// A `ProjectMeta` — arbitrary counters.

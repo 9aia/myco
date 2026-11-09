@@ -43,7 +43,9 @@ myco <verb> --help     # every verb, self-documenting
 | Add a task | `myco todo add "title" [--pri high] [--owner devin]` |
 | Park / re-activate a task | `myco todo defer T-NNN` / `myco backlog promote T-NNN` |
 | Claim / start / block / finish | `myco item set T-NNN --status claimed|in-progress|blocked|done` |
-| Done a task | `myco todo done T-NNN` |
+| Done a task | `myco todo done T-NNN` (archives subtree → `DONE.md`) |
+| Done tasks / filters | `myco done list` · every `list` verb takes `--status --owner --label --pri --epic --milestone --query --limit` |
+| Undo the last mutation | `myco undo` (resets the `project` tip one commit — refuses dirty/pushed tips) |
 | File / close an issue | `myco issue new "title"` / `myco issue resolve I-NNN` |
 | Design / plan / decision docs | `myco proposal new` · `myco plan new` · `myco adr new` |
 | Inspect / mutate any item | `myco item show T-NNN` · `myco item set T-NNN …` |
@@ -55,7 +57,7 @@ myco <verb> --help     # every verb, self-documenting
 | Config verbs | `[verbs.<name>]` in myco.toml — `emit` (a baked `ViewSpec` → table/json/ids/first) or `target`+`args` (alias for a read-only builtin); works on CLI, batch, serve |
 | Served surface | `myco serve` (JSON-RPC 2.0 on stdio, for pipe-holding embedders) · `myco batch` (one-shot: NDJSON requests stdin/`--file` → NDJSON responses) |
 | Cross-repo | `myco index add <repo>` (ledger-less repos register `ledger = "none"`, no snapshot; `--org` marks the one global ledger) · `myco item move <ID> --to <repo>` (re-files an item in another repo's ledger; source closes `done` + `moved to` handoff) · `myco view org-status` · `myco view org-board` · `[views.x] source="index" format="repos"` → one row per repo (org/items/open/claimed/err). In a registered ledger-less repo, project verbs resolve to the org ledger's worktree |
-| Housekeeping | `myco init` · `check` · `migrate` · `commit` · `org init` |
+| Housekeeping | `myco init` · `check` · `migrate` · `commit` · `undo` · `org init` |
 
 ## The daily loop
 
