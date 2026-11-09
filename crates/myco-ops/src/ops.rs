@@ -293,12 +293,8 @@ pub fn undo_last(dir: &Path, force: bool) -> Result<UndoOutcome, String> {
         .into_iter()
         .next()
         .ok_or_else(|| "nothing to undo — the ledger branch has no commits".to_string())?;
-    if myco_git::git_out(dir, &["rev-parse", "--verify", "HEAD~1"]).is_err() {
-        return Err(format!(
-            "nothing to undo — {} is the root commit",
-            entry.hash
-        ));
-    }
+    let base = myco_git::git_out(dir, &["rev-parse", "--verify", "HEAD~1"])
+        .map_err(|_| format!("nothing to undo — {} is the root commit", entry.hash))?;
     if myco_git::has_changes(dir).map_err(|e| e.to_string())? {
         return Err(
             "uncommitted changes in the worktree — `myco commit` them or clean the tree first; \
@@ -319,7 +315,28 @@ pub fn undo_last(dir: &Path, force: bool) -> Result<UndoOutcome, String> {
     }
     myco_git::git_out(dir, &["reset", "--hard", "HEAD~1"])
         .map_err(|e| format!("git reset failed in {}: {e}", dir.display()))?;
-    let warnings = multi_commit_warnings(&entry.subject);
+    let mut warnings = multi_commit_warnings(&entry.subject);
+    // Record the undone commit for `redo`. The journal self-
+    // invalidates: if its top anchor isn't the HEAD we just left,
+    // the timeline moved and the stale stack is dropped first.
+    let mut j = crate::history::load(dir);
+    if !crate::history::top_valid(&j, &entry.hash) {
+        crate::history::clear(&mut j);
+    }
+    crate::history::push(
+        &mut j,
+        crate::history::HistoryEntry {
+            target: entry.hash.clone(),
+            base: base.trim().to_string(),
+            subject: entry.subject.clone(),
+            date: entry.date.clone(),
+        },
+    );
+    if let Err(e) = crate::history::save(dir, &j) {
+        warnings.push(format!(
+            "undo committed but the redo journal could not be saved ({e}) — redo may be unavailable"
+        ));
+    }
     Ok(UndoOutcome {
         hash: entry.hash,
         subject: entry.subject,
@@ -328,32 +345,32 @@ pub fn undo_last(dir: &Path, force: bool) -> Result<UndoOutcome, String> {
     })
 }
 
-/// `myco redo` — restore the commit the last undo moved away from:
-/// `git reset --hard HEAD@{1}`. The inverse of [`undo_last`] with
-/// no published-tip guard — re-applying a commit that was already
-/// the tip rewrites nothing new.
+/// `myco redo` — restore the commit the last undo moved away
+/// from: pop the top of the undo journal
+/// (`<git-common-dir>/myco-history.json`, see
+/// [`crate::history`]) and `git reset --hard` to its target.
+/// Repeatable — each pop exposes the next-older undone commit,
+/// which is the redo stack single-step reflog tricks can't
+/// express.
 ///
 /// Guards mirror undo's: committable checkout, clean worktree (a
-/// hard reset would destroy `--no-commit` writes), and the
-/// reflog's newest action must be `reset: moving to HEAD~1` —
-/// undo_last's exact reflog message. That both proves an undo
-/// happened *and* distinguishes it from a redo (whose message
-/// names `HEAD@{1}`), so a second `redo` refuses instead of
-/// toggling back. A commit, pull, or checkout since the undo
-/// moves `HEAD@{1}` off the undone commit — also refused.
+/// hard reset would destroy `--no-commit` writes), and the top
+/// entry's `base` must still equal HEAD — any commit, pull, or
+/// manual git op since the undo breaks the anchor and the stack
+/// self-clears. No published-tip guard: re-applying a commit
+/// that was already the tip rewrites nothing new.
 pub fn redo_last(dir: &Path) -> Result<UndoOutcome, String> {
     ensure_committable(dir)?;
-    let action =
-        myco_git::git_out(dir, &["reflog", "-1", "--format=%gs"]).map_err(|e| e.to_string())?;
-    if action.trim() != "reset: moving to HEAD~1" {
-        return Err(
-            "nothing to redo — the last ledger action wasn't an undo (or it was already redone)"
-                .into(),
-        );
-    }
-    let prev = myco_git::git_out(dir, &["rev-parse", "HEAD@{1}"]).map_err(|e| e.to_string())?;
-    if prev.len() != 40 || !prev.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("nothing to redo — no previous position in the reflog".into());
+    let head = crate::history::head_sha(dir)
+        .map_err(|_| "nothing to redo — the ledger branch has no commits".to_string())?;
+    let mut j = crate::history::load(dir);
+    let Some(top) = j.future.last().cloned() else {
+        return Err("nothing to redo — no undone commit is waiting".into());
+    };
+    if top.base != head {
+        crate::history::clear(&mut j);
+        let _ = crate::history::save(dir, &j);
+        return Err("nothing to redo — the ledger moved since the last undo".into());
     }
     if myco_git::has_changes(dir).map_err(|e| e.to_string())? {
         return Err(
@@ -362,25 +379,50 @@ pub fn redo_last(dir: &Path) -> Result<UndoOutcome, String> {
                 .into(),
         );
     }
-    myco_git::git_out(dir, &["reset", "--hard", "HEAD@{1}"])
+    if myco_git::git_out(
+        dir,
+        &[
+            "rev-parse",
+            "--verify",
+            &format!("{}^{{commit}}", top.target),
+        ],
+    )
+    .is_err()
+    {
+        return Err(format!(
+            "nothing to redo — {} no longer exists",
+            &top.target[..12]
+        ));
+    }
+    myco_git::git_out(dir, &["reset", "--hard", &top.target])
         .map_err(|e| format!("git reset failed in {}: {e}", dir.display()))?;
-    let entry = head_entry(dir)?;
-    let warnings = multi_commit_warnings(&entry.subject);
+    j.future.pop();
+    let mut warnings = multi_commit_warnings(&top.subject);
+    if let Err(e) = crate::history::save(dir, &j) {
+        warnings.push(format!(
+            "redo committed but the redo journal could not be saved ({e}) — further redo may be unavailable"
+        ));
+    }
     Ok(UndoOutcome {
-        hash: entry.hash,
-        subject: entry.subject,
-        date: entry.date,
+        hash: top.target,
+        subject: top.subject,
+        date: top.date,
         warnings,
     })
 }
 
-/// HEAD's tip commit as a [`LogEntry`]-shaped triple.
-fn head_entry(dir: &Path) -> Result<myco_git::LogEntry, String> {
-    myco_git::log(dir, Some(1))
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .next()
-        .ok_or_else(|| "the ledger branch has no commits".to_string())
+/// How many commits `redo` could still restore — 0 when the
+/// journal is empty or its top anchor no longer matches HEAD.
+pub fn redo_depth(dir: &Path) -> usize {
+    match crate::history::head_sha(dir) {
+        Ok(head) => crate::history::depth(dir, &head),
+        Err(_) => 0,
+    }
+}
+
+/// The redoable stack, next-redo first — backs `myco undo --list`.
+pub fn history_list(dir: &Path) -> Vec<crate::history::HistoryEntry> {
+    crate::history::list(dir)
 }
 
 /// Sibling-leg warnings for verbs that commit outside the
@@ -711,12 +753,94 @@ mod tests {
         assert_eq!(out.subject, "chore: c1");
         assert_eq!(head(d.path()), tip);
         assert!(d.path().join("f1.txt").exists());
-        // a second redo refuses — the last action is now a redo,
-        // not an undo
+        // a second redo refuses — the journal is drained
         assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
         // …and undo still works after a redo — they ping-pong
         undo_last(d.path(), false).unwrap();
         assert!(!d.path().join("f1.txt").exists());
+    }
+
+    #[test]
+    fn redo_walks_the_stack_multi_level() {
+        // the redo stack reflog tricks can't express: undo twice,
+        // redo twice — each pop restores the exact next commit
+        let d = repo(4);
+        let h3 = head(d.path());
+        let h2 = {
+            // c2's hash — capture before rewinding
+            let out = String::from_utf8(
+                Command::new("git")
+                    .arg("-C")
+                    .arg(d.path())
+                    .args(["rev-parse", "HEAD~1"])
+                    .output()
+                    .unwrap()
+                    .stdout,
+            )
+            .unwrap();
+            out.trim().to_string()
+        };
+        let _ = h3;
+        undo_last(d.path(), false).unwrap(); // c3 away
+        undo_last(d.path(), false).unwrap(); // c2 away
+        assert_eq!(redo_depth(d.path()), 2);
+        let out = redo_last(d.path()).unwrap();
+        assert_eq!(out.hash, h2, "first redo restores the newest undo");
+        assert_eq!(redo_depth(d.path()), 1);
+        redo_last(d.path()).unwrap();
+        assert_eq!(head(d.path()), h3, "second redo reaches the tip");
+        assert_eq!(redo_depth(d.path()), 0);
+        assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
+        // the journal lives in the git common dir — never committed
+        assert!(d.path().join(".git/myco-history.json").exists());
+    }
+
+    #[test]
+    fn redo_invalidates_when_the_ledger_moves() {
+        let d = repo(3);
+        undo_last(d.path(), false).unwrap();
+        undo_last(d.path(), false).unwrap();
+        assert_eq!(redo_depth(d.path()), 2);
+        // any commit breaks every anchor — the whole stack clears
+        std::fs::write(d.path().join("f9.txt"), "x").unwrap();
+        git(d.path(), &["add", "-A"]);
+        git(d.path(), &["commit", "-qm", "chore: new"]);
+        assert_eq!(redo_depth(d.path()), 0);
+        assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
+        // …and a fresh undo starts a new stack
+        undo_last(d.path(), false).unwrap();
+        assert_eq!(redo_depth(d.path()), 1);
+    }
+
+    #[test]
+    fn corrupt_journal_self_heals() {
+        let d = repo(2);
+        // garbage where the journal should be — reads as empty,
+        // never an error
+        std::fs::write(d.path().join(".git/myco-history.json"), "{not json").unwrap();
+        assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
+        assert_eq!(redo_depth(d.path()), 0);
+        // undo still works and rewrites a valid journal
+        undo_last(d.path(), false).unwrap();
+        assert_eq!(redo_depth(d.path()), 1);
+        redo_last(d.path()).unwrap();
+    }
+
+    #[test]
+    fn undo_after_redo_rebuilds_the_stack() {
+        let d = repo(3);
+        undo_last(d.path(), false).unwrap();
+        undo_last(d.path(), false).unwrap();
+        redo_last(d.path()).unwrap(); // one level restored
+        assert_eq!(redo_depth(d.path()), 1);
+        // undoing the just-restored tip pushes a fresh entry on
+        // top of the surviving stack — undo↔redo stays symmetric
+        undo_last(d.path(), false).unwrap();
+        assert_eq!(redo_depth(d.path()), 2);
+        redo_last(d.path()).unwrap();
+        redo_last(d.path()).unwrap();
+        assert_eq!(redo_depth(d.path()), 0);
+        assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
     }
 
     #[test]
@@ -730,7 +854,7 @@ mod tests {
         assert!(redo_last(d.path())
             .unwrap_err()
             .contains("uncommitted changes"));
-        // a commit since the undo moves HEAD@{1} off the undone tip
+        // a commit since the undo breaks the journal anchor
         std::fs::remove_file(d.path().join("dirty.txt")).unwrap();
         std::fs::write(d.path().join("f2.txt"), "x").unwrap();
         git(d.path(), &["add", "-A"]);

@@ -12,6 +12,7 @@ myco-git.workspace = true
 myco-index.workspace = true
 myco-store.workspace = true
 camino.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
 

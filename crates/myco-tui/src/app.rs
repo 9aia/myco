@@ -1650,6 +1650,12 @@ impl Model {
                 self.reload();
                 let hash: String = out.hash.chars().take(12).collect();
                 let mut msg = format!("redid {hash} — {}", out.subject);
+                if let Ok(wt) = self.undo_target() {
+                    let n = ops::redo_depth(&wt);
+                    if n > 0 {
+                        msg.push_str(&format!(" ({n} more)"));
+                    }
+                }
                 for w in &out.warnings {
                     msg.push_str(&format!(" — warning: {w}"));
                 }

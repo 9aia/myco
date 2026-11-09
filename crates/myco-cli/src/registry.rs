@@ -1040,11 +1040,17 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "undo",
-        about: "Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the commit stays in the reflog. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`).",
-        params: &[&[flag(
-            "force",
-            "Undo even when the tip commit is already published on the remote.",
-        )]],
+        about: "Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the undone commit is journaled for `redo`. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`). `--list` shows the redoable stack without mutating.",
+        params: &[
+            &[flag(
+                "force",
+                "Undo even when the tip commit is already published on the remote.",
+            )],
+            &[flag(
+                "list",
+                "List the redoable commits (newest first) instead of undoing.",
+            )],
+        ],
         kind_lock: None,
         mutates: true,
         hidden: false,
@@ -1053,7 +1059,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "redo",
-        about: "Redo the last undo — restores the commit `myco undo` moved away from (`git reset --hard HEAD@{1})`. Refuses when the last ledger action wasn't an undo, on a dirty worktree, and after any commit/pull since the undo.",
+        about: "Redo the last undo — pops the undo journal and restores the commit `myco undo` moved away from (`git reset --hard <target>`). Repeatable while entries remain; the stack self-invalidates when the ledger moves (any commit/pull/manual git op since the undo). Refuses on a dirty worktree.",
         params: &[],
         kind_lock: None,
         mutates: true,

@@ -13,6 +13,7 @@
 
 pub mod config;
 pub mod discover;
+pub mod history;
 pub mod items;
 pub mod links;
 pub mod ops;

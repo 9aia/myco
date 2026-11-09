@@ -534,6 +534,14 @@ pub(crate) fn w_check(s: &Server, _a: &crate::registry::Args) -> Result<Value, F
 pub(crate) fn w_undo(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let force = a.flag("force");
     let proj = crate::discover::discover(s.dir(), s.root()).map_err(Fail::Verb)?;
+    if a.flag("list") {
+        let entries = crate::ops::history_list(&proj.worktree);
+        return Ok(json!({
+            "redoable": entries.iter().map(|e| json!({
+                "hash": e.target, "subject": e.subject, "date": e.date,
+            })).collect::<Vec<_>>(),
+        }));
+    }
     let _lock = crate::ops::lock_worktree(&proj.worktree).map_err(Fail::Verb)?;
     let out = crate::ops::undo_last(&proj.worktree, force).map_err(Fail::Verb)?;
     Ok(json!({
@@ -548,8 +556,10 @@ pub(crate) fn w_redo(s: &Server, _a: &crate::registry::Args) -> Result<Value, Fa
     let proj = crate::discover::discover(s.dir(), s.root()).map_err(Fail::Verb)?;
     let _lock = crate::ops::lock_worktree(&proj.worktree).map_err(Fail::Verb)?;
     let out = crate::ops::redo_last(&proj.worktree).map_err(Fail::Verb)?;
+    let remaining = crate::ops::redo_depth(&proj.worktree);
     Ok(json!({
         "redone": {"hash": out.hash, "subject": out.subject, "date": out.date},
+        "remaining": remaining,
         "warnings": out.warnings,
     }))
 }
