@@ -41,3 +41,4 @@
 - [ ] T-077 task-placeholder-32 · pri:low · created:2026-11-08
 - [ ] T-081 P-012 ph1: item fields — due/est/cycle tokens + item set flags + schema · pri:high · created:2026-11-09 · blocks:PL-002
 - [ ] T-082 P-012 ph2: \[\[cycles]] config + check warnings + group-by-cycle · created:2026-11-09
+- [ ] T-083 P-012 ph3: timeline + stats + burnup view emits (tty+JSON, index parity) · created:2026-11-09
