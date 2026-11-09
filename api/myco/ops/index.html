@@ -3,7 +3,7 @@
 <code>store_at</code> is cli-local: the concrete <code>MdStore</code> factory —
 <code>myco-ops</code> is generic over <a href="../../myco_store/trait.Store.html" title="trait myco_store::Store"><code>myco_store::Store</code></a>, so the
 composition root (this crate) names the impl.</p>
-</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.WorktreeLock.html" title="struct myco::ops::WorktreeLock">Worktree<wbr>Lock</a></dt><dd>RAII guard for a worktree lock — an OS advisory lock (<code>flock</code>)
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.UndoOutcome.html" title="struct myco::ops::UndoOutcome">Undo<wbr>Outcome</a></dt><dd>What <a href="fn.undo_last.html" title="fn myco::ops::undo_last"><code>undo_last</code></a> reverted — the <code>undo</code> verb’s report payload.</dd><dt><a class="struct" href="struct.WorktreeLock.html" title="struct myco::ops::WorktreeLock">Worktree<wbr>Lock</a></dt><dd>RAII guard for a worktree lock — an OS advisory lock (<code>flock</code>)
 on the repo’s lock file. The lock releases when the guard
 drops (or the process dies — the OS cleans up).</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.CONFIG.html" title="constant myco::ops::CONFIG">CONFIG</a></dt><dd>The config impl ops verbs share — cli-local like <code>store_at</code>:
 the composition root names it, ops stays impl-free.</dd><dt><a class="constant" href="constant.DEFAULT_ACTOR.html" title="constant myco::ops::DEFAULT_ACTOR">DEFAULT_<wbr>ACTOR</a></dt><dd>Fallback actor for the <code>Actor:</code> commit trailer — the local
@@ -42,4 +42,9 @@ unspawnable pager all fall back to <code>println!</code>.</dd><dt><a class="fn" 
 files are never overwritten. <code>root</code> is the store’s worktree
 dir (the <code>.gitkeep</code> sweep is raw fs — the port has no “list
 dir” verb). Returns the rel paths created.</dd><dt><a class="fn" href="fn.store_at.html" title="fn myco::ops::store_at">store_<wbr>at</a></dt><dd><code>MdStore</code> rooted at a worktree path, resolving item layout
-through the repo’s kind table (<code>[[kinds]]</code>, P-008).</dd></dl></section></div></main></body></html>
+through the repo’s kind table (<code>[[kinds]]</code>, P-008).</dd><dt><a class="fn" href="fn.undo_last.html" title="fn myco::ops::undo_last">undo_<wbr>last</a></dt><dd><code>myco undo</code> — move the worktree’s branch tip back one commit
+(<code>git reset --hard HEAD~1</code>). Every mutating verb is exactly one
+commit on the ledger branch, so the reset <em>is</em> the inverse
+mutation — including file deletions (<code>todo done</code>’s removed
+line comes back whole). The commit stays reachable through the
+reflog; nothing is garbage-collected.</dd></dl></section></div></main></body></html>

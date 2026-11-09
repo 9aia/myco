@@ -14,6 +14,7 @@ machine-readable JSON Schema; `myco check` enforces it.
 | `meta.toml`  | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
 | `TODO.md`    | open-line tasks (`T-`), `##` sections, nested children              |
 | `BACKLOG.md` | deferred items — same grammar, no checkbox                          |
+| `DONE.md`    | done archive — same grammar, status pinned `done`                   |
 | `index.md`   | free-form human index — verbatim, never rewritten                   |
 | `issues/`    | `issue-NNNN-<slug>.md` + `issues/archive/`                          |
 | `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/`                    |
@@ -30,7 +31,7 @@ table — ids are never reused. Tasks live as lines; the four
 file-backed kinds (`I`, `P`, `PL`, `ADR`) get a markdown file
 each, filenames padded to four digits.
 
-## Line items — TODO.md / BACKLOG.md
+## Line items — TODO.md / BACKLOG.md / DONE.md
 
 ```markdown
 # TODO — <repo>
@@ -42,9 +43,13 @@ each, filenames padded to four digits.
 ```
 
 * `BACKLOG.md` lines are the same shape minus `[ ]`, default
-  status `deferred`; `TODO.md` defaults to `open`.
-* `done` removes the line (history keeps it); `defer` moves it to
-  `BACKLOG.md`; `promote` moves it back.
+  status `deferred`; `TODO.md` defaults to `open`. `DONE.md` is
+  the done archive — same line grammar, status pinned `done`,
+  read by `myco done list` and still resolvable via
+  `myco item show`.
+* `done` moves the line (subtree included) to `DONE.md` —
+  completed work stays visible instead of vanishing;
+  `defer` moves it to `BACKLOG.md`; `promote` moves it back.
 * `done`/`defer` on a parent act on the whole subtree; on a
   child, just that node.
 * Token order is canonical (`status`, `pri`, `owner`, `created`,
