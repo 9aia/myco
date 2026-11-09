@@ -9,7 +9,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 DOCS="$(pwd)"
-REPO="${MYCO_REPO:-$HOME/GitHub/9aia/myco}"
+REPO="${MYCO_REPO:-$HOME/GitHub/9aia/workspace/repos/myco}"
 export MYCO_ROOT="$REPO"
 
 # The bupha watcher unit runs with the minimal systemd PATH
