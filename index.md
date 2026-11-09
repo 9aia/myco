@@ -4,7 +4,7 @@ layout: home
 hero:
   name: myco
   text: project management, grown not built
-  tagline: Records engine for agent work — views + mutations; project management is the shipped prelude
+  tagline: Agent-first project management — markdown ledger canonical, git the audit trail; a records + views + mutations engine underneath
   actions:
     - theme: brand
       text: Getting Started
