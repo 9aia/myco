@@ -39,3 +39,4 @@
 - [ ] T-075 task-placeholder-30 · pri:low · created:2026-11-08
 - [ ] T-076 task-placeholder-31 · pri:low · created:2026-11-08
 - [ ] T-077 task-placeholder-32 · pri:low · created:2026-11-08
+- [ ] T-078 undo: revert last mutation (git-level or inverse-op) · pri:high · created:2026-11-09
