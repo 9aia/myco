@@ -110,6 +110,9 @@ pub(crate) enum ConfirmAction {
     Done,
     /// `u` — `ops::undo_last` on the target repo's worktree.
     Undo,
+    /// `u` after the published-tip refusal — `undo_last(force = true)`,
+    /// the TUI's answer to the CLI's `--force`.
+    UndoForce,
 }
 
 /// A mutation waiting on `y`/`n` — set when a Normal-mode key asks
@@ -1272,7 +1275,8 @@ impl Model {
                 self.mode = Mode::Normal;
                 match pending.map(|p| p.action) {
                     Some(ConfirmAction::Done) => self.mutate(|m| m.done_selected()),
-                    Some(ConfirmAction::Undo) => self.undo_last(),
+                    Some(ConfirmAction::Undo) => self.undo_last(false),
+                    Some(ConfirmAction::UndoForce) => self.undo_last(true),
                     None => {}
                 }
             }
@@ -1462,7 +1466,7 @@ impl Model {
             return;
         };
         self.confirm = Some(PendingConfirm {
-            prompt: format!("done {id} — {title}: permanently removes it + its subtree? [y/n]"),
+            prompt: format!("done {id} — {title}: archive it + its subtree to DONE.md? [y/n]"),
             action: ConfirmAction::Done,
         });
         self.mode = Mode::Confirm;
@@ -1527,10 +1531,10 @@ impl Model {
     /// discipline: reload either way, the status bar tells the
     /// outcome — including `undo_last`'s own guard refusals
     /// (dirty tree, pushed tip, root commit).
-    fn undo_last(&mut self) {
+    fn undo_last(&mut self, force: bool) {
         let result = self.undo_target().and_then(|wt| {
             let _lock = ops::lock_worktree(&wt)?;
-            ops::undo_last(&wt, false)
+            ops::undo_last(&wt, force)
         });
         match result {
             Ok(out) => {
@@ -1544,7 +1548,21 @@ impl Model {
             }
             Err(e) => {
                 self.reload();
-                self.status = e;
+                // The published-tip refusal is recoverable in the
+                // TUI — re-arm the prompt as the force path (the
+                // CLI's `--force` equivalent) instead of dead-ending
+                // on a status-bar error the user can't act on.
+                if !force && e.contains("already published") {
+                    self.confirm = Some(PendingConfirm {
+                        prompt: "tip is published on origin — undo anyway? \
+                                 rewrites pushed history [y/n]"
+                            .to_string(),
+                        action: ConfirmAction::UndoForce,
+                    });
+                    self.mode = Mode::Confirm;
+                } else {
+                    self.status = e;
+                }
             }
         }
     }
@@ -2260,6 +2278,54 @@ pub(crate) mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn undo_on_a_published_tip_offers_force() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        let wt = m.proj.as_ref().unwrap().worktree.clone();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&wt)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}");
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        git(&["init", "-q", "-b", "project"]);
+        git(&["config", "user.email", "t@t"]);
+        git(&["config", "user.name", "t"]);
+        git(&["config", "commit.gpgsign", "false"]);
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "chore: first"]);
+        // a second commit — the undo target
+        let mut other = items::load_ledger(store(&m)).unwrap();
+        other.put_todo(t(2), None);
+        items::save_ledger(store(&m), &other).unwrap();
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "chore: second"]);
+        // fake a published tip: origin's remote-tracking ref sits
+        // on HEAD, so undo_last's guard refuses without force
+        git(&[
+            "config",
+            "remote.origin.fetch",
+            "+refs/heads/*:refs/remotes/origin/*",
+        ]);
+        git(&["update-ref", "refs/remotes/origin/project", "HEAD"]);
+
+        m.key(key('u'));
+        m.key(key('y'));
+        // refused — but the prompt comes back as the force path
+        // instead of dead-ending on the status bar
+        assert_eq!(m.mode, Mode::Confirm);
+        assert_eq!(m.confirm.as_ref().unwrap().action, ConfirmAction::UndoForce);
+        let p = m.confirm.as_ref().unwrap().prompt.clone();
+        assert!(p.contains("published"), "{p}");
+        m.key(key('y'));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.status.starts_with("undid"), "{}", m.status);
     }
 
     #[test]
