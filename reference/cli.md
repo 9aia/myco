@@ -14,6 +14,8 @@ This document contains the help content for the `myco` command-line program.
 * [`myco backlog add`↴](#myco-backlog-add)
 * [`myco backlog promote`↴](#myco-backlog-promote)
 * [`myco backlog list`↴](#myco-backlog-list)
+* [`myco done`↴](#myco-done)
+* [`myco done list`↴](#myco-done-list)
 * [`myco issue`↴](#myco-issue)
 * [`myco issue new`↴](#myco-issue-new)
 * [`myco issue list`↴](#myco-issue-list)
@@ -52,6 +54,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco check`↴](#myco-check)
 * [`myco migrate`↴](#myco-migrate)
 * [`myco commit`↴](#myco-commit)
+* [`myco undo`↴](#myco-undo)
 * [`myco view`↴](#myco-view)
 * [`myco next`↴](#myco-next)
 * [`myco status`↴](#myco-status)
@@ -73,6 +76,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 
 * `todo` — TODO.md tasks — add / done / defer / list.
 * `backlog` — BACKLOG.md parked items — add / promote / list.
+* `done` — DONE.md — the done-task archive `todo done` lands in.
 * `issue` — Tracked issues, one file each under `issues/`.
 * `proposal` — Design proposals under `proposals/` (`P-NNN`).
 * `plan` — Execution plans under `plans/` (`PL-NNN`).
@@ -87,6 +91,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `check` — Validate the ledger (schemas, state machine, ids, refs) and the worktree it lives in (detached HEAD, wrong branch, unpushed commits); also validates the managed AGENTS.md block on the repo root. Findings carry a severity: `error` exits 1, `warning` is reported and costs nothing (ADR-0002). `--fix` applies safe repairs + commits, including reattaching a detached worktree.
 * `migrate` — Convert legacy ledgers to v2: `pm/` → `project/`, or normalize files already on the `project` branch.
 * `commit` — Stage + commit worktree changes (conventional message).
+* `undo` — Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the commit stays in the reflog. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`).
 * `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit.
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized.
@@ -116,7 +121,7 @@ TODO.md tasks — add / done / defer / list.
 ###### **Subcommands:**
 
 * `add` — Add a task — allocs a T-id, appends to a section of TODO.md.
-* `done` — Mark done — walks the state machine to `done`, then removes the line (git history keeps the record). Done on a parent removes the whole subtree — children die with it.
+* `done` — Mark done — walks the state machine to `done`, removes the line, and archives the subtree into DONE.md. Done on a parent archives the whole subtree — children die with it. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
 * `defer` — Park a task — transition to `deferred`, move the line to BACKLOG.md. Defer on a parent moves the whole subtree (children park with it); on a child it detaches alone.
 * `list` — List tasks.
 
@@ -147,13 +152,17 @@ Add a task — allocs a T-id, appends to a section of TODO.md.
 
 ## `myco todo done`
 
-Mark done — walks the state machine to `done`, then removes the line (git history keeps the record). Done on a parent removes the whole subtree — children die with it.
+Mark done — walks the state machine to `done`, removes the line, and archives the subtree into DONE.md. Done on a parent archives the whole subtree — children die with it. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
 
-**Usage:** `myco todo done <id>`
+**Usage:** `myco todo done [OPTIONS] <id>`
 
 ###### **Arguments:**
 
 * `<ID>` — Task id (`T-NNN`).
+
+###### **Options:**
+
+* `--yes` — Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
 
 
 
@@ -180,6 +189,10 @@ List tasks.
 * `--status <STATUS>` — Keep only items with this status.
 * `--owner <OWNER>` — Keep only items owned by this actor.
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable).
+* `--pri <PRI>` — Keep only items at this priority.
+* `--epic <EPIC>` — Keep only items in this epic.
+* `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
 
@@ -243,6 +256,41 @@ List backlog items.
 * `--status <STATUS>` — Keep only items with this status.
 * `--owner <OWNER>` — Keep only items owned by this actor.
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable).
+* `--pri <PRI>` — Keep only items at this priority.
+* `--epic <EPIC>` — Keep only items in this epic.
+* `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
+* `--limit <N>` — Keep only the first N items after filtering.
+
+
+
+## `myco done`
+
+DONE.md — the done-task archive `todo done` lands in.
+
+**Usage:** `myco done <COMMAND>`
+
+###### **Subcommands:**
+
+* `list` — List done tasks — the DONE.md archive `todo done`/`item set --status done` land in. Read-only; done is terminal.
+
+
+
+## `myco done list`
+
+List done tasks — the DONE.md archive `todo done`/`item set --status done` land in. Read-only; done is terminal.
+
+**Usage:** `myco done list [OPTIONS]`
+
+###### **Options:**
+
+* `--status <STATUS>` — Keep only items with this status.
+* `--owner <OWNER>` — Keep only items owned by this actor.
+* `--label <LABEL>` — Keep only items carrying all of these labels (repeatable).
+* `--pri <PRI>` — Keep only items at this priority.
+* `--epic <EPIC>` — Keep only items in this epic.
+* `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
 
@@ -298,6 +346,10 @@ List issues (live files; `--archived` includes `issues/archive/`).
 * `--status <STATUS>` — Keep only items with this status.
 * `--owner <OWNER>` — Keep only items owned by this actor.
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable).
+* `--pri <PRI>` — Keep only items at this priority.
+* `--epic <EPIC>` — Keep only items in this epic.
+* `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
 
@@ -391,6 +443,10 @@ List proposals.
 * `--status <STATUS>` — Keep only items with this status.
 * `--owner <OWNER>` — Keep only items owned by this actor.
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable).
+* `--pri <PRI>` — Keep only items at this priority.
+* `--epic <EPIC>` — Keep only items in this epic.
+* `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
 
@@ -455,6 +511,10 @@ List plans.
 * `--status <STATUS>` — Keep only items with this status.
 * `--owner <OWNER>` — Keep only items owned by this actor.
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable).
+* `--pri <PRI>` — Keep only items at this priority.
+* `--epic <EPIC>` — Keep only items in this epic.
+* `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
 
@@ -507,6 +567,10 @@ List ADRs.
 * `--status <STATUS>` — Keep only items with this status.
 * `--owner <OWNER>` — Keep only items owned by this actor.
 * `--label <LABEL>` — Keep only items carrying all of these labels (repeatable).
+* `--pri <PRI>` — Keep only items at this priority.
+* `--epic <EPIC>` — Keep only items in this epic.
+* `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
 
@@ -536,7 +600,7 @@ Kind-agnostic item verbs — show / set / move.
 ###### **Subcommands:**
 
 * `show` — Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
-* `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it).
+* `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` archives the subtree into DONE.md — terminal, so it confirms on a tty: `--yes`/`$MYCO_YES` skips).
 * `move` — Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:` dropped — it names source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
 
 
@@ -555,7 +619,7 @@ Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by
 
 ## `myco item set`
 
-Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` deletes it).
+Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` archives the subtree into DONE.md — terminal, so it confirms on a tty: `--yes`/`$MYCO_YES` skips).
 
 **Usage:** `myco item set [OPTIONS] <id>`
 
@@ -575,6 +639,7 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--epic <EPIC>` — Epic name — `""` clears the epic.
 * `--milestone <MILESTONE>` — Milestone name — `""` clears the milestone.
 * `--session <SESSION>` — Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state.
+* `--yes` — Skip the `--status done` confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
 
 
 
@@ -593,6 +658,7 @@ Move an item to another repo's ledger — re-creates it in the destination's own
 * `--to <TO>` — Destination — a repo root, its `project/` worktree, or a registered repo name.
 * `--note <NOTE>` — Extra context appended to the source's `moved to` handoff note.
 * `--actor <ACTOR>` — Who moved it (default `cli`).
+* `--yes` — Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
 
 
 
@@ -795,6 +861,18 @@ Stage + commit worktree changes (conventional message).
 ###### **Options:**
 
 * `-m`, `--message <MESSAGE>` — Commit message (default: `chore: update project ledger`).
+
+
+
+## `myco undo`
+
+Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the commit stays in the reflog. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`).
+
+**Usage:** `myco undo [OPTIONS]`
+
+###### **Options:**
+
+* `--force` — Undo even when the tip commit is already published on the remote.
 
 
 

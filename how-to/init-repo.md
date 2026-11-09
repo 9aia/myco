@@ -16,6 +16,7 @@ myco init
 | `project/meta.toml`                                             | repo name + per-kind id counters (`[next]`)                    |
 | `project/TODO.md`                                               | active tasks                                                   |
 | `project/BACKLOG.md`                                            | deferred items                                                 |
+| `project/DONE.md`                                               | done archive — completed tasks stay browsable                  |
 | `project/index.md`                                              | human-readable ledger index                                    |
 | `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs                                          |
 | `.gitignore` += `project/`                                      | keeps the worktree out of code commits                         |

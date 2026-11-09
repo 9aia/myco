@@ -45,7 +45,7 @@ myco init
 
 `init` creates the orphan `project` branch, mounts it as a
 `project/` worktree, seeds `meta.toml`, `TODO.md`, `BACKLOG.md`,
-`index.md` and the item dirs (`issues/`, `proposals/`, `plans/`,
+`DONE.md`, `index.md` and the item dirs (`issues/`, `proposals/`, `plans/`,
 `adrs/`, `handoffs/`), adds `project/` to `.gitignore` on your
 code branch, and writes a managed _Agent awareness_ block into
 `AGENTS.md`. It is idempotent — run it again and a healthy
@@ -57,7 +57,7 @@ worktree is verified, a damaged one repaired.
 myco todo add "ship the thing" --pri high --label release
 myco item set T-001 --status in-progress
 myco status            # ledger digest
-myco todo done T-001   # the line leaves TODO.md — git history keeps it
+myco todo done T-001   # the line moves to DONE.md — still browsable
 ```
 
 Every mutating verb is one atomic commit on the `project` branch —
@@ -78,12 +78,13 @@ needed; `R` forces one anyway.
 
 | Key                            | Action                                       |
 | ------------------------------ | -------------------------------------------- |
-| `1` / `2` / `3`, `h` / `l`     | TODO / BACKLOG / FILES tabs                  |
+| `Tab` / `Shift-Tab`, `1` / `2` / `3`, `h` / `l` | cycle / pick TODO / BACKLOG / FILES tabs |
 | `j` / `k`, `gg` / `G`, `{`/`}` | move · ends · section jumps                  |
 | `Enter`, `→`                  | item preview — `j`/`k` scroll, `←`/esc back   |
 | `←`                           | back — pops the drill-down stack (esc-like in preview, no-op on the board) |
 | `a`                            | add an item (TODO/BACKLOG only)              |
-| `Space` / `dd`, `D`, `p`       | done · defer to BACKLOG · promote to TODO    |
+| `Space` / `dd`, `D`, `p`       | done · defer to BACKLOG · promote to TODO (done/undo ask `y`/`n`) |
+| `u`                            | undo the last mutation (asks `y`/`n`)        |
 | `Alt+j` / `Alt+k`              | reorder among siblings                       |
 | `/`, `F`                       | live filter · clear it                       |
 | `:`                            | command line — `:q` `:w` `:e` `:<id>` `:set` |

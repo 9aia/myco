@@ -28,7 +28,7 @@ Design rules:
 | `myco-core` | domain | myco domain core: item models, ID registry, state machine — pure, no I/O |
 | `myco-config` | port | Config port: where myco.toml-shaped config comes from |
 | `myco-index` | port | Index port: the derived, disposable cache powering status/board/report/org views |
-| `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
+| `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, DONE.md, meta.toml, item files) is persisted |
 | `myco-ops` | ops | myco — ops I/O shell: project discovery, store open/save, commit-per-mutation, verb plumbing |
 | `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
 | `myco-driver` | adapter | tamias-driver-myco — pavo view driver over a repo's project/ ledger (reads via myco-ops) |

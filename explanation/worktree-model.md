@@ -11,6 +11,7 @@ your-repo/
 ├── project/          ← worktree of the orphan `project` branch
 │   ├── TODO.md
 │   ├── BACKLOG.md
+│   ├── DONE.md
 │   ├── issues/  proposals/  plans/  adrs/  handoffs/
 │   ├── index.md
 │   └── meta.toml
@@ -44,7 +45,10 @@ Every mutating verb is one atomic, conventional commit on
 `git -C project log` _is_ the history of intent — who moved what
 when, replayable and greppable, with no separate audit store.
 `--no-commit` / `$MYCO_NO_COMMIT` opts out per run; `myco commit`
-squashes a batch into one.
+squashes a batch into one. `myco undo` rewinds the tip one commit
+(`HEAD~1`) — the exact inverse of the last verb — refusing dirty
+worktrees, the root commit, and published tips unless `--force`;
+the undone commit stays in the reflog.
 
 That sentence is only true while the worktree is attached. A
 `project/` worktree on a **detached HEAD** commits onto no branch:

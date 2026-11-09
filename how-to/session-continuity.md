@@ -56,8 +56,11 @@ Entries are never rewritten — each `myco handoff` is one appended
 (`chore: handoff T-012`) on the `project` branch, so the branch
 history is the audit trail.
 
-When an item is removed — done tasks leave `TODO.md` — its
-handoff file becomes orphaned. `myco check` reports it and
-`myco check --fix` moves it to `handoffs/archive/`: the live dir
-stays clean, the knowledge survives, and `myco resume` on an
-archived item still finds it.
+When an item is done it doesn't disappear — the whole subtree
+moves to `DONE.md`, the done archive. `myco done list` browses it
+with the same filters as the other lists, and `myco item show`
+still resolves it, so its handoff file stays live. A handoff only
+becomes orphaned when the item is truly gone; `myco check`
+reports it and `myco check --fix` moves it to
+`handoffs/archive/`: the live dir stays clean, the knowledge
+survives, and `myco resume` on an archived item still finds it.
