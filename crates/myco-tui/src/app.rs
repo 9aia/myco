@@ -110,6 +110,8 @@ pub(crate) enum ConfirmAction {
     Done,
     /// `u` — `ops::undo_last` on the target repo's worktree.
     Undo,
+    /// `U` — `ops::redo_last`, the undo's inverse.
+    Redo,
     /// `u` after the published-tip refusal — `undo_last(force = true)`,
     /// the TUI's answer to the CLI's `--force`.
     UndoForce,
@@ -1026,6 +1028,7 @@ impl Model {
             KeyCode::Char('p') => self.mutate(|m| m.promote_selected()),
             KeyCode::Char(' ') => self.request_done(),
             KeyCode::Char('u') => self.request_undo(),
+            KeyCode::Char('U') => self.request_redo(),
             KeyCode::Char('a') => {
                 if self.orgs.is_some() {
                     self.say("add writes one repo — run `myco ui` inside it");
@@ -1316,6 +1319,7 @@ impl Model {
                     Some(ConfirmAction::Done) => self.mutate(|m| m.done_selected()),
                     Some(ConfirmAction::Undo) => self.undo_last(false),
                     Some(ConfirmAction::UndoForce) => self.undo_last(true),
+                    Some(ConfirmAction::Redo) => self.redo_last(),
                     None => {}
                 }
             }
@@ -1603,6 +1607,57 @@ impl Model {
                 } else {
                     self.say_err(e);
                 }
+            }
+        }
+    }
+
+    /// `U` — arm the redo confirm. Same target resolution as `u`;
+    /// the prompt names the commit `HEAD@{1}` would restore.
+    fn request_redo(&mut self) {
+        let wt = match self.undo_target() {
+            Ok(wt) => wt,
+            Err(e) => {
+                self.say_err(e);
+                return;
+            }
+        };
+        let subject = myco_git::git_out(&wt, &["log", "-1", "--format=%s", "HEAD@{1}"])
+            .ok()
+            .filter(|s| !s.is_empty());
+        let what = match (self.selected_repo(), subject) {
+            (Some(r), Some(s)) => format!("redo last undo in {r} — restore {s}?"),
+            (Some(r), None) => format!("redo last undo in {r}?"),
+            (None, Some(s)) => format!("redo last undo — restore {s}?"),
+            (None, None) => "redo last undo?".to_string(),
+        };
+        self.confirm = Some(PendingConfirm {
+            prompt: format!("{what} [y/n]"),
+            action: ConfirmAction::Redo,
+        });
+        self.mode = Mode::Confirm;
+    }
+
+    /// Confirmed `U` — `ops::redo_last` resets the target worktree
+    /// back to the commit the last undo moved away from. Same
+    /// resync discipline as `undo_last`.
+    fn redo_last(&mut self) {
+        let result = self.undo_target().and_then(|wt| {
+            let _lock = ops::lock_worktree(&wt)?;
+            ops::redo_last(&wt)
+        });
+        match result {
+            Ok(out) => {
+                self.reload();
+                let hash: String = out.hash.chars().take(12).collect();
+                let mut msg = format!("redid {hash} — {}", out.subject);
+                for w in &out.warnings {
+                    msg.push_str(&format!(" — warning: {w}"));
+                }
+                self.say(msg);
+            }
+            Err(e) => {
+                self.reload();
+                self.say_err(e);
             }
         }
     }
@@ -2372,6 +2427,53 @@ pub(crate) mod tests {
         m.key(key('y'));
         assert_eq!(m.mode, Mode::Normal);
         assert!(m.status.starts_with("undid"), "{}", m.status);
+    }
+
+    #[test]
+    fn redo_asks_then_restores_the_undone_commit() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        let wt = m.proj.as_ref().unwrap().worktree.clone();
+        let git = |args: &[&str]| {
+            let st = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&wt)
+                .args(args)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(st.success(), "git {args:?}");
+        };
+        git(&["init", "-q", "-b", "project"]);
+        git(&["config", "user.email", "t@t"]);
+        git(&["config", "user.name", "t"]);
+        git(&["config", "commit.gpgsign", "false"]);
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "chore: first"]);
+        let mut other = items::load_ledger(store(&m)).unwrap();
+        other.put_todo(t(2), None);
+        items::save_ledger(store(&m), &other).unwrap();
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "chore: second"]);
+
+        // undo through the keys, then redo through the keys
+        m.key(key('u'));
+        m.key(key('y'));
+        assert!(m.status.starts_with("undid"), "{}", m.status);
+        m.key(key('U'));
+        assert_eq!(m.mode, Mode::Confirm);
+        let p = m.confirm.as_ref().unwrap().prompt.clone();
+        assert!(p.contains("redo last undo"), "{p}");
+        m.key(key('y'));
+        assert_eq!(m.mode, Mode::Normal);
+        assert!(m.status.starts_with("redid"), "{}", m.status);
+        // T-002 is back on the board
+        let disk = items::load_ledger(store(&m)).unwrap();
+        assert!(disk.locate(ItemId::new(ItemKind::Task, 2)).is_some());
+        // and a second redo refuses — last action is now a redo
+        m.key(key('U'));
+        m.key(key('y'));
+        assert!(m.status.contains("nothing to redo"), "{}", m.status);
     }
 
     #[test]

@@ -542,6 +542,18 @@ pub(crate) fn w_undo(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
     }))
 }
 
+/// `redo` — restores the commit the last undo moved away from.
+/// No store needed — the reset is pure git.
+pub(crate) fn w_redo(s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    let proj = crate::discover::discover(s.dir(), s.root()).map_err(Fail::Verb)?;
+    let _lock = crate::ops::lock_worktree(&proj.worktree).map_err(Fail::Verb)?;
+    let out = crate::ops::redo_last(&proj.worktree).map_err(Fail::Verb)?;
+    Ok(json!({
+        "redone": {"hash": out.hash, "subject": out.subject, "date": out.date},
+        "warnings": out.warnings,
+    }))
+}
+
 /// `item.show` — `{id}` (a single id per request).
 pub(crate) fn w_item_show(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let id = a.one::<ItemId>("id").map_err(Fail::BadParams)?;

@@ -319,17 +319,78 @@ pub fn undo_last(dir: &Path, force: bool) -> Result<UndoOutcome, String> {
     }
     myco_git::git_out(dir, &["reset", "--hard", "HEAD~1"])
         .map_err(|e| format!("git reset failed in {}: {e}", dir.display()))?;
-    let warnings = MULTI_COMMIT_SUBJECTS
-        .iter()
-        .filter(|p| entry.subject.starts_with(**p))
-        .map(|p| format!("{p}… also commits outside this worktree — those sibling commits remain"))
-        .collect();
+    let warnings = multi_commit_warnings(&entry.subject);
     Ok(UndoOutcome {
         hash: entry.hash,
         subject: entry.subject,
         date: entry.date,
         warnings,
     })
+}
+
+/// `myco redo` — restore the commit the last undo moved away from:
+/// `git reset --hard HEAD@{1}`. The inverse of [`undo_last`] with
+/// no published-tip guard — re-applying a commit that was already
+/// the tip rewrites nothing new.
+///
+/// Guards mirror undo's: committable checkout, clean worktree (a
+/// hard reset would destroy `--no-commit` writes), and the
+/// reflog's newest action must be `reset: moving to HEAD~1` —
+/// undo_last's exact reflog message. That both proves an undo
+/// happened *and* distinguishes it from a redo (whose message
+/// names `HEAD@{1}`), so a second `redo` refuses instead of
+/// toggling back. A commit, pull, or checkout since the undo
+/// moves `HEAD@{1}` off the undone commit — also refused.
+pub fn redo_last(dir: &Path) -> Result<UndoOutcome, String> {
+    ensure_committable(dir)?;
+    let action =
+        myco_git::git_out(dir, &["reflog", "-1", "--format=%gs"]).map_err(|e| e.to_string())?;
+    if action.trim() != "reset: moving to HEAD~1" {
+        return Err(
+            "nothing to redo — the last ledger action wasn't an undo (or it was already redone)"
+                .into(),
+        );
+    }
+    let prev = myco_git::git_out(dir, &["rev-parse", "HEAD@{1}"]).map_err(|e| e.to_string())?;
+    if prev.len() != 40 || !prev.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("nothing to redo — no previous position in the reflog".into());
+    }
+    if myco_git::has_changes(dir).map_err(|e| e.to_string())? {
+        return Err(
+            "uncommitted changes in the worktree — `myco commit` them or clean the tree first; \
+             redo only rewinds committed state"
+                .into(),
+        );
+    }
+    myco_git::git_out(dir, &["reset", "--hard", "HEAD@{1}"])
+        .map_err(|e| format!("git reset failed in {}: {e}", dir.display()))?;
+    let entry = head_entry(dir)?;
+    let warnings = multi_commit_warnings(&entry.subject);
+    Ok(UndoOutcome {
+        hash: entry.hash,
+        subject: entry.subject,
+        date: entry.date,
+        warnings,
+    })
+}
+
+/// HEAD's tip commit as a [`LogEntry`]-shaped triple.
+fn head_entry(dir: &Path) -> Result<myco_git::LogEntry, String> {
+    myco_git::log(dir, Some(1))
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .next()
+        .ok_or_else(|| "the ledger branch has no commits".to_string())
+}
+
+/// Sibling-leg warnings for verbs that commit outside the
+/// worktree (`init`, `migrate`, `move`, `check --fix`).
+fn multi_commit_warnings(subject: &str) -> Vec<String> {
+    MULTI_COMMIT_SUBJECTS
+        .iter()
+        .filter(|p| subject.starts_with(**p))
+        .map(|p| format!("{p}… also commits outside this worktree — those sibling commits remain"))
+        .collect()
 }
 
 /// Pretty JSON to stdout.
@@ -638,5 +699,42 @@ mod tests {
         // --force rewinds anyway — the caller owns the hazard
         undo_last(d.path(), true).unwrap();
         assert!(!d.path().join("f1.txt").exists());
+    }
+
+    #[test]
+    fn redo_restores_the_undone_commit() {
+        let d = repo(2);
+        let tip = head(d.path());
+        undo_last(d.path(), false).unwrap();
+        assert!(!d.path().join("f1.txt").exists());
+        let out = redo_last(d.path()).unwrap();
+        assert_eq!(out.subject, "chore: c1");
+        assert_eq!(head(d.path()), tip);
+        assert!(d.path().join("f1.txt").exists());
+        // a second redo refuses — the last action is now a redo,
+        // not an undo
+        assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
+        // …and undo still works after a redo — they ping-pong
+        undo_last(d.path(), false).unwrap();
+        assert!(!d.path().join("f1.txt").exists());
+    }
+
+    #[test]
+    fn redo_guards() {
+        let d = repo(2);
+        // no undo happened — the last action is a commit
+        assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
+        undo_last(d.path(), false).unwrap();
+        // uncommitted writes would die in the reset
+        std::fs::write(d.path().join("dirty.txt"), "x").unwrap();
+        assert!(redo_last(d.path())
+            .unwrap_err()
+            .contains("uncommitted changes"));
+        // a commit since the undo moves HEAD@{1} off the undone tip
+        std::fs::remove_file(d.path().join("dirty.txt")).unwrap();
+        std::fs::write(d.path().join("f2.txt"), "x").unwrap();
+        git(d.path(), &["add", "-A"]);
+        git(d.path(), &["commit", "-qm", "chore: new"]);
+        assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
     }
 }

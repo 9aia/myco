@@ -1052,6 +1052,16 @@ pub static VERBS: &[Verb] = &[
         wire: Some(serve::w_undo),
     },
     Verb {
+        name: "redo",
+        about: "Redo the last undo — restores the commit `myco undo` moved away from (`git reset --hard HEAD@{1})`. Refuses when the last ledger action wasn't an undo, on a dirty worktree, and after any commit/pull since the undo.",
+        params: &[],
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::redo::h),
+        wire: Some(serve::w_redo),
+    },
+    Verb {
         name: "absorb.comments",
         about: "Sweep code comments into the ledger via ripgrep (`rg` must be installed — respects `.gitignore`; `project/`, `docs/`, `target/` are excluded).",
         params: &[&[

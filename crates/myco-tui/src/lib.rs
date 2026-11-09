@@ -14,7 +14,7 @@
 //! reference (`9aia/pm`, `docs/tui.md` there) — the keymap is
 //! vim-style: `j/k` move, `h/l`/`tab`/`shift-tab`/`1`/`2`/`3` boards
 //! (tab cycles, wrapping), `Space`/`dd` done
-//! and `u` undo (both ask `y`/`n` first), `D` defer, `p` promote,
+//! and `u`/`U` undo/redo (all ask `y`/`n` first), `D` defer, `p` promote,
 //! `Alt+↑/↓` reorder, `a` add, `/` filter,
 //! `:` command line (`:q` `:w` `:e` `:<id>` `:set id`), `Enter`/`→`/
 //! double-click open the preview (`j`/`k` scroll, `←`/`esc` back —

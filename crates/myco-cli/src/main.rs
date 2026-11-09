@@ -45,6 +45,7 @@ mod ops;
 mod org;
 mod plan;
 mod proposal;
+mod redo;
 mod registry;
 mod report;
 mod schema;
