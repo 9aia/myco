@@ -1,7 +1,7 @@
 +++
 id = "P-013"
 title = "typed item links + clickable TUI related ids"
-status = "open"
+status = "done"
 created = "2026-11-09"
 priority = "medium"
 +++
