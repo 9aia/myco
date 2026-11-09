@@ -39,6 +39,9 @@ repo ledgers *and* the org index for free.
   by `due`; JSON emit is structured for pavo/agents.
 - **R4 — stats emit**: counts by status / priority / label /
   owner / cycle / epic — ASCII bars on a tty, JSON for machines.
+- **R4b — burnup**: `done:` timestamps stamped at archive time
+  power a cumulative burnup emit — done-over-time vs total scope,
+  per cycle when `cycle:` is set.
 - **R5 — surfaces**: `item set`/`todo add`/`backlog add`/kind `new`
   verbs gain the flags; view filter/group/sort axes accept the new
   fields; TUI preview shows them; index snapshots carry them.
@@ -53,6 +56,7 @@ repo ledgers *and* the org index for free.
 pub due: Option<time::Date>,        // serde via crate::date::opt
 pub estimate: Option<u32>,          // points; bounded (<= 1000)
 pub cycle: Option<String>,          // [A-Za-z0-9_.-]+ like epic/milestone
+pub done: Option<time::Date>,       // archive stamp — write-once
 ```
 
 Line grammar (TODO.md/BACKLOG.md and DONE.md archive lines):
@@ -63,6 +67,15 @@ Frontmatter uses full names (`due`, `estimate`, `cycle`), matching
 `estimate` semantics: relative size in points, not hours — document
 as such; teams define their own scale. `due` is a calendar date,
 timezone-free (`time::Date` already in core).
+
+**`done:` stamp** — when `todo done`/`item set --status done`
+archives an item into DONE.md, the line gains `done:YYYY-MM-DD`
+(local date at archive time). DONE.md already preserves item
+tokens, so this is one more token in the same grammar — parse,
+emit, goldens, schema all treat it like `due:`. The stamp is
+write-once: re-archiving never rewrites it, and `item show`
+surfaces it. This is what makes burnup possible — the archive is
+the history.
 
 ### Config (`myco.toml`)
 
@@ -88,9 +101,16 @@ Filter/group/sort axes gain `due`, `estimate`, `cycle`. New emits:
   `{lane, items[{id, due, est, cycle}]}` for pavo.
 - **`stats`** — grouped counts with ASCII bars on tty; the same
   eval pipeline yields JSON on `--json`.
+- **`burnup`** — cumulative done-count per day/week over a window
+  (default: current cycle or trailing 8 weeks), vs total scope
+  line; ASCII columns on tty, `{points: [{date, done, scope}]}`
+  JSON for pavo. Scope = open+done items in the filtered set;
+  done dates come from the `done:` stamp (below). Items archived
+  before this feature lack stamps — they count toward scope but
+  not the curve (documented; history starts at adoption).
 
-Both work unchanged on `source = "index"` specs — org roadmaps
-are the point.
+All three work unchanged on `source = "index"` specs — org
+roadmaps and org burnups are the point.
 
 ### Verbs & surfaces
 
@@ -109,11 +129,11 @@ are the point.
    store-md goldens. Unblocks sorting/filtering immediately.
 2. **Cycles config**: `[[cycles]]` parsing/validation, `check`
    warnings for unknown cycle names, group-by-cycle axis.
-3. **Emits**: `timeline` + `stats` view emits (tty + JSON),
-   index-source support, docs.
-4. **Stretch**: `done:YYYY-MM-DD` stamp on archive → historical
-   burnup; pavo roadmap widget. Deferred — needs its own proposal
-   if pulled forward.
+3. **Emits**: `timeline` + `stats` + `burnup` view emits (tty +
+   JSON), index-source support, docs.
+4. **Done stamps**: `done:` token on archive, `item show` surface,
+   burnup's data source. Can land early — it's a field, not an
+   emit — but ships with phase 3 so burnup has data on day one.
 
 ### Failure modes
 
@@ -128,6 +148,10 @@ are the point.
 - **Index staleness**: snapshot version bump forces one rescan.
 - **Timezones**: dates are calendar dates; "overdue" is computed
   against local today — documented, no tz math.
+- **Done stamps**: write-once — a `done:` token already present is
+  never overwritten (re-archive, undo/redo restores, migrate).
+  Items done before adoption have no stamp: they inflate scope but
+  not the curve — the chart notes the cutoff date.
 
 ### Migration
 
@@ -144,8 +168,9 @@ untouched.
 - config-toml: `[[cycles]]` parse, duplicate/ordering validation.
 - ops: `item set`/add flags incl. `""` clears; `check` warning on
   unknown cycle.
-- view: filter/group/sort on the new axes; `timeline`/`stats`
-  deterministic-output tests, index-source parity.
+- view: filter/group/sort on the new axes; `timeline`/`stats`/
+  `burnup` deterministic-output tests, index-source parity;
+  burnup fixture with known done-dates asserts exact curve points.
 - tui: preview renders fields; index snapshot rescan on version
   bump.
 - e2e per phase: proposal → plan → tasks.
