@@ -39,5 +39,4 @@
 - [ ] T-075 task-placeholder-30 · pri:low · created:2026-11-08
 - [ ] T-076 task-placeholder-31 · pri:low · created:2026-11-08
 - [ ] T-077 task-placeholder-32 · pri:low · created:2026-11-08
-- [ ] T-079 confirm before dangerous actions (TUI + destructive verbs) · pri:high · created:2026-11-09
 - [ ] T-080 done tasks visible in lists + list filters (--status/--pri/--owner/search) · created:2026-11-09
