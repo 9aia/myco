@@ -10,17 +10,17 @@ api:
 - name: FILE_COLS
   kind: const
   file: crates/myco-driver/src/views.rs
-  line: 160
+  line: 123
   module: myco-driver
 - name: FILE_VIEWS
   kind: const
   file: crates/myco-driver/src/views.rs
-  line: 140
+  line: 103
   module: myco-driver
 - name: Found
   kind: type
   file: crates/myco-driver/src/views.rs
-  line: 697
+  line: 647
   module: myco-driver
 - name: HandoffRow
   kind: type
@@ -30,42 +30,37 @@ api:
 - name: ITEM_COLS
   kind: const
   file: crates/myco-driver/src/views.rs
-  line: 147
+  line: 110
   module: myco-driver
 - name: Snapshot
   kind: type
   file: crates/myco-driver/src/data.rs
   line: 79
   module: myco-driver
-- name: binding
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 110
-  module: myco-driver
 - name: body_payload
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 849
+  line: 799
   module: myco-driver
 - name: bound
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 46
+  line: 41
   module: myco-driver
 - name: capabilities_json
   kind: function
   file: crates/myco-driver/src/main.rs
-  line: 30
+  line: 25
   module: myco-driver
 - name: children_rows
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 820
+  line: 770
   module: myco-driver
 - name: col
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 54
+  line: 45
   module: myco-driver
 - name: config_layered
   kind: function
@@ -85,12 +80,12 @@ api:
 - name: degraded_snapshot_yields_error_payloads
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 1045
+  line: 995
   module: myco-driver
 - name: dispatch
   kind: function
   file: crates/myco-driver/src/main.rs
-  line: 40
+  line: 35
   module: myco-driver
 - name: driver_passes_pavo_conformance
   kind: function
@@ -105,7 +100,7 @@ api:
 - name: every_binding_is_a_known_query
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 1036
+  line: 986
   module: myco-driver
 - name: failed
   kind: function
@@ -115,82 +110,82 @@ api:
 - name: files_rows
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 526
+  line: 476
   module: myco-driver
 - name: find_item
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 711
+  line: 661
   module: myco-driver
 - name: graph
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 94
+  line: 69
   module: myco-driver
 - name: graph_payload
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 864
+  line: 814
   module: myco-driver
 - name: handoffs_rows
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 919
+  line: 869
   module: myco-driver
 - name: item
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 703
+  line: 653
   module: myco-driver
 - name: item_detail
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 727
+  line: 677
   module: myco-driver
 - name: item_filters
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 381
+  line: 331
   module: myco-driver
 - name: item_query_needs_id
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 1060
+  line: 1010
   module: myco-driver
 - name: item_root
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 974
+  line: 924
   module: myco-driver
 - name: item_row
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 414
+  line: 364
   module: myco-driver
 - name: item_tree
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 592
+  line: 542
   module: myco-driver
 - name: items_rows
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 488
+  line: 438
   module: myco-driver
 - name: known_query
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 326
+  line: 276
   module: myco-driver
 - name: kv
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 62
+  line: 49
   module: myco-driver
 - name: ledger_tree
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 550
+  line: 500
   module: myco-driver
 - name: load
   kind: function
@@ -200,9 +195,14 @@ api:
 - name: main
   kind: function
   file: crates/myco-driver/src/main.rs
-  line: 98
+  line: 81
   module: myco-driver
-api_omitted: 24
+- name: manifest
+  kind: function
+  file: crates/myco-driver/src/views.rs
+  line: 247
+  module: myco-driver
+api_omitted: 22
 deps:
 - camino
 - myco-config
@@ -211,6 +211,7 @@ deps:
 - myco-ops
 - myco-store
 - myco-store-md
+- pavo-driver-kit
 - pavo-protocol
 - serde
 - serde_json
@@ -237,11 +238,11 @@ provenance:
   - crates/myco-driver/src/views.rs
   - crates/myco-driver/tests/conformance.rs
   hashes:
-  - 1fc300154ce77cd28614d40a1b5bcddc7b9157aa
+  - e544249002c0828573b001a6b814a4eb74fa8a6a
   - 0f275d5c8939904eba41c54b9bacb80a1fbc902b
-  - 5fc2690f8c598f20071b740bf71c936ef538a1ba
-  - 58fe6d94eea3f6797bdab2c3b78243afc4ac15c0
+  - e5d1f2052ffe28de2283f7b7d9f9589ee8bc5669
+  - add46046992962ad4f7be4dc1e5a32e5600db231
   - bcf687da55f4d327b1667d16099ac7104b0abdb8
-  commit_sha: ac9c703181afb9708dd1d70c60432a286fa44eea
-  generated_at: '1794178209'
+  commit_sha: 88d65cf20e66d85851a7da4506773fee6be426ab
+  generated_at: '1794244420'
   generator: kuda-template/0.1.2

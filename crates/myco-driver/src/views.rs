@@ -26,10 +26,8 @@
 use std::collections::BTreeMap;
 
 use myco_core::{Item, ItemId};
-use pavo_protocol::{
-    ColumnNode, Contributes, Contribution, DriverManifest, GraphNode, KvNode, MarkdownNode,
-    NodeBase, QueryBinding, TableColumn, TableNode, TreeItem, TreeNode, ViewNode, ViewSpec,
-};
+use pavo_driver_kit as kit;
+use pavo_protocol::{DriverManifest, GraphNode, NodeBase, TreeItem, ViewNode, ViewSpec};
 use serde_json::{json, Map, Value};
 
 use crate::data::Snapshot;
@@ -37,61 +35,40 @@ use crate::data::Snapshot;
 // ---------------------------------------------------------------- helpers
 
 fn titled(title: &str) -> NodeBase {
-    NodeBase {
-        title: Some(title.to_string()),
-        ..NodeBase::default()
-    }
+    kit::base().title(title).build()
 }
 
 fn bound(title: &str, query: &str) -> NodeBase {
-    NodeBase {
-        title: Some(title.to_string()),
-        query: Some(query.to_string()),
-        ..NodeBase::default()
-    }
+    kit::base().title(title).query(query).build()
 }
 
 fn col(title: &str, children: Vec<ViewNode>) -> ViewNode {
-    ViewNode::Column(ColumnNode {
-        base: titled(title),
-        children,
-        gap: None,
-    })
+    kit::column(titled(title), children)
 }
 
 fn kv(title: &str, query: &str) -> ViewNode {
-    ViewNode::Kv(KvNode {
-        base: bound(title, query),
-        pairs: Vec::new(),
-    })
+    kit::kv(bound(title, query), Vec::new())
 }
 
 fn table(title: &str, query: &str, columns: &[(&str, &str)]) -> ViewNode {
-    ViewNode::Table(TableNode {
-        base: bound(title, query),
-        columns: columns
+    // `sortable_table`: every table this driver declares sorts.
+    kit::sortable_table(
+        bound(title, query),
+        columns
             .iter()
-            .map(|(key, t)| TableColumn {
-                key: (*key).to_string(),
-                title: (*t).to_string(),
-                align: None,
-                width: None,
-            })
+            .map(|(key, t)| kit::table_column(key, t))
             .collect(),
-        rows: Vec::new(),
-        sortable: true,
-    })
+        Vec::new(),
+    )
 }
 
 fn tree(title: &str, query: &str) -> ViewNode {
-    ViewNode::Tree(TreeNode {
-        base: bound(title, query),
-        items: Vec::new(),
-        expandable: true,
-    })
+    kit::expandable_tree(bound(title, query), Vec::new())
 }
 
 fn graph(title: &str, query: &str) -> ViewNode {
+    // The kit's `graph` constructor leaves `layout` unset; the board
+    // asks for `dot` — keep the literal for that one hint.
     ViewNode::Graph(GraphNode {
         base: bound(title, query),
         nodes: Vec::new(),
@@ -101,18 +78,7 @@ fn graph(title: &str, query: &str) -> ViewNode {
 }
 
 fn md(title: &str, text: &str) -> ViewNode {
-    ViewNode::Markdown(MarkdownNode {
-        base: titled(title),
-        text: text.to_string(),
-    })
-}
-
-fn binding(name: &str) -> QueryBinding {
-    QueryBinding {
-        name: name.to_string(),
-        op: "query".to_string(),
-        params: Map::new(),
-    }
+    kit::markdown(titled(title), text)
 }
 
 fn spec(
@@ -123,14 +89,11 @@ fn spec(
     queries: &[&str],
     root: ViewNode,
 ) -> ViewSpec {
-    ViewSpec {
-        id: id.to_string(),
-        title: title.to_string(),
-        route: route.to_string(),
-        description: Some(description.to_string()),
-        queries: queries.iter().map(|q| binding(q)).collect(),
-        root,
+    let mut view = kit::view(id, title, route, root).description(description);
+    for q in queries {
+        view = view.query(kit::binding(q, "query"));
     }
+    view.build()
 }
 
 // ---------------------------------------------------------------- manifest
@@ -282,41 +245,28 @@ pub fn specs() -> Vec<ViewSpec> {
 
 /// The `manifest` op result.
 pub fn manifest() -> DriverManifest {
-    DriverManifest {
-        name: "myco".to_string(),
-        title: "Myco".to_string(),
-        icon: Some("📋".to_string()),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        verbs: vec!["manifest".to_string(), "serve".to_string()],
-        capabilities: vec!["pavo".to_string()],
-        contributes: Contributes {
-            navbar: vec![Contribution {
-                id: "board".to_string(),
-                title: "Myco".to_string(),
-                route: "/myco/board".to_string(),
-                priority: 20,
-                icon: None,
-            }],
-            dashboard: vec![Contribution {
-                id: "status".to_string(),
-                title: "Myco status".to_string(),
-                route: "/myco/status".to_string(),
-                priority: 30,
-                icon: None,
-            }],
-            statusbar: vec![Contribution {
-                id: "status".to_string(),
-                title: "Myco ledger".to_string(),
-                route: "/myco/status".to_string(),
-                priority: 40,
-                icon: None,
-            }],
-            routes: Vec::new(),
-            extra: Default::default(),
-        },
-        views: specs(),
-        renderers: Vec::new(),
+    // `contribution` defaults priority to 100; the slots below order
+    // explicitly (lower sorts first).
+    let mut navbar = kit::contribution("board", "Myco", "/myco/board");
+    navbar.priority = 20;
+    let mut dashboard = kit::contribution("status", "Myco status", "/myco/status");
+    dashboard.priority = 30;
+    let mut statusbar = kit::contribution("status", "Myco ledger", "/myco/status");
+    statusbar.priority = 40;
+
+    // `Manifest::new` already defaults verbs to ["manifest","serve"]
+    // and capabilities to ["pavo"] — the same values the literal
+    // declared by hand.
+    let mut m = kit::Manifest::new("myco", "Myco")
+        .version(env!("CARGO_PKG_VERSION"))
+        .icon("📋")
+        .navbar(navbar)
+        .dashboard(dashboard)
+        .statusbar(statusbar);
+    for v in specs() {
+        m = m.view(v);
     }
+    m.build()
 }
 
 // ---------------------------------------------------------------- queries
