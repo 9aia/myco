@@ -221,6 +221,9 @@ pub struct Model {
     /// When `status` was last set — drives the [`STATUS_TTL`]
     /// expiry in `tick`.
     status_at: Instant,
+    /// `status` is an error — sticky: it holds the bar until the
+    /// next input instead of expiring on [`STATUS_TTL`].
+    status_err: bool,
     /// Editor to open on the next loop turn (`E`).
     pub pending_editor: Option<PathBuf>,
     /// File-backed items for the `Files` board.
@@ -362,6 +365,7 @@ impl Model {
             show_ids: true,
             status: String::new(),
             status_at: Instant::now(),
+            status_err: false,
             pending_editor: None,
             files: Vec::new(),
             handoffs: Vec::new(),
@@ -387,11 +391,11 @@ impl Model {
         m.watch_fp = m.fingerprint();
         m.arm_watch();
         if let Some(name) = &view {
-            m.status = format!("view: {name}");
+            m.say(format!("view: {name}"));
         }
         match &m.orgs {
             Some(orgs) if orgs.is_empty() => {
-                m.status = "index: no repos registered — `myco index add <path>`".into();
+                m.say_err("index: no repos registered — `myco index add <path>`");
             }
             Some(orgs) => {
                 let errs: Vec<String> = orgs
@@ -399,7 +403,7 @@ impl Model {
                     .filter_map(|o| o.error.as_ref().map(|e| format!("{}: {e}", o.name)))
                     .collect();
                 if !errs.is_empty() {
-                    m.status = format!("index: {}", errs.join("; "));
+                    m.say_err(format!("index: {}", errs.join("; ")));
                 }
             }
             None => {}
@@ -474,7 +478,7 @@ impl Model {
             Err(e) => errs.push(format!("handoffs: {e}")),
         }
         if !errs.is_empty() {
-            self.say(format!("files: {}", errs.join("; ")));
+            self.say_err(format!("files: {}", errs.join("; ")));
         }
     }
 
@@ -565,6 +569,23 @@ impl Model {
     fn say(&mut self, msg: impl Into<String>) {
         self.status = msg.into();
         self.status_at = Instant::now();
+        self.status_err = false;
+    }
+
+    /// Error toast — like [`Self::say`] but sticky: `tick` never
+    /// expires it; the next key or click dismisses it.
+    fn say_err(&mut self, msg: impl Into<String>) {
+        self.say(msg);
+        self.status_err = true;
+    }
+
+    /// A sticky error clears on the next input — the user has
+    /// seen it.
+    fn dismiss_error(&mut self) {
+        if self.status_err {
+            self.status.clear();
+            self.status_err = false;
+        }
     }
 
     /// Reload the ledger docs *and* the file-backed items from disk
@@ -579,13 +600,13 @@ impl Model {
             if let Some(loader) = &mut self.org_loader {
                 match loader() {
                     Ok(fresh) => *orgs = fresh,
-                    Err(e) => self.say(format!("reload: {e}")),
+                    Err(e) => self.say_err(format!("reload: {e}")),
                 }
             }
         } else if let Some(store) = &self.store {
             match items::load_ledger(store) {
                 Ok(ledger) => self.ledger = ledger,
-                Err(e) => self.say(format!("reload: {e}")),
+                Err(e) => self.say_err(format!("reload: {e}")),
             }
         }
         self.load_files();
@@ -607,7 +628,7 @@ impl Model {
     /// watcher can miss.
     pub fn tick(&mut self) {
         self.tick_n += 1;
-        if !self.status.is_empty() && self.status_at.elapsed() >= STATUS_TTL {
+        if !self.status.is_empty() && !self.status_err && self.status_at.elapsed() >= STATUS_TTL {
             self.status.clear();
         }
         let dirty = self.drain_watch();
@@ -960,6 +981,7 @@ impl Model {
     /// Handle one key. Returns `true` to quit — key errors land in
     /// the status bar instead of killing the app.
     pub fn key(&mut self, k: KeyEvent) -> bool {
+        self.dismiss_error();
         // Ctrl-C is the force-quit and must work from every mode —
         // even mid-`a`, mid-`:` or under an overlay.
         if k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL) {
@@ -1050,7 +1072,7 @@ impl Model {
                 // resync — the write may have partially landed, or
                 // another writer moved the rows under us
                 self.reload();
-                self.say(e);
+                self.say_err(e);
             }
         }
     }
@@ -1244,16 +1266,16 @@ impl Model {
             "e" => self.open_editor(),
             "go" => match arg.parse::<ItemId>() {
                 Ok(id) => self.jump_to(id),
-                Err(_) => self.say(format!(":go expects an id, got {arg:?}")),
+                Err(_) => self.say_err(format!(":go expects an id, got {arg:?}")),
             },
             "set" => match arg {
                 "id" | "numbers" => self.show_ids = true,
                 "noid" | "nonumbers" => self.show_ids = false,
-                _ => self.say(":set takes id / noid"),
+                _ => self.say_err(":set takes id / noid"),
             },
             _ => match cmd.parse::<ItemId>() {
                 Ok(id) => self.jump_to(id),
-                Err(_) => self.say(format!("unknown command :{cmd}")),
+                Err(_) => self.say_err(format!("unknown command :{cmd}")),
             },
         }
         false
@@ -1269,7 +1291,7 @@ impl Model {
         {
             self.reselect(Some(id), None, self.sel);
         } else {
-            self.say(format!("{id}: not on this board"));
+            self.say_err(format!("{id}: not on this board"));
         }
     }
 
@@ -1334,6 +1356,7 @@ impl Model {
     /// and a second left-down on the same cell within ~400ms
     /// opens that row like `→`.
     pub fn mouse(&mut self, ev: MouseEvent) {
+        self.dismiss_error();
         if self.mode != Mode::Normal {
             return;
         }
@@ -1497,7 +1520,7 @@ impl Model {
         let wt = match self.undo_target() {
             Ok(wt) => wt,
             Err(e) => {
-                self.say(e);
+                self.say_err(e);
                 return;
             }
         };
@@ -1578,7 +1601,7 @@ impl Model {
                     });
                     self.mode = Mode::Confirm;
                 } else {
-                    self.say(e);
+                    self.say_err(e);
                 }
             }
         }
@@ -1663,7 +1686,7 @@ impl Model {
             .locate(id)
             .ok_or_else(|| format!("{id}: no such task"))?;
         if !loc.backlog {
-            self.say(format!("{id} isn't in BACKLOG.md"));
+            self.say_err(format!("{id} isn't in BACKLOG.md"));
             return Ok(());
         }
         let mut item = ledger
@@ -2054,6 +2077,7 @@ pub(crate) mod tests {
             show_ids: true,
             status: String::new(),
             status_at: Instant::now(),
+            status_err: false,
             pending_editor: None,
             files: Vec::new(),
             handoffs: Vec::new(),
@@ -2817,6 +2841,19 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn error_toasts_stick_until_the_next_input() {
+        let mut m = model(|l| l.put_todo(t(1), None));
+        m.say_err("undo refused");
+        // stale by TTL — errors don't expire on tick
+        m.status_at = Instant::now() - STATUS_TTL - Duration::from_millis(1);
+        m.tick();
+        assert_eq!(m.status, "undo refused");
+        // any key dismisses it
+        m.key(key('j'));
+        assert!(m.status.is_empty());
+    }
+
+    #[test]
     fn tick_ignores_a_bare_touch() {
         let mut m = model(|l| l.put_todo(t(1), None));
         let wt = m.proj.as_ref().unwrap().worktree.clone();
@@ -3118,6 +3155,7 @@ pub(crate) mod tests {
             show_ids: true,
             status: String::new(),
             status_at: Instant::now(),
+            status_err: false,
             pending_editor: None,
             files: Vec::new(),
             handoffs: Vec::new(),
