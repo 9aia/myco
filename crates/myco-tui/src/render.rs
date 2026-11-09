@@ -345,7 +345,7 @@ fn related_lines(m: &Model, item: &myco_core::Item) -> Vec<Line<'static>> {
 /// Normal-mode hint sets, widest first — `pick_hints` takes the
 /// first that fits so narrow terminals degrade instead of cropping.
 const HINTS: [&str; 3] = [
-    "j/k move · 1/2/3 boards · space done · D defer · p promote · u undo · alt+↑/↓ reorder · a add · / filter · : cmd · enter/→ open · ← back · E edit · R reload · ? help · q quit",
+    "j/k move · tab boards · space done · D defer · p promote · u undo · alt+↑/↓ reorder · a add · / filter · : cmd · enter/→ open · ← back · E edit · R reload · ? help · q quit",
     "j/k move · space done · u undo · a add · / filter · : cmd · enter/→ · ← back · E edit · ? help · q quit",
     "? help · q quit",
 ];
@@ -440,7 +440,7 @@ fn help_lines() -> Vec<Line<'static>> {
         bind("←", "back"),
         group("tabs"),
         bind("1 / 2 / 3", "TODO / BACKLOG / FILES"),
-        bind("h/l", "switch board"),
+        bind("h/l, tab", "switch board"),
         group("items (TODO/BACKLOG)"),
         bind("space, dd", "mark done (asks first)"),
         bind("D", "defer → BACKLOG"),

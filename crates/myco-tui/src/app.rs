@@ -965,6 +965,8 @@ impl Model {
             KeyCode::Char('3') => self.switch_board(2),
             KeyCode::Char('h') => self.step_board(-1),
             KeyCode::Char('l') => self.step_board(1),
+            KeyCode::Tab => self.step_board(1),
+            KeyCode::BackTab => self.step_board(-1),
             KeyCode::Right => self.open_preview(),
             KeyCode::Left => self.back(),
             KeyCode::Char('j') | KeyCode::Down if alt => self.mutate(|m| m.reorder(1)),
@@ -2122,6 +2124,26 @@ pub(crate) mod tests {
         assert_eq!(m.selected().unwrap().id.number(), 3);
         m.key(key('1'));
         assert_eq!(m.board, Board::Todo);
+    }
+
+    #[test]
+    fn tab_cycles_boards_and_wraps() {
+        let mut m = model(|_| {});
+        let tab = || KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        let backtab = || KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE);
+        assert_eq!(m.board, Board::Todo);
+        m.key(tab());
+        assert_eq!(m.board, Board::Backlog);
+        m.key(tab());
+        assert_eq!(m.board, Board::Files);
+        // wraps forward past the last tab
+        m.key(tab());
+        assert_eq!(m.board, Board::Todo);
+        // and backward past the first
+        m.key(backtab());
+        assert_eq!(m.board, Board::Files);
+        m.key(backtab());
+        assert_eq!(m.board, Board::Backlog);
     }
 
     #[test]
