@@ -147,6 +147,7 @@ Add a task — allocs a T-id, appends to a section of TODO.md.
 * `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …).
 * `--label <LABEL>` — `#label` — repeatable.
 * `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable.
+* `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
 
@@ -230,6 +231,7 @@ Add a deferred item — allocs a T-id straight into BACKLOG.md.
 * `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …).
 * `--label <LABEL>` — `#label` — repeatable.
 * `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable.
+* `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
 
@@ -331,6 +333,7 @@ File an issue — allocs an I-id, writes `issues/issue-NNNN-<slug>.md` with fron
 * `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …).
 * `--label <LABEL>` — `#label` — repeatable.
 * `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable.
+* `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
 
@@ -429,6 +432,7 @@ File a proposal — allocs a P-id, writes the proposal file with frontmatter + t
 * `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …).
 * `--label <LABEL>` — `#label` — repeatable.
 * `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable.
+* `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
 
@@ -497,6 +501,7 @@ File a plan — allocs a PL-id, writes the plan file with frontmatter + a phase-
 * `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …).
 * `--label <LABEL>` — `#label` — repeatable.
 * `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable.
+* `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
 
@@ -553,6 +558,7 @@ File an ADR — allocs an ADR-id, writes the file with frontmatter (status `open
 * `--owner <OWNER>` — Owner actor id (`devin`, `human:luis`, …).
 * `--label <LABEL>` — `#label` — repeatable.
 * `--blocks <BLOCKS>` — Ids this item blocks — comma-separated or repeatable.
+* `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
 
@@ -601,15 +607,15 @@ Kind-agnostic item verbs — show / set / move.
 
 ###### **Subcommands:**
 
-* `show` — Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
+* `show` — Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/associated/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
 * `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` archives the subtree into DONE.md — terminal, so it confirms on a tty: `--yes`/`$MYCO_YES` skips).
-* `move` — Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:` dropped — it names source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
+* `move` — Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
 
 
 
 ## `myco item show`
 
-Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
+Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/associated/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
 
 **Usage:** `myco item show <id>...`
 
@@ -638,6 +644,8 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--unlabel <UNLABEL>` — Remove a label — repeatable.
 * `--blocks <BLOCKS>` — Add (`+T-1` or `T-1`) or remove (`-T-1`) a blocks dep — repeatable or comma-separated.
 * `--unblock <UNBLOCK>` — Remove a blocks dep — repeatable or comma-separated.
+* `--links <LINKS>` — Add (`+PL-1` or `PL-1`) or remove (`-PL-1`) a link — repeatable or comma-separated.
+* `--unlink <UNLINK>` — Remove a link — repeatable or comma-separated.
 * `--epic <EPIC>` — Epic name — `""` clears the epic.
 * `--milestone <MILESTONE>` — Milestone name — `""` clears the milestone.
 * `--session <SESSION>` — Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state.
@@ -647,7 +655,7 @@ Mutate an item in place. `--status` is the only field routed through the state m
 
 ## `myco item move`
 
-Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:` dropped — it names source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
+Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
 
 **Usage:** `myco item move [OPTIONS] --to <to> <id>`
 
