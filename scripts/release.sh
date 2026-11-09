@@ -27,6 +27,7 @@ if [ -z "$touched" ]; then echo "no crate changes since $last"; exit 0; fi
 
 order="myco-core myco-config myco-git myco-shell myco-config-toml myco"
 published=""
+tags=""
 for c in $order; do
     p="${c}"; [ "$c" = myco-cli ] && p="myco"   # cli package name
     dir="crates/$c"
