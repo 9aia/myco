@@ -1,11 +1,10 @@
 # Release model
 
-Releases are repo automation, not manual steps:
-`scripts/release.sh` is triggered by bupha watch on each `main`
-push — a debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
-means only the last push in a quiet window actually releases. The
-script runs inside a detached worktree and pushes commits and
-tags from there, never from the main checkout.
+Releases are manual: `scripts/release.sh` is run by an operator
+on `main` — the old trigger (bupha watch on each `main` push) is
+retired; CI is now the peregrin `ci-gate` campaign. The script's
+leading debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
+still applies, and it pushes commits and tags to `main`.
 
 ## What a release run does
 
@@ -39,14 +38,12 @@ by tagging once.
 
 ## CI and docs deploys
 
-The same bupha watch owns the rest of what used to be GitHub
-Actions — there are no workflows in the repo:
+There are no GitHub Actions workflows; the gate is the peregrin
+`ci-gate` campaign (bupha watch is retired):
 
 - **Push to `docs`** runs `scripts/deploy-docs.sh`, which
   rebuilds the site and pushes `gh-pages` — Pages is a legacy
   branch deploy, so that push is the whole release of the site.
-- **Push to `main`** is gated locally by the `pre-push` hook
-  (`cargo xtask check`). `scripts/ci.sh` (`check && test`) is
-  ready for bupha, but the watcher routes one `branch` per repo
-  name today — a second `9aia/myco` entry needs bupha's
-  `[[repo.jobs]]` work (its T-004).
+- **Push to `main`** is gated by the ci-gate campaign
+  (`scripts/ci.sh` = `check && test` + the coverage floor) and
+  locally by the `pre-push` hook (`cargo xtask check`).
