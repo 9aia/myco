@@ -146,10 +146,11 @@ struct FrontmatterIn {
     cycle: Option<String>,
 }
 
-/// `priority` reads like the line grammar — `low|med|high|crit`
-/// and the full names emit writes — via [`Priority`]'s `FromStr`
-/// (lenient read, strict canonical write). Deriving `Priority`
-/// would accept full names only.
+/// `priority` reads like the line grammar — `low|med|high|crit`,
+/// the spelling emit writes — plus the serde full names
+/// (`medium`, `critical`) older files and hand-edits carry, via
+/// [`Priority`]'s `FromStr` (lenient read, strict canonical
+/// write). Deriving `Priority` would accept full names only.
 fn de_opt_priority<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Priority>, D::Error> {
     Option::<String>::deserialize(d)?
         .map(|s| s.parse().map_err(serde::de::Error::custom))
@@ -182,7 +183,11 @@ struct FrontmatterOut<'a> {
     created: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     owner: Option<String>,
-    priority: Priority,
+    /// The `pri:` token spelling (`med`, `crit`) — frontmatter is
+    /// line-grammar vocabulary, not serde's full names (I-032).
+    /// Read stays lenient (`medium`/`critical` parse), so any
+    /// rewrite normalizes them to tokens.
+    priority: &'a str,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     labels: Vec<&'a str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -394,7 +399,7 @@ pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
         status: file.meta.status,
         created: file.meta.created.map(date::render),
         owner: file.meta.owner.as_ref().map(ToString::to_string),
-        priority: file.meta.priority,
+        priority: file.meta.priority.token(),
         labels: file.meta.labels.iter().map(String::as_str).collect(),
         blocks: file.meta.blocks.iter().map(ItemId::to_string).collect(),
         links: file.meta.links.iter().map(ItemId::to_string).collect(),
@@ -546,7 +551,7 @@ mod tests {
 
     #[test]
     fn supersede_keys_roundtrip() {
-        let src = "+++\nid = \"ADR-0002\"\ntitle = \"old\"\nstatus = \"done\"\npriority = \"medium\"\nsuperseded_by = \"ADR-0003\"\nsupersedes = \"ADR-0001\"\n+++\n";
+        let src = "+++\nid = \"ADR-0002\"\ntitle = \"old\"\nstatus = \"done\"\npriority = \"med\"\nsuperseded_by = \"ADR-0003\"\nsupersedes = \"ADR-0001\"\n+++\n";
         let file = parse_item_file(src, &spec(ItemKind::Adr), "adrs/0002-old.md").unwrap();
         assert_eq!(file.meta.superseded_by, Some(ItemId::new(ItemKind::Adr, 3)));
         assert_eq!(file.meta.supersedes, Some(ItemId::new(ItemKind::Adr, 1)));
@@ -558,7 +563,7 @@ mod tests {
 
     #[test]
     fn links_roundtrip_and_self_reject() {
-        let src = "+++\nid = \"T-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\nlinks = [\"P-013\", \"PL-001\"]\n+++\n";
+        let src = "+++\nid = \"T-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"med\"\nlinks = [\"P-013\", \"PL-001\"]\n+++\n";
         let file = parse_item_file(src, &spec(ItemKind::Task), "x.md").unwrap();
         assert!(file.meta.links.contains(&ItemId::new(ItemKind::Plan, 1)));
         assert!(file
@@ -578,7 +583,7 @@ mod tests {
 
     #[test]
     fn epic_milestone_roundtrip() {
-        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\nepic = \"v2\"\nmilestone = \"1.0\"\n+++\n";
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"med\"\nepic = \"v2\"\nmilestone = \"1.0\"\n+++\n";
         let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/issue-0001-x.md").unwrap();
         assert_eq!(file.meta.epic.as_deref(), Some("v2"));
         assert_eq!(file.meta.milestone.as_deref(), Some("1.0"));
@@ -595,7 +600,7 @@ mod tests {
 
     #[test]
     fn scheduling_keys_roundtrip() {
-        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\ndue = \"2026-12-01\"\nestimate = 3\ncycle = \"sprint-12\"\n+++\n";
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"med\"\ndue = \"2026-12-01\"\nestimate = 3\ncycle = \"sprint-12\"\n+++\n";
         let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/issue-0001-x.md").unwrap();
         assert_eq!(file.meta.due, Some(date::parse("2026-12-01").unwrap()));
         assert_eq!(file.meta.estimate, Some(3));
@@ -652,17 +657,31 @@ mod tests {
     }
 
     #[test]
-    fn frontmatter_accepts_short_forms() {
-        // `pri:`-token shorthand and a bare TOML date — the shapes
-        // a hand-edit naturally produces — read as their canonical
-        // values (I-021); emit still writes the strict forms
-        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"med\"\ncreated = 2026-02-01\n+++\n";
+    fn frontmatter_normalizes_full_names() {
+        // serde's full names and bare TOML dates — the shapes a
+        // hand-edit (or an older myco) produces — read as their
+        // canonical values (I-021, I-032); emit rewrites the
+        // strict `pri:`-token / quoted-date forms
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\ncreated = 2026-02-01\n+++\n";
         let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").unwrap();
         assert_eq!(file.meta.priority, Priority::Medium);
         assert_eq!(file.meta.created, Some(date::parse("2026-02-01").unwrap()));
         let out = emit_item_file(&file).unwrap();
-        assert!(out.contains("priority = \"medium\""));
+        assert!(out.contains("priority = \"med\""));
         assert!(out.contains("created = \"2026-02-01\""));
+        // `critical` normalizes to `crit` the same way
+        let src =
+            "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"critical\"\n+++\n";
+        let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").unwrap();
+        assert_eq!(file.meta.priority, Priority::Critical);
+        assert!(emit_item_file(&file)
+            .unwrap()
+            .contains("priority = \"crit\""));
+        // token spellings round-trip byte-identical
+        let src =
+            "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"med\"\n+++\n";
+        let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").unwrap();
+        assert_eq!(emit_item_file(&file).unwrap(), src);
         // a datetime-with-time is still a bad `YYYY-MM-DD` date
         let bad = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\ncreated = 2026-02-01T10:00:00Z\n+++\n";
         assert!(parse_item_file(bad, &spec(ItemKind::Issue), "x.md").is_err());
@@ -697,7 +716,7 @@ mod tests {
         // a body that opens with an indented code block must not
         // lose its indent to `trim()` — that would demote it to a
         // paragraph on read (I-021)
-        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\n+++\n\n    fn main() {}\n\npara\n";
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"med\"\n+++\n\n    fn main() {}\n\npara\n";
         let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").unwrap();
         assert_eq!(file.body, "    fn main() {}\n\npara");
         assert_eq!(emit_item_file(&file).unwrap(), src);
@@ -723,7 +742,7 @@ mod tests {
         assert_eq!(file.meta.priority, Priority::Medium);
         assert!(file.body.is_empty());
         let out = emit_item_file(&file).unwrap();
-        assert!(out.contains("priority = \"medium\""));
+        assert!(out.contains("priority = \"med\""));
         assert!(!out.contains("owner"));
         assert_eq!(
             parse_item_file(&out, &spec(ItemKind::Proposal), "p.md").unwrap(),

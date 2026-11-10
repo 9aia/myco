@@ -574,7 +574,7 @@ fn absorb_jira_csv_imports_and_dedups() {
     let i1 = read(&wt, "issues/issue-0001-crash-on-startup.md");
     for frag in [
         "status = \"open\"",
-        "priority = \"critical\"",
+        "priority = \"crit\"",
         "owner = \"luis-figueiredo\"",
         "labels = [\"bug\", \"help-wanted\"]",
         "epic = \"EPIC-9\"",

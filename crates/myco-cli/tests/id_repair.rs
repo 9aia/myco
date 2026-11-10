@@ -98,7 +98,7 @@ fn adr_files(wt: &Path) -> Vec<String> {
 }
 
 fn item_file(id: &str, title: &str, extra_fm: &str, body: &str) -> String {
-    format!("+++\nid = \"{id}\"\ntitle = \"{title}\"\nstatus = \"open\"\npriority = \"medium\"\n{extra_fm}+++\n\n{body}")
+    format!("+++\nid = \"{id}\"\ntitle = \"{title}\"\nstatus = \"open\"\npriority = \"med\"\n{extra_fm}+++\n\n{body}")
 }
 
 /// `migrate` adoption honors the filename number —

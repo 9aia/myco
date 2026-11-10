@@ -477,7 +477,7 @@ fn issue_new_list_resolve_archive_comment() {
     for frag in [
         "id = \"I-001\"",
         "status = \"open\"",
-        "priority = \"critical\"",
+        "priority = \"crit\"",
         "## Description",
         "## Checklist",
         "## Resolution",

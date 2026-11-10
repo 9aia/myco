@@ -3,7 +3,7 @@ id = "P-002"
 title = "Agent verbs"
 status = "open"
 created = "2026-02-02"
-priority = "medium"
+priority = "med"
 +++
 
 ## Goal

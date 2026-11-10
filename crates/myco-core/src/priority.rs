@@ -1,6 +1,7 @@
-//! Item priority. Serde/frontmatter uses full kebab names
-//! (`"medium"`); `pri:` line tokens use the short forms
-//! `low|med|high|crit`.
+//! Item priority. Frontmatter and `pri:` line tokens use the
+//! short forms `low|med|high|crit`; serde (JSON views, wire)
+//! uses the full kebab names (`"medium"`). Read accepts both —
+//! lenient read, strict canonical write.
 
 use std::fmt;
 use std::str::FromStr;
@@ -31,7 +32,8 @@ impl Priority {
         Priority::Critical,
     ];
 
-    /// The `pri:` token — `low`, `med`, `high`, `crit`.
+    /// The `pri:`/frontmatter token — `low`, `med`, `high`,
+    /// `crit`.
     pub fn token(self) -> &'static str {
         match self {
             Priority::Low => "low",
@@ -41,8 +43,9 @@ impl Priority {
         }
     }
 
-    /// Full name used in serde/frontmatter — `low`, `medium`,
-    /// `high`, `critical`.
+    /// Full name used in serde/JSON and display labels — `low`,
+    /// `medium`, `high`, `critical`. Accepted on frontmatter
+    /// read but never emitted there (I-032).
     pub fn name(self) -> &'static str {
         match self {
             Priority::Low => "low",
