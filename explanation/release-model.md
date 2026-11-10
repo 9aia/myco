@@ -4,8 +4,7 @@ url: /myco/explanation/release-model.md
 # Release model
 
 Releases are manual: `scripts/release.sh` is run by an operator
-on `main` — the old trigger (bupha watch on each `main` push) is
-retired; CI is now the peregrin `ci-gate` campaign. The script's
+on `main`. The script's
 leading debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
 still applies, and it pushes commits and tags to `main`.
 
@@ -51,7 +50,7 @@ by tagging once.
 ## CI and docs deploys
 
 There are no GitHub Actions workflows; the gate is the peregrin
-`ci-gate` campaign (bupha watch is retired):
+`ci-gate` campaign (the gate is mid-migration back to bupha):
 
 * **Push to `docs`** runs `scripts/deploy-docs.sh`, which
   rebuilds the site and pushes `gh-pages` — Pages is a legacy

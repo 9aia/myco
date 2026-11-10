@@ -2429,9 +2429,9 @@ ADRs, handoffs). Neighbors own their own memory:
 * **peregrin** — orchestration; it embeds the ledger through
   `myco serve` (JSON-RPC 2.0 on stdio — `adrs/0001`), reachable
   one-shot via `myco batch`
-* **bupha** — retired CI gate (was: `myco check` in pipelines,
-  `Item:` trailers); the gate is now the peregrin `ci-gate`
-  campaign
+* **bupha** — CI gate (was: `myco check` in pipelines,
+  `Item:` trailers); bupha is the CI repo again — the org gate is
+  mid-migration back from the peregrin `ci-gate` campaign (PL-013)
 * **mycena** — surfaces TODO/FIXME in code → `myco absorb`
 * **sepia** — session lifecycle → `myco handoff` / `myco resume`
 
@@ -2446,8 +2446,7 @@ url: /myco/explanation/release-model.md
 # Release model
 
 Releases are manual: `scripts/release.sh` is run by an operator
-on `main` — the old trigger (bupha watch on each `main` push) is
-retired; CI is now the peregrin `ci-gate` campaign. The script's
+on `main`. The script's
 leading debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
 still applies, and it pushes commits and tags to `main`.
 
@@ -2493,7 +2492,7 @@ by tagging once.
 ## CI and docs deploys
 
 There are no GitHub Actions workflows; the gate is the peregrin
-`ci-gate` campaign (bupha watch is retired):
+`ci-gate` campaign (the gate is mid-migration back to bupha):
 
 * **Push to `docs`** runs `scripts/deploy-docs.sh`, which
   rebuilds the site and pushes `gh-pages` — Pages is a legacy
