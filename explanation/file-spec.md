@@ -68,7 +68,7 @@ id = "P-001"
 title = "myco v2 — agent-first project management, in Rust"
 status = "open"
 created = "2026-10-29"
-priority = "medium"
+priority = "med"
 labels = ["design"]
 blocks = ["T-008"]
 links = ["PL-001", "P-013"]
@@ -84,8 +84,11 @@ sections per kind.
 
 Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
 `priority`, `labels`, `blocks`, `links`, `note`, `superseded_by`,
-`supersedes`, `epic`, `milestone`. Archiving moves the file to
-`<dir>/archive/` — `myco item show` still finds archived items.
+`supersedes`, `epic`, `milestone`. `priority` spells the `pri:`
+token (`low|med|high|crit`) — the serde full names `medium` /
+`critical` still read but re-emit as tokens on any write.
+Archiving moves the file to `<dir>/archive/` — `myco item show`
+still finds archived items.
 
 ## State machine
 
