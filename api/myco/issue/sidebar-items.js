@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["body_source","h_archive","h_comment","h_list","h_new","h_resolve"]};
+window.SIDEBAR_ITEMS = {"fn":["h_archive","h_comment","h_list","h_new","h_resolve"]};

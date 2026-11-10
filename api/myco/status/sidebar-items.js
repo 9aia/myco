@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["PROMPT_MAX_LINES"],"fn":["active_groups","digest_json","h","in_group","prompt_block","prompt_item","prompt_json","status_json"]};
+window.SIDEBAR_ITEMS = {"constant":["PROMPT_MAX_LINES"],"fn":["digest_json","h","prompt_block","prompt_json","status_json"]};

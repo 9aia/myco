@@ -23,70 +23,12 @@ index links, <code>blocks:</code>/<code>supersedes</code> refs and handoffs),
 reconcile counters, reattach a detached worktree, re-emit
 canonical — then re-analyzes; without it every finding is just
 reported.</p>
-</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Analysis.html" title="struct myco::check::Analysis">Analysis</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>One analysis pass over the worktree.</dd><dt><a class="struct" href="struct.Finding.html" title="struct myco::check::Finding">Finding</a></dt><dd>A validation finding. <code>fixable</code> means <code>--fix</code> repairs it.</dd><dt><a class="struct" href="struct.Located.html" title="struct myco::check::Located">Located</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>One item anywhere in the ledger, with where it lives for
-diagnostics.</dd><dt><a class="struct" href="struct.ProseRef.html" title="struct myco::check::ProseRef">Prose<wbr>Ref</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>A file queued for the dangling-ref scan — <code>zones</code> are the byte
-ranges worth scanning (a post-frontmatter body, or the title
-heads of TODO/BACKLOG lines); <code>self_ids</code> are the file’s own
-claims (frontmatter id + title/H1 claims) that never flag.</dd><dt><a class="struct" href="struct.Renum.html" title="struct myco::check::Renum">Renum</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>A file wanting renumbering — its title claims a number its
-frontmatter id doesn’t have. Collected during the file walk,
-resolved once the whole <code>ids</code> map exists.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.Claim.html" title="enum myco::check::Claim">Claim</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The id a file claims for itself in prose — frontmatter <code>title</code>
-and body first-heading both count (<code>ADR-0008: …</code>). <code>One</code> when
-they agree (or only one speaks), <code>Conflict</code> when they name two
-different ids of the same kind, <code>None</code> when neither does.</dd><dt><a class="enum" href="enum.Fix.html" title="enum myco::check::Fix">Fix</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>A repair <code>--fix</code> applies.</dd><dt><a class="enum" href="enum.Read.html" title="enum myco::check::Read">Read</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>A file read — <code>Missing</code> only when the path doesn’t exist.
-Anything else (permissions, non-UTF8) is <code>Unreadable</code> so a
-file that exists but can’t be read is never reported missing
-or scaffolded over by <code>--fix</code>.</dd><dt><a class="enum" href="enum.Severity.html" title="enum myco::check::Severity">Severity</a></dt><dd>How much a finding costs. <code>Error</code> fails the gate; <code>Warn</code> is
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Finding.html" title="struct myco::check::Finding">Finding</a></dt><dd>A validation finding. <code>fixable</code> means <code>--fix</code> repairs it.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.Severity.html" title="enum myco::check::Severity">Severity</a></dt><dd>How much a finding costs. <code>Error</code> fails the gate; <code>Warn</code> is
 knowledge for the reader and never changes the exit code — the
 distinction exists because some findings are <em>by design</em> and
 unfixable (a prose <code>T-NNN</code> naming an item that was completed and
 therefore removed: see ADR-0002). A gate that reds on those is a
-gate everyone learns to ignore.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.agents_md_finding.html" title="fn myco::check::agents_md_finding">agents_<wbr>md_<wbr>finding</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The finding a non-Ok AGENTS.md state produces — shared by
-<code>run_on</code> and <a href="fn.check_json.html" title="fn myco::check::check_json"><code>check_json</code></a>. <code>None</code> for <code>State::Ok</code>.</dd><dt><a class="fn" href="fn.analyze_with.html" title="fn myco::check::analyze_with">analyze_<wbr>with</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>analyze</code> resolved against <code>kinds</code> — <code>[[kinds]]</code> (P-008) makes
-the file-spec vocabulary data: dir scans, filename grammar,
-and “is this kind declared” all read the table.</dd><dt><a class="fn" href="fn.apply_fixes.html" title="fn myco::check::apply_fixes">apply_<wbr>fixes</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.body_heading.html" title="fn myco::check::body_heading">body_<wbr>heading</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>First heading’s text in a markdown body — any depth, the H1
-convention (<code># ADR-0008: …</code>) or a <code>##</code> that opens the file.</dd><dt><a class="fn" href="fn.check_json.html" title="fn myco::check::check_json">check_<wbr>json</a></dt><dd>The read-only <code>check</code> payload — the <code>--json</code> report shape
+gate everyone learns to ignore.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.check_json.html" title="fn myco::check::check_json">check_<wbr>json</a></dt><dd>The read-only <code>check</code> payload — the <code>--json</code> report shape
 without running a fix pass. Served by <code>myco serve</code> (the
-verdict rides in <code>ok</code>; there’s no exit code on the wire).</dd><dt><a class="fn" href="fn.frontmatter_end.html" title="fn myco::check::frontmatter_end">frontmatter_<wbr>end</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Byte offset just past the closing <code>+++</code> fence line — the start
-of an item/handoff file’s body. 0 when there’s no frontmatter
-(or it’s unclosed — the parse finding covers that case).</dd><dt><a class="fn" href="fn.h.html" title="fn myco::check::h">h</a></dt><dd>The <code>check</code> verb. Exit 1 on errors, 0 when clean (or
-warnings-only).</dd><dt><a class="fn" href="fn.id_ref_tokens.html" title="fn myco::check::id_ref_tokens">id_<wbr>ref_<wbr>tokens</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>&lt;KIND&gt;-&lt;digits&gt;</code> tokens in prose — a hand-rolled scanner (one
-pass per file, cheaper than a <code>regex</code> dep for five prefixes).
-Returns <code>(byte offset, id)</code> pairs; <code>FOO-123</code>, <code>XT-001</code> and
-<code>T-001abc</code> don’t tokenize — the prefix needs a word boundary
-and the digits a trailing one.</dd><dt><a class="fn" href="fn.in_zones.html" title="fn myco::check::in_zones">in_<wbr>zones</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Is <code>off</code> inside any <code>(start, end)</code> byte range?</dd><dt><a class="fn" href="fn.is_done_line.html" title="fn myco::check::is_done_line">is_<wbr>done_<wbr>line</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Is <code>line</code> a done item? <code>[x]</code>/<code>[X]</code> checkbox, or a <code>· status:done</code>
-metadata token.</dd><dt><a class="fn" href="fn.kind_findings.html" title="fn myco::check::kind_findings">kind_<wbr>findings</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>[[kinds]]</code> lint — an invalid kind table is a finding
-(unfixable — the repair is editing myco.toml). Repo layer
-only, like <code>view_findings</code>/<code>verb_findings</code>.</dd><dt><a class="fn" href="fn.leading_id.html" title="fn myco::check::leading_id">leading_<wbr>id</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>&lt;KIND&gt;-&lt;digits&gt;</code> at the start of a title — <code>ADR-0008: x</code>,
-<code>T-003 y</code>, <code>PL-001 — z</code>. The id token must end at a boundary
-(<code>:</code>, whitespace, a dash) or the string.</dd><dt><a class="fn" href="fn.line_col.html" title="fn myco::check::line_col">line_<wbr>col</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>1-based <code>(line, col)</code> for a byte offset — cols count chars.</dd><dt><a class="fn" href="fn.normalize.html" title="fn myco::check::normalize">normalize</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.read.html" title="fn myco::check::read">read</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.repo_kinds.html" title="fn myco::check::repo_kinds">repo_<wbr>kinds</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>[[kinds]]</code> for a repo — the repo-layer myco.toml (or
-<code>$MYCO_CONFIG</code>), prelude on absence; a broken config resolves
-to the prelude here and reports through <a href="fn.kind_findings.html" title="fn myco::check::kind_findings"><code>kind_findings</code></a>.</dd><dt><a class="fn" href="fn.repoint_blocks_tokens.html" title="fn myco::check::repoint_blocks_tokens">repoint_<wbr>blocks_<wbr>tokens</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Rewrite <code>· blocks:&lt;csv&gt;</code> / <code>· links:&lt;csv&gt;</code> tokens in
-TODO/BACKLOG item lines. <code>None</code> when nothing changed.</dd><dt><a class="fn" href="fn.repoint_frontmatter.html" title="fn myco::check::repoint_frontmatter">repoint_<wbr>frontmatter</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Rewrite id references inside a <code>+++</code> frontmatter block —
-<code>blocks = […]</code> arrays and <code>superseded_by</code>/<code>supersedes</code> scalars,
-quoted ids only. <code>None</code> when nothing changed.</dd><dt><a class="fn" href="fn.repoint_handoff.html" title="fn myco::check::repoint_handoff">repoint_<wbr>handoff</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Rewrite a handoff file to a new item id — <code>item = "&lt;OLD&gt;"</code> plus
-the <code># Handoffs — &lt;OLD&gt;</code> title (both must agree per the spec).</dd><dt><a class="fn" href="fn.run_on.html" title="fn myco::check::run_on">run_on</a></dt><dd>Check on an already-resolved project (migrate reuses it).</dd><dt><a class="fn" href="fn.self_ids.html" title="fn myco::check::self_ids">self_<wbr>ids</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The ids a file claims for itself — frontmatter id plus any
-title/H1 claim (a renumber candidate’s <code>ADR-0001:</code> heading is a
-claim, not a stale reference).</dd><dt><a class="fn" href="fn.strip_done.html" title="fn myco::check::strip_done">strip_<wbr>done</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Delete done-item lines and their deeper-indented continuations
-— a done item’s nested children die with it, but a done child
-leaves its parent’s other children alone.</dd><dt><a class="fn" href="fn.title_claim.html" title="fn myco::check::title_claim">title_<wbr>claim</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.title_zones.html" title="fn myco::check::title_zones">title_<wbr>zones</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Per-line “title zones” for TODO.md/BACKLOG.md — the text before
-the first <code>·</code> on each line (metadata tokens like <code>blocks:</code> and
-<code>note:</code> live after it and have their own checks), minus the
-list marker and the item’s own leading id (<code>- [ ] T-001 …</code> —
-T-001 is the line’s identity, not a reference; a done <code>[x]</code>
-line’s id doesn’t resolve but is no more a stale ref than the
-live kind).</dd><dt><a class="fn" href="fn.transform_file.html" title="fn myco::check::transform_file">transform_<wbr>file</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Apply <code>f</code> to a file’s pending Write fix at <code>write_rel</code> when one
-exists, otherwise transform the on-disk contents at <code>read_rel</code>
-into a new Write fix at <code>write_rel</code>. (The two differ when the
-file is itself being renamed.) <code>f</code> returns <code>None</code> when the
-contents don’t change.</dd><dt><a class="fn" href="fn.verb_findings.html" title="fn myco::check::verb_findings">verb_<wbr>findings</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>[verbs]</code> lint — an invalid config verb is a finding
-(unfixable — the repair is editing myco.toml). Only the repo
-layer is linted; shadowing a builtin is legal (warned at use).</dd><dt><a class="fn" href="fn.view_findings.html" title="fn myco::check::view_findings">view_<wbr>findings</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>[views]</code> lint — unparseable config or an invalid spec is a
-finding (unfixable — the repair is editing myco.toml). Only the
-repo layer is linted: check output must be identical for every
-user and CI. Shadowing a builtin is legal (warned at use), not
-a finding.</dd><dt><a class="fn" href="fn.worktree_findings.html" title="fn myco::check::worktree_findings">worktree_<wbr>findings</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Worktree health — the invariant the whole design rests on:
-“the <code>project</code> branch history is the audit trail”. A ledger
-sitting on a detached HEAD (or on a branch nobody pushes) has
-no audit trail at all, and nothing else in <code>check</code> looks at
-git. <code>--fix</code> reattaches; the unpushed case is reported only,
-because pushing is a network opinion <code>check</code> must not have.</dd></dl></section></div></main></body></html>
+verdict rides in <code>ok</code>; there’s no exit code on the wire).</dd><dt><a class="fn" href="fn.h.html" title="fn myco::check::h">h</a></dt><dd>The <code>check</code> verb. Exit 1 on errors, 0 when clean (or
+warnings-only).</dd><dt><a class="fn" href="fn.run_on.html" title="fn myco::check::run_on">run_on</a></dt><dd>Check on an already-resolved project (migrate reuses it).</dd></dl></section></div></main></body></html>

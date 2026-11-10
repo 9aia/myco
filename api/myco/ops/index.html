@@ -13,19 +13,17 @@ stamp that id instead; the same default those flags already
 fall back to.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.autocommit.html" title="fn myco::ops::autocommit">autocommit</a></dt><dd>One atomic commit of everything under <code>dir</code> — the
 auto-commit-per-verb path. <code>msg</code> gains the <code>Actor:</code> trailer
 (<a href="fn.commit_msg.html" title="fn myco::ops::commit_msg"><code>commit_msg</code></a>; <code>actor</code> is the verb’s actor, <code>None</code> →
-<a href="../continuity/constant.DEFAULT_ACTOR.html" title="constant myco::continuity::DEFAULT_ACTOR"><code>DEFAULT_ACTOR</code></a>). No commit when disabled or when the
+<a href="constant.DEFAULT_ACTOR.html" title="constant myco::ops::DEFAULT_ACTOR"><code>DEFAULT_ACTOR</code></a>). No commit when disabled or when the
 tree is clean. Returns whether a commit was made.</dd><dt><a class="fn" href="fn.commit_msg.html" title="fn myco::ops::commit_msg">commit_<wbr>msg</a></dt><dd><code>msg</code> + the <code>Actor:</code> trailer — every myco commit names the
 verb’s actor in the message body (T-011: actor-tagged
 trailers, not per-actor git authors — author/committer stay
 the repo’s stable <code>user.name</code>/<code>user.email</code> identity, or the
 <code>myco@localhost</code> fallback). <code>None</code> resolves to
-<a href="../continuity/constant.DEFAULT_ACTOR.html" title="constant myco::continuity::DEFAULT_ACTOR"><code>DEFAULT_ACTOR</code></a>. The subject line is untouched, so <code>%s</code>
+<a href="constant.DEFAULT_ACTOR.html" title="constant myco::ops::DEFAULT_ACTOR"><code>DEFAULT_ACTOR</code></a>. The subject line is untouched, so <code>%s</code>
 parses (e.g. <code>report</code>’s velocity walk) never see it.</dd><dt><a class="fn" href="fn.commit_paths.html" title="fn myco::ops::commit_paths">commit_<wbr>paths</a></dt><dd>Commit only <code>paths</code> inside <code>dir</code> — used for repo-root edits
 (<code>.gitignore</code>, <code>pm/</code> removal) so an unrelated dirty tree isn’t
 swept into the verb’s commit. Returns whether a commit was made.</dd><dt><a class="fn" href="fn.commits_enabled.html" title="fn myco::ops::commits_enabled">commits_<wbr>enabled</a></dt><dd>Are verb commits enabled? <code>--no-commit</code> or <code>$MYCO_NO_COMMIT</code>
-(any value) suppresses them.</dd><dt><a class="fn" href="fn.config_layered.html" title="fn myco::ops::config_layered">config_<wbr>layered</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Layered TOML — <code>Some(path)</code> pins the repo layer, <code>None</code> runs
-the impl’s default search. <code>myco-ops</code> keeps the <em>which path</em>
-policy; this only names the format.</dd><dt><a class="fn" href="fn.ensure_committable.html" title="fn myco::ops::ensure_committable">ensure_<wbr>committable</a></dt><dd>Mutating verbs must not write a ledger they cannot commit. A
+(any value) suppresses them.</dd><dt><a class="fn" href="fn.ensure_committable.html" title="fn myco::ops::ensure_committable">ensure_<wbr>committable</a></dt><dd>Mutating verbs must not write a ledger they cannot commit. A
 detached <code>project/</code> worktree is the failure mode that costs the
 most: every write lands, no branch records it, and the audit
 trail is gone the moment the worktree moves. <code>check</code> reports and

@@ -7,15 +7,7 @@ registered repo’s snapshot is checked for freshness (stored
 missing snapshot is rebuilt on the spot — index reads never
 serve old data silently. Repos whose worktree vanished keep
 their last snapshot and report an error inline.</p>
-</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.RepoView.html" title="struct myco::org::RepoView">Repo<wbr>View</a></dt><dd>One repo’s snapshot load outcome for index-sourced views.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.h_init.html" title="fn myco::org::h_init">h_init</a></dt><dd>The <code>org init</code> verb — rolls scaffold out (no snapshot reads).</dd><dt><a class="fn" href="fn.init_all.html" title="fn myco::org::init_all">init_<wbr>all</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>init</code> over every registered repo — per-repo outcomes, errors
-collected (one bad repo doesn’t stop the rollout).
-<code>ledger = "none"</code> entries are skipped outright: the rollout
-refreshes repos that <em>have</em> (or should have, per the legacy
-<code>local</code> reading) ledgers — it must never scaffold a
-<code>project/</code> branch into an intentionally ledger-less org
-member. Mark such repos <code>none</code> in <code>repos.toml</code> (or re-run
-<code>myco index add</code> on them — ledger-less repos auto-register
-<code>none</code>).</dd><dt><a class="fn" href="fn.load_fresh.html" title="fn myco::org::load_fresh">load_<wbr>fresh</a></dt><dd>Load every registered repo’s snapshot, auto-rebuilding stale
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.RepoView.html" title="struct myco::org::RepoView">Repo<wbr>View</a></dt><dd>One repo’s snapshot load outcome for index-sourced views.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.h_init.html" title="fn myco::org::h_init">h_init</a></dt><dd>The <code>org init</code> verb — rolls scaffold out (no snapshot reads).</dd><dt><a class="fn" href="fn.load_fresh.html" title="fn myco::org::load_fresh">load_<wbr>fresh</a></dt><dd>Load every registered repo’s snapshot, auto-rebuilding stale
 ones (head mismatch or missing). The per-repo <code>git</code>/fs work is
 parallel — redb opens lock the file, so index I/O stays serial.
 <code>ledger = "none"</code> entries are ledger-less by design: they are

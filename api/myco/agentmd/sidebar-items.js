@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BEGIN","END","SECTION"],"enum":["Change","State"],"fn":["block_state","canonical","heading_level","heading_text","merged","section_start","sync"]};
+window.SIDEBAR_ITEMS = {"constant":["BEGIN","END"],"enum":["Change","State"],"fn":["block_state","sync"]};

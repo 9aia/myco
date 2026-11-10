@@ -4,14 +4,7 @@ repo&lt;user, builtins win collisions); <code>alias</code> bakes argv for a
 read-only builtin; <code>view-emit</code> evaluates a <code>ViewSpec</code> into one
 of the emit shapes. Mutations stay builtin — both kinds are
 read-only by construction.</p>
-</div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.cfg_root.html" title="fn myco::cfgverb::cfg_root">cfg_<wbr>root</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The repo root for <code>[verbs]</code>/<code>[views]</code> resolution — mirrors
-<code>view</code>’s: discovery’s root, else <code>--root</code>/cwd (config verbs
-that don’t need a store still resolve outside a project).</dd><dt><a class="fn" href="fn.emit.html" title="fn myco::cfgverb::emit">emit</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Evaluate <code>spec</code> and shape it per <code>emit</code> — returns the wire
-payload plus the human text (the CLI prints one or the other).
-Mirrors <code>view</code>‘s universe rule: <code>repo</code> reads this worktree,
-<code>index</code> unions the registered repos’ snapshots.</dd><dt><a class="fn" href="fn.run.html" title="fn myco::cfgverb::run">run</a></dt><dd>The CLI path — <code>myco &lt;name&gt; [args…]</code> where <code>&lt;name&gt;</code> isn’t a
+</div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.run.html" title="fn myco::cfgverb::run">run</a></dt><dd>The CLI path — <code>myco &lt;name&gt; [args…]</code> where <code>&lt;name&gt;</code> isn’t a
 builtin. Load-time warnings (skipped entries) print first;
-resolution errors are the verb error.</dd><dt><a class="fn" href="fn.split_globals.html" title="fn myco::cfgverb::split_globals">split_<wbr>globals</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>--json/--no-commit/--dir/--root</code> out of a config verb’s
-trailing tokens; the rest comes back for rejection.</dd><dt><a class="fn" href="fn.warn_if_shadowed.html" title="fn myco::cfgverb::warn_if_shadowed">warn_<wbr>if_<wbr>shadowed</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>A builtin shadowed by a <code>[verbs.&lt;name&gt;]</code> entry warns — the
-builtin wins (the stable surface is part of the audit trail).</dd><dt><a class="fn" href="fn.wire.html" title="fn myco::cfgverb::wire">wire</a></dt><dd>The wire path — a method that isn’t a builtin verb resolves
+resolution errors are the verb error.</dd><dt><a class="fn" href="fn.wire.html" title="fn myco::cfgverb::wire">wire</a></dt><dd>The wire path — a method that isn’t a builtin verb resolves
 as a config verb for this repo.</dd></dl></section></div></main></body></html>

@@ -19,22 +19,11 @@ it (<a href="fn.claim_session.html" title="fn myco::continuity::claim_session"><
 id) is the teardown — every live work-state item that session
 last tagged reverts in one commit, so a dying session
 releases exactly its own work.</p>
-</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Preimage.html" title="struct myco::continuity::Preimage">Preimage</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>An item’s writable pre-image — the line ledger plus its item
-file when file-backed — snapshotted so a paired write (status
-revert + marker entry; claim mutation + tag entry) can roll
-the first half back when the second fails instead of leaving
-it on disk for the <em>next</em> verb’s autocommit to sweep up under
-its own message.</dd><dt><a class="struct" href="struct.ResumeData.html" title="struct myco::continuity::ResumeData">Resume<wbr>Data</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The gathered <code>resume</code> context — the typed form behind
-<a href="fn.resume_json.html" title="fn myco::continuity::resume_json"><code>resume_json</code></a> and the human block.</dd><dt><a class="struct" href="struct.SessionInterrupts.html" title="struct myco::continuity::SessionInterrupts">Session<wbr>Interrupts</a></dt><dd>A session teardown’s outcome — every item that reverted plus
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.SessionInterrupts.html" title="struct myco::continuity::SessionInterrupts">Session<wbr>Interrupts</a></dt><dd>A session teardown’s outcome — every item that reverted plus
 the per-item failures the run walked past.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.CLAIM_NOTE.html" title="constant myco::continuity::CLAIM_NOTE">CLAIM_<wbr>NOTE</a></dt><dd>The note the claim-side verbs write when <code>--session</code> tags a
 claim (<code>next --claim</code>, <code>item set</code> on a work-state item) — the
 <code>session:&lt;id&gt;</code> heading is the tag <code>interrupt --session</code>
-filters on; the note is for humans reading the log.</dd><dt><a class="constant" href="constant.DEFAULT_ACTOR.html" title="constant myco::continuity::DEFAULT_ACTOR">DEFAULT_<wbr>ACTOR</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>--actor</code> fallback — the local CLI wrote it. Also <code>next --claim</code>’s owner default and the <code>Actor:</code> commit trailer’s.
-Fallback actor for the <code>Actor:</code> commit trailer — the local
-CLI wrote it. Verbs that name an actor (<code>--actor</code> on
-<code>handoff</code>/<code>interrupt</code>, <code>--owner</code> on <code>add</code>/<code>new</code>/<code>set</code>/<code>--claim</code>)
-stamp that id instead; the same default those flags already
-fall back to.</dd><dt><a class="constant" href="constant.DEFAULT_LAST.html" title="constant myco::continuity::DEFAULT_LAST">DEFAULT_<wbr>LAST</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Handoff entries shown by default (<code>--last</code> overrides).</dd><dt><a class="constant" href="constant.INTERRUPT_NOTE.html" title="constant myco::continuity::INTERRUPT_NOTE">INTERRUPT_<wbr>NOTE</a></dt><dd>The note prefix <code>interrupt</code> writes — also the derivation rule:
+filters on; the note is for humans reading the log.</dd><dt><a class="constant" href="constant.INTERRUPT_NOTE.html" title="constant myco::continuity::INTERRUPT_NOTE">INTERRUPT_<wbr>NOTE</a></dt><dd>The note prefix <code>interrupt</code> writes — also the derivation rule:
 an item “was interrupted” when its latest handoff note starts
 with this word. No dedicated status — the event lives in the
 append-only log; status/board/report surfaces derive the flag.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.claim_session.html" title="fn myco::continuity::claim_session">claim_<wbr>session</a></dt><dd>Which session holds the item’s claim — the <code>session:</code> of its
@@ -61,25 +50,9 @@ sweep — a malformed handoff or failed revert reports per item
 and doesn’t abort the rest.</dd><dt><a class="fn" href="fn.interrupted_set.html" title="fn myco::continuity::interrupted_set">interrupted_<wbr>set</a></dt><dd>The interrupted subset of <code>items</code> — for status/board markers.
 The first unreadable handoff file fails the set.</dd><dt><a class="fn" href="fn.is_interrupted.html" title="fn myco::continuity::is_interrupted">is_<wbr>interrupted</a></dt><dd>Did the item’s latest handoff mark it interrupted? A read
 failure propagates — a malformed handoff file is a finding,
-not a silent “not interrupted”.</dd><dt><a class="fn" href="fn.open_checklist.html" title="fn myco::continuity::open_checklist">open_<wbr>checklist</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Unchecked <code>- [ ]</code> checkbox items in a markdown body — the open
-checklist <code>resume</code> surfaces (issue bodies, plan phases).</dd><dt><a class="fn" href="fn.preimage.html" title="fn myco::continuity::preimage">preimage</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="fn" href="fn.read_note.html" title="fn myco::continuity::read_note">read_<wbr>note</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>--note</code> inline, or <code>-</code> for stdin.</dd><dt><a class="fn" href="fn.record_handoff.html" title="fn myco::continuity::record_handoff">record_<wbr>handoff</a></dt><dd>The handoff write — the item must exist somewhere in the
+not a silent “not interrupted”.</dd><dt><a class="fn" href="fn.record_handoff.html" title="fn myco::continuity::record_handoff">record_<wbr>handoff</a></dt><dd>The handoff write — the item must exist somewhere in the
 ledger (any kind, live or archived). Validates the note and
 the session id, appends the entry, and returns it plus the
 worktree-relative path (the file lands wherever it already
-lived). Caller commits.</dd><dt><a class="fn" href="fn.restore.html" title="fn myco::continuity::restore">restore</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Best-effort restore of a <a href="struct.Preimage.html" title="struct myco::continuity::Preimage"><code>Preimage</code></a> — returns the legs that
-wouldn’t write so the caller can report what stuck.</dd><dt><a class="fn" href="fn.resume_block.html" title="fn myco::continuity::resume_block">resume_<wbr>block</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>One item’s prompt-ready block — the compact item line first,
-sections only when they carry context. Identical for single-
-and multi-id output (blocks join on a blank line).</dd><dt><a class="fn" href="fn.resume_data.html" title="fn myco::continuity::resume_data">resume_<wbr>data</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Gather the resume context — the item, <code>blocks:</code>/<code>links:</code> dep
-titles, the latest handoff entries, the open checklist.</dd><dt><a class="fn" href="fn.resume_json.html" title="fn myco::continuity::resume_json">resume_<wbr>json</a></dt><dd>The resume payload — <code>{item, location, blocks_titles, links_titles, handoffs[], open_checklist}</code> — shared by
-<code>--json</code> and <code>myco serve</code>.</dd><dt><a class="fn" href="fn.resume_value.html" title="fn myco::continuity::resume_value">resume_<wbr>value</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>ResumeData</code> → the <code>{item, location, blocks_titles, links_titles, handoffs[], open_checklist}</code> payload shape.</dd><dt><a class="fn" href="fn.session_interrupt_report.html" title="fn myco::continuity::session_interrupt_report">session_<wbr>interrupt_<wbr>report</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>The bulk report — <code>{session, interrupted[], errors[], committed}</code> for <code>--json</code>, one line plus per-item stderr
-errors for humans. Returns the exit code (1 when any item
-failed — the reverts still committed).</dd><dt><a class="fn" href="fn.tag_claim.html" title="fn myco::continuity::tag_claim">tag_<wbr>claim</a></dt><dd>The claim-side write behind <code>--session</code> on the claiming verbs
-(<code>next --claim</code>, <code>item set</code>): apply <code>flags</code> through the shared
-mutation path and record the claim as a <code>claimed</code> handoff
-entry tagged with the session — the tag
-<a href="fn.claim_session.html" title="fn myco::continuity::claim_session"><code>claim_session</code></a>/<code>interrupt --session</code> read. The item must
-land (or already sit) in a work state — <code>--session</code> tags a
-claim, and an open item has none. Caller commits — one commit
-covers both writes; a failed tag rolls the mutation back.
-<code>actor</code> names the claimer (falls back to the item’s
-post-mutation owner, then <code>cli</code>).</dd><dt><a class="fn" href="fn.validate_session.html" title="fn myco::continuity::validate_session">validate_<wbr>session</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>--session</code> values must fit the <code>session:&lt;id&gt;</code> heading token.</dd></dl></section></div></main></body></html>
+lived). Caller commits.</dd><dt><a class="fn" href="fn.resume_json.html" title="fn myco::continuity::resume_json">resume_<wbr>json</a></dt><dd>The resume payload — <code>{item, location, blocks_titles, links_titles, handoffs[], open_checklist}</code> — shared by
+<code>--json</code> and <code>myco serve</code>.</dd></dl></section></div></main></body></html>

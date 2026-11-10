@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["apply_set","graph","h_set","h_show","mutate_item","put_back","related_json","related_lines","set_flags","set_item","show","show_block","show_data","show_json","show_value","signed"],"struct":["SetFlags","ShowData"]};
+window.SIDEBAR_ITEMS = {"fn":["h_set","h_show"]};

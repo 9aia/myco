@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["COLUMNS","DEFAULT_MAX_ROWS","HEADER_STYLE"],"fn":["card","color_enabled","colorize","dim","fit_widths_dyn","groups_json","is_status_board","items_json","lane_index","looks_like_id","render_columns","sgr","status_cards","style_card_cell","style_header_cell","table_overhead","term_width","truncate"],"struct":["Fit"]};
+window.SIDEBAR_ITEMS = {"constant":["COLUMNS","DEFAULT_MAX_ROWS"],"fn":["render_columns"],"struct":["Fit"]};

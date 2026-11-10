@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["extract_file","handoff_id","item_spec","push_item"]};
+window.SIDEBAR_ITEMS = {"fn":["extract_file"]};

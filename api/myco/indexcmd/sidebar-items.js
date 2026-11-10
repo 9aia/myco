@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["current_head","h_add","h_list","h_rebuild","h_remove","normalize_path","now","open_index","par_map","registered_entry","registered_key","repo_at","scan_one","scan_repo","snap_json","sync_links"]};
+window.SIDEBAR_ITEMS = {"fn":["current_head","h_add","h_list","h_rebuild","h_remove","now","open_index","par_map","repo_at","scan_one","scan_repo"]};
