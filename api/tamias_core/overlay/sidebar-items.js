@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["overlay","payload_root"]};
