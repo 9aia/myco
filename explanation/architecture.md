@@ -98,9 +98,9 @@ ADRs, handoffs). Neighbors own their own memory:
 - **peregrin** — orchestration; it embeds the ledger through
   `myco serve` (JSON-RPC 2.0 on stdio — `adrs/0001`), reachable
   one-shot via `myco batch`
-- **bupha** — retired CI gate (was: `myco check` in pipelines,
-  `Item:` trailers); the gate is now the peregrin `ci-gate`
-  campaign
+- **bupha** — CI gate (was: `myco check` in pipelines,
+  `Item:` trailers); bupha is the CI repo again — the org gate is
+  mid-migration back from the peregrin `ci-gate` campaign (PL-013)
 - **mycena** — surfaces TODO/FIXME in code → `myco absorb`
 - **sepia** — session lifecycle → `myco handoff` / `myco resume`
 
