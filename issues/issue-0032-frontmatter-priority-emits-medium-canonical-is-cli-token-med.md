@@ -1,7 +1,7 @@
 +++
 id = "I-032"
 title = 'frontmatter priority emits "medium" — canonical is CLI token "med"'
-status = "open"
+status = "in-progress"
 created = "2026-11-10"
 owner = "devin"
 priority = "medium"
