@@ -1506,7 +1506,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "view",
-        about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = \"repos\"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).",
+        about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = \"repos\"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).",
         params: &[&[
             pos("name", Val::Str, "View name — builtin preset or config view.").optional(),
             flag("list", "List defined views and exit.").cli(),
