@@ -22,8 +22,8 @@ modules:
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: fd3d35bb40ab246f433da4d8438415763cb12d88
-files_total: 242
+tree_digest: d0949c2b5faa97b37b1cd5860830c122a4611073
+files_total: 245
 provenance:
   files:
   - Cargo.toml
@@ -46,12 +46,12 @@ provenance:
   - xtask/Cargo.toml
   hashes:
   - a00a354405bdfda883749b0eb8c20d1e03d9ecca
-  - f149a326a1d233d13a88613cc34ef6cc564dac79
+  - 7efffe95ebfe6646151259792329bf344f24679b
   - af22350c9d0ea9600fd920c6f69729be43074044
   - 23f74adbbc8eef38ec170c5b09d557ad1af36096
   - 1a25ef123f1406c0e6eb8b48a0d2be5084a400e9
   - f75323e2b82195a4149a5fb91548e75ba386acbf
-  - e544249002c0828573b001a6b814a4eb74fa8a6a
+  - 36f747a58ea1d30b6b12a32374611f27db8f48ec
   - 432464a491cc0c5d00b71a63bd0392634e09f7b3
   - 98ad0e8e8540bb83e139ee0ceadf6fc80dcf5348
   - ed7878723f2aeca5305d834b0ab071f7ba611399
@@ -63,6 +63,6 @@ provenance:
   - 09b1d91010143e6a3d82af92584a4f393a6d5e74
   - 8bff61b145c701208864f3d424121159d9078c8c
   - 3bb61ce46463344ee41a3f06bc39d58040459339
-  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
-  generated_at: '1794272278'
+  commit_sha: be47760863fcba0b65b50642186e0025d3af852d
+  generated_at: '1794289027'
   generator: kuda/0.1.0

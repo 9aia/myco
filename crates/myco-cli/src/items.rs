@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use myco_core::{ItemId, NewItemMeta};
+use myco_core::ItemId;
 use myco_store_md::MdStore;
 
 pub use myco_ops::items::*;

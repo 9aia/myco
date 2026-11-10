@@ -7,6 +7,11 @@ api:
   file: crates/myco-driver/src/data.rs
   line: 46
   module: myco-driver
+- name: Engine
+  kind: type
+  file: crates/myco-driver/src/surface.rs
+  line: 18
+  module: myco-driver
 - name: FILE_COLS
   kind: const
   file: crates/myco-driver/src/views.rs
@@ -32,15 +37,40 @@ api:
   file: crates/myco-driver/src/views.rs
   line: 110
   module: myco-driver
+- name: SURFACES
+  kind: const
+  file: crates/myco-driver/src/ops.rs
+  line: 30
+  module: myco-driver
 - name: Snapshot
   kind: type
   file: crates/myco-driver/src/data.rs
   line: 79
   module: myco-driver
+- name: argv
+  kind: function
+  file: crates/myco-driver/src/ops.rs
+  line: 124
+  module: myco-driver
+- name: argv_maps_params_to_myco_flags
+  kind: function
+  file: crates/myco-driver/src/ops.rs
+  line: 252
+  module: myco-driver
+- name: argv_skips_wire_only_and_absent_params
+  kind: function
+  file: crates/myco-driver/src/ops.rs
+  line: 270
+  module: myco-driver
 - name: body_payload
   kind: function
   file: crates/myco-driver/src/views.rs
   line: 823
+  module: myco-driver
+- name: bool_param
+  kind: function
+  file: crates/myco-driver/src/ops.rs
+  line: 97
   module: myco-driver
 - name: bound
   kind: function
@@ -50,7 +80,7 @@ api:
 - name: capabilities_json
   kind: function
   file: crates/myco-driver/src/main.rs
-  line: 25
+  line: 49
   module: myco-driver
 - name: children_rows
   kind: function
@@ -70,7 +100,7 @@ api:
 - name: data
   kind: module
   file: crates/myco-driver/src/main.rs
-  line: 19
+  line: 40
   module: myco-driver
 - name: default
   kind: function
@@ -85,7 +115,7 @@ api:
 - name: dispatch
   kind: function
   file: crates/myco-driver/src/main.rs
-  line: 35
+  line: 59
   module: myco-driver
 - name: driver_passes_pavo_conformance
   kind: function
@@ -132,6 +162,11 @@ api:
   file: crates/myco-driver/src/views.rs
   line: 893
   module: myco-driver
+- name: is_surface
+  kind: function
+  file: crates/myco-driver/src/ops.rs
+  line: 32
+  module: myco-driver
 - name: item
   kind: function
   file: crates/myco-driver/src/views.rs
@@ -167,44 +202,10 @@ api:
   file: crates/myco-driver/src/views.rs
   line: 558
   module: myco-driver
-- name: items_rows
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 446
-  module: myco-driver
-- name: known_query
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 276
-  module: myco-driver
-- name: kv
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 49
-  module: myco-driver
-- name: ledger_tree
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 516
-  module: myco-driver
-- name: load
-  kind: function
-  file: crates/myco-driver/src/data.rs
-  line: 157
-  module: myco-driver
-- name: main
-  kind: function
-  file: crates/myco-driver/src/main.rs
-  line: 81
-  module: myco-driver
-- name: manifest
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 247
-  module: myco-driver
-api_omitted: 22
+api_omitted: 45
 deps:
 - camino
+- myco
 - myco-config
 - myco-config-toml
 - myco-core
@@ -216,18 +217,20 @@ deps:
 - serde
 - serde_json
 - pavo-testkit
+- serde_json
 - myco-core
 - myco-ops
 - myco-store
 - myco-store-md
 - myco-config
 - pavo_protocol
-- serde_json
 notes: ''
 verify:
 - crates/myco-driver/Cargo.toml
 - crates/myco-driver/src/data.rs
 - crates/myco-driver/src/main.rs
+- crates/myco-driver/src/ops.rs
+- crates/myco-driver/src/surface.rs
 - crates/myco-driver/src/views.rs
 - crates/myco-driver/tests/conformance.rs
 provenance:
@@ -235,14 +238,18 @@ provenance:
   - crates/myco-driver/Cargo.toml
   - crates/myco-driver/src/data.rs
   - crates/myco-driver/src/main.rs
+  - crates/myco-driver/src/ops.rs
+  - crates/myco-driver/src/surface.rs
   - crates/myco-driver/src/views.rs
   - crates/myco-driver/tests/conformance.rs
   hashes:
-  - e544249002c0828573b001a6b814a4eb74fa8a6a
+  - 36f747a58ea1d30b6b12a32374611f27db8f48ec
   - 0f275d5c8939904eba41c54b9bacb80a1fbc902b
-  - e5d1f2052ffe28de2283f7b7d9f9589ee8bc5669
+  - 2c33e37d05f94b027a8338e7fbec7697814d3425
+  - 484efbc9be9e2219f7ff2f64f21ba8be9ce318ec
+  - 70f88ad7103cc88539c46a8f2542392ec91f9b13
   - 62557dcc43c2e25a0c3af911492e4d63ed4e81c9
   - bcf687da55f4d327b1667d16099ac7104b0abdb8
-  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
-  generated_at: '1794272278'
+  commit_sha: be47760863fcba0b65b50642186e0025d3af852d
+  generated_at: '1794289027'
   generator: kuda-template/0.1.2

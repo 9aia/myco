@@ -202,7 +202,7 @@ api:
   file: project/issues/issue-0030-issue-0030-rust-toolchain-upgrade-2026.md
   line: 2
   module: project
-api_omitted: 74
+api_omitted: 75
 deps: []
 notes: ''
 verify:
@@ -291,9 +291,9 @@ provenance:
   - project/proposals/proposal-0013-typed-item-links-clickable-tui-related-ids.md
   hashes:
   - 9065e6f6e33503b5f7a4a773acd637396048731c
-  - 9fd7aab5529829c7b5d6ddaf4835c364c5524ddf
+  - 715652b47d74fc9d34deee9ccc2abfbbf11b833a
   - df0ebe074d2ac166504a6b14391be3adebcda4d8
-  - ae2ff683008f7cfc971828f22e30eb354826069f
+  - 36242422705a760ca35b6b8039c0ee25d9b136bb
   - f8064e4cee00450ca64f33d7a26bcd545a8117db
   - 8ee2b578c23f86be23573ebb29fa91ca8ad5cd53
   - f9deccb752376dfd2277072da18c40886f7ae381
@@ -361,6 +361,6 @@ provenance:
   - f93477c78a78e1e9d4610ff60da911ed8557922a
   - a025911a8d63b5df9ea985ade293f70ae59f8e58
   - fa3c0d16a86878dd03ee66d4b5faa80ef8e9d93c
-  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
-  generated_at: '1794272278'
+  commit_sha: be47760863fcba0b65b50642186e0025d3af852d
+  generated_at: '1794289027'
   generator: kuda-template/0.1.2

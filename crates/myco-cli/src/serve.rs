@@ -203,7 +203,7 @@ impl<R: BufRead, W: Write> ServeTransport for StdioTransport<R, W> {
 /// ([`crate::registry::Args::spec`]).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct SpecPatch {
+pub struct SpecPatch {
     filter: Option<FilterPatch>,
     source: Option<ViewSource>,
     group_by: Option<GroupAxis>,
@@ -320,7 +320,7 @@ impl SpecPatch {
 /// Dispatch failure — [`Server::respond`] maps these to wire
 /// codes; dispatch itself knows no wire.
 #[derive(Debug)]
-pub(crate) enum Fail {
+pub enum Fail {
     /// The method isn't served.
     UnknownMethod,
     /// Params didn't decode — -32602.

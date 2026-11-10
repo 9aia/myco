@@ -68,9 +68,9 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/myco-index-redb` | Index impl — redb snapshots + `repos.toml` under `~/.local/share/myco` |
 | `crates/myco-ops` | Ops I/O shell — discovery, store open/save, commit-per-mutation, verb plumbing; pure pieces live in core |
 | `crates/myco-testkit` | Golden fixtures + conformance for the file spec |
-| `crates/myco-driver` | `tamias-driver-myco` — pavo view driver (read-only) over `project/` |
+| `crates/myco-driver` | `tamias-driver-myco` — pavo view driver over `project/` + engine ops (`ops` manifest derived from the `VERBS` table, `cli.<verb>` wire queries re-exec `run`, optional `cli`/`mcp` surface features); writes always ride the engine's own verbs |
 | `crates/myco-tui` | `myco ui` — interactive board TUI (ratatui) over `myco-ops`; default `tui` feature on `myco-cli` |
-| `crates/myco-cli` | The `myco` binary — clap, `--json` everywhere, `manifest`/`gen-cli-docs` |
+| `crates/myco-cli` | The `myco` engine (package `myco`, lib target) + compat bin — `src/lib.rs` is the engine (`run() = dispatch(&parse())`, `parse_from`/`run_from` for drivers), `src/main.rs` a 6-line compat bin; clap, `--json` everywhere, `manifest`/`gen-cli-docs` |
 | `xtask` | check / test / coverage / install / site |
 
 Planned (per `project/proposals/proposal-0001-*.md`): `myco-template`.

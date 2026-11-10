@@ -313,7 +313,7 @@ pub fn interrupt_item(
 /// covers both writes; a failed tag rolls the mutation back.
 /// `actor` names the claimer (falls back to the item's
 /// post-mutation owner, then `cli`).
-pub fn tag_claim(
+pub(crate) fn tag_claim(
     store: &impl Store,
     id: ItemId,
     flags: &crate::itemcmd::SetFlags,

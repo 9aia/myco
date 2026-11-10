@@ -6,17 +6,41 @@
 //! - `manifest` — print the [`DriverManifest`] JSON (discovery
 //!   probe; never touches project state).
 //! - `capabilities` — `{"capabilities": ["pavo"], "verbs": […]}`.
+//! - `ops` — the engine ops manifest: every `myco` CLI verb as a
+//!   `cli.<verb>` wire query, derived from the engine's own
+//!   [`myco::registry::VERBS`] table.
+//! - `run <argv>` — engine passthrough: `tamias-driver-myco run
+//!   board` ≡ `myco board`. Also the child side of `cli.*` wire
+//!   queries (`ops::run_verb` re-execs this same verb so engine
+//!   output never touches the serve stream).
 //! - `serve` — ndjson JSON-RPC on stdio: `{"op":"manifest"}`,
 //!   `{"op":"views"}`, `{"op":"view","view":…,"params":{…}}`,
 //!   `{"op":"query","query":…,"params":{…}}` →
 //!   `{"ok":true,"result":…}` / `{"ok":false,"error":…}`.
+//!   `query:"ops"` answers the ops manifest; `query:"cli.<verb>"`
+//!   runs the engine op.
+//!
+//! Optional surfaces: features `cli`/`mcp` embed
+//! pavo-driver-kit's surface layer — `cli <op> [args]` is a
+//! generated CLI over the ops manifest (`serve`/`ui` ride as
+//! streaming subcommands), `mcp` serves the ops as MCP tools on
+//! stdio. Both are equivalent to the standalone
+//! `tamias-driver-cli`/`tamias-driver-mcp` surface drivers,
+//! minus the PATH/discovery hop.
 //!
 //! Which repo: each `view`/`query` resolves its own target —
 //! `params.dir`/`params.root` → `$MYCO_DIR` → cwd discovery
-//! (see `data.rs` for the exact order). `manifest`/`views` are
-//! project-free so pavo can enumerate drivers anywhere.
+//! (see `data.rs` for the exact order). Engine ops are the
+//! exception by design: `cli.<verb>` re-execs `run` in the
+//! request's repo and lets `myco::dispatch` own the outcome —
+//! writes keep the engine's own semantics (per-verb commit,
+//! `Actor:` trailer). `manifest`/`views` are project-free so
+//! pavo can enumerate drivers anywhere.
 
 mod data;
+mod ops;
+#[cfg(any(feature = "cli", feature = "mcp"))]
+mod surface;
 mod views;
 
 use pavo_driver_kit as kit;
@@ -45,26 +69,35 @@ fn dispatch(req: &Request) -> Response {
             Err(e) => Response::err(e),
         },
         Request::Query { query, params } => {
-            // Unknown names fail the op; everything else answers
-            // `ok:true` — degraded snapshots travel as
-            // `{"error": …}` data (the marker renderers understand),
-            // matching the reference driver's contract.
-            if !views::known_query(query) {
-                return Response::err(format!("unknown query: {query}"));
+            // `ops` and `cli.<verb>` are engine ops; everything
+            // else is a view query — unknown names fail the op,
+            // degraded snapshots travel as `{"error": …}` data
+            // (the marker renderers understand).
+            if query == "ops" {
+                Response::ok_typed(&wire::QueryResult {
+                    query: query.clone(),
+                    data: ops::manifest(),
+                })
+            } else if let Some(v) = ops::op_of(query) {
+                ops::run_verb(v, params)
+            } else if views::known_query(query) {
+                let snap = data::load(params);
+                let payload = views::query_data(query, params, &snap);
+                Response::ok_typed(&wire::QueryResult {
+                    query: query.clone(),
+                    data: payload,
+                })
+            } else {
+                Response::err(format!("unknown query: {query}"))
             }
-            let snap = data::load(params);
-            let payload = views::query_data(query, params, &snap);
-            Response::ok_typed(&wire::QueryResult {
-                query: query.clone(),
-                data: payload,
-            })
         }
         Request::Render { kind, .. } => Response::err(format!(
             "tamias-driver-myco claims no renderers (kind '{kind}')"
         )),
         // The protocol grew `submit`/`jobs`/`notifications` ops after
-        // this driver was written; myco is read-only with no feeds,
-        // so they answer `ok:false` like any unsupported op.
+        // this driver was written; the view side is read-only with
+        // no feeds, so they answer `ok:false` like any unsupported
+        // op. Mutations go through `cli.<verb>`, never `submit`.
         Request::Submit { .. } | Request::Jobs | Request::Notifications => {
             Response::err("tamias-driver-myco implements no submit/jobs/notifications ops")
         }
@@ -79,19 +112,62 @@ fn serve() -> i32 {
 }
 
 fn main() {
-    let mut args = std::env::args().skip(1);
-    match args.next().as_deref() {
-        Some("manifest") => println!("{}", kit::manifest_json(&views::manifest())),
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let code = match args.first().map(String::as_str) {
+        Some("manifest") => {
+            println!("{}", kit::manifest_json(&views::manifest()));
+            0
+        }
         Some("capabilities") => {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&capabilities_json()).unwrap_or_default()
             );
+            0
         }
-        Some("serve") => std::process::exit(serve()),
+        Some("ops") => {
+            println!("{}", ops::manifest());
+            0
+        }
+        // Engine passthrough — `tamias-driver-myco run status` is
+        // `myco status`. Also the child side of `cli.*` wire
+        // queries (ops::run_verb re-execs this same verb).
+        Some("run") => {
+            let argv = std::iter::once("myco".to_string()).chain(args.iter().skip(1).cloned());
+            std::process::exit(myco::run_from(argv));
+        }
+        // Embedded surface verbs (feature-gated, optional): the
+        // pavo-driver-kit surface layer renders this driver's own
+        // ops manifest — `cli` = generated clap CLI (op →
+        // subcommand), `mcp` = ops → MCP tools over stdio. The
+        // standalone tamias-driver-cli/-mcp binaries do the same
+        // over process dispatch; these verbs need nothing on PATH.
+        #[cfg(feature = "cli")]
+        Some("cli") => {
+            let m = kit::surface::OpsManifest::from_value(&ops::manifest()).unwrap_or_default();
+            let argv: Vec<String> = std::iter::once("myco".to_string())
+                .chain(args.iter().skip(1).cloned())
+                .collect();
+            kit::surface::cli::run("myco", &m, &argv, &mut surface::Engine)
+        }
+        #[cfg(feature = "mcp")]
+        Some("mcp") => {
+            let m = kit::surface::OpsManifest::from_value(&ops::manifest()).unwrap_or_default();
+            match kit::surface::mcp::serve_stdio(&m, &mut surface::Engine) {
+                Ok(()) => 0,
+                Err(e) => {
+                    eprintln!("tamias-driver-myco mcp: {e}");
+                    1
+                }
+            }
+        }
+        Some("serve") | None => serve(),
         _ => {
-            eprintln!("usage: tamias-driver-myco manifest|capabilities|serve");
-            std::process::exit(1);
+            eprintln!(
+                "usage: tamias-driver-myco manifest|capabilities|ops|run <argv>|serve\n       (feature `cli` adds `cli <op> [args]`; feature `mcp` adds `mcp`)"
+            );
+            1
         }
-    }
+    };
+    std::process::exit(code);
 }

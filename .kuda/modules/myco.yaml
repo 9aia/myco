@@ -202,7 +202,7 @@ api:
   file: crates/myco-cli/src/serve.rs
   line: 38
   module: myco
-api_omitted: 948
+api_omitted: 954
 deps:
 - camino
 - clap
@@ -248,12 +248,12 @@ verify:
 - .claude/skills/skill-creator/scripts/__init__.py
 - Cargo.toml
 - crates/myco-cli/Cargo.toml
+- crates/myco-cli/src/lib.rs
 - crates/myco-cli/src/main.rs
 - package.json
 - .agents/skills/skill-creator/eval-viewer/generate_review.py
 - .agents/skills/skill-creator/scripts/aggregate_benchmark.py
 - .agents/skills/skill-creator/scripts/generate_report.py
-- .agents/skills/skill-creator/scripts/improve_description.py
 provenance:
   files:
   - .agents/skills/skill-creator/eval-viewer/generate_review.py
@@ -297,6 +297,7 @@ provenance:
   - crates/myco-cli/src/issue.rs
   - crates/myco-cli/src/itemcmd.rs
   - crates/myco-cli/src/items.rs
+  - crates/myco-cli/src/lib.rs
   - crates/myco-cli/src/links.rs
   - crates/myco-cli/src/main.rs
   - crates/myco-cli/src/migrate.rs
@@ -361,7 +362,7 @@ provenance:
   - 42a618537e0638ec32537037aac6d89bd33196a9
   - 624e1ab16140855241d45033ebb33a64f1b7e85f
   - 43de5c03b4d0890f62879b20e00a512fff0fd655
-  - 273a90e724e3cfc3006cfb7958eb42fcdd8fb336
+  - 175765b6904f2955f523884226fd117a1473cdcc
   - 61c611ada34e412b977a86ad4d8461fda6899c7d
   - bccd1312b7c7ed43ca8f4a1dee6226a787fec70e
   - 5f4eaab917f0c079416dd7c58a958f5a6f05a464
@@ -369,9 +370,10 @@ provenance:
   - b719b47ab3002b01c6a3b18f1b89d2ef2c02c8ec
   - 8848edc08ccf6975edd7be9341878d1ff7806983
   - 3e94b8687954ed60f648a1580fed3b66d2cffdbc
-  - 7e73ca38b26270fd25678d4420da4d6033bdd3e1
+  - 8b6f06aa86d65d4b44c4ccd4e8b85dee175f96f2
+  - c3ac0158fd74323170684c175eab970d03c97751
   - 831325260258889ac9cbd4c5a008022d1888a366
-  - d4db50729f2c6c312e5eb3a722b91f45d017947a
+  - dc0749eb8ba5670b6c3fb92d46185976dd42c56a
   - 6e0f9a9b397aa006385a237210f41289c7011384
   - 1dea019e6ba92d9103247f339a1690f96d9b3af8
   - c19e697847a9729f9beba0d77b1f310588d07c3a
@@ -383,7 +385,7 @@ provenance:
   - 59d8cf45470d536581245698a3b3c32172ce2c72
   - 4699cb3c6ef39eaffc7b84950c13b63f6050f289
   - d1ba93e5ab4e1bc7d70a71c5f420fd8192cfc9de
-  - 4c423b6375cdd7ca911f92bc88702e2bf8d93a6f
+  - dc98995a86165253c35f61991d9242ebd952dfc7
   - 914b2b585b00f8ba89bff293c79a7c780a3ed00b
   - 7be39d581a523abe21ae23e03481689006e804f0
   - 0257c799b762d814cedb8e26e3a25fb4b211329e
@@ -401,6 +403,6 @@ provenance:
   - a43956a72d4e2eec983cc53446e62a5dea4db50b
   - 2b65ad8589374ca829298e1422fb4ab7eb946cfe
   - 8bff61b145c701208864f3d424121159d9078c8c
-  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
-  generated_at: '1794272278'
+  commit_sha: be47760863fcba0b65b50642186e0025d3af852d
+  generated_at: '1794289027'
   generator: kuda-template/0.1.2
