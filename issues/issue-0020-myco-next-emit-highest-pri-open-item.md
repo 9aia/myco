@@ -4,7 +4,7 @@ title = "myco next — emit highest-pri open item"
 status = "done"
 created = "2026-10-31"
 owner = "devin"
-priority = "medium"
+priority = "med"
 labels = ["agent-dx"]
 +++
 

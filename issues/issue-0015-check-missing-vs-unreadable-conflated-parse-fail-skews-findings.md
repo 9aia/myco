@@ -3,7 +3,7 @@ id = "I-015"
 title = "check: missing vs unreadable conflated; parse-fail skews findings"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

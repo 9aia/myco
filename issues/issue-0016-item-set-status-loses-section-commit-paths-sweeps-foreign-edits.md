@@ -3,7 +3,7 @@ id = "I-016"
 title = "item set --status loses section; commit_paths sweeps foreign edits"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

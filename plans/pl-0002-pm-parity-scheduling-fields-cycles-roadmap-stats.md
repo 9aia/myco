@@ -3,7 +3,7 @@ id = "PL-002"
 title = "pm-parity scheduling fields cycles roadmap stats"
 status = "open"
 created = "2026-11-09"
-priority = "medium"
+priority = "med"
 +++
 
 Executes P-012 (accepted 2026-11-09). Four independently shippable phases; each lands as its own commit series with tests per the proposal's test plan.

@@ -3,7 +3,7 @@ id = "I-014"
 title = "index consistency: head path, key canonicalization, atomicity"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

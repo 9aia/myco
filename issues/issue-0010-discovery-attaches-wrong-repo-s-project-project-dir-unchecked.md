@@ -3,7 +3,7 @@ id = "I-010"
 title = "discovery attaches wrong repo's project/; project_dir unchecked"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

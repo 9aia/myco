@@ -3,7 +3,7 @@ id = "P-006"
 title = "declarative views — filter/group/sort specs in myco.toml; verbs become presets"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["agent-dx"]
 +++
 

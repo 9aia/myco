@@ -3,7 +3,7 @@ id = "I-017"
 title = "init --dir writes root files into the wrong repo"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

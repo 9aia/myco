@@ -4,7 +4,7 @@ title = "link index — DAG edges, fingerprint invalidation, bounded GC"
 status = "done"
 created = "2026-10-31"
 owner = "devin"
-priority = "medium"
+priority = "med"
 labels = ["index"]
 blocks = ["I-019"]
 +++

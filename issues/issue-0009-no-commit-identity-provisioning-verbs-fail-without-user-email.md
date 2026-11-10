@@ -3,7 +3,7 @@ id = "I-009"
 title = "no commit-identity provisioning — verbs fail without user.email"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

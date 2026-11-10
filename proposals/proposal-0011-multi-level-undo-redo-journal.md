@@ -3,7 +3,7 @@ id = "P-011"
 title = "multi-level undo/redo journal"
 status = "done"
 created = "2026-11-09"
-priority = "medium"
+priority = "med"
 +++
 
 ## Problem

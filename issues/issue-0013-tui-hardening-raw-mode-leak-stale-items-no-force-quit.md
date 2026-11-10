@@ -3,7 +3,7 @@ id = "I-013"
 title = "TUI hardening: raw-mode leak, stale ITEMS, no force-quit"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

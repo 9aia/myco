@@ -4,7 +4,7 @@ title = "verb registry + config-declared verbs"
 status = "done"
 created = "2026-11-02"
 owner = "devin"
-priority = "medium"
+priority = "med"
 +++
 
 Status: **implemented** · Created: 2026-11-02 · The decision

@@ -3,7 +3,7 @@ id = "I-011"
 title = "markdown escaping: ATX closing ## x ### breaks round-trip"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

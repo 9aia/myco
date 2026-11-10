@@ -3,7 +3,7 @@ id = "I-030"
 title = "issue-0030-rust-toolchain-upgrade-2026"
 status = "open"
 created = "2026-11-08"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

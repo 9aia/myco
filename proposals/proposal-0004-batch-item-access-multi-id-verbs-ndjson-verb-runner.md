@@ -4,7 +4,7 @@ title = "batch item access — multi-id verbs + NDJSON verb-runner"
 status = "done"
 created = "2026-10-31"
 owner = "devin"
-priority = "medium"
+priority = "med"
 labels = ["agent-dx"]
 +++
 

@@ -3,7 +3,7 @@ id = "I-018"
 title = "json parity: prompt ignores --json, board lacks interrupted, org opaque"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

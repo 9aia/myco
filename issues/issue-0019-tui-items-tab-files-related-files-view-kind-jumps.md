@@ -4,7 +4,7 @@ title = "TUI: ITEMS tab → FILES, related-files view, {/} kind jumps"
 status = "done"
 created = "2026-10-31"
 owner = "devin"
-priority = "medium"
+priority = "med"
 labels = ["tui"]
 +++
 

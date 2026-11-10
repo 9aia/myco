@@ -3,7 +3,7 @@ id = "I-028"
 title = "check: dangling supersedes/superseded_by frontmatter produces no finding — ADR-0002 classifies declared refs as errors; dangling-blocks flagged but supersede targets aren't"
 status = "done"
 created = "2026-11-03"
-priority = "medium"
+priority = "med"
 +++
 
 # check: dangling supersedes/superseded_by frontmatter produces no finding — ADR-0002 classifies declared refs as errors; dangling-blocks flagged but supersede targets aren't

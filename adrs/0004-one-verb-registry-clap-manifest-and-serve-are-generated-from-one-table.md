@@ -3,7 +3,7 @@ id = "ADR-0004"
 title = "One verb registry — clap, manifest and serve are generated from one table"
 status = "done"
 created = "2026-11-03"
-priority = "medium"
+priority = "med"
 labels = ["agent-dx"]
 +++
 

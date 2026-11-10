@@ -3,7 +3,7 @@ id = "I-012"
 title = "store integrity: id cross-check, all_ids, emit validation, panics"
 status = "done"
 created = "2026-10-31"
-priority = "medium"
+priority = "med"
 labels = ["audit"]
 +++
 

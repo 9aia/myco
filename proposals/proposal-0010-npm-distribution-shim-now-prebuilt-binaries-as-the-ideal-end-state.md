@@ -3,7 +3,7 @@ id = "P-010"
 title = "npm distribution: shim now, prebuilt binaries as the ideal end state"
 status = "open"
 created = "2026-11-08"
-priority = "medium"
+priority = "med"
 +++
 
 # npm distribution: shim now, prebuilt binaries as the ideal end state

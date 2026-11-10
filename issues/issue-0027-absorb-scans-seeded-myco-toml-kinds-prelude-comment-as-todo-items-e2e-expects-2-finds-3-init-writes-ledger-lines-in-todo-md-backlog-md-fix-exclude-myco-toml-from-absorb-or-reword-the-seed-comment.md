@@ -4,7 +4,7 @@ title = "absorb scans seeded myco.toml [[kinds]] prelude comment as TODO items â
 status = "done"
 created = "2026-11-03"
 owner = "devin"
-priority = "medium"
+priority = "med"
 +++
 
 # absorb scans seeded myco.toml [[kinds]] prelude comment as TODO items â€” e2e expects 2, finds 3 (init writes '# ledger lines in TODO.md/BACKLOG.md'). Fix: exclude myco.toml from absorb, or reword the seed comment

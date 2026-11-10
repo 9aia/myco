@@ -3,7 +3,7 @@ id = "PL-001"
 title = "plan-001-phase-1-item-creation-2026"
 status = "open"
 created = "2026-11-08"
-priority = "medium"
+priority = "med"
 +++
 
 # plan-001-phase-1-item-creation-2026

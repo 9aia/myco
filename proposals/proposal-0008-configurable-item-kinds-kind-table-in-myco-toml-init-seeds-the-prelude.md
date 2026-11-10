@@ -4,7 +4,7 @@ title = "configurable item kinds — kind table in myco.toml, init seeds the pre
 status = "done"
 created = "2026-11-02"
 owner = "devin"
-priority = "medium"
+priority = "med"
 labels = ["agent-dx"]
 +++
 

@@ -4,7 +4,7 @@ title = "Org-level myco ui — interactive cross-repo board"
 status = "done"
 created = "2026-10-31"
 owner = "devin"
-priority = "medium"
+priority = "med"
 labels = ["org", "tui"]
 +++
 
