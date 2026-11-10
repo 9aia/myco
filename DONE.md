@@ -3,3 +3,38 @@
 - T-078 undo: revert last mutation (git-level or inverse-op) · pri:high · created:2026-11-09
 - T-079 confirm before dangerous actions (TUI + destructive verbs) · pri:high · created:2026-11-09
 - T-080 done tasks visible in lists + list filters (--status/--pri/--owner/search) · created:2026-11-09
+- T-042 task-1-description-placeholder · pri:low · created:2026-11-08
+- T-043 task-2-description-placeholder · pri:low · created:2026-11-08
+- T-045 task-3 · pri:low · created:2026-11-08
+- T-046 task-placeholder-1 · pri:low · created:2026-11-08
+- T-047 task-placeholder-2 · pri:low · created:2026-11-08
+- T-048 task-placeholder-3 · pri:low · created:2026-11-08
+- T-049 task-placeholder-4 · pri:low · created:2026-11-08
+- T-050 task-placeholder-5 · pri:low · created:2026-11-08
+- T-051 task-placeholder-6 · pri:low · created:2026-11-08
+- T-052 task-placeholder-7 · pri:low · created:2026-11-08
+- T-053 task-placeholder-8 · pri:low · created:2026-11-08
+- T-054 task-placeholder-9 · pri:low · created:2026-11-08
+- T-055 task-placeholder-10 · pri:low · created:2026-11-08
+- T-056 task-placeholder-11 · pri:low · created:2026-11-08
+- T-057 task-placeholder-12 · pri:low · created:2026-11-08
+- T-058 task-placeholder-13 · pri:low · created:2026-11-08
+- T-059 task-placeholder-14 · pri:low · created:2026-11-08
+- T-060 task-placeholder-15 · pri:low · created:2026-11-08
+- T-061 task-placeholder-16 · pri:low · created:2026-11-08
+- T-062 task-placeholder-17 · pri:low · created:2026-11-08
+- T-063 task-placeholder-18 · pri:low · created:2026-11-08
+- T-064 task-placeholder-19 · pri:low · created:2026-11-08
+- T-065 task-placeholder-20 · pri:low · created:2026-11-08
+- T-066 task-placeholder-21 · pri:low · created:2026-11-08
+- T-067 task-placeholder-22 · pri:low · created:2026-11-08
+- T-068 task-placeholder-23 · pri:low · created:2026-11-08
+- T-069 task-placeholder-24 · pri:low · created:2026-11-08
+- T-070 task-placeholder-25 · pri:low · created:2026-11-08
+- T-071 task-placeholder-26 · pri:low · created:2026-11-08
+- T-072 task-placeholder-27 · pri:low · created:2026-11-08
+- T-073 task-placeholder-28 · pri:low · created:2026-11-08
+- T-074 task-placeholder-29 · pri:low · created:2026-11-08
+- T-075 task-placeholder-30 · pri:low · created:2026-11-08
+- T-076 task-placeholder-31 · pri:low · created:2026-11-08
+- T-077 task-placeholder-32 · pri:low · created:2026-11-08
