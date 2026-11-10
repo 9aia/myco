@@ -38,3 +38,4 @@
 - T-075 task-placeholder-30 · pri:low · created:2026-11-08
 - T-076 task-placeholder-31 · pri:low · created:2026-11-08
 - T-077 task-placeholder-32 · pri:low · created:2026-11-08
+- T-081 P-012 ph1: item fields — due/est/cycle tokens + item set flags + schema · pri:high · owner:devin · created:2026-11-09 · blocks:T-082
