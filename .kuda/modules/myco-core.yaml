@@ -10,7 +10,7 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-core/src/priority.rs
-  line: 27
+  line: 28
   module: myco-core
 - name: ALL
   kind: const
@@ -95,7 +95,7 @@ api:
 - name: Err
   kind: type
   file: crates/myco-core/src/priority.rs
-  line: 62
+  line: 65
   module: myco-core
 - name: Err
   kind: type
@@ -267,11 +267,11 @@ provenance:
   - 35994c7e790eedc768987fd5c6b3e3d9b44338f3
   - 729de5482a6022a91af244ac5eaaac086a2842fc
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
-  - b6f0e2f2ea7098c82a0bc8424159bb7c0bc8198c
+  - f01971e1bcca257a19dcdaac97e6cc1c2448483c
   - e62184d264d30354071a59cf2b664a41e01e0334
   - 8151702a3a351e7e0190b10dc05471a8cf7de0b0
   - 50ec99c0465cc315ea710acd4c3a25693bc05290
   - 4cc27aecf26206465afb4fb0142882e4d8f87aae
-  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
-  generated_at: '1794272278'
+  commit_sha: 0ef8b7951a973a91f5d14b106b38ff7ef6cf1a2f
+  generated_at: '1794325596'
   generator: kuda-template/0.1.2

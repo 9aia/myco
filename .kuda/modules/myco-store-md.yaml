@@ -75,7 +75,7 @@ api:
 - name: FrontmatterOut
   kind: type
   file: crates/myco-store-md/src/itemfile.rs
-  line: 177
+  line: 178
   module: myco-store-md
 - name: HANDOFFS_ARCHIVE
   kind: const
@@ -90,7 +90,7 @@ api:
 - name: ISSUE
   kind: const
   file: crates/myco-store-md/src/itemfile.rs
-  line: 443
+  line: 448
   module: myco-store-md
 - name: LINE_START
   kind: const
@@ -266,7 +266,7 @@ provenance:
   - 5f9b9495f2861f0438e386ed3bc5863df483f37d
   - 0f4252f1d31daea262ee8ded1c3944f9a2cf6d72
   - cff97a0d5e3a7b92aee95b3462b96bac4239bfef
-  - a26f39d2ab1560731b9b56a014ccae684c2eea85
+  - f1e90740c3b030879d1ba0f74a0903e8cf0f0f45
   - 2038f568bd992afec3b0163a934580bce1f58553
   - eb3e3b3cbbcda1aab84778440d07157c855ae22a
   - 38b93fd873ca88a0a57e2920d4cf87f371fd078d
@@ -274,6 +274,6 @@ provenance:
   - 319e13ac429e7e938d4f3bdafcde59f033c01ce2
   - 445f3fe811906a7abd23e0a7d4744f99db6b8b81
   - 65fc26278c9f3019ee010602a6f17a8874707379
-  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
-  generated_at: '1794272278'
+  commit_sha: 0ef8b7951a973a91f5d14b106b38ff7ef6cf1a2f
+  generated_at: '1794325596'
   generator: kuda-template/0.1.2
