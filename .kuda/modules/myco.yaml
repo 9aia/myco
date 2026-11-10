@@ -35,7 +35,7 @@ api:
 - name: BODY
   kind: const
   file: crates/myco-cli/src/registry.rs
-  line: 827
+  line: 863
   module: myco
 - name: CLAIM_NOTE
   kind: const
@@ -110,17 +110,17 @@ api:
 - name: FILE_LIST
   kind: const
   file: crates/myco-cli/src/registry.rs
-  line: 800
+  line: 824
   module: myco
 - name: FILTER
   kind: const
   file: crates/myco-cli/src/registry.rs
-  line: 866
+  line: 902
   module: myco
 - name: Fail
   kind: type
   file: crates/myco-cli/src/serve.rs
-  line: 302
+  line: 323
   module: myco
 - name: FilterPatch
   kind: type
@@ -170,7 +170,7 @@ api:
 - name: IDS
   kind: const
   file: crates/myco-cli/src/registry.rs
-  line: 953
+  line: 994
   module: myco
 - name: IGNORE_COMMENT
   kind: const
@@ -190,7 +190,7 @@ api:
 - name: INTERRUPT_PARAMS
   kind: const
   file: crates/myco-cli/src/registry.rs
-  line: 842
+  line: 878
   module: myco
 - name: INVALID_PARAMS
   kind: const
@@ -202,7 +202,7 @@ api:
   file: crates/myco-cli/src/serve.rs
   line: 38
   module: myco
-api_omitted: 944
+api_omitted: 948
 deps:
 - camino
 - clap
@@ -349,7 +349,7 @@ provenance:
   - e58c70bea39d5b252a1e819f242bbdcdf20e8b87
   - 30a263d674ef19de11c756d6f7537f91a421909e
   - 51b6a07dd57174197a937034b7eecebd5768ff8a
-  - 6e003ec3c12a31cc4cb2aaf0c995df2b448d1f5d
+  - a00a354405bdfda883749b0eb8c20d1e03d9ecca
   - af22350c9d0ea9600fd920c6f69729be43074044
   - e4e9a6ea1f511d9183fb63d797870ba0134e65e8
   - 524380801d28b1b5b9b20225ea8c6ef3673810b6
@@ -368,27 +368,27 @@ provenance:
   - 51224457c1748f0aa3712a89b0f435af9ab2c1ea
   - b719b47ab3002b01c6a3b18f1b89d2ef2c02c8ec
   - 8848edc08ccf6975edd7be9341878d1ff7806983
-  - 6f90069a1aa8242058f863b3bdca3fe486506a41
-  - 5543a8ed6487e4a30c8d5f231dc309f6a1bfd755
+  - 3e94b8687954ed60f648a1580fed3b66d2cffdbc
+  - 7e73ca38b26270fd25678d4420da4d6033bdd3e1
   - 831325260258889ac9cbd4c5a008022d1888a366
   - d4db50729f2c6c312e5eb3a722b91f45d017947a
   - 6e0f9a9b397aa006385a237210f41289c7011384
-  - de7fcc807ff6a64c325e23b4958f6128c07de663
+  - 1dea019e6ba92d9103247f339a1690f96d9b3af8
   - c19e697847a9729f9beba0d77b1f310588d07c3a
   - f2658c12900461dd123f49a479bfdb66d374ee47
   - 7f6a735e5e219ff89fb4a3cbb110617f39dd1ac7
   - c329af7ef72f8af98b379c75735d07b566154bdb
   - 708073c26ba96e6cdc0a2c1b9050ee53896be78f
   - d5a8af631570da68b8c50faa2d48d469964887bb
-  - ab889a6b21c6bb81b0fdc084e132dcfa5b5af0b8
+  - 59d8cf45470d536581245698a3b3c32172ce2c72
   - 4699cb3c6ef39eaffc7b84950c13b63f6050f289
-  - d5d48b3954241464639d5dda67306f4903f3b1b6
-  - 03a4114eda25dde1c339110a535260381556a2c5
+  - d1ba93e5ab4e1bc7d70a71c5f420fd8192cfc9de
+  - 4c423b6375cdd7ca911f92bc88702e2bf8d93a6f
   - 914b2b585b00f8ba89bff293c79a7c780a3ed00b
   - 7be39d581a523abe21ae23e03481689006e804f0
   - 0257c799b762d814cedb8e26e3a25fb4b211329e
   - b284558b205e58fe6a803dd1e6112aacad7b1d4b
-  - db0f8f7f878fe86dc70d875c852366462bf1c47d
+  - ffdf5d520f4ed131da9d64be2ed4565e4f60af3c
   - 36346a6ad0e6f97341b382b4764e08a50c67f65f
   - aa7dbb71ad3f71db6fcdb8df6c664409a287327e
   - f5fc13de914cf4694acc812797f2833812282975
@@ -397,10 +397,10 @@ provenance:
   - 63af7d181de0ada85c1015e520b64a9881c714d8
   - e6fdf13d4c9ebcf07cb2855f85a5687720767c4a
   - 07974e98007cd4fdf302f05ab8546068b5b111b4
-  - 800c97209612a2f7cd885b5e84b6d3622ecf4bc9
+  - 0b8ad01b01aa048d1c7e3c945b3ac8e6ef92f256
   - a43956a72d4e2eec983cc53446e62a5dea4db50b
   - 2b65ad8589374ca829298e1422fb4ab7eb946cfe
   - 8bff61b145c701208864f3d424121159d9078c8c
-  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
-  generated_at: '1794254004'
+  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
+  generated_at: '1794272278'
   generator: kuda-template/0.1.2

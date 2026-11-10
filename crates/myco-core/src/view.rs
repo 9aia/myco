@@ -133,6 +133,20 @@ pub struct ViewFilter {
     /// `milestone` — exact milestone name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub milestone: Option<String>,
+    /// `due` — exact due date (`"YYYY-MM-DD"`).
+    #[serde(
+        default,
+        with = "crate::date::opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    pub due: Option<time::Date>,
+    /// `estimate` — exact point estimate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimate: Option<u32>,
+    /// `cycle` — exact cycle name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cycle: Option<String>,
     /// `superseded` — `false` excludes items with `superseded_by`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub superseded: Option<bool>,
@@ -185,6 +199,12 @@ pub enum SortField {
     Id,
     /// `created:` date — ascending; absent dates sort last either way.
     Created,
+    /// `due:` date — ascending; undated items sort last either way.
+    Due,
+    /// `est:` points — ascending; unestimated items sort last either way.
+    Estimate,
+    /// `cycle:` name — ascending; uncycled items sort last either way.
+    Cycle,
     /// Lifecycle order (open → deferred).
     Status,
     /// ItemKind order (task → plan).
@@ -207,7 +227,7 @@ pub struct SortKey {
 
 /// Failure to parse a [`SortKey`] (`"wat"`, `"-"`).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("invalid sort key {0:?} — expected pri|id|created|status|kind|owner|title, optionally -prefixed")]
+#[error("invalid sort key {0:?} — expected pri|id|created|due|est|cycle|status|kind|owner|title, optionally -prefixed")]
 pub struct ParseSortKeyError(pub String);
 
 impl FromStr for SortKey {
@@ -222,6 +242,9 @@ impl FromStr for SortKey {
             "pri" => SortField::Pri,
             "id" => SortField::Id,
             "created" => SortField::Created,
+            "due" => SortField::Due,
+            "est" | "estimate" => SortField::Estimate,
+            "cycle" => SortField::Cycle,
             "status" => SortField::Status,
             "kind" => SortField::Kind,
             "owner" => SortField::Owner,
@@ -241,6 +264,9 @@ impl fmt::Display for SortKey {
             SortField::Pri => "pri",
             SortField::Id => "id",
             SortField::Created => "created",
+            SortField::Due => "due",
+            SortField::Estimate => "estimate",
+            SortField::Cycle => "cycle",
             SortField::Status => "status",
             SortField::Kind => "kind",
             SortField::Owner => "owner",
@@ -518,6 +544,12 @@ impl ViewFilter {
                 .milestone
                 .as_ref()
                 .is_none_or(|m| item.milestone.as_ref() == Some(m))
+            && self.due.is_none_or(|d| item.due == Some(d))
+            && self.estimate.is_none_or(|e| item.estimate == Some(e))
+            && self
+                .cycle
+                .as_ref()
+                .is_none_or(|c| item.cycle.as_ref() == Some(c))
             && self
                 .superseded
                 .is_none_or(|s| s == item.superseded_by.is_some())
@@ -620,6 +652,9 @@ fn key_cmp(field: SortField, a: &Item, b: &Item, desc: bool) -> Ordering {
         SortField::Kind => dir(a.id.kind().cmp(&b.id.kind())),
         SortField::Title => dir(a.title.cmp(&b.title)),
         SortField::Created => opt_cmp(a.created.as_ref(), b.created.as_ref(), desc),
+        SortField::Due => opt_cmp(a.due.as_ref(), b.due.as_ref(), desc),
+        SortField::Estimate => opt_cmp(a.estimate.as_ref(), b.estimate.as_ref(), desc),
+        SortField::Cycle => opt_cmp(a.cycle.as_ref(), b.cycle.as_ref(), desc),
         SortField::Owner => opt_cmp(a.owner.as_ref(), b.owner.as_ref(), desc),
     }
 }
@@ -845,6 +880,70 @@ mod tests {
         let labels: Vec<_> = g.iter().map(|g| g.label.as_deref().unwrap()).collect();
         assert_eq!(labels, ["v2", UNGROUPED]);
         assert_eq!(g[1].items.len(), 4);
+    }
+
+    #[test]
+    fn filter_matches_scheduling_fields() {
+        let mut v = items();
+        v[0] = v[0]
+            .clone()
+            .due(crate::date::parse("2026-12-01").unwrap())
+            .estimate(3)
+            .cycle("sprint-12");
+        let spec: ViewSpec =
+            toml::from_str(r#"filter = { due = "2026-12-01", estimate = 3, cycle = "sprint-12" }"#)
+                .unwrap();
+        assert_eq!(flat_ids(&eval(&v, &spec, &table())), ["T-001"]);
+        // a set field that doesn't match excludes the item
+        let spec: ViewSpec = toml::from_str(r#"filter = { cycle = "sprint-13" }"#).unwrap();
+        assert!(flat_ids(&eval(&v, &spec, &table())).is_empty());
+        let spec: ViewSpec = toml::from_str(r#"filter = { estimate = 8 }"#).unwrap();
+        assert!(flat_ids(&eval(&v, &spec, &table())).is_empty());
+        let spec: ViewSpec = toml::from_str(r#"filter = { due = "2026-12-02" }"#).unwrap();
+        assert!(flat_ids(&eval(&v, &spec, &table())).is_empty());
+        // malformed dates are toml errors, not silent non-matches
+        assert!(toml::from_str::<ViewSpec>(r#"filter = { due = "soon" }"#).is_err());
+    }
+
+    #[test]
+    fn sort_by_scheduling_fields() {
+        let mut v = items();
+        v[0] = v[0]
+            .clone()
+            .due(crate::date::parse("2026-12-02").unwrap())
+            .estimate(8)
+            .cycle("b");
+        v[1] = v[1]
+            .clone()
+            .due(crate::date::parse("2026-12-01").unwrap())
+            .estimate(3)
+            .cycle("a");
+        // due asc — dated first (2026-12-01 then -02), rest trail
+        let spec: ViewSpec = toml::from_str(r#"sort = ["due"]"#).unwrap();
+        assert_eq!(
+            flat_ids(&eval(&v, &spec, &table()))[..2],
+            ["T-002", "T-001"]
+        );
+        let spec: ViewSpec = toml::from_str(r#"sort = ["estimate"]"#).unwrap();
+        assert_eq!(
+            flat_ids(&eval(&v, &spec, &table()))[..2],
+            ["T-002", "T-001"]
+        );
+        // `est` is the short alias; display emits the canonical name
+        assert_eq!("est".parse::<SortKey>().unwrap().field, SortField::Estimate);
+        assert_eq!(
+            SortKey {
+                field: SortField::Estimate,
+                desc: false
+            }
+            .to_string(),
+            "estimate"
+        );
+        let spec: ViewSpec = toml::from_str(r#"sort = ["-cycle"]"#).unwrap();
+        assert_eq!(
+            flat_ids(&eval(&v, &spec, &table()))[..2],
+            ["T-001", "T-002"]
+        );
     }
 
     #[test]

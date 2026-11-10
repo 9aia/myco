@@ -44,11 +44,11 @@ myco <verb> --help     # every verb, self-documenting
 | Park / re-activate a task | `myco todo defer T-NNN` / `myco backlog promote T-NNN` |
 | Claim / start / block / finish | `myco item set T-NNN --status claimed|in-progress|blocked|done` |
 | Done a task | `myco todo done T-NNN` (archives subtree → `DONE.md`) |
-| Done tasks / filters | `myco done list` · every `list` verb takes `--status --owner --label --pri --epic --milestone --query --limit` |
+| Done tasks / filters | `myco done list` · every `list` verb takes `--status --owner --label --pri --epic --milestone --due --est --cycle --query --limit` |
 | Undo the last mutation | `myco undo` (resets the `project` tip one commit — refuses dirty/pushed tips) |
 | File / close an issue | `myco issue new "title"` / `myco issue resolve I-NNN` |
 | Design / plan / decision docs | `myco proposal new` · `myco plan new` · `myco adr new` |
-| Inspect / mutate any item | `myco item show T-NNN` · `myco item set T-NNN …` |
+| Inspect / mutate any item | `myco item show T-NNN` · `myco item set T-NNN …` (`--due`/`--est`/`--cycle` schedule; `""` clears) |
 | Session end (resumable state) | `myco handoff T-NNN --note "done/next/open"` |
 | Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
 | Restart work on an item | `myco resume T-NNN` (`item show`/`resume` take 1..n ids) |

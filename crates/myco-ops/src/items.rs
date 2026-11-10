@@ -322,9 +322,9 @@ pub fn report(
     Ok(0)
 }
 
-/// `--status/--owner/--label/--pri/--epic/--milestone/--query`
-/// list filter + `--limit` — the parsed form of the CLI's
-/// `ListFlags`, usable by any front-end.
+/// `--status/--owner/--label/--pri/--epic/--milestone/--due/--est/
+/// --cycle/--query` list filter + `--limit` — the parsed form of
+/// the CLI's `ListFlags`, usable by any front-end.
 #[derive(Debug, Clone, Default)]
 pub struct Filter {
     /// Keep only items with this status.
@@ -339,6 +339,12 @@ pub struct Filter {
     pub epic: Option<String>,
     /// Keep only items in this milestone.
     pub milestone: Option<String>,
+    /// Keep only items due on this exact date.
+    pub due: Option<time::Date>,
+    /// Keep only items with this point estimate.
+    pub estimate: Option<u32>,
+    /// Keep only items in this cycle.
+    pub cycle: Option<String>,
     /// Keep only items whose id, title, or a label contains this
     /// text (case-insensitive).
     pub query: Option<String>,
@@ -364,6 +370,12 @@ impl Filter {
                 .milestone
                 .as_deref()
                 .is_none_or(|m| item.milestone.as_deref() == Some(m))
+            && self.due.is_none_or(|d| item.due == Some(d))
+            && self.estimate.is_none_or(|e| item.estimate == Some(e))
+            && self
+                .cycle
+                .as_deref()
+                .is_none_or(|c| item.cycle.as_deref() == Some(c))
             && self.query.as_deref().is_none_or(|q| {
                 let q = q.to_lowercase();
                 item.id.to_string().to_lowercase().contains(&q)

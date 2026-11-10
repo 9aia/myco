@@ -33,6 +33,9 @@ pub(crate) struct FilterPatch {
     pub(crate) unclaimed: bool,
     pub(crate) epic: Option<String>,
     pub(crate) milestone: Option<String>,
+    pub(crate) due: Option<time::Date>,
+    pub(crate) estimate: Option<u32>,
+    pub(crate) cycle: Option<String>,
     pub(crate) live_only: bool,
     pub(crate) superseded: bool,
 }
@@ -51,6 +54,9 @@ pub(crate) fn filter_args(a: &Args) -> Result<FilterPatch, String> {
         unclaimed: a.flag("unclaimed"),
         epic: a.opt("epic").map(str::to_string),
         milestone: a.opt("milestone").map(str::to_string),
+        due: items::opt_date(a, "due")?,
+        estimate: a.parsed("est")?,
+        cycle: a.opt("cycle").map(str::to_string),
         live_only: a.flag("live_only"),
         superseded: a.flag("superseded"),
     })
@@ -90,6 +96,15 @@ impl FilterPatch {
         if let Some(m) = &self.milestone {
             f.milestone = Some(m.clone());
         }
+        if let Some(d) = self.due {
+            f.due = Some(d);
+        }
+        if let Some(e) = self.estimate {
+            f.estimate = Some(e);
+        }
+        if let Some(c) = &self.cycle {
+            f.cycle = Some(c.clone());
+        }
         if self.live_only {
             f.superseded = Some(false);
         }
@@ -110,6 +125,9 @@ impl FilterPatch {
             || self.unclaimed
             || self.epic.is_some()
             || self.milestone.is_some()
+            || self.due.is_some()
+            || self.estimate.is_some()
+            || self.cycle.is_some()
             || self.live_only
             || self.superseded
     }
@@ -218,6 +236,15 @@ fn spec_digest(s: &ViewSpec) -> String {
     }
     if let Some(m) = &f.milestone {
         parts.push(format!("milestone={m}"));
+    }
+    if let Some(d) = f.due {
+        parts.push(format!("due={d}"));
+    }
+    if let Some(e) = f.estimate {
+        parts.push(format!("estimate={e}"));
+    }
+    if let Some(c) = &f.cycle {
+        parts.push(format!("cycle={c}"));
     }
     if let Some(sup) = f.superseded {
         parts.push(format!("superseded={sup}"));

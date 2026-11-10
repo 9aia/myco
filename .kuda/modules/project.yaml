@@ -291,9 +291,9 @@ provenance:
   - project/proposals/proposal-0013-typed-item-links-clickable-tui-related-ids.md
   hashes:
   - 9065e6f6e33503b5f7a4a773acd637396048731c
-  - b7aeabf550f528523eb1dbf6f7b99da639b0b2b4
+  - 9fd7aab5529829c7b5d6ddaf4835c364c5524ddf
   - df0ebe074d2ac166504a6b14391be3adebcda4d8
-  - 22ab05176f497b1548de33b4d2c65809d3b99b22
+  - ae2ff683008f7cfc971828f22e30eb354826069f
   - f8064e4cee00450ca64f33d7a26bcd545a8117db
   - 8ee2b578c23f86be23573ebb29fa91ca8ad5cd53
   - f9deccb752376dfd2277072da18c40886f7ae381
@@ -360,7 +360,7 @@ provenance:
   - 411a25a7d548faa48decd5ab47c0c7b43f972807
   - f93477c78a78e1e9d4610ff60da911ed8557922a
   - a025911a8d63b5df9ea985ade293f70ae59f8e58
-  - 6d7408c54fb495616163767f993e762e7c338321
-  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
-  generated_at: '1794254004'
+  - fa3c0d16a86878dd03ee66d4b5faa80ef8e9d93c
+  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
+  generated_at: '1794272278'
   generator: kuda-template/0.1.2

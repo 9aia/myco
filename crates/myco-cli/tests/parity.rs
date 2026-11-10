@@ -220,6 +220,201 @@ fn epic_and_milestone_views() {
     assert!(stdout(&out).starts_with('|'));
 }
 
+// ---------- scheduling fields (P-012 ph1) ----------
+
+#[test]
+fn scheduling_flags_roundtrip() {
+    let (d, wt) = project();
+    // todo add --due/--est/--cycle → canonical line tokens + json
+    let out = run(
+        d.path(),
+        &[
+            "todo",
+            "add",
+            "scheduled task",
+            "--due",
+            "2026-12-01",
+            "--est",
+            "3",
+            "--cycle",
+            "sprint-12",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["item"]["due"], "2026-12-01");
+    assert_eq!(v["item"]["estimate"], 3);
+    assert_eq!(v["item"]["cycle"], "sprint-12");
+    let todo = read(&wt, "TODO.md");
+    assert!(
+        todo.contains("due:2026-12-01 · est:3 · cycle:sprint-12"),
+        "{todo}"
+    );
+
+    // backlog add mirrors the flags
+    let out = run(
+        d.path(),
+        &[
+            "backlog",
+            "add",
+            "parked",
+            "--cycle",
+            "sprint-13",
+            "--est",
+            "8",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let backlog = read(&wt, "BACKLOG.md");
+    assert!(backlog.contains("est:8 · cycle:sprint-13"), "{backlog}");
+
+    // issue new → frontmatter keys at the tail
+    let out = run(
+        d.path(),
+        &[
+            "issue",
+            "new",
+            "a bug",
+            "--due",
+            "2026-12-15",
+            "--cycle",
+            "sprint-12",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0);
+    let file = read(&wt, "issues/issue-0001-a-bug.md");
+    assert!(file.contains("due = \"2026-12-15\""), "{file}");
+    assert!(file.contains("cycle = \"sprint-12\""), "{file}");
+
+    // item set — set + `""` clears, on both line and file items
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--est", "5", "--due", ""],
+    );
+    assert_eq!(code(&out), 0);
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("est:5"), "{todo}");
+    assert!(!todo.contains("due:"), "{todo}");
+    let out = run(d.path(), &["item", "set", "I-001", "--cycle", "", "--json"]);
+    assert_eq!(code(&out), 0);
+    assert!(json(&out)["item"]["cycle"].is_null());
+
+    // invalid values are errors on both flag paths
+    for args in [
+        vec!["todo", "add", "x", "--due", "tomorrow"],
+        vec!["todo", "add", "x", "--est", "1001"],
+        vec!["todo", "add", "x", "--cycle", "has space"],
+        vec!["item", "set", "T-001", "--due", "2026-13-40"],
+        vec!["item", "set", "T-001", "--est", "nope"],
+        vec!["item", "set", "T-001", "--est", "1001"],
+        vec!["item", "set", "T-001", "--cycle", "a/b"],
+    ] {
+        let out = run(d.path(), &args);
+        assert_eq!(code(&out), 2, "{args:?} → {}", stderr(&out));
+    }
+}
+
+#[test]
+fn scheduling_views_and_filters() {
+    let (d, _wt) = project();
+    run(
+        d.path(),
+        &[
+            "todo",
+            "add",
+            "one",
+            "--due",
+            "2026-12-02",
+            "--est",
+            "8",
+            "--cycle",
+            "s2",
+        ],
+    );
+    run(
+        d.path(),
+        &[
+            "todo",
+            "add",
+            "two",
+            "--due",
+            "2026-12-01",
+            "--est",
+            "3",
+            "--cycle",
+            "s1",
+        ],
+    );
+    run(d.path(), &["todo", "add", "three"]);
+
+    // list filters — exact-match on the scheduling fields
+    let titles = |args: &[&str]| -> Vec<String> {
+        let mut cmd = vec!["todo", "list", "--json"];
+        cmd.extend_from_slice(args);
+        let v = json(&run(d.path(), &cmd));
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["title"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(titles(&["--cycle", "s1"]), ["two"]);
+    assert_eq!(titles(&["--due", "2026-12-02"]), ["one"]);
+    assert_eq!(titles(&["--est", "8"]), ["one"]);
+
+    // view filter flags — `--cycle`/`--due`/`--est` narrow the spec
+    let v = json(&run(d.path(), &["view", "--cycle", "s1", "--json"]));
+    let items = v["groups"].as_array().unwrap()[0]["items"]
+        .as_array()
+        .unwrap();
+    assert_eq!(items[0]["id"], "T-002");
+    let v = json(&run(
+        d.path(),
+        &["view", "--est", "3", "--due", "2026-12-01", "--json"],
+    ));
+    assert_eq!(
+        v["groups"].as_array().unwrap()[0]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // sort axes — `due` orders earliest-first, undated trail
+    let v = json(&run(d.path(), &["view", "--sort", "due", "--json"]));
+    let ids: Vec<&str> = v["groups"].as_array().unwrap()[0]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["T-002", "T-001", "T-003"]);
+    // `est`/`cycle` sort too; `-` flips (present values first either
+    // way; the `=` form keeps clap from reading `-est` as a flag)
+    let v = json(&run(d.path(), &["view", "--sort=-est", "--json"]));
+    let ids: Vec<&str> = v["groups"].as_array().unwrap()[0]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["T-001", "T-002", "T-003"]);
+
+    // a config view spec can filter on the fields too
+    std::fs::write(
+        d.path().join("myco.toml"),
+        "[views.iter]\nfilter = { cycle = \"s2\" }\n",
+    )
+    .unwrap();
+    let v = json(&run(d.path(), &["view", "iter", "--json"]));
+    let items = v["groups"].as_array().unwrap()[0]["items"]
+        .as_array()
+        .unwrap();
+    assert_eq!(items[0]["id"], "T-001");
+}
+
 // ---------- absorb comments ----------
 
 /// Seed a repo with comment kinds across a few files.

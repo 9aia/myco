@@ -227,6 +227,10 @@ struct FilterPatch {
     claimed: Option<bool>,
     epic: Option<String>,
     milestone: Option<String>,
+    #[serde(default, deserialize_with = "de_opt_date")]
+    due: Option<time::Date>,
+    estimate: Option<u32>,
+    cycle: Option<String>,
     superseded: Option<bool>,
 }
 
@@ -235,6 +239,14 @@ struct FilterPatch {
 fn de_opt_priority<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Priority>, D::Error> {
     Option::<String>::deserialize(d)?
         .map(|s| s.parse().map_err(serde::de::Error::custom))
+        .transpose()
+}
+
+/// `due` wire values are `"YYYY-MM-DD"` strings — the same read
+/// `due:` tokens and `[views]` TOML accept.
+fn de_opt_date<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<time::Date>, D::Error> {
+    Option::<String>::deserialize(d)?
+        .map(|s| myco_core::date::parse(&s).map_err(serde::de::Error::custom))
         .transpose()
 }
 
@@ -271,6 +283,15 @@ impl SpecPatch {
             }
             if let Some(v) = &p.milestone {
                 f.milestone = Some(v.clone());
+            }
+            if let Some(v) = p.due {
+                f.due = Some(v);
+            }
+            if let Some(v) = p.estimate {
+                f.estimate = Some(v);
+            }
+            if let Some(v) = &p.cycle {
+                f.cycle = Some(v.clone());
             }
             if let Some(v) = p.superseded {
                 f.superseded = Some(v);

@@ -246,11 +246,17 @@ fn draw_preview(f: &mut Frame, m: &mut Model, area: Rect) {
             ),
         ]));
     }
-    for (key, val) in [("epic   ", &item.epic), ("ms     ", &item.milestone)] {
+    for (key, val) in [
+        ("epic   ", item.epic.clone()),
+        ("ms     ", item.milestone.clone()),
+        ("due    ", item.due.map(myco_core::date::render)),
+        ("est    ", item.estimate.map(|e| e.to_string())),
+        ("cycle  ", item.cycle.clone()),
+    ] {
         if let Some(v) = val {
             lines.push(Line::from(vec![
                 Span::styled(key, Style::default().fg(MUTED)),
-                Span::raw(v.clone()),
+                Span::raw(v),
             ]));
         }
     }
@@ -724,7 +730,8 @@ mod tests {
     }
 
     /// A model whose selected item exercises every preview field:
-    /// owner/labels/epic/milestone/created/note/children/edges.
+    /// owner/labels/epic/milestone/due/est/cycle/created/note/
+    /// children/edges.
     fn rich_model() -> Model {
         let mut m = model(|l| {
             l.put_todo(
@@ -735,6 +742,9 @@ mod tests {
                     .label("rel")
                     .epic("e1")
                     .milestone("m1")
+                    .due(myco_core::date::parse("2026-12-01").unwrap())
+                    .estimate(5)
+                    .cycle("sprint-12")
                     .child(t(2))
                     .blocks(ItemId::new(ItemKind::Task, 3))
                     .blocks(ItemId::new(ItemKind::Task, 99)), // unloaded neighbor

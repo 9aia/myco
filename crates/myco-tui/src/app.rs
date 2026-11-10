@@ -4243,6 +4243,9 @@ pub(crate) mod tests {
                     .label("l")
                     .epic("e")
                     .milestone("m")
+                    .due(myco_core::date::parse("2026-12-01").unwrap())
+                    .estimate(5)
+                    .cycle("s1")
                     .child(t(2))
                     .blocks(ItemId::new(ItemKind::Task, 3)),
                 None,

@@ -5,7 +5,7 @@
 //! <id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>]
 //!     [· created:<date>] [· #<label>]… [· blocks:<id>[,<id>]…]
 //!     [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>]
-//!     [· note:<text>]
+//!     [· due:<date>] [· est:<n>] [· cycle:<name>] [· note:<text>]
 //! ```
 //!
 //! Metadata tokens come after the title, `·`-separated, in the
@@ -22,6 +22,7 @@
 use markdown::mdast::Node;
 use myco_core::{
     date, is_valid_group_name, is_valid_label, Actor, Item, ItemId, ItemKind, Priority, Status,
+    MAX_ESTIMATE,
 };
 
 use crate::error::EmitError;
@@ -101,6 +102,9 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
     let mut links_seen = false;
     let mut epic = None;
     let mut milestone = None;
+    let mut due = None;
+    let mut estimate = None;
+    let mut cycle = None;
     let mut note = None;
     let mut item = Item::new(id, title);
 
@@ -196,6 +200,33 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
                 }
                 milestone = Some(value.to_string());
             }
+            "due" => {
+                if due.is_some() {
+                    return Err(bad("duplicate due: token"));
+                }
+                due = Some(date::parse(value).map_err(|e| format!("bad due: date — {e}"))?);
+            }
+            "est" => {
+                if estimate.is_some() {
+                    return Err(bad("duplicate est: token"));
+                }
+                let n: u32 = value.parse().map_err(|_| {
+                    bad(format!("bad est: value {value:?} — expected a point count"))
+                })?;
+                if n > MAX_ESTIMATE {
+                    return Err(bad(format!("est:{n} exceeds max {MAX_ESTIMATE}")));
+                }
+                estimate = Some(n);
+            }
+            "cycle" => {
+                if cycle.is_some() {
+                    return Err(bad("duplicate cycle: token"));
+                }
+                if !is_valid_group_name(value) {
+                    return Err(bad(format!("invalid cycle name {value:?}")));
+                }
+                cycle = Some(value.to_string());
+            }
             "note" => {
                 if note.is_some() {
                     return Err(bad("duplicate note: token"));
@@ -204,7 +235,7 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
             }
             other => {
                 return Err(bad(format!(
-                    "unknown metadata key {other:?} — expected status|pri|owner|created|blocks|links|epic|ms|note or #label"
+                    "unknown metadata key {other:?} — expected status|pri|owner|created|blocks|links|epic|ms|due|est|cycle|note or #label"
                 )));
             }
         }
@@ -222,6 +253,9 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
     item.created = created;
     item.epic = epic;
     item.milestone = milestone;
+    item.due = due;
+    item.estimate = estimate;
+    item.cycle = cycle;
     item.note = note;
     Ok(item)
 }
@@ -247,11 +281,17 @@ pub(crate) fn check_item(item: &Item, file: &'static str) -> Result<(), EmitErro
     for (what, name) in [
         ("epic", item.epic.as_deref()),
         ("milestone", item.milestone.as_deref()),
+        ("cycle", item.cycle.as_deref()),
     ] {
         if let Some(name) = name {
             if !is_valid_group_name(name) {
                 return Err(err(&format!("invalid {what} name {name:?}")));
             }
+        }
+    }
+    if let Some(e) = item.estimate {
+        if e > MAX_ESTIMATE {
+            return Err(err(&format!("est:{e} exceeds max {MAX_ESTIMATE}")));
         }
     }
     if let Some(note) = &item.note {
@@ -313,6 +353,15 @@ pub(crate) fn text(item: &Item, spec: &LineSpec) -> Result<String, EmitError> {
     if let Some(ms) = &item.milestone {
         tokens.push(format!("ms:{ms}"));
     }
+    if let Some(d) = item.due {
+        tokens.push(format!("due:{}", date::render(d)));
+    }
+    if let Some(e) = item.estimate {
+        tokens.push(format!("est:{e}"));
+    }
+    if let Some(c) = &item.cycle {
+        tokens.push(format!("cycle:{c}"));
+    }
     if let Some(note) = &item.note {
         tokens.push(format!("note:{note}"));
     }
@@ -340,7 +389,7 @@ mod tests {
 
     #[test]
     fn parse_full_line() {
-        let i = item("T-012 Write the thing · status:in-progress · pri:high · owner:devin · created:2026-02-09 · #core · #store · blocks:T-010, I-002 · epic:v2 · ms:1.0 · note:from src/x.rs:9");
+        let i = item("T-012 Write the thing · status:in-progress · pri:high · owner:devin · created:2026-02-09 · #core · #store · blocks:T-010, I-002 · epic:v2 · ms:1.0 · due:2026-12-01 · est:3 · cycle:sprint-12 · note:from src/x.rs:9");
         assert_eq!(i.id, ItemId::new(ItemKind::Task, 12));
         assert_eq!(i.title, "Write the thing");
         assert_eq!(i.status, Status::InProgress);
@@ -352,7 +401,33 @@ mod tests {
         assert!(i.blocks.contains(&ItemId::new(ItemKind::Issue, 2)));
         assert_eq!(i.epic.as_deref(), Some("v2"));
         assert_eq!(i.milestone.as_deref(), Some("1.0"));
+        assert_eq!(i.due, Some(date::parse("2026-12-01").unwrap()));
+        assert_eq!(i.estimate, Some(3));
+        assert_eq!(i.cycle.as_deref(), Some("sprint-12"));
         assert_eq!(i.note.as_deref(), Some("from src/x.rs:9"));
+    }
+
+    #[test]
+    fn parse_scheduling_tokens() {
+        // scheduling tokens are optional and additive — bare lines
+        // parse exactly as before
+        let i = item("T-003 plain task");
+        assert!(i.due.is_none() && i.estimate.is_none() && i.cycle.is_none());
+        let i = item("T-004 x · due:2026-12-01");
+        assert_eq!(i.due, Some(date::parse("2026-12-01").unwrap()));
+        let i = item("T-005 x · est:0");
+        assert_eq!(i.estimate, Some(0));
+        // round-trip in canonical order — est:0 still emits
+        // (Some(0) is set, not a default)
+        for line in [
+            "T-006 x · due:2026-12-01 · est:3 · cycle:sprint-12",
+            "T-007 x · est:0 · cycle:s-1",
+        ] {
+            let i = item(line);
+            let s = text(&i, &TODO).unwrap();
+            assert_eq!(s, line, "{s}");
+            assert_eq!(parse_text(&s, &TODO).unwrap(), i);
+        }
     }
 
     #[test]
@@ -413,6 +488,19 @@ mod tests {
             ("T-001 t · ms:", "empty ms"),
             ("T-001 t · ms:has space", "bad ms name"),
             ("T-001 t · ms:a · ms:b", "dup ms"),
+            ("T-001 t · due:", "empty due"),
+            ("T-001 t · due:tomorrow", "bad due date"),
+            ("T-001 t · due:2026-13-40", "bad due date"),
+            ("T-001 t · due:2026-01-01 · due:2026-01-02", "dup due"),
+            ("T-001 t · est:", "empty est"),
+            ("T-001 t · est:three", "non-numeric est"),
+            ("T-001 t · est:-1", "negative est"),
+            ("T-001 t · est:1.5", "fractional est"),
+            ("T-001 t · est:1001", "est over max"),
+            ("T-001 t · est:1 · est:2", "dup est"),
+            ("T-001 t · cycle:", "empty cycle"),
+            ("T-001 t · cycle:has space", "bad cycle name"),
+            ("T-001 t · cycle:a · cycle:b", "dup cycle"),
             ("T-001 t · note:", "empty note"),
             ("T-001 t · note:a · note:b", "dup note"),
             ("T-001 t · #", "empty label"),
@@ -438,11 +526,14 @@ mod tests {
             .blocks(ItemId::new(ItemKind::Task, 10))
             .epic("v2")
             .milestone("1.0")
+            .due(date::parse("2026-12-01").unwrap())
+            .estimate(3)
+            .cycle("sprint-12")
             .note("swept from src/x.rs:9");
         let s = text(&i, &TODO).unwrap();
         assert_eq!(
             s,
-            "T-012 Write the thing · status:in-progress · pri:high · owner:devin · created:2026-02-09 · #core · #store · blocks:T-010,I-002 · epic:v2 · ms:1.0 · note:swept from src/x.rs:9"
+            "T-012 Write the thing · status:in-progress · pri:high · owner:devin · created:2026-02-09 · #core · #store · blocks:T-010,I-002 · epic:v2 · ms:1.0 · due:2026-12-01 · est:3 · cycle:sprint-12 · note:swept from src/x.rs:9"
         );
         // round trip
         assert_eq!(parse_text(&s, &TODO).unwrap(), i);
@@ -472,6 +563,12 @@ mod tests {
         i.milestone = Some("bad/ms".into());
         assert!(text(&i, &TODO).is_err());
         i.milestone = None;
+        i.cycle = Some("bad/cycle".into());
+        assert!(text(&i, &TODO).is_err());
+        i.cycle = None;
+        i.estimate = Some(MAX_ESTIMATE + 1);
+        assert!(text(&i, &TODO).is_err());
+        i.estimate = None;
         i.note = Some("has · dot".into());
         assert!(text(&i, &TODO).is_err());
         i.note = Some(" trailing ".into());

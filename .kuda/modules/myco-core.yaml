@@ -25,7 +25,7 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-core/src/view.rs
-  line: 417
+  line: 443
   module: myco-core
 - name: Actor
   kind: type
@@ -40,7 +40,7 @@ api:
 - name: AliasVerb
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 114
+  line: 116
   module: myco-core
 - name: BacklogDoc
   kind: type
@@ -50,12 +50,12 @@ api:
 - name: Config
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 155
+  line: 157
   module: myco-core
 - name: ConfigVerb
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 102
+  line: 104
   module: myco-core
 - name: DoneDoc
   kind: type
@@ -75,7 +75,7 @@ api:
 - name: EmitMode
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 139
+  line: 141
   module: myco-core
 - name: Err
   kind: type
@@ -110,17 +110,17 @@ api:
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 214
+  line: 234
   module: myco-core
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 442
+  line: 468
   module: myco-core
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 469
+  line: 495
   module: myco-core
 - name: Error
   kind: type
@@ -135,17 +135,17 @@ api:
 - name: Flat
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 334
+  line: 360
   module: myco-core
 - name: GroupAxis
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 145
+  line: 159
   module: myco-core
 - name: GroupKey
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 484
+  line: 510
   module: myco-core
 - name: HandoffEntry
   kind: type
@@ -170,7 +170,7 @@ api:
 - name: Item
   kind: type
   file: crates/myco-core/src/item.rs
-  line: 97
+  line: 115
   module: myco-core
 - name: ItemFile
   kind: type
@@ -190,7 +190,7 @@ api:
 - name: ItemMeta
   kind: type
   file: crates/myco-core/src/item.rs
-  line: 88
+  line: 106
   module: myco-core
 - name: KindSpec
   kind: type
@@ -202,7 +202,7 @@ api:
   file: crates/myco-core/src/kind.rs
   line: 182
   module: myco-core
-api_omitted: 378
+api_omitted: 384
 deps:
 - schemars
 - serde
@@ -262,16 +262,16 @@ provenance:
   - e7e29dca7946d7bbcd82dbc8ee2b4c6cfc4c1174
   - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
   - ec34134e87bdf0b1515595800aa3a81ac74449dc
-  - d6335b5518ac54be464a131427ac9f879177e284
+  - a1461918ab4b25d64c18a88bee7e27ac5ba89b61
   - 9141235a6cb438570b3221e892f9cfb86b7af42a
   - 35994c7e790eedc768987fd5c6b3e3d9b44338f3
-  - 1a2799c032cd7b6dacfa7cb3e07e48f1fdc84f8c
+  - 729de5482a6022a91af244ac5eaaac086a2842fc
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - b6f0e2f2ea7098c82a0bc8424159bb7c0bc8198c
   - e62184d264d30354071a59cf2b664a41e01e0334
   - 8151702a3a351e7e0190b10dc05471a8cf7de0b0
-  - 4665fc529b7ec9752c06f9fdbb388459859ded86
+  - 50ec99c0465cc315ea710acd4c3a25693bc05290
   - 4cc27aecf26206465afb4fb0142882e4d8f87aae
-  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
-  generated_at: '1794254004'
+  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
+  generated_at: '1794272278'
   generator: kuda-template/0.1.2

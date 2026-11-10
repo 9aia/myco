@@ -731,8 +731,8 @@ const GROUPS: &[Group] = &[
 
 // ---------------------------------------------------------------- param bundles
 
-/// `--pri/--owner/--label/--blocks/--links/--epic/--milestone` —
-/// every `add`/`new` verb's metadata flags.
+/// `--pri/--owner/--label/--blocks/--links/--epic/--milestone/
+/// --due/--est/--cycle` — every `add`/`new` verb's metadata flags.
 const META: &[Param] = &[
     opt("pri", Val::Pri, "Priority: low|med|high|crit.").alias("priority"),
     opt(
@@ -765,10 +765,22 @@ const META: &[Param] = &[
         Val::Str,
         "Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).",
     ),
+    opt("due", Val::Str, "Due date — `YYYY-MM-DD`."),
+    opt(
+        "est",
+        Val::Count,
+        "Estimate in points (0–1000) — relative size, not hours.",
+    )
+    .alias("estimate"),
+    opt(
+        "cycle",
+        Val::Str,
+        "Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).",
+    ),
 ];
 
-/// `--status/--owner/--label/--pri/--epic/--milestone/--query/
-/// --limit` — every `list` verb's filters.
+/// `--status/--owner/--label/--pri/--epic/--milestone/--due/
+/// --est/--cycle/--query/--limit` — every `list` verb's filters.
 const LIST: &[Param] = &[
     opt("status", Val::Status, "Keep only items with this status."),
     opt("owner", Val::Str, "Keep only items owned by this actor."),
@@ -781,6 +793,18 @@ const LIST: &[Param] = &[
     opt("pri", Val::Pri, "Keep only items at this priority."),
     opt("epic", Val::Str, "Keep only items in this epic."),
     opt("milestone", Val::Str, "Keep only items in this milestone."),
+    opt(
+        "due",
+        Val::Str,
+        "Keep only items due on this date (`YYYY-MM-DD`).",
+    ),
+    opt(
+        "est",
+        Val::Count,
+        "Keep only items with this point estimate.",
+    )
+    .alias("estimate"),
+    opt("cycle", Val::Str, "Keep only items in this cycle."),
     opt(
         "query",
         Val::Str,
@@ -810,6 +834,18 @@ const FILE_LIST: &[Param] = &[
     opt("pri", Val::Pri, "Keep only items at this priority."),
     opt("epic", Val::Str, "Keep only items in this epic."),
     opt("milestone", Val::Str, "Keep only items in this milestone."),
+    opt(
+        "due",
+        Val::Str,
+        "Keep only items due on this date (`YYYY-MM-DD`).",
+    ),
+    opt(
+        "est",
+        Val::Count,
+        "Keep only items with this point estimate.",
+    )
+    .alias("estimate"),
+    opt("cycle", Val::Str, "Keep only items in this cycle."),
     opt(
         "query",
         Val::Str,
@@ -909,6 +945,11 @@ const FILTER: &[Param] = &[
     flag("unclaimed", "Items with no owner.").cli(),
     opt("epic", Val::Str, "Items in this epic.").cli(),
     opt("milestone", Val::Str, "Items in this milestone.").cli(),
+    opt("due", Val::Str, "Items due on this date (`YYYY-MM-DD`).").cli(),
+    opt("est", Val::Count, "Items with this point estimate.")
+        .alias("estimate")
+        .cli(),
+    opt("cycle", Val::Str, "Items in this cycle.").cli(),
     flag("live_only", "Items not superseded by another (ADRs).")
         .conflicts("superseded")
         .cli(),
@@ -1418,6 +1459,9 @@ pub static VERBS: &[Verb] = &[
                 .delim(),
             opt("epic", Val::Str, "Epic name — `\"\"` clears the epic."),
             opt("milestone", Val::Str, "Milestone name — `\"\"` clears the milestone."),
+            opt("due", Val::Str, "Due date (`YYYY-MM-DD`) — `\"\"` clears the due date."),
+            opt("est", Val::Str, "Estimate in points (0–1000) — `\"\"` clears the estimate.").alias("estimate"),
+            opt("cycle", Val::Str, "Cycle name (`[A-Za-z0-9_.-]+`) — `\"\"` clears the cycle."),
             opt("session", Val::Str, "Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state."),
             flag(
                 "yes",

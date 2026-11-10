@@ -24,6 +24,12 @@ pub(crate) struct SetFlags {
     pub(crate) unlink: Vec<ItemId>,
     pub(crate) epic: Option<String>,
     pub(crate) milestone: Option<String>,
+    /// Raw `--due` value — kept stringly so `""` clears and the
+    /// date validates at apply time (like the group names).
+    pub(crate) due: Option<String>,
+    /// Raw `--est` value — `""` clears, else a points count.
+    pub(crate) est: Option<String>,
+    pub(crate) cycle: Option<String>,
 }
 
 /// The decoded `item set` flags — shared by the CLI handler and
@@ -41,6 +47,9 @@ pub(crate) fn set_flags(a: &Args) -> Result<SetFlags, String> {
         unlink: a.many_parsed("unlink")?,
         epic: a.opt("epic").map(str::to_string),
         milestone: a.opt("milestone").map(str::to_string),
+        due: a.opt("due").map(str::to_string),
+        est: a.opt("est").map(str::to_string),
+        cycle: a.opt("cycle").map(str::to_string),
     })
 }
 
@@ -66,6 +75,9 @@ impl SetFlags {
             && self.unlink.is_empty()
             && self.epic.is_none()
             && self.milestone.is_none()
+            && self.due.is_none()
+            && self.est.is_none()
+            && self.cycle.is_none()
     }
 }
 
@@ -142,6 +154,7 @@ fn apply_set(item: &mut Item, flags: &SetFlags) -> Result<(), String> {
     for (what, flag, slot) in [
         ("epic", &flags.epic, &mut item.epic),
         ("milestone", &flags.milestone, &mut item.milestone),
+        ("cycle", &flags.cycle, &mut item.cycle),
     ] {
         if let Some(name) = flag {
             if name.is_empty() {
@@ -151,6 +164,31 @@ fn apply_set(item: &mut Item, flags: &SetFlags) -> Result<(), String> {
             } else {
                 *slot = Some(name.clone());
             }
+        }
+    }
+    if let Some(d) = &flags.due {
+        if d.is_empty() {
+            item.due = None; // `--due ""` clears
+        } else {
+            item.due = Some(
+                myco_core::date::parse(d).map_err(|e| format!("invalid due date {d:?} — {e}"))?,
+            );
+        }
+    }
+    if let Some(e) = &flags.est {
+        if e.is_empty() {
+            item.estimate = None; // `--est ""` clears
+        } else {
+            let n: u32 = e
+                .parse()
+                .map_err(|_| format!("invalid est value {e:?} — expected a point count"))?;
+            if n > myco_core::MAX_ESTIMATE {
+                return Err(format!(
+                    "estimate {n} exceeds max {}",
+                    myco_core::MAX_ESTIMATE
+                ));
+            }
+            item.estimate = Some(n);
         }
     }
     Ok(())

@@ -60,7 +60,7 @@ api:
 - name: HINTS
   kind: const
   file: crates/myco-tui/src/render.rs
-  line: 420
+  line: 426
   module: myco-tui
 - name: LOCK
   kind: const
@@ -120,7 +120,7 @@ api:
 - name: RelatedRow
   kind: type
   file: crates/myco-tui/src/render.rs
-  line: 351
+  line: 357
   module: myco-tui
 - name: Row
   kind: type
@@ -145,7 +145,7 @@ api:
 - name: add_mode_key_edges
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 4306
+  line: 4309
   module: myco-tui
 - name: add_on_backlog_creates_a_deferred_item
   kind: function
@@ -175,7 +175,7 @@ api:
 - name: apply_ledger_ignores_an_unknown_repo
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 4462
+  line: 4465
   module: myco-tui
 - name: arm_watch
   kind: function
@@ -195,7 +195,7 @@ api:
 - name: bind
   kind: function
   file: crates/myco-tui/src/render.rs
-  line: 500
+  line: 506
   module: myco-tui
 - name: board_path
   kind: function
@@ -245,11 +245,11 @@ provenance:
   - crates/myco-tui/tests/pty.rs
   hashes:
   - 09b1d91010143e6a3d82af92584a4f393a6d5e74
-  - 112df97569487c9d37883155d73bf44e5696cc6b
+  - 868169c244fdc8de9aa87f5321e5421c63dae89b
   - 437a7fc509d6717d52a2b32a7dc1fef8854be650
   - 7ac02453b56f59bc259c4117c493f3c16730bff7
-  - b841d284a0060145f258505d7c01572b61ee3605
+  - 72a7123c096ed41deac8a13b02ca0c56a9fa663a
   - 6d3bdf9aaa624a5d2e34c1a6eb84fa757c96a0f0
-  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
-  generated_at: '1794254004'
+  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
+  generated_at: '1794272278'
   generator: kuda-template/0.1.2

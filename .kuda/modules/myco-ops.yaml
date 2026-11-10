@@ -95,7 +95,7 @@ api:
 - name: NewItem
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 419
+  line: 431
   module: myco-ops
 - name: Origin
   kind: type
@@ -256,12 +256,12 @@ provenance:
   - eaff06f7145e1435cf37a599f48e49139ce531db
   - e32236a7fbef4a549c16f14a53f3e811399afd31
   - d68f4d02abaec478c8ca1ab8258a72a98ba5bbbf
-  - 435970b4c6a3d81bc9bdd4ffe97e85d8ba7c0f9c
+  - e775f5fafac41b21ba371d158e8a9135f015a921
   - 692efc8e5656308c8cd3fd2f4d6d6e8fe2f229cd
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
   - 24b9910925fdd3a237b722338f2010e023b0055a
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: 2d6da9a8a27a376c66e9611163b22a1513199ebb
-  generated_at: '1794254004'
+  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
+  generated_at: '1794272278'
   generator: kuda-template/0.1.2

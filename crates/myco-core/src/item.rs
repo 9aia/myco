@@ -72,6 +72,24 @@ pub struct Item {
     /// `ms:<name>` (kept short — lines stay readable).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub milestone: Option<String>,
+    /// `due:` — the calendar date this item is due, `YYYY-MM-DD`
+    /// (timezone-free, like `created:`).
+    #[serde(
+        default,
+        with = "crate::date::opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    pub due: Option<time::Date>,
+    /// `est:` — relative size in points ([`MAX_ESTIMATE`] bound).
+    /// Points, not hours — teams define their own scale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimate: Option<u32>,
+    /// `cycle:` — the iteration/sprint this item is scheduled in.
+    /// A group name like `epic:`/`ms:` — existence is a `check`
+    /// concern, not a parse one (free-form names are legal).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cycle: Option<String>,
     /// Nested sub-items — the `  - [ ]` lines indented under this
     /// one in TODO.md/BACKLOG.md. Children are full items: same
     /// metadata, same state machine. Depth is arbitrary (one
@@ -123,6 +141,9 @@ impl Item {
             supersedes: None,
             epic: None,
             milestone: None,
+            due: None,
+            estimate: None,
+            cycle: None,
             children: Vec::new(),
         }
     }
@@ -213,6 +234,25 @@ impl Item {
         self
     }
 
+    /// Builder-style `due` setter.
+    pub fn due(mut self, d: time::Date) -> Self {
+        self.due = Some(d);
+        self
+    }
+
+    /// Builder-style `estimate` setter (points — the value is
+    /// trusted; [`MAX_ESTIMATE`] is enforced at the write paths).
+    pub fn estimate(mut self, points: u32) -> Self {
+        self.estimate = Some(points);
+        self
+    }
+
+    /// Builder-style `cycle` setter.
+    pub fn cycle(mut self, name: impl Into<String>) -> Self {
+        self.cycle = Some(name.into());
+        self
+    }
+
     /// Append a nested child (subtask) — line-grammar items only;
     /// file-backed kinds never carry children.
     pub fn child(mut self, child: Item) -> Self {
@@ -236,6 +276,15 @@ impl Item {
         if let Some(m) = &self.milestone {
             s += &format!(" ms:{m}");
         }
+        if let Some(d) = self.due {
+            s += &format!(" due:{}", crate::date::render(d));
+        }
+        if let Some(e) = self.estimate {
+            s += &format!(" est:{e}");
+        }
+        if let Some(c) = &self.cycle {
+            s += &format!(" cycle:{c}");
+        }
         if !self.title.is_empty() {
             s += &format!(" {}", self.title);
         }
@@ -244,8 +293,9 @@ impl Item {
 }
 
 /// Optional metadata applied to a freshly-created item — the parsed
-/// `--pri/--owner/--label/--blocks/--epic/--milestone` bundle every
-/// `add`/`new` front-end shares. Validated on `apply`.
+/// `--pri/--owner/--label/--blocks/--epic/--milestone/--due/--est/
+/// --cycle` bundle every `add`/`new` front-end shares. Validated
+/// on `apply`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -264,6 +314,18 @@ pub struct NewItemMeta {
     pub epic: Option<String>,
     /// `ms:` milestone name.
     pub milestone: Option<String>,
+    /// `due:` date — `YYYY-MM-DD`.
+    #[serde(
+        default,
+        with = "crate::date::opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    pub due: Option<time::Date>,
+    /// `est:` points ([`MAX_ESTIMATE`] bound).
+    pub estimate: Option<u32>,
+    /// `cycle:` name.
+    pub cycle: Option<String>,
 }
 
 impl NewItemMeta {
@@ -277,11 +339,20 @@ impl NewItemMeta {
                 return Err(format!("invalid label {l:?}"));
             }
         }
-        for (what, name) in [("epic", &self.epic), ("milestone", &self.milestone)] {
+        for (what, name) in [
+            ("epic", &self.epic),
+            ("milestone", &self.milestone),
+            ("cycle", &self.cycle),
+        ] {
             if let Some(name) = name {
                 if !is_valid_group_name(name) {
                     return Err(format!("invalid {what} name {name:?}"));
                 }
+            }
+        }
+        if let Some(e) = self.estimate {
+            if e > MAX_ESTIMATE {
+                return Err(format!("estimate {e} exceeds max {MAX_ESTIMATE}"));
             }
         }
         if let Some(p) = self.priority {
@@ -301,6 +372,9 @@ impl NewItemMeta {
         }
         item.epic = self.epic.clone();
         item.milestone = self.milestone.clone();
+        item.due = self.due;
+        item.estimate = self.estimate;
+        item.cycle = self.cycle.clone();
         Ok(())
     }
 }
@@ -329,9 +403,15 @@ pub fn is_valid_label(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
 }
 
-/// An `epic:`/`ms:` group name — `[A-Za-z0-9_.-]+`: the label
-/// charset plus `.` for `1.0`-style milestones. Same boundary rule
-/// as labels (the name must fit a `·`-separated line token).
+/// Largest legal `est:` value — points are a relative scale, not
+/// a measurement; 1000 caps typos (`--est 10000`) without
+/// constraining any sane team's range.
+pub const MAX_ESTIMATE: u32 = 1000;
+
+/// An `epic:`/`ms:`/`cycle:` group name — `[A-Za-z0-9_.-]+`: the
+/// label charset plus `.` for `1.0`-style milestones. Same
+/// boundary rule as labels (the name must fit a `·`-separated
+/// line token).
 pub fn is_valid_group_name(s: &str) -> bool {
     !s.is_empty()
         && s.bytes()
@@ -351,10 +431,13 @@ mod tests {
             .owner(Actor::new("devin").unwrap())
             .label("core")
             .epic("v2")
-            .milestone("1.0");
+            .milestone("1.0")
+            .due(crate::date::parse("2026-12-01").unwrap())
+            .estimate(3)
+            .cycle("sprint-12");
         assert_eq!(
             i.compact(),
-            "T-001 open pri:high owner:devin #core epic:v2 ms:1.0 the thing"
+            "T-001 open pri:high owner:devin #core epic:v2 ms:1.0 due:2026-12-01 est:3 cycle:sprint-12 the thing"
         );
         let bare = Item::new(ItemId::new(ItemKind::Task, 2), "");
         assert_eq!(bare.compact(), "T-002 open pri:med");
@@ -383,6 +466,31 @@ mod tests {
         }
         .apply(&mut item)
         .is_err());
+        // scheduling fields validate the same way — cycle is a
+        // group name, est is bounded
+        assert!(NewItemMeta {
+            cycle: Some("bad cycle".into()),
+            ..Default::default()
+        }
+        .apply(&mut item)
+        .is_err());
+        assert!(NewItemMeta {
+            estimate: Some(MAX_ESTIMATE + 1),
+            ..Default::default()
+        }
+        .apply(&mut item)
+        .is_err());
+        NewItemMeta {
+            due: crate::date::parse("2026-12-01").ok(),
+            estimate: Some(MAX_ESTIMATE),
+            cycle: Some("sprint-12".into()),
+            ..Default::default()
+        }
+        .apply(&mut item)
+        .unwrap();
+        assert_eq!(item.due, crate::date::parse("2026-12-01").ok());
+        assert_eq!(item.estimate, Some(MAX_ESTIMATE));
+        assert_eq!(item.cycle.as_deref(), Some("sprint-12"));
     }
 
     #[test]
@@ -487,6 +595,9 @@ mod tests {
         assert!(!obj.contains_key("note"));
         assert!(!obj.contains_key("epic"));
         assert!(!obj.contains_key("milestone"));
+        assert!(!obj.contains_key("due"));
+        assert!(!obj.contains_key("estimate"));
+        assert!(!obj.contains_key("cycle"));
         assert!(!obj.contains_key("children"));
         // full item round-trips — children included
         let full = Item::new(ItemId::new(ItemKind::Issue, 2), "t")
@@ -499,6 +610,9 @@ mod tests {
             .supersedes(ItemId::new(ItemKind::Adr, 1))
             .epic("v2")
             .milestone("1.0")
+            .due(crate::date::parse("2026-12-01").unwrap())
+            .estimate(3)
+            .cycle("sprint-12")
             .child(
                 Item::new(ItemId::new(ItemKind::Task, 7), "sub")
                     .child(Item::new(ItemId::new(ItemKind::Task, 8), "deep")),

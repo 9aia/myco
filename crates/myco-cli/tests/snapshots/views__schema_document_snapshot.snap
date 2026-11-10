@@ -1,6 +1,5 @@
 ---
 source: crates/myco-cli/tests/views.rs
-assertion_line: 133
 expression: "serde_json::to_string_pretty(&v).unwrap()"
 ---
 {
@@ -69,7 +68,10 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
         "superseded_by",
         "supersedes",
         "epic",
-        "milestone"
+        "milestone",
+        "due",
+        "estimate",
+        "cycle"
       ]
     },
     "kinds": {
@@ -145,11 +147,12 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "pri": "med",
       "status": "doc default (open|deferred|done)"
     },
-    "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms names — `ms` is the milestone token)",
+    "estimate_bound": "0–1000 points (relative size, not hours)",
+    "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms/cycle names — `ms` is the milestone token)",
     "label_pattern": "[A-Za-z0-9_-]+",
     "nesting": "an item's children are a `-`/`[ ]` list indented under it (canonical 2 spaces per level; one level recommended). Children carry the same token grammar — `done`/`defer` on a parent act on the whole subtree, on a child just that node",
     "separator": "·",
-    "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] [· note:<text>]",
+    "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] [· due:<YYYY-MM-DD>] [· est:<n>] [· cycle:<name>] [· note:<text>]",
     "token_order": [
       "status",
       "pri",
@@ -160,6 +163,9 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "links",
       "epic",
       "ms",
+      "due",
+      "est",
+      "cycle",
       "note"
     ]
   },
@@ -232,10 +238,33 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "cycle": {
+              "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "due": {
+              "description": "`due:` — the calendar date this item is due, `YYYY-MM-DD`\n(timezone-free, like `created:`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "epic": {
               "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "estimate": {
+              "description": "`est:` — relative size in points ([`MAX_ESTIMATE`] bound).\nPoints, not hours — teams define their own scale.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
                 "null"
               ]
             },
@@ -454,10 +483,33 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "cycle": {
+              "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "due": {
+              "description": "`due:` — the calendar date this item is due, `YYYY-MM-DD`\n(timezone-free, like `created:`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "epic": {
               "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "estimate": {
+              "description": "`est:` — relative size in points ([`MAX_ESTIMATE`] bound).\nPoints, not hours — teams define their own scale.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
                 "null"
               ]
             },
@@ -772,10 +824,33 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
             "null"
           ]
         },
+        "cycle": {
+          "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "due": {
+          "description": "`due:` — the calendar date this item is due, `YYYY-MM-DD`\n(timezone-free, like `created:`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "epic": {
           "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "estimate": {
+          "description": "`est:` — relative size in points ([`MAX_ESTIMATE`] bound).\nPoints, not hours — teams define their own scale.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
             "null"
           ]
         },
@@ -891,10 +966,33 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "cycle": {
+              "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "due": {
+              "description": "`due:` — the calendar date this item is due, `YYYY-MM-DD`\n(timezone-free, like `created:`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "epic": {
               "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "estimate": {
+              "description": "`est:` — relative size in points ([`MAX_ESTIMATE`] bound).\nPoints, not hours — teams define their own scale.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
                 "null"
               ]
             },
@@ -1252,10 +1350,33 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "cycle": {
+              "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "due": {
+              "description": "`due:` — the calendar date this item is due, `YYYY-MM-DD`\n(timezone-free, like `created:`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "epic": {
               "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "estimate": {
+              "description": "`est:` — relative size in points ([`MAX_ESTIMATE`] bound).\nPoints, not hours — teams define their own scale.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
                 "null"
               ]
             },
@@ -1495,10 +1616,33 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "cycle": {
+              "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "due": {
+              "description": "`due:` — the calendar date this item is due, `YYYY-MM-DD`\n(timezone-free, like `created:`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "epic": {
               "description": "`epic:` — the epic (named delivery grouping) this item\nbelongs to. Line token `epic:<name>`; a group name, not a\nlabel — one per item.",
               "type": [
                 "string",
+                "null"
+              ]
+            },
+            "estimate": {
+              "description": "`est:` — relative size in points ([`MAX_ESTIMATE`] bound).\nPoints, not hours — teams define their own scale.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
                 "null"
               ]
             },

@@ -107,6 +107,9 @@ fn carried_meta(src: &Item) -> NewItemMeta {
         links: Vec::new(),
         epic: src.epic.clone(),
         milestone: src.milestone.clone(),
+        due: src.due,
+        estimate: src.estimate,
+        cycle: src.cycle.clone(),
     }
 }
 

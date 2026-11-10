@@ -8,9 +8,9 @@
 //! `NNNN` = id number padded to 4 digits. TOML frontmatter in
 //! `+++` fences (id, title, status, created, owner, priority,
 //! labels, blocks, links, note, superseded_by, supersedes, epic,
-//! milestone — extendable: unknown keys are ignored on read for
-//! forward-compat); body = free-form markdown (verbatim; kind
-//! templates are `myco-template`'s job).
+//! milestone, due, estimate, cycle — extendable: unknown keys are
+//! ignored on read for forward-compat); body = free-form markdown
+//! (verbatim; kind templates are `myco-template`'s job).
 
 use myco_core::{date, Actor, Item, ItemFile, ItemId, KindSpec, Priority, Status, Storage};
 use serde::{Deserialize, Serialize};
@@ -140,6 +140,10 @@ struct FrontmatterIn {
     supersedes: Option<String>,
     epic: Option<String>,
     milestone: Option<String>,
+    #[serde(default, deserialize_with = "de_opt_created")]
+    due: Option<String>,
+    estimate: Option<u32>,
+    cycle: Option<String>,
 }
 
 /// `priority` reads like the line grammar — `low|med|high|crit`
@@ -195,6 +199,12 @@ struct FrontmatterOut<'a> {
     epic: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     milestone: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    due: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    estimate: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cycle: Option<&'a str>,
 }
 
 /// Parse an item file's source. `spec` declares the kind the
@@ -312,7 +322,11 @@ pub fn parse_item_file(src: &str, spec: &KindSpec, path: &str) -> Result<ItemFil
                 .map_err(|e: myco_core::ParseItemIdError| fm_err(e.to_string()))
         })
         .transpose()?;
-    for (key, name) in [("epic", &fm.epic), ("milestone", &fm.milestone)] {
+    for (key, name) in [
+        ("epic", &fm.epic),
+        ("milestone", &fm.milestone),
+        ("cycle", &fm.cycle),
+    ] {
         if let Some(name) = name {
             if !myco_core::is_valid_group_name(name) {
                 return Err(fm_err(format!("invalid {key} name {name:?}")));
@@ -321,6 +335,20 @@ pub fn parse_item_file(src: &str, spec: &KindSpec, path: &str) -> Result<ItemFil
     }
     item.epic = fm.epic;
     item.milestone = fm.milestone;
+    item.due = fm
+        .due
+        .map(|d| date::parse(&d).map_err(|e| fm_err(format!("bad due date — {e}"))))
+        .transpose()?;
+    if let Some(e) = fm.estimate {
+        if e > myco_core::MAX_ESTIMATE {
+            return Err(fm_err(format!(
+                "estimate {e} exceeds max {}",
+                myco_core::MAX_ESTIMATE
+            )));
+        }
+        item.estimate = Some(e);
+    }
+    item.cycle = fm.cycle;
     if item.blocks.contains(&id)
         || item.links.contains(&id)
         || item.supersedes == Some(id)
@@ -375,6 +403,9 @@ pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
         supersedes: file.meta.supersedes.map(|i| i.to_string()),
         epic: file.meta.epic.as_deref(),
         milestone: file.meta.milestone.as_deref(),
+        due: file.meta.due.map(date::render),
+        estimate: file.meta.estimate,
+        cycle: file.meta.cycle.as_deref(),
     };
     let toml = toml::to_string(&fm).map_err(|e| EmitError::new("item file", e.to_string()))?;
     if file.body != myco_core::canonical_body(&file.body) {
@@ -554,6 +585,38 @@ mod tests {
         assert_eq!(emit_item_file(&file).unwrap(), src);
         // invalid group names are frontmatter errors
         for bad in ["epic = \"has space\"", "milestone = \"a/b\""] {
+            let s = format!("+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\n{bad}\n+++\n");
+            assert!(
+                parse_item_file(&s, &spec(ItemKind::Issue), "x.md").is_err(),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn scheduling_keys_roundtrip() {
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\npriority = \"medium\"\ndue = \"2026-12-01\"\nestimate = 3\ncycle = \"sprint-12\"\n+++\n";
+        let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/issue-0001-x.md").unwrap();
+        assert_eq!(file.meta.due, Some(date::parse("2026-12-01").unwrap()));
+        assert_eq!(file.meta.estimate, Some(3));
+        assert_eq!(file.meta.cycle.as_deref(), Some("sprint-12"));
+        assert_eq!(emit_item_file(&file).unwrap(), src);
+        // bare TOML dates read like `created` does; emit canonicalizes
+        let src = "+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\ndue = 2026-12-01\n+++\n";
+        let file = parse_item_file(src, &spec(ItemKind::Issue), "issues/x.md").unwrap();
+        assert_eq!(file.meta.due, Some(date::parse("2026-12-01").unwrap()));
+        assert!(emit_item_file(&file)
+            .unwrap()
+            .contains("due = \"2026-12-01\""));
+        // bad values are frontmatter errors
+        for bad in [
+            "due = \"tomorrow\"",
+            "due = 2026-13-40",
+            "estimate = \"3\"",
+            "estimate = 1001",
+            "estimate = -1",
+            "cycle = \"has space\"",
+        ] {
             let s = format!("+++\nid = \"I-001\"\ntitle = \"x\"\nstatus = \"open\"\n{bad}\n+++\n");
             assert!(
                 parse_item_file(&s, &spec(ItemKind::Issue), "x.md").is_err(),

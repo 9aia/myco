@@ -61,8 +61,9 @@ pub fn open_read(
     }
 }
 
-/// `--pri/--owner/--label/--blocks/--links/--epic/--milestone` →
-/// the `NewItemMeta` every `add`/`new` verb applies.
+/// `--pri/--owner/--label/--blocks/--links/--epic/--milestone/
+/// --due/--est/--cycle` → the `NewItemMeta` every `add`/`new`
+/// verb applies.
 pub fn meta_args(a: &crate::registry::Args) -> Result<NewItemMeta, String> {
     Ok(NewItemMeta {
         priority: a.parsed("pri")?,
@@ -72,11 +73,15 @@ pub fn meta_args(a: &crate::registry::Args) -> Result<NewItemMeta, String> {
         links: a.many_parsed("links")?,
         epic: a.opt("epic").map(str::to_string),
         milestone: a.opt("milestone").map(str::to_string),
+        due: opt_date(a, "due")?,
+        estimate: a.parsed("est")?,
+        cycle: a.opt("cycle").map(str::to_string),
     })
 }
 
-/// `--status/--owner/--label/--pri/--epic/--milestone/--query/
-/// --limit` → the `Filter` every `list` verb shares.
+/// `--status/--owner/--label/--pri/--epic/--milestone/--due/
+/// --est/--cycle/--query/--limit` → the `Filter` every `list`
+/// verb shares.
 pub fn list_args(a: &crate::registry::Args) -> Result<Filter, String> {
     Ok(Filter {
         status: a.parsed("status")?,
@@ -85,9 +90,23 @@ pub fn list_args(a: &crate::registry::Args) -> Result<Filter, String> {
         pri: a.parsed("pri")?,
         epic: a.opt("epic").map(str::to_string),
         milestone: a.opt("milestone").map(str::to_string),
+        due: opt_date(a, "due")?,
+        estimate: a.parsed("est")?,
+        cycle: a.opt("cycle").map(str::to_string),
         query: a.opt("query").map(str::to_string),
         limit: a.parsed("limit")?,
     })
+}
+
+/// A `--due`-style date flag → `Option<Date>` — `date::parse`
+/// keeps the error text identical to `created:` token errors.
+pub(crate) fn opt_date(
+    a: &crate::registry::Args,
+    name: &str,
+) -> Result<Option<time::Date>, String> {
+    a.opt(name)
+        .map(|s| myco_core::date::parse(s).map_err(|e| format!("\"{name}\": {e}")))
+        .transpose()
 }
 
 /// `--body FILE|-` reads a file or stdin, `--text` is inline —
