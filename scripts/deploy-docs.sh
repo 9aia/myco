@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Build the VitePress site and publish .vitepress/dist to the `gh-pages`
 # branch. Runs identically by hand (from the docs/ worktree) and under
-# bupha — the watcher runs `bash scripts/deploy-docs.sh` in a detached
-# worktree of the pushed docs sha, so cwd is the docs checkout root and
+# the CI gate — the peregrin ci-gate campaign (bupha is retired) runs
+# `bash scripts/deploy-docs.sh` in a detached worktree of the pushed
+# docs sha, so cwd is the docs checkout root and
 # `..` is NOT the main repo. Cargo work happens in MYCO_REPO (the real
 # checkout); the gen-*.py scripts honor MYCO_ROOT for the same reason.
 set -euo pipefail
@@ -12,7 +13,7 @@ DOCS="$(pwd)"
 REPO="${MYCO_REPO:-$HOME/GitHub/9aia/workspace/repos/myco}"
 export MYCO_ROOT="$REPO"
 
-# The bupha watcher unit runs with the minimal systemd PATH
+# The gate may run with the minimal systemd PATH
 # (/usr/local/bin:/usr/bin) whenever it starts before the session env is
 # imported — pull the user tool dirs in ourselves so bun/cargo resolve
 # like they do in a login shell.
