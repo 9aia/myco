@@ -22,12 +22,14 @@ myco init
 | `project/DONE.md`                                               | done archive — completed tasks stay browsable                  |
 | `project/index.md`                                              | human-readable ledger index                                    |
 | `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs                                          |
+| `myco.toml`                                                      | repo-root config — seeded with the commented `[[kinds]]` prelude (only when absent) |
 | `.gitignore` += `project/`                                      | keeps the worktree out of code commits                         |
 | `AGENTS.md`                                                     | gains a marker-delimited, myco-managed *Agent awareness* block |
 
 `init` commits the scaffold on the `project` branch — your code
-branch only gains the `.gitignore` line and the `AGENTS.md`
-block. The block teaches agents the myco workflow; it's delimited
+branch gains `myco.toml` (the commented kinds prelude, only when
+the file doesn't already exist), the `.gitignore` line, and the
+`AGENTS.md` block. The block teaches agents the myco workflow; it's delimited
 by `<!-- myco:agent-awareness -->` markers so prose elsewhere in
 the file is preserved — a hand-written *Agent awareness* section
 is upgraded in place. `check` validates it as an
@@ -55,11 +57,14 @@ myco init --dir ~/work/ledger          # worktree somewhere else
 
 Every other verb discovers the project the same way, in order:
 
-1. `--dir` — explicit worktree path
+1. `--dir` — explicit worktree path (must qualify as a myco project)
 2. `--root` — repo root (worktree is `<root>/project`)
-3. `project_dir` in `myco.toml` (see [config](../reference/config.md))
-4. walk up from cwd for a `project/` worktree on branch `project`
-5. cwd inside the worktree itself
+3. cwd inside the project worktree itself
+4. `project_dir` in `myco.toml` (see [config](../reference/config.md))
+5. walk up from cwd for a `project/` worktree on branch `project`
+6. org-ledger fallback — a *registered* repo with no ledger of its
+   own resolves to the org ledger (see
+   [org views](org-views.md#ledger-less-repos--one-org-wide-ledger))
 
 A non-standard worktree location stays discoverable if you set
 `project_dir` (relative to the repo root) in a `myco.toml` —

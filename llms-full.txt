@@ -46,7 +46,10 @@ appended one line to `project/TODO.md`:
 ```
 
 Everything after the title is `·`-separated tokens —
-`pri:`, `owner:`, `#label`, `blocks:`, `epic:`, `ms:`.
+`status:`, `pri:`, `owner:`, `created:`, `#label`, `blocks:`,
+`links:`, `epic:`, `ms:`, `due:`, `est:`, `cycle:`, `note:` (see
+[the file spec](../explanation/file-spec.md) for the full
+grammar).
 
 Nest a sub-task under it:
 
@@ -108,8 +111,10 @@ myco check
 check: clean
 ```
 
-Done tasks are *removed* from `TODO.md` — the `project` branch
-history is the record. Every verb you ran was one atomic commit
+Done tasks move to `DONE.md` — the done archive keeps completed
+work browsable (`myco done list`, `myco item show`) instead of
+vanishing; the `project` branch history is still the record.
+Every verb you ran was one atomic commit
 on that branch (`git -C project log --oneline` shows them all).
 
 ## Recap
@@ -120,7 +125,7 @@ on that branch (`git -C project log --oneline` shows them all).
 | `item set --status`              | one legal state-machine step                |
 | `todo defer` / `backlog promote` | move the line TODO ↔ BACKLOG                |
 | `handoff` / `resume`             | append-only session notes / restart context |
-| `todo done`                      | `done`, then delete the line                |
+| `todo done`                      | `done`, line moves to `DONE.md`        |
 | `check`                          | validate files, state machine, index drift  |
 
 Every write went through a verb — hand-editing works too (the
@@ -157,12 +162,14 @@ myco init
 | `project/DONE.md`                                               | done archive — completed tasks stay browsable                  |
 | `project/index.md`                                              | human-readable ledger index                                    |
 | `project/issues/`, `proposals/`, `plans/`, `adrs/`, `handoffs/` | file-backed item dirs                                          |
+| `myco.toml`                                                      | repo-root config — seeded with the commented `[[kinds]]` prelude (only when absent) |
 | `.gitignore` += `project/`                                      | keeps the worktree out of code commits                         |
 | `AGENTS.md`                                                     | gains a marker-delimited, myco-managed *Agent awareness* block |
 
 `init` commits the scaffold on the `project` branch — your code
-branch only gains the `.gitignore` line and the `AGENTS.md`
-block. The block teaches agents the myco workflow; it's delimited
+branch gains `myco.toml` (the commented kinds prelude, only when
+the file doesn't already exist), the `.gitignore` line, and the
+`AGENTS.md` block. The block teaches agents the myco workflow; it's delimited
 by `<!-- myco:agent-awareness -->` markers so prose elsewhere in
 the file is preserved — a hand-written *Agent awareness* section
 is upgraded in place. `check` validates it as an
@@ -190,11 +197,14 @@ myco init --dir ~/work/ledger          # worktree somewhere else
 
 Every other verb discovers the project the same way, in order:
 
-1. `--dir` — explicit worktree path
+1. `--dir` — explicit worktree path (must qualify as a myco project)
 2. `--root` — repo root (worktree is `<root>/project`)
-3. `project_dir` in `myco.toml` (see [config](../reference/config.md))
-4. walk up from cwd for a `project/` worktree on branch `project`
-5. cwd inside the worktree itself
+3. cwd inside the project worktree itself
+4. `project_dir` in `myco.toml` (see [config](../reference/config.md))
+5. walk up from cwd for a `project/` worktree on branch `project`
+6. org-ledger fallback — a *registered* repo with no ledger of its
+   own resolves to the org ledger (see
+   [org views](org-views.md#ledger-less-repos--one-org-wide-ledger))
 
 A non-standard worktree location stays discoverable if you set
 `project_dir` (relative to the repo root) in a `myco.toml` —
@@ -278,7 +288,7 @@ Next session — human or agent — pulls the restart context:
 
 ```sh
 myco resume T-012          # compact prompt-ready block
-myco resume T-012 --json   # {item, location, blocks_titles, handoffs, open_checklist}
+myco resume T-012 --json   # {item, location, blocks_titles, links_titles, handoffs, handoffs_total, open_checklist}
 ```
 
 Then `myco status --prompt` for the ledger-wide picture and the
@@ -287,7 +297,7 @@ loop restarts.
 ## Hygiene
 
 ```sh
-myco check          # exits 1 with findings
+myco check          # exits 1 on error-severity findings (--fix repairs what it safely can)
 myco check --fix    # safe repairs + one commit
 ```
 
@@ -353,8 +363,9 @@ open checklist:
   - [ ] add regression test
 ```
 
-`--json` gives `{item, location, blocks_titles, handoffs[],
-open_checklist}` — the same data for machines. `--last N` shows
+`--json` gives `{item, location, blocks_titles, links_titles,
+handoffs[], handoffs_total, open_checklist}` — the same data for
+machines. `--last N` shows
 only the latest N handoff entries (default 10).
 
 `myco item show <id>` surfaces a `handoffs: N` count; `myco check`
@@ -400,11 +411,29 @@ myco resume T-012 --json
 ```
 
 `resume` returns the item (status, priority, owner, labels), the
-titles of its `blocks:` dependencies, the latest handoff entries,
-and the unchecked `- [ ]` checklist items for file-backed items —
+titles of its `blocks:` dependencies and `links:` associations,
+the latest handoff entries (`handoffs` + `handoffs_total`), and
+the unchecked `- [ ]` checklist items for file-backed items —
 the single-item counterpart of `myco status --prompt`. Human
 output is a compact prompt-ready block; `--last N` caps the
 entries shown (default 10).
+
+## Abnormal endings — `myco interrupt`
+
+A session that dies mid-work shouldn't leave items claimed
+forever. `myco interrupt` is the teardown verb:
+
+```sh
+myco interrupt T-012 --note "session crashed" --actor devin
+myco interrupt --session cli:abc123        # every item claimed under it
+```
+
+With an id, the item walks a legal step back to `open` (from
+`in-progress`/`blocked`/`claimed`) and gains an `interrupted`
+handoff entry in the same commit — `myco item show` and the board
+flag it with `⚡` until real work resumes. Without an id,
+`--session <id>` reverts every item whose claim was tagged with
+that session (claims made via `item set --session`/`--claim`).
 
 ## Where handoffs live
 
@@ -558,9 +587,9 @@ url: /myco/how-to/views.md
 
 A view is a declarative spec — `filter`, `group_by`, `sort`,
 `limit`, `format` — evaluated by one engine. Names come from two
-places: built-in presets (`board`, `open`, `epic`, `milestone`)
-and `[views.<name>]` tables in `myco.toml`
-([spec fields](../reference/config.md)).
+places: built-in presets (`board`, `open`, `epic`, `milestone`,
+`next`, `org-board`, `org-status`) and `[views.<name>]` tables in
+`myco.toml` ([spec fields](../reference/config.md)).
 
 ## Define one
 
@@ -575,7 +604,8 @@ format = "list"
 
 ```sh
 myco view hot          # resolves the named view
-myco view              # lists every defined view + origin
+myco view              # lists every defined view + origin — or renders
+                       # `default_view` from config when one is set
 myco view --status open --pri-min high   # ad-hoc spec from flags
 myco view hot --limit 3                  # flags patch the named spec
 ```
@@ -588,6 +618,10 @@ Every read is also `--json`: `{view, spec, groups, interrupted}`.
 `view board` renders the kanban (Backlog | Open | Claimed | In
 Progress | Blocked lanes); `view epic` and `view milestone` group
 by that metadata, one column per group with `ungrouped` trailing.
+`view next` is the "what do I pick up" preset — one open task or
+issue, top of the default sort. `view org-board`/`org-status` are
+the index-sourced org presets (see
+[org views](org-views.md)).
 The filter flags scope any view — `myco view board --epic v2` is
 one epic's lanes.
 
@@ -755,7 +789,7 @@ Under the hood both are plain view specs with `source = "index"`
 — the same thing works ad-hoc or in your own `[views]` config:
 
 ```sh
-myco view --source index --group-by status --format board   # = org-board
+myco view --source index --group-by status --format board   # org-board minus its live-status filter
 myco view --source index --group-by owner                   # who has what, org-wide
 myco view org-board --kind issue --label bug                # filters still apply
 myco view org-status --status open,claimed                  # active items only
@@ -796,6 +830,88 @@ For a fully interactive board — TODO/BACKLOG tabs, item preview,
 done/defer/promote by key, including index-sourced `org-*` views
 (`myco ui --view org-board`) — see
 [`myco ui`](../getting-started.md#the-interactive-board).
+
+---
+
+---
+url: /myco/how-to/custom-kinds.md
+---
+# Declare custom item kinds
+
+`[[kinds]]` tables in `myco.toml` extend the five prelude kinds
+(task, issue, proposal, adr, plan) with your own — a `spike`
+folder of experiment write-ups, a `decision` log, whatever the
+ledger needs. `myco init` seeds the whole prelude as comments in
+the repo-root `myco.toml`; uncomment a block to restate a builtin,
+or append entries to declare new kinds.
+
+## Declare one
+
+```toml
+# myco.toml (repo root — or ~/.config/myco/myco.toml for all repos)
+
+[[kinds]]
+name      = "spike"
+prefix    = "S"               # [A-Z][A-Z0-9]*, ≤ 15 bytes — S-001 is now a real id
+storage   = "dir"             # dir = one file per item; doc = ledger lines
+dir       = "spikes"          # optional — defaults to <name>s
+done_state = "done"           # the status that resolves the item
+zero_pad  = 3                 # S-001 vs ADR-0001
+```
+
+Field reference (all but `name`/`prefix`/`storage` optional —
+full list in [config](../reference/config.md)):
+
+| field          | meaning                                                        |
+| -------------- | -------------------------------------------------------------- |
+| `name`         | vocabulary name — `kind = ["spike"]` in views, `S-` ids        |
+| `prefix`       | id prefix — must not collide with another kind's prefix        |
+| `storage`      | `doc` (ledger lines) or `dir` (one md file per item)           |
+| `dir`          | `dir` storage subdirectory — defaults to `<name>s`             |
+| `file_prefix`  | filename prefix — defaults to `name`; `""` gives `0004-slug.md` |
+| `states`       | the statuses this kind may carry — defaults to the full machine |
+| `done_state`   | the resolving status — `done` unless declared otherwise        |
+| `supersede`    | `superseded_by:`/`supersedes:` frontmatter is meaningful       |
+| `resolve_verb` | declaration only in v1 — no verb reads it yet                  |
+| `zero_pad`     | digits in emitted ids — 3 default                              |
+
+## What you get for free
+
+A declared kind rides the generic surface — no new verbs:
+
+* **files** — `dir` kinds get `spikes/spike-NNNN-<slug>.md` with
+  the same `+++` frontmatter + markdown body as issues and
+  plans ([file spec](../explanation/file-spec.md)); `doc` kinds
+  live in the ledger docs
+* **verbs** — `myco item show S-001`, `item set` (status walks
+  *this kind's* `states`), `item move`, `handoff`, `resume`,
+  `interrupt` all work on any declared id
+* **views** — `kind = ["spike"]` (or `["S"]`) filters any view;
+  `group_by = "kind"` buckets mixed ledgers
+* **checks** — `myco check` validates the kind's files, ids, and
+  state machine, and lints the `[[kinds]]` table itself
+  (`kind-invalid` findings)
+
+## Restating a prelude kind
+
+Naming a `[[kinds]]` entry `issue` *shadows* the builtin spec —
+restating it verbatim is a no-op (that's what the commented seed
+shows), and changing fields like `states` or `done_state`
+reconfigures the kind. The `prefix` is locked: `issue`'s `I` is
+identity — reinterpreting it would rewrite every existing id, so
+a mismatched prefix is a config error. Repo `myco.toml` wins a
+name collision over `~/.config/myco/myco.toml` — a repo's kind
+vocabulary is shared surface.
+
+## Creating items
+
+There are no per-kind `new` verbs for custom kinds (the prelude
+kinds keep theirs — `issue new`, `plan new`, …). Author the item
+file per the [file spec](../explanation/file-spec.md) —
+`spikes/spike-0001-<slug>.md` with `id = "S-001"` frontmatter —
+then `myco check` validates it and the verbs take over from
+there. Keep the `[next]` counters in `project/meta.toml` ahead of
+the ids you hand out, or the next `alloc` collides.
 
 ---
 
@@ -898,7 +1014,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `commit` — Stage + commit worktree changes (conventional message).
 * `undo` — Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the undone commit is journaled for `redo`. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`). `--list` shows the redoable stack without mutating.
 * `redo` — Redo the last undo — pops the undo journal and restores the commit `myco undo` moved away from (`git reset --hard <target>`). Repeatable while entries remain; the stack self-invalidates when the ledger moves (any commit/pull/manual git op since the undo). Refuses on a dirty worktree.
-* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit.
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized.
 * `report` — Aging + velocity + blocked — how the ledger is trending.
@@ -950,6 +1066,9 @@ Add a task — allocs a T-id, appends to a section of TODO.md.
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` \[alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 ## `myco todo done`
 
@@ -989,6 +1108,9 @@ List tasks.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -1024,6 +1146,9 @@ Add a deferred item — allocs a T-id straight into BACKLOG.md.
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` \[alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 ## `myco backlog promote`
 
@@ -1049,6 +1174,9 @@ List backlog items.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -1076,6 +1204,9 @@ List done tasks — the DONE.md archive `todo done`/`item set --status done` lan
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -1114,6 +1245,9 @@ File an issue — allocs an I-id, writes `issues/issue-NNNN-<slug>.md` with fron
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` \[alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 ## `myco issue list`
 
@@ -1130,6 +1264,9 @@ List issues (live files; `--archived` includes `issues/archive/`).
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -1201,6 +1338,9 @@ File a proposal — allocs a P-id, writes the proposal file with frontmatter + t
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` \[alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 ## `myco proposal list`
 
@@ -1216,6 +1356,9 @@ List proposals.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -1262,6 +1405,9 @@ File a plan — allocs a PL-id, writes the plan file with frontmatter + a phase-
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` \[alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 ## `myco plan list`
 
@@ -1277,6 +1423,9 @@ List plans.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -1313,6 +1462,9 @@ File an ADR — allocs an ADR-id, writes the file with frontmatter (status `open
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` \[alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 ## `myco adr list`
 
@@ -1328,6 +1480,9 @@ List ADRs.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -1390,6 +1545,9 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--unlink <UNLINK>` — Remove a link — repeatable or comma-separated.
 * `--epic <EPIC>` — Epic name — `""` clears the epic.
 * `--milestone <MILESTONE>` — Milestone name — `""` clears the milestone.
+* `--due <DUE>` — Due date (`YYYY-MM-DD`) — `""` clears the due date.
+* `--est <EST>` \[alias: `estimate`] — Estimate in points (0–1000) — `""` clears the estimate.
+* `--cycle <CYCLE>` — Cycle name (`[A-Za-z0-9_.-]+`) — `""` clears the cycle.
 * `--session <SESSION>` — Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state.
 * `--yes` — Skip the `--status done` confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
 
@@ -1597,7 +1755,7 @@ Redo the last undo — pops the undo journal and restores the commit `myco undo`
 
 ## `myco view`
 
-Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 
 **Usage:** `myco view [OPTIONS] [name]`
 
@@ -1620,6 +1778,9 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--unclaimed` — Items with no owner.
 * `--epic <EPIC>` — Items in this epic.
 * `--milestone <MILESTONE>` — Items in this milestone.
+* `--due <DUE>` — Items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Items with this point estimate.
+* `--cycle <CYCLE>` — Items in this cycle.
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
 * `--source <SOURCE>` — Item universe — repo (default) reads this worktree; index unions every registered repo's snapshot (org views).
@@ -1646,6 +1807,9 @@ The single highest-priority open item — "what should I work on" (a `view` eval
 * `--unclaimed` — Items with no owner.
 * `--epic <EPIC>` — Items in this epic.
 * `--milestone <MILESTONE>` — Items in this milestone.
+* `--due <DUE>` — Items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` \[alias: `estimate`] — Items with this point estimate.
+* `--cycle <CYCLE>` — Items in this cycle.
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction. Default `pri,id`.
@@ -1802,8 +1966,9 @@ url: /myco/reference/agents-md-block.md
 The `<tool>:agent-awareness` convention — how multiple tools each
 maintain a section of a repo's `AGENTS.md` without clobbering human
 prose or each other. Normative; **myco is the reference
-implementation** (`crates/myco-cli/src/agentmd.rs`). sturn, kuda,
-bupha, and mimus blocks are deployed against it.
+implementation** (`crates/myco-cli/src/agentmd.rs`). The sturn
+and kuda blocks in the sibling 9aia repos are deployed against
+it.
 
 Keywords **MUST** / **MUST NOT** / **SHOULD** / **MAY** read as in
 RFC 2119.
@@ -2053,7 +2218,7 @@ each, filenames padded to four digits.
 
 ## <section>
 
-- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · note:<text>
+- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · due:2026-12-01 · est:3 · cycle:sprint-12 · note:<text>
   - [ ] T-013 a sub-task — children are the same grammar, indented 2 spaces/level
 ```
 
@@ -2068,13 +2233,16 @@ each, filenames padded to four digits.
 * `done`/`defer` on a parent act on the whole subtree; on a
   child, just that node.
 * Token order is canonical (`status`, `pri`, `owner`, `created`,
-  `#label`, `blocks`, `links`, `epic`, `ms`, `note`) so emit
-  produces minimal diffs. `ms` is the milestone token — kept
-  short. `links:` declares kind-agnostic associations — the plan,
-  proposal, or ADR an item belongs to (`myco item set --links` /
-  `--unlink`).
+  `#label`, `blocks`, `links`, `epic`, `ms`, `due`, `est`, `cycle`,
+  `note`) so emit produces minimal diffs. `ms` is the milestone
+  token — kept short. `links:` declares kind-agnostic associations
+  — the plan, proposal, or ADR an item belongs to (`myco item set --links` / `--unlink`). `due` is a `YYYY-MM-DD` date, `est` a
+  point estimate (0–1000, `--est`/`--estimate`), `cycle` an
+  iteration name — the scheduling trio (`due`/`estimate`/`cycle`
+  in file frontmatter).
 * Patterns: actors `[A-Za-z0-9._:-]+`, labels `[A-Za-z0-9_-]+`,
-  epic/ms names `[A-Za-z0-9_.-]+`, priority `low|med|high|crit`.
+  epic/ms/cycle names `[A-Za-z0-9_.-]+`, priority
+  `low|med|high|crit`.
 
 ## File items — issues/ proposals/ plans/ adrs/
 
@@ -2092,6 +2260,9 @@ blocks = ["T-008"]
 links = ["PL-001", "P-013"]
 epic = "v2"
 milestone = "1.0"
+due = "2026-12-01"
+estimate = 3
+cycle = "sprint-12"
 +++
 
 # Title
@@ -2102,9 +2273,14 @@ sections per kind.
 
 Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
 `priority`, `labels`, `blocks`, `links`, `note`, `superseded_by`,
-`supersedes`, `epic`, `milestone`. `priority` spells the `pri:`
+`supersedes`, `epic`, `milestone`, `due`, `estimate`, `cycle`.
+`priority` spells the `pri:`
 token (`low|med|high|crit`) — the serde full names `medium` /
-`critical` still read but re-emit as tokens on any write.
+`critical` still read but re-emit as tokens on any write. `due`
+is a `YYYY-MM-DD` string (a bare TOML date reads the same and
+re-emits quoted), `estimate` a 0–1000 point count, `cycle` a
+name — unknown keys are ignored on read (forward-compat) and
+dropped on re-emit.
 Archiving moves the file to `<dir>/archive/` — `myco item show`
 still finds archived items.
 
@@ -2117,7 +2293,7 @@ legal step at a time:
 | ------------- | ------------------------------------ |
 | `open`        | `claimed`, `in-progress`, `deferred` |
 | `claimed`     | `in-progress`, `open`, `deferred`    |
-| `in-progress` | `blocked`, `done`, `deferred`        |
+| `in-progress` | `blocked`, `done`, `deferred`, `open` |
 | `blocked`     | `in-progress`, `open`, `deferred`    |
 | `deferred`    | `open`                               |
 | `done`        | — (terminal)                         |
@@ -2216,13 +2392,18 @@ program happens to be project management.
       owns, must never be data            declared, layered, shadowable
 ```
 
+The crate is also a library: `myco-cli`'s `lib.rs` exposes
+`parse_from`/`run_from`/`dispatch` so `myco-driver` (and any
+embedder) drives the same engine in-process — `src/main.rs` is a
+six-line compat bin over it.
+
 A read is `universe → eval → emit`:
 
 | stage | knob | values |
 | --- | --- | --- |
 | universe | `source` | `repo` (this worktree) · `index` (the registered-repo union) |
 | eval | `filter → group_by → sort → limit` | a `ViewSpec`, from config or flags |
-| emit | `format` | `list` · `board` · `md` · `json` · `repos` |
+| emit | `format` | `list` · `board` · `repos` (`--md` / `--json` are output modifiers, not spec values) |
 
 Every feature gets asked one question — **engine or prelude?**
 Engine answers generalize (a new source, axis or format); prelude
@@ -2272,13 +2453,19 @@ still applies, and it pushes commits and tags to `main`.
 
 ## What a release run does
 
-1. **Diff since the last tag** — crates under `crates/` that
-   changed since `git describe --tags` are the release set; the
-   `myco` binary re-publishes whenever any crate changed. No
-   crate changes, no release.
+1. **Diff since the last tag** — the release set is a *fixed*
+   list of six crates: `myco-core`, `myco-git`, `myco-config`,
+   `myco-config-toml`, `myco-shell`, `myco-cli`. Only changes
+   under `crates/<one-of-those>/` count; changes to `myco-ops`,
+   `myco-store*`, `myco-index*`, `myco-tui`, `myco-driver`, or
+   `myco-testkit` trigger nothing. The `myco` binary re-publishes
+   whenever any of the six changed. No release-set changes, no
+   release.
 2. **Per-crate patch bump + publish** —
    `cargo set-version -p <crate> --bump patch`, then
-   `cargo publish` with retries.
+   `cargo publish` with retries, in dependency order
+   (`myco-core myco-config myco-git myco-shell myco-config-toml
+   myco`).
    Each crate gets its own tag `<crate>-v<ver>` — versions
    diverge independently in the monorepo.
 3. **Commit + push** — one `release: bump crate versions` commit,
@@ -2298,7 +2485,10 @@ by tagging once.
   project, so `cargo publish` of the CLI package depends on
   resolving that; installs should use
   `cargo install --git https://github.com/9aia/myco` regardless.
-* Library crates publish normally under their `myco-*` names.
+* Only the six release-set crates publish — the rest of the
+  workspace (`myco-ops`, `myco-store*`, `myco-index*`, `myco-tui`,
+  `myco-driver`, `myco-testkit`) is internal and installs via
+  `cargo install --git`.
 
 ## CI and docs deploys
 
@@ -2365,7 +2555,9 @@ myco init
 `init` creates the orphan `project` branch, mounts it as a
 `project/` worktree, seeds `meta.toml`, `TODO.md`, `BACKLOG.md`,
 `DONE.md`, `index.md` and the item dirs (`issues/`, `proposals/`, `plans/`,
-`adrs/`, `handoffs/`), adds `project/` to `.gitignore` on your
+`adrs/`, `handoffs/`), seeds a commented `[[kinds]]` prelude into
+`myco.toml` at the repo root (only when absent), adds `project/`
+to `.gitignore` on your
 code branch, and writes a managed *Agent awareness* block into
 `AGENTS.md`. It is idempotent — run it again and a healthy
 worktree is verified, a damaged one repaired.
@@ -2440,8 +2632,11 @@ pavo open myco:board     # same views in the pavo TUI
 
 Run `pavo` inside the repo (or pass `--param
 dir=…/project`) so the driver knows which ledger to open. The
-driver is read-only — mutations stay on `myco` verbs (or `myco
-ui`).
+driver's reads are view queries; writes ride the same engine
+verbs — `tamias-driver-myco run <verb>` (or the driver's `ops`
+manifest / `cli.<verb>` queries) reaches the full `myco` surface,
+commit-per-mutation included. `myco ui` stays the interactive
+path.
 
 ## Agent self-discovery
 

@@ -62,13 +62,18 @@ program happens to be project management.
       owns, must never be data            declared, layered, shadowable
 ```
 
+The crate is also a library: `myco-cli`'s `lib.rs` exposes
+`parse_from`/`run_from`/`dispatch` so `myco-driver` (and any
+embedder) drives the same engine in-process — `src/main.rs` is a
+six-line compat bin over it.
+
 A read is `universe → eval → emit`:
 
 | stage | knob | values |
 | --- | --- | --- |
 | universe | `source` | `repo` (this worktree) · `index` (the registered-repo union) |
 | eval | `filter → group_by → sort → limit` | a `ViewSpec`, from config or flags |
-| emit | `format` | `list` · `board` · `md` · `json` · `repos` |
+| emit | `format` | `list` · `board` · `repos` (`--md` / `--json` are output modifiers, not spec values) |
 
 Every feature gets asked one question — **engine or prelude?**
 Engine answers generalize (a new source, axis or format); prelude

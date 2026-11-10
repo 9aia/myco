@@ -5,9 +5,9 @@ url: /myco/how-to/views.md
 
 A view is a declarative spec — `filter`, `group_by`, `sort`,
 `limit`, `format` — evaluated by one engine. Names come from two
-places: built-in presets (`board`, `open`, `epic`, `milestone`)
-and `[views.<name>]` tables in `myco.toml`
-([spec fields](../reference/config.md)).
+places: built-in presets (`board`, `open`, `epic`, `milestone`,
+`next`, `org-board`, `org-status`) and `[views.<name>]` tables in
+`myco.toml` ([spec fields](../reference/config.md)).
 
 ## Define one
 
@@ -22,7 +22,8 @@ format = "list"
 
 ```sh
 myco view hot          # resolves the named view
-myco view              # lists every defined view + origin
+myco view              # lists every defined view + origin — or renders
+                       # `default_view` from config when one is set
 myco view --status open --pri-min high   # ad-hoc spec from flags
 myco view hot --limit 3                  # flags patch the named spec
 ```
@@ -35,6 +36,10 @@ Every read is also `--json`: `{view, spec, groups, interrupted}`.
 `view board` renders the kanban (Backlog | Open | Claimed | In
 Progress | Blocked lanes); `view epic` and `view milestone` group
 by that metadata, one column per group with `ungrouped` trailing.
+`view next` is the "what do I pick up" preset — one open task or
+issue, top of the default sort. `view org-board`/`org-status` are
+the index-sourced org presets (see
+[org views](org-views.md)).
 The filter flags scope any view — `myco view board --epic v2` is
 one epic's lanes.
 

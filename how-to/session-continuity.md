@@ -31,11 +31,29 @@ myco resume T-012 --json
 ```
 
 `resume` returns the item (status, priority, owner, labels), the
-titles of its `blocks:` dependencies, the latest handoff entries,
-and the unchecked `- [ ]` checklist items for file-backed items —
+titles of its `blocks:` dependencies and `links:` associations,
+the latest handoff entries (`handoffs` + `handoffs_total`), and
+the unchecked `- [ ]` checklist items for file-backed items —
 the single-item counterpart of `myco status --prompt`. Human
 output is a compact prompt-ready block; `--last N` caps the
 entries shown (default 10).
+
+## Abnormal endings — `myco interrupt`
+
+A session that dies mid-work shouldn't leave items claimed
+forever. `myco interrupt` is the teardown verb:
+
+```sh
+myco interrupt T-012 --note "session crashed" --actor devin
+myco interrupt --session cli:abc123        # every item claimed under it
+```
+
+With an id, the item walks a legal step back to `open` (from
+`in-progress`/`blocked`/`claimed`) and gains an `interrupted`
+handoff entry in the same commit — `myco item show` and the board
+flag it with `⚡` until real work resumes. Without an id,
+`--session <id>` reverts every item whose claim was tagged with
+that session (claims made via `item set --session`/`--claim`).
 
 ## Where handoffs live
 

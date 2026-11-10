@@ -42,8 +42,9 @@ open checklist:
   - [ ] add regression test
 ```
 
-`--json` gives `{item, location, blocks_titles, handoffs[],
-open_checklist}` — the same data for machines. `--last N` shows
+`--json` gives `{item, location, blocks_titles, links_titles,
+handoffs[], handoffs_total, open_checklist}` — the same data for
+machines. `--last N` shows
 only the latest N handoff entries (default 10).
 
 `myco item show <id>` surfaces a `handoffs: N` count; `myco check`

@@ -20,6 +20,7 @@ Agent-first project management — markdown ledger canonical, git the audit trai
 - [Import external work](/myco/how-to/import-work.md)
 - [Shape the board with named views](/myco/how-to/views.md)
 - [See work across repos](/myco/how-to/org-views.md)
+- [Declare custom item kinds](/myco/how-to/custom-kinds.md)
 
 ### Reference
 

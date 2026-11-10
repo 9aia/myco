@@ -92,7 +92,7 @@ Under the hood both are plain view specs with `source = "index"`
 — the same thing works ad-hoc or in your own `[views]` config:
 
 ```sh
-myco view --source index --group-by status --format board   # = org-board
+myco view --source index --group-by status --format board   # org-board minus its live-status filter
 myco view --source index --group-by owner                   # who has what, org-wide
 myco view org-board --kind issue --label bug                # filters still apply
 myco view org-status --status open,claimed                  # active items only
