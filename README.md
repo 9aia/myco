@@ -42,7 +42,8 @@ agent ──► myco <verb> ──► write md ──► commit on `project` bra
 
 myco = **work memory**. Neighbors: **sturn** (ephemeral
 coordination), **kuda** (code memory), **peregrin** (orchestration),
-**bupha** (CI gate), **mycena** (TODO/FIXME surfacing),
+**bupha**/**ci-gate** (CI gate — bupha retired, gate is peregrin
+campaigns), **mycena** (TODO/FIXME surfacing),
 **sepia** (session lifecycle → handoff/resume).
 
 ## Status
