@@ -3,8 +3,9 @@
 The `<tool>:agent-awareness` convention — how multiple tools each
 maintain a section of a repo's `AGENTS.md` without clobbering human
 prose or each other. Normative; **myco is the reference
-implementation** (`crates/myco-cli/src/agentmd.rs`). sturn, kuda,
-bupha, and mimus blocks are deployed against it.
+implementation** (`crates/myco-cli/src/agentmd.rs`). The sturn
+and kuda blocks in the sibling 9aia repos are deployed against
+it.
 
 Keywords **MUST** / **MUST NOT** / **SHOULD** / **MAY** read as in
 RFC 2119.

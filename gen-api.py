@@ -6,7 +6,7 @@ import json, os, pathlib, shutil, subprocess
 
 DOCS = pathlib.Path(__file__).resolve().parent
 # The main checkout — docs/ normally mirrors it as a worktree (so
-# DOCS.parent works); under bupha the docs sha runs detached and
+# DOCS.parent works); in CI the docs sha runs detached and
 # MYCO_ROOT points at the real repo.
 ROOT = pathlib.Path(os.environ.get("MYCO_ROOT") or DOCS.parent)
 
@@ -15,7 +15,7 @@ ROOT = pathlib.Path(os.environ.get("MYCO_ROOT") or DOCS.parent)
 # and shas and has served stale rmeta — a poisoned `myco-core` unit
 # made `cargo doc --workspace` fail with a phantom type error until
 # `cargo clean -p` cleared it. A dedicated dir under the repo's own
-# (gitignored) target/ stays warm across bupha runs and can't be
+# (gitignored) target/ stays warm across gate runs and can't be
 # poisoned by artifacts from other checkouts. An explicit
 # CARGO_TARGET_DIR still wins.
 os.environ.setdefault(

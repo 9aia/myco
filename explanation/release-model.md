@@ -8,13 +8,19 @@ still applies, and it pushes commits and tags to `main`.
 
 ## What a release run does
 
-1. **Diff since the last tag** — crates under `crates/` that
-   changed since `git describe --tags` are the release set; the
-   `myco` binary re-publishes whenever any crate changed. No
-   crate changes, no release.
+1. **Diff since the last tag** — the release set is a *fixed*
+   list of six crates: `myco-core`, `myco-git`, `myco-config`,
+   `myco-config-toml`, `myco-shell`, `myco-cli`. Only changes
+   under `crates/<one-of-those>/` count; changes to `myco-ops`,
+   `myco-store*`, `myco-index*`, `myco-tui`, `myco-driver`, or
+   `myco-testkit` trigger nothing. The `myco` binary re-publishes
+   whenever any of the six changed. No release-set changes, no
+   release.
 2. **Per-crate patch bump + publish** —
    `cargo set-version -p <crate> --bump patch`, then
-   `cargo publish` with retries.
+   `cargo publish` with retries, in dependency order
+   (`myco-core myco-config myco-git myco-shell myco-config-toml
+   myco`).
    Each crate gets its own tag `<crate>-v<ver>` — versions
    diverge independently in the monorepo.
 3. **Commit + push** — one `release: bump crate versions` commit,
@@ -34,7 +40,10 @@ by tagging once.
   project, so `cargo publish` of the CLI package depends on
   resolving that; installs should use
   `cargo install --git https://github.com/9aia/myco` regardless.
-- Library crates publish normally under their `myco-*` names.
+- Only the six release-set crates publish — the rest of the
+  workspace (`myco-ops`, `myco-store*`, `myco-index*`, `myco-tui`,
+  `myco-driver`, `myco-testkit`) is internal and installs via
+  `cargo install --git`.
 
 ## CI and docs deploys
 

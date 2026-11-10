@@ -64,7 +64,7 @@ Next session — human or agent — pulls the restart context:
 
 ```sh
 myco resume T-012          # compact prompt-ready block
-myco resume T-012 --json   # {item, location, blocks_titles, handoffs, open_checklist}
+myco resume T-012 --json   # {item, location, blocks_titles, links_titles, handoffs, handoffs_total, open_checklist}
 ```
 
 Then `myco status --prompt` for the ledger-wide picture and the
@@ -73,7 +73,7 @@ loop restarts.
 ## Hygiene
 
 ```sh
-myco check          # exits 1 with findings
+myco check          # exits 1 on error-severity findings (--fix repairs what it safely can)
 myco check --fix    # safe repairs + one commit
 ```
 

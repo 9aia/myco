@@ -46,7 +46,9 @@ myco init
 `init` creates the orphan `project` branch, mounts it as a
 `project/` worktree, seeds `meta.toml`, `TODO.md`, `BACKLOG.md`,
 `DONE.md`, `index.md` and the item dirs (`issues/`, `proposals/`, `plans/`,
-`adrs/`, `handoffs/`), adds `project/` to `.gitignore` on your
+`adrs/`, `handoffs/`), seeds a commented `[[kinds]]` prelude into
+`myco.toml` at the repo root (only when absent), adds `project/`
+to `.gitignore` on your
 code branch, and writes a managed _Agent awareness_ block into
 `AGENTS.md`. It is idempotent — run it again and a healthy
 worktree is verified, a damaged one repaired.
@@ -121,8 +123,11 @@ pavo open myco:board     # same views in the pavo TUI
 
 Run `pavo` inside the repo (or pass `--param
 dir=…/project`) so the driver knows which ledger to open. The
-driver is read-only — mutations stay on `myco` verbs (or `myco
-ui`).
+driver's reads are view queries; writes ride the same engine
+verbs — `tamias-driver-myco run <verb>` (or the driver's `ops`
+manifest / `cli.<verb>` queries) reaches the full `myco` surface,
+commit-per-mutation included. `myco ui` stays the interactive
+path.
 
 ## Agent self-discovery
 

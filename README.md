@@ -9,7 +9,8 @@ the pushed sha (gen → `cargo doc` → `vitepress build` →
 `gh-pages` is the whole deploy; there is no Actions workflow.
 
 The detached worktree has no sibling `main` checkout, so cargo
-work happens in `$MYCO_REPO` (default `~/GitHub/9aia/myco`) and
+work happens in `$MYCO_REPO` (default
+`~/GitHub/9aia/workspace/repos/myco`) and
 the `gen-*.py` scripts resolve sources via `MYCO_ROOT` instead of
 `..`. Run `bash scripts/deploy-docs.sh` by hand for the same
 pipeline locally.

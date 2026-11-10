@@ -4,7 +4,7 @@
 import os, pathlib, re, sys
 
 # Sources live in the main checkout — normally docs/ is a worktree of it
-# (so `..` works); under bupha the docs sha runs detached, so MYCO_ROOT
+# (so `..` works); in CI the docs sha runs detached, so MYCO_ROOT
 # points at the real repo.
 ROOT = pathlib.Path(
     os.environ.get("MYCO_ROOT") or pathlib.Path(__file__).parent / "..")

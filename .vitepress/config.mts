@@ -42,6 +42,7 @@ export default defineConfig({
           { text: "Import external work", link: "/how-to/import-work" },
           { text: "Shape the board with named views", link: "/how-to/views" },
           { text: "See work across repos", link: "/how-to/org-views" },
+          { text: "Declare custom item kinds", link: "/how-to/custom-kinds" },
         ],
       },
       {

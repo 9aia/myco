@@ -150,6 +150,9 @@ Add a task — allocs a T-id, appends to a section of TODO.md.
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` [alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 
 
@@ -195,6 +198,9 @@ List tasks.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -234,6 +240,9 @@ Add a deferred item — allocs a T-id straight into BACKLOG.md.
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` [alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 
 
@@ -263,6 +272,9 @@ List backlog items.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -294,6 +306,9 @@ List done tasks — the DONE.md archive `todo done`/`item set --status done` lan
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -336,6 +351,9 @@ File an issue — allocs an I-id, writes `issues/issue-NNNN-<slug>.md` with fron
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` [alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 
 
@@ -354,6 +372,9 @@ List issues (live files; `--archived` includes `issues/archive/`).
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -435,6 +456,9 @@ File a proposal — allocs a P-id, writes the proposal file with frontmatter + t
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` [alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 
 
@@ -452,6 +476,9 @@ List proposals.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -504,6 +531,9 @@ File a plan — allocs a PL-id, writes the plan file with frontmatter + a phase-
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` [alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 
 
@@ -521,6 +551,9 @@ List plans.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -561,6 +594,9 @@ File an ADR — allocs an ADR-id, writes the file with frontmatter (status `open
 * `--links <LINKS>` — Ids this item is associated with (its plan, proposal, …) — comma-separated or repeatable.
 * `--epic <EPIC>` — Epic name — the delivery grouping this item belongs to (`[A-Za-z0-9_.-]+`).
 * `--milestone <MILESTONE>` — Milestone name — the target this item ships under (`[A-Za-z0-9_.-]+`).
+* `--due <DUE>` — Due date — `YYYY-MM-DD`.
+* `--est <EST>` [alias: `estimate`] — Estimate in points (0–1000) — relative size, not hours.
+* `--cycle <CYCLE>` — Cycle name — the iteration this item is scheduled in (`[A-Za-z0-9_.-]+`).
 
 
 
@@ -578,6 +614,9 @@ List ADRs.
 * `--pri <PRI>` — Keep only items at this priority.
 * `--epic <EPIC>` — Keep only items in this epic.
 * `--milestone <MILESTONE>` — Keep only items in this milestone.
+* `--due <DUE>` — Keep only items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Keep only items with this point estimate.
+* `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
 
@@ -648,6 +687,9 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--unlink <UNLINK>` — Remove a link — repeatable or comma-separated.
 * `--epic <EPIC>` — Epic name — `""` clears the epic.
 * `--milestone <MILESTONE>` — Milestone name — `""` clears the milestone.
+* `--due <DUE>` — Due date (`YYYY-MM-DD`) — `""` clears the due date.
+* `--est <EST>` [alias: `estimate`] — Estimate in points (0–1000) — `""` clears the estimate.
+* `--cycle <CYCLE>` — Cycle name (`[A-Za-z0-9_.-]+`) — `""` clears the cycle.
 * `--session <SESSION>` — Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state.
 * `--yes` — Skip the `--status done` confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
 
@@ -920,6 +962,9 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--unclaimed` — Items with no owner.
 * `--epic <EPIC>` — Items in this epic.
 * `--milestone <MILESTONE>` — Items in this milestone.
+* `--due <DUE>` — Items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Items with this point estimate.
+* `--cycle <CYCLE>` — Items in this cycle.
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
 * `--source <SOURCE>` — Item universe — repo (default) reads this worktree; index unions every registered repo's snapshot (org views).
@@ -948,6 +993,9 @@ The single highest-priority open item — "what should I work on" (a `view` eval
 * `--unclaimed` — Items with no owner.
 * `--epic <EPIC>` — Items in this epic.
 * `--milestone <MILESTONE>` — Items in this milestone.
+* `--due <DUE>` — Items due on this date (`YYYY-MM-DD`).
+* `--est <EST>` [alias: `estimate`] — Items with this point estimate.
+* `--cycle <CYCLE>` — Items in this cycle.
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction. Default `pri,id`.

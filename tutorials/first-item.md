@@ -43,7 +43,10 @@ appended one line to `project/TODO.md`:
 ```
 
 Everything after the title is `·`-separated tokens —
-`pri:`, `owner:`, `#label`, `blocks:`, `epic:`, `ms:`.
+`status:`, `pri:`, `owner:`, `created:`, `#label`, `blocks:`,
+`links:`, `epic:`, `ms:`, `due:`, `est:`, `cycle:`, `note:` (see
+[the file spec](../explanation/file-spec.md) for the full
+grammar).
 
 Nest a sub-task under it:
 
@@ -105,8 +108,10 @@ myco check
 check: clean
 ```
 
-Done tasks are _removed_ from `TODO.md` — the `project` branch
-history is the record. Every verb you ran was one atomic commit
+Done tasks move to `DONE.md` — the done archive keeps completed
+work browsable (`myco done list`, `myco item show`) instead of
+vanishing; the `project` branch history is still the record.
+Every verb you ran was one atomic commit
 on that branch (`git -C project log --oneline` shows them all).
 
 ## Recap
@@ -117,7 +122,7 @@ on that branch (`git -C project log --oneline` shows them all).
 | `item set --status`              | one legal state-machine step                |
 | `todo defer` / `backlog promote` | move the line TODO ↔ BACKLOG                |
 | `handoff` / `resume`             | append-only session notes / restart context |
-| `todo done`                      | `done`, then delete the line                |
+| `todo done`                      | `done`, line moves to `DONE.md`        |
 | `check`                          | validate files, state machine, index drift  |
 
 Every write went through a verb — hand-editing works too (the

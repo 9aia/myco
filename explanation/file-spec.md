@@ -35,7 +35,7 @@ each, filenames padded to four digits.
 
 ## <section>
 
-- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · note:<text>
+- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · due:2026-12-01 · est:3 · cycle:sprint-12 · note:<text>
   - [ ] T-013 a sub-task — children are the same grammar, indented 2 spaces/level
 ```
 
@@ -50,13 +50,17 @@ each, filenames padded to four digits.
 - `done`/`defer` on a parent act on the whole subtree; on a
   child, just that node.
 - Token order is canonical (`status`, `pri`, `owner`, `created`,
-  `#label`, `blocks`, `links`, `epic`, `ms`, `note`) so emit
-  produces minimal diffs. `ms` is the milestone token — kept
-  short. `links:` declares kind-agnostic associations — the plan,
-  proposal, or ADR an item belongs to (`myco item set --links` /
-  `--unlink`).
+  `#label`, `blocks`, `links`, `epic`, `ms`, `due`, `est`, `cycle`,
+  `note`) so emit produces minimal diffs. `ms` is the milestone
+  token — kept short. `links:` declares kind-agnostic associations
+  — the plan, proposal, or ADR an item belongs to (`myco item set
+  --links` / `--unlink`). `due` is a `YYYY-MM-DD` date, `est` a
+  point estimate (0–1000, `--est`/`--estimate`), `cycle` an
+  iteration name — the scheduling trio (`due`/`estimate`/`cycle`
+  in file frontmatter).
 - Patterns: actors `[A-Za-z0-9._:-]+`, labels `[A-Za-z0-9_-]+`,
-  epic/ms names `[A-Za-z0-9_.-]+`, priority `low|med|high|crit`.
+  epic/ms/cycle names `[A-Za-z0-9_.-]+`, priority
+  `low|med|high|crit`.
 
 ## File items — issues/ proposals/ plans/ adrs/
 
@@ -74,6 +78,9 @@ blocks = ["T-008"]
 links = ["PL-001", "P-013"]
 epic = "v2"
 milestone = "1.0"
+due = "2026-12-01"
+estimate = 3
+cycle = "sprint-12"
 +++
 
 # Title
@@ -84,9 +91,14 @@ sections per kind.
 
 Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
 `priority`, `labels`, `blocks`, `links`, `note`, `superseded_by`,
-`supersedes`, `epic`, `milestone`. `priority` spells the `pri:`
+`supersedes`, `epic`, `milestone`, `due`, `estimate`, `cycle`.
+`priority` spells the `pri:`
 token (`low|med|high|crit`) — the serde full names `medium` /
-`critical` still read but re-emit as tokens on any write.
+`critical` still read but re-emit as tokens on any write. `due`
+is a `YYYY-MM-DD` string (a bare TOML date reads the same and
+re-emits quoted), `estimate` a 0–1000 point count, `cycle` a
+name — unknown keys are ignored on read (forward-compat) and
+dropped on re-emit.
 Archiving moves the file to `<dir>/archive/` — `myco item show`
 still finds archived items.
 
@@ -99,7 +111,7 @@ legal step at a time:
 | ------------- | ------------------------------------ |
 | `open`        | `claimed`, `in-progress`, `deferred` |
 | `claimed`     | `in-progress`, `open`, `deferred`    |
-| `in-progress` | `blocked`, `done`, `deferred`        |
+| `in-progress` | `blocked`, `done`, `deferred`, `open` |
 | `blocked`     | `in-progress`, `open`, `deferred`    |
 | `deferred`    | `open`                               |
 | `done`        | — (terminal)                         |
