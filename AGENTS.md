@@ -84,9 +84,10 @@ proposals, plans, ADRs, handoffs). Neighbors own theirs:
 - **kuda** — code memory; myco indexes *work items*, not code.
 - **peregrin** — orchestration; it embeds the ledger through
   `myco serve` (JSON-RPC 2.0 on stdio — ADR-0001).
-- **bupha** — retired CI gate (was: `myco check` in pipelines,
-  `Item: T-012` commit trailers); the gate is now the peregrin
-  `ci-gate` campaign.
+- **bupha** — CI gate (was: `myco check` in pipelines,
+  `Item: T-012` commit trailers); bupha is the CI repo again — the
+  org gate is mid-migration back from the peregrin `ci-gate`
+  campaign (PL-013).
 - **mycena** — surfaces TODO/FIXME in code → `myco absorb`.
 - **sepia** — session lifecycle → `myco handoff` / `myco resume`.
 

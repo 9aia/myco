@@ -38,7 +38,7 @@ file impl; `myco-git` and `myco-shell` shell out; `myco`
 ## Releasing
 
 `scripts/release.sh` is run manually by an operator on `main`
-(bupha's dogfood watch is retired) —
+(releases are operator-run) —
 bump, publish, tag (`{crate}-v{ver}`), dist binaries. See
 `docs/explanation/release-model.md` once the docs site lands.
 
