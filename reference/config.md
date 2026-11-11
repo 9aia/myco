@@ -12,6 +12,8 @@ url: /myco/reference/config.md
 | `views` | `map` | optional | Named declarative views — merged across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the *user* layer wins a name collision. |
 | `verbs` | `map` | optional | Config-declared verbs (P-007) — merged like `views`, but the *repo* layer wins collisions (repo verbs are shared surface, personal verbs don't override them). Builtins win over both at resolution. |
 | `kinds` | `Vec<KindSpec>` | optional | `[[kinds]]` — user item kinds layered over the prelude (P-008). A prelude name *shadows* that spec (prefix stays locked); new names extend the table. Merged like verbs: the repo layer wins a name collision — a repo's kind vocabulary is shared surface. |
+| `sync` | `SyncConfig` | optional | `[sync]` — ledger-branch sync policy. `None` = defaults. Repo layer wins the table like the scalars. |
+| `index` | `IndexConfig` | optional | `[index]` — org-index designation (`ledger = "org"\|"none"`). The index universe reads the repo-layer `myco.toml` directly, so a user-layer table can't leak a global designation into every repo. |
 
 ## Constraints
 

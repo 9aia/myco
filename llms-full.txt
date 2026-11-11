@@ -700,18 +700,27 @@ url: /myco/how-to/org-views.md
 ---
 # See work across repos
 
-`myco index` registers repos into a machine-wide cache;
-index-sourced `myco view` specs render cross-repo views over it.
-The org is just a view over the index universe — every filter,
-grouping, and format the view engine has applies to it.
+`myco view --source index` renders cross-repo views over the
+**index universe** — a disposable derived cache (redb under
+`$MYCO_HOME`, else `~/.local/share/myco`). The org is just a
+view over the universe — every filter, grouping, and format the
+view engine has applies to it.
 
-## The index
+## The universe
 
-The index lives under `$MYCO_HOME`, else `$XDG_DATA_HOME/myco`,
-else `~/.local/share/myco`:
+Inside a **lasius workspace** (`lasius.toml` found walking up
+from the cwd) the universe is the workspace's clones —
+`<root>/<repos_dir>/*` git checkouts, minus `exclude` globs —
+unioned with `repos.toml` registrations outside the workspace
+(`index list` marks each row `lasius`/`registry`). Outside
+lasius the universe is the `repos.toml` registry alone, so
+`myco index add` is still how repos join there.
+
+The index dir holds:
 
 * `repos.toml` — the registry (`[[repo]] path name`), a plain
-  file you can inspect
+  file you can inspect; inside lasius it also carries
+  registrations outside the workspace
 * `index.redb` — one `snapshots` table: repo path → JSON snapshot
 
 It is a **derived, disposable cache** — markdown in each repo's
@@ -721,53 +730,55 @@ It is a **derived, disposable cache** — markdown in each repo's
 ## Register repos
 
 ```sh
-myco index add ~/GitHub/9aia/sepia    # repo root or its project/ worktree
+myco index list                       # universe + snapshot freshness
+myco index rebuild [<path>]           # re-scan one or all
+myco index add ~/GitHub/9aia/sepia    # explicit registration —
+                                      #   required outside lasius
 myco index add .                      # register the repo you're in
-myco index list                       # repos + snapshot freshness
+myco index remove ~/GitHub/9aia/sepia # unregister a repos.toml entry
 ```
 
-`add` takes an initial snapshot. Snapshots go stale as ledgers
-change — `list` marks them `stale`; index-sourced views
-auto-rebuild stale entries on read, or rebuild explicitly:
-
-```sh
-myco index rebuild                    # all registered repos
-myco index rebuild ~/GitHub/9aia/sepia
-myco index remove ~/GitHub/9aia/sepia # unregister + drop snapshot
-```
+Inside lasius every clone joins the universe automatically — no
+`index add` needed. `add` still records an explicit registry
+entry (and takes an initial snapshot); snapshots go stale as
+ledgers change — `list` marks them `stale`; index-sourced views
+auto-rebuild stale entries on read, or rebuild explicitly.
 
 ## Ledger-less repos — one org-wide ledger
 
-The registry distinguishes three ledger states per repo, via the
-`ledger` key in `repos.toml` (absent = `local`, the conventional
-reading):
+Each universe repo has a ledger state — `local` (the
+conventional reading), `none` (explicitly ledger-less), or
+`org` (the org/global ledger: the *one* repo whose worktree
+every ledger-less member resolves to).
 
-* `local` — the repo's own `project/` worktree (the `worktree`
-  key, else `<path>/project`).
-* `none` — explicitly ledger-less: an org member with no
-  `project/` at all.
-* `org` — the org/global ledger: the *one* repo whose worktree
-  every ledger-less member resolves to.
+The designation lives in the repo's own `myco.toml`:
 
-`myco index add` observes the state: a git repo with no
-qualifying worktree registers as `none` and takes no snapshot;
-`--org` marks the global ledger (and clears the mark on any
-other entry — at most one).
-
-```sh
-myco index add ~/GitHub/9aia/project --org   # the one global ledger
-myco index add ~/GitHub/handl-lang/engine    # ledger-less → "none"
+```toml
+[index]
+ledger = "org"   # or "none" — "local" is the default
 ```
 
-Inside a registered `none` repo, verbs that need a project —
-`status`, `todo add`, `view`, writes included — resolve to the
-org ledger's worktree instead of failing. Unregistered repos
-still fail as before; `--dir`, `--root`, `MYCO_CONFIG`, and
-`project_dir` keep top precedence. `none` entries are omitted
-from index-sourced org views (no rows, no warnings), report
-`no-ledger` under `index rebuild`/`index list`, and are skipped
-by `org init` — the rollout never scaffolds `project/` into
-them. `ledger` is a plain hand-editable `repos.toml` key.
+Resolution order: `myco.toml [index] ledger` → a legacy
+`repos.toml` `ledger` key (`org`/`none`; `local` is the default,
+not a mark — `myco index add --org` still writes it) →
+derivation: a universe repo with no qualifying `project/`
+worktree is `none`, one with a worktree `local`.
+
+```sh
+# myco.toml in the ledger repo:        [index] ledger = "org"
+# or the registry equivalent:
+myco index add ~/GitHub/9aia/project --org   # the one global ledger
+```
+
+Inside a `none` repo, verbs that need a project — `status`,
+`todo add`, `view`, writes included — resolve to the org
+ledger's worktree instead of failing. Repos outside the
+universe still fail as before; `--dir`, `--root`, `MYCO_CONFIG`,
+and `project_dir` keep top precedence. `none` entries are
+omitted from index-sourced org views (no rows, no warnings),
+report `no-ledger` under `index rebuild`/`index list`, and are
+skipped by `org init` — the rollout never scaffolds `project/`
+into them.
 
 ## Org views — `view --source index`
 
@@ -1935,6 +1946,8 @@ url: /myco/reference/config.md
 | `views` | `map` | optional | Named declarative views — merged across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the *user* layer wins a name collision. |
 | `verbs` | `map` | optional | Config-declared verbs (P-007) — merged like `views`, but the *repo* layer wins collisions (repo verbs are shared surface, personal verbs don't override them). Builtins win over both at resolution. |
 | `kinds` | `Vec<KindSpec>` | optional | `[[kinds]]` — user item kinds layered over the prelude (P-008). A prelude name *shadows* that spec (prefix stays locked); new names extend the table. Merged like verbs: the repo layer wins a name collision — a repo's kind vocabulary is shared surface. |
+| `sync` | `SyncConfig` | optional | `[sync]` — ledger-branch sync policy. `None` = defaults. Repo layer wins the table like the scalars. |
+| `index` | `IndexConfig` | optional | `[index]` — org-index designation (`ledger = "org"\|"none"`). The index universe reads the repo-layer `myco.toml` directly, so a user-layer table can't leak a global designation into every repo. |
 
 ## Constraints
 
@@ -1954,13 +1967,10 @@ Rustdoc for every workspace crate — public APIs are
 documented at source (doc comments).
 
 * [myco-core](/myco/api/myco_core/index.html) — domain
-* [myco-config](/myco/api/myco_config/index.html) — port
 * [myco-index](/myco/api/myco_index/index.html) — port
 * [myco-store](/myco/api/myco_store/index.html) — port
 * [myco-ops](/myco/api/myco_ops/index.html) — ops
-* [myco-config-toml](/myco/api/myco_config_toml/index.html) — adapter
 * [myco-driver](/myco/api/myco_driver/index.html) — adapter
-* [myco-git](/myco/api/myco_git/index.html) — adapter
 * [myco-index-redb](/myco/api/myco_index_redb/index.html) — adapter
 * [myco-shell](/myco/api/myco_shell/index.html) — adapter
 * [myco-store-md](/myco/api/myco_store_md/index.html) — adapter
@@ -2347,18 +2357,23 @@ url: /myco/explanation/architecture.md
 
 Ports-and-adapters over a flat `crates/` workspace:
 `myco-core` is pure domain — item models, the id registry, the
-state machine — with no I/O. Ports are traits (`myco-store`,
-`myco-config`, `myco-index`); impls live in separate crates;
-`crates/myco-cli` (package `myco`) is the composition root that
-wires impls to verbs.
+state machine, the `Config`/`LedgerMode` models — with no I/O.
+Ports are traits (`myco-store`, `myco-index`); impls live in
+separate crates. Config loading is delegated to scarab
+(`scarab-config-toml` parsing behind `myco-ops`'s `config::TOML`
+loader — the `myco-config*` crates were retired) and workspace
+discovery to lasius (`lasius-core` behind `myco-ops`'s
+`universe`); `crates/myco-cli` (package `myco`) is the
+composition root that wires impls to verbs.
 
 Design rules:
 
 * **No `unsafe`, no async** — the binary stays dependency-light
   and synchronous; no runtime to embed.
-* **Git via the `git` CLI** — `myco-git` shells out for the
-  orphan branch, worktree, and per-verb commits; no
-  libgit2/gix binding.
+* **Git via the shared `lasius-vcs` port** — `myco-ops::vcs`
+  routes every call through it (`lasius-vcs-git` shells out to
+  the `git` CLI) for the orphan branch, worktree, and per-verb
+  commits; no libgit2/gix binding, no per-repo git crate.
 * **Markdown is the file spec** — `myco-store-md` owns strict
   parse/emit: deterministic output, stable ordering, minimal
   diffs. `myco-testkit` freezes emit with golden fixtures and
@@ -2370,13 +2385,10 @@ Design rules:
 | crate | layer | purpose |
 |---|---|---|
 | `myco-core` | domain | myco domain core: item models, ID registry, state machine — pure, no I/O |
-| `myco-config` | port | Config port: where myco.toml-shaped config comes from |
 | `myco-index` | port | Index port: the derived, disposable cache powering status/board/report/org views |
 | `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
 | `myco-ops` | ops | myco — ops I/O shell: project discovery, store open/save, commit-per-mutation, verb plumbing |
-| `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
 | `myco-driver` | adapter | tamias-driver-myco — pavo view driver over a repo's project/ ledger (reads via myco-ops) |
-| `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
 | `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
 | `myco-shell` | adapter | Run a command in a working directory via bash -c — the generic shell-out helper |
 | `myco-store-md` | adapter | Markdown adapter for the store port — strict parse/emit of project/ files, round-trip stable; owns the file spec |
@@ -2471,18 +2483,18 @@ still applies, and it pushes commits and tags to `main`.
 ## What a release run does
 
 1. **Diff since the last tag** — the release set is a *fixed*
-   list of six crates: `myco-core`, `myco-git`, `myco-config`,
-   `myco-config-toml`, `myco-shell`, `myco-cli`. Only changes
-   under `crates/<one-of-those>/` count; changes to `myco-ops`,
-   `myco-store*`, `myco-index*`, `myco-tui`, `myco-driver`, or
-   `myco-testkit` trigger nothing. The `myco` binary re-publishes
-   whenever any of the six changed. No release-set changes, no
-   release.
+   list of four crates: `myco-core`, `myco-ops`, `myco-shell`,
+   `myco-cli` (`myco-ops` carries the config loader, index
+   universe, and all git access via `lasius-vcs` since the
+   `myco-config*`/`myco-git` crates were retired). Only changes under `crates/<one-of-those>/`
+   count; changes to `myco-store*`, `myco-index*`, `myco-tui`,
+   `myco-driver`, or `myco-testkit` trigger nothing. The `myco`
+   binary re-publishes whenever any of the four changed. No
+   release-set changes, no release.
 2. **Per-crate patch bump + publish** —
    `cargo set-version -p <crate> --bump patch`, then
    `cargo publish` with retries, in dependency order
-   (`myco-core myco-config myco-git myco-shell myco-config-toml
-   myco`).
+   (`myco-core myco-ops myco-shell myco`).
    Each crate gets its own tag `<crate>-v<ver>` — versions
    diverge independently in the monorepo.
 3. **Commit + push** — one `release: bump crate versions` commit,
