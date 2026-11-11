@@ -78,16 +78,16 @@ pub fn repo_at(path: &Path) -> Result<discover::Project, String> {
     // ledger-less: any git repo registers without a snapshot —
     // `h_add` reads the registry to tell "no ledger yet" from
     // "custom worktree still qualifies"
-    let repo = myco_git::repo_root(path)
+    let repo = myco_ops::vcs::repo_root(path)
         .ok()
-        .or_else(|| path.parent().and_then(|p| myco_git::repo_root(p).ok()))
+        .or_else(|| path.parent().and_then(|p| myco_ops::vcs::repo_root(p).ok()))
         .ok_or_else(|| {
             format!(
                 "{}: not a myco repo — not inside a git repository",
                 path.display()
             )
         })?;
-    let root = myco_git::main_worktree_compat(&repo).unwrap_or(repo);
+    let root = myco_ops::vcs::main_worktree(&repo).unwrap_or(repo);
     let root = root
         .canonicalize()
         .map_err(|e| format!("{}: {e}", root.display()))?;
@@ -113,7 +113,7 @@ pub fn scan_repo(proj: &discover::Project) -> Result<RepoSnapshot, String> {
     Ok(RepoSnapshot {
         path,
         name: scan.name,
-        head_commit: myco_git::head_commit(&proj.worktree).unwrap_or_default(),
+        head_commit: myco_ops::vcs::head_commit(&proj.worktree).unwrap_or_default(),
         scanned_at: now(),
         items: scan.items,
         archived: scan.archived,
@@ -127,7 +127,7 @@ pub fn scan_repo(proj: &discover::Project) -> Result<RepoSnapshot, String> {
 pub fn current_head(entry: &RepoEntry) -> Option<String> {
     entry
         .worktree_path()
-        .and_then(|w| myco_git::head_commit(w.as_std_path()))
+        .and_then(|w| myco_ops::vcs::head_commit(w.as_std_path()))
 }
 
 /// Map `items` across scoped worker threads, preserving order —
@@ -188,7 +188,7 @@ pub fn scan_one(entry: &RepoEntry) -> Result<RepoSnapshot, String> {
         name: scan.name,
         // "" when HEAD is unreadable — never matches a real head,
         // so the snapshot stays stale rather than looking fresh
-        head_commit: myco_git::head_commit(wt.as_std_path()).unwrap_or_default(),
+        head_commit: myco_ops::vcs::head_commit(wt.as_std_path()).unwrap_or_default(),
         scanned_at: now(),
         items: scan.items,
         archived: scan.archived,
@@ -645,7 +645,7 @@ mod tests {
         git(r, &["init", "-q"]);
         git(r, &["config", "user.email", "t@t"]);
         git(r, &["config", "user.name", "t"]);
-        myco_git::create_orphan_branch(r, "project", "init").unwrap();
+        myco_ops::vcs::create_orphan_branch(r, "project", "init").unwrap();
         git(r, &["worktree", "add", "project", "project"]);
         std::fs::write(r.join("project/TODO.md"), "# TODO — x\n").unwrap();
         d

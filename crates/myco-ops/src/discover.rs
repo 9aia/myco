@@ -41,7 +41,7 @@ fn canon(p: &Path) -> PathBuf {
 /// so `project/sub` would otherwise pass the branch check and be
 /// mistaken for the ledger.
 fn is_worktree_root(d: &Path) -> bool {
-    myco_git::repo_root(d)
+    crate::vcs::repo_root(d)
         .map(|top| canon(&top) == canon(d))
         .unwrap_or(false)
 }
@@ -53,7 +53,7 @@ pub fn qualifies(d: &Path) -> bool {
     if !d.is_dir() {
         return false;
     }
-    (is_worktree_root(d) && myco_git::worktree_branch(d).as_deref() == Some(BRANCH))
+    (is_worktree_root(d) && crate::vcs::worktree_branch(d).as_deref() == Some(BRANCH))
         || d.join("TODO.md").is_file()
 }
 
@@ -62,8 +62,8 @@ pub fn qualifies(d: &Path) -> bool {
 /// `rev-parse --show-toplevel` finds the real worktree root, so a
 /// nested dir never gets mistaken for the ledger.
 fn enclosing_project_worktree(cwd: &Path) -> Option<PathBuf> {
-    let top = myco_git::repo_root(cwd).ok()?;
-    (myco_git::worktree_branch(&top).as_deref() == Some(BRANCH)).then_some(top)
+    let top = crate::vcs::repo_root(cwd).ok()?;
+    (crate::vcs::worktree_branch(&top).as_deref() == Some(BRANCH)).then_some(top)
 }
 
 /// `candidate` — a qualifying `project/` dir found under `a` —
@@ -78,7 +78,7 @@ fn owns_project(a: &Path, candidate: &Path) -> bool {
     if !is_worktree_root(candidate) {
         return true;
     }
-    match (myco_git::common_dir(a), myco_git::common_dir(candidate)) {
+    match (crate::vcs::common_dir(a), crate::vcs::common_dir(candidate)) {
         // same shared git dir → same repo (covers `a` being a
         // linked worktree itself)
         (Ok(x), Ok(y)) => canon(&x) == canon(&y),
@@ -86,7 +86,7 @@ fn owns_project(a: &Path, candidate: &Path) -> bool {
         // main worktree IS `a` (the ledger's repo rooted there);
         // a worktree whose main worktree lives elsewhere is
         // foreign
-        _ => myco_git::main_worktree_compat(candidate).is_some_and(|m| canon(&m) == canon(a)),
+        _ => crate::vcs::main_worktree(candidate).is_some_and(|m| canon(&m) == canon(a)),
     }
 }
 
@@ -203,7 +203,7 @@ fn discover_in_index(
         }
         let root = match root {
             Some(r) => canonicalize(r)?,
-            None => myco_git::main_worktree_compat(&worktree)
+            None => crate::vcs::main_worktree(&worktree)
                 .or_else(|| worktree.parent().map(Path::to_path_buf))
                 .unwrap_or_else(|| worktree.clone()),
         };
@@ -233,7 +233,7 @@ fn discover_in_index(
     // `project/` found by config or walking: an ancestor's ledger
     // may be a different repo's
     if let Some(wt) = enclosing_project_worktree(&cwd) {
-        let root = myco_git::main_worktree_compat(&wt)
+        let root = crate::vcs::main_worktree(&wt)
             .or_else(|| wt.parent().map(Path::to_path_buf))
             .unwrap_or_else(|| wt.clone());
         return Ok(Project { root, worktree: wt });
@@ -241,7 +241,7 @@ fn discover_in_index(
 
     // myco.toml's `project_dir` — read from the discovered repo's
     // own config, inside the repo only
-    if let Ok(root) = myco_git::repo_root(&cwd) {
+    if let Ok(root) = crate::vcs::repo_root(&cwd) {
         if let Some(rel) = configured_project_dir(&root, &cfg) {
             let worktree = root.join(rel);
             if qualifies(&worktree) && owns_project(&root, &worktree) {
@@ -253,7 +253,7 @@ fn discover_in_index(
     // walk up: `<ancestor>/project` that qualifies *and belongs
     // to the same repo* — capped at the worktree root containing
     // cwd so a higher ancestor's foreign `project/` can't win
-    let top = myco_git::repo_root(&cwd).ok().map(|t| canon(&t));
+    let top = crate::vcs::repo_root(&cwd).ok().map(|t| canon(&t));
     for a in cwd.ancestors() {
         if top.as_ref().is_some_and(|t| !a.starts_with(t)) {
             break;
@@ -270,7 +270,7 @@ fn discover_in_index(
     // org-ledger fallback — only repos in the index universe
     // (lasius clones ∪ registry) get here; others still fail
     if let Some(index) = index {
-        if let Ok(top) = myco_git::repo_root(&cwd) {
+        if let Ok(top) = crate::vcs::repo_root(&cwd) {
             if let Some(p) = org_fallback(&top, index, cfg) {
                 return Ok(p);
             }
@@ -304,7 +304,7 @@ fn org_fallback(repo: &Path, index: &dyn myco_index::Index, cfg: ConfigLoader) -
     // its main worktree (cwd may sit in a linked worktree whose
     // toplevel isn't the registered root)
     let mut keys = vec![canon(repo)];
-    if let Some(m) = myco_git::main_worktree_compat(repo) {
+    if let Some(m) = crate::vcs::main_worktree(repo) {
         let m = canon(&m);
         if !keys.contains(&m) {
             keys.push(m);
@@ -340,7 +340,7 @@ fn org_fallback(repo: &Path, index: &dyn myco_index::Index, cfg: ConfigLoader) -
 
 /// Tailor the dead-end message — `init` can only help inside a repo.
 fn no_project_error(cwd: &Path) -> String {
-    match myco_git::repo_root(cwd) {
+    match crate::vcs::repo_root(cwd) {
         Ok(root) => format!(
             "no project worktree found above {} — run `myco init` in {}",
             cwd.display(),
@@ -369,12 +369,12 @@ pub fn repo_root_for(dir: Option<&Path>, root: Option<&Path>) -> Result<PathBuf,
         // its (canonicalized) parent
         let d = canonical_dir(d);
         let parent = d.parent().unwrap_or(d.as_path());
-        let container = myco_git::repo_root(parent)
+        let container = crate::vcs::repo_root(parent)
             .map_err(|_| format!("{}: not inside a git repository", parent.display()))?;
-        return Ok(myco_git::main_worktree_compat(&container).unwrap_or(container));
+        return Ok(crate::vcs::main_worktree(&container).unwrap_or(container));
     }
     let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
-    myco_git::repo_root(&cwd).map_err(|_| {
+    crate::vcs::repo_root(&cwd).map_err(|_| {
         format!(
             "myco init: {} is not inside a git repository",
             cwd.display()
@@ -413,7 +413,7 @@ mod tests {
         git(r, &["init", "-q"]);
         git(r, &["config", "user.email", "t@t"]);
         git(r, &["config", "user.name", "t"]);
-        myco_git::create_orphan_branch(r, "project", "init").unwrap();
+        crate::vcs::create_orphan_branch(r, "project", "init").unwrap();
         git(r, &["worktree", "add", "project", "project"]);
         std::fs::write(r.join("project/TODO.md"), "# TODO — x\n").unwrap();
         d
@@ -527,7 +527,7 @@ mod tests {
                 "attached a foreign repo's worktree"
             );
             // …and B's *own* ledger resolves fine
-            myco_git::create_orphan_branch(b.path(), "project", "init").unwrap();
+            crate::vcs::create_orphan_branch(b.path(), "project", "init").unwrap();
             let own = b.path().join("own-ledger");
             git(
                 b.path(),
@@ -549,7 +549,7 @@ mod tests {
             git(r, &["init", "-q"]);
             git(r, &["config", "user.email", "t@t"]);
             git(r, &["config", "user.name", "t"]);
-            myco_git::create_orphan_branch(r, "project", "init").unwrap();
+            crate::vcs::create_orphan_branch(r, "project", "init").unwrap();
             git(r, &["worktree", "add", "pm", "project"]);
             std::fs::write(r.join("myco.toml"), "project_dir = \"pm\"\n").unwrap();
             let sub = r.join("sub");

@@ -1598,7 +1598,7 @@ const DOC_LOCS: &[&str] = &["TODO.md", "BACKLOG.md", "DONE.md"];
 /// discriminator).
 fn remote_holds(wt: &Path, remote: &str, item: &Item, loc: &str) -> bool {
     if DOC_LOCS.contains(&loc) {
-        let Ok(src) = myco_git::git_out(wt, &["show", &format!("{remote}:{loc}")]) else {
+        let Ok(src) = myco_ops::vcs::git_out(wt, &["show", &format!("{remote}:{loc}")]) else {
             return false;
         };
         let idtok = item.id.to_string();
@@ -1607,7 +1607,7 @@ fn remote_holds(wt: &Path, remote: &str, item: &Item, loc: &str) -> bool {
     } else {
         // cat-file -e via git_out — a miss is expected here, and
         // the bool `git()` helper would leak `fatal:` on stderr
-        myco_git::git_out(wt, &["cat-file", "-e", &format!("{remote}:{loc}")]).is_ok()
+        myco_ops::vcs::git_out(wt, &["cat-file", "-e", &format!("{remote}:{loc}")]).is_ok()
     }
 }
 
@@ -1796,7 +1796,7 @@ pub(crate) fn renumber_duplicates(
         // the handoff file follows the item only when the remote
         // side doesn't own one already
         let remote_handoff =
-            myco_git::git_out(wt, &["cat-file", "-e", &format!("{remote}:{hfrom}")]).is_ok();
+            myco_ops::vcs::git_out(wt, &["cat-file", "-e", &format!("{remote}:{hfrom}")]).is_ok();
         if DOC_LOCS.contains(&m.loc.as_str()) {
             if let Read::Ok(src) = read(wt, &m.loc) {
                 match repoint_doc_line(&src, &m.item, &m.new) {
@@ -2004,13 +2004,13 @@ fn worktree_findings(worktree: &Path) -> Vec<Finding> {
     // its own. A plain `project/` subdirectory (the legacy in-tree
     // layout) rides the enclosing branch by design — `myco migrate`
     // is the answer there, not a finding on every `check`.
-    let is_root = myco_git::repo_root(worktree)
+    let is_root = myco_ops::vcs::repo_root(worktree)
         .map(|top| top.canonicalize().ok() == worktree.canonicalize().ok())
         .unwrap_or(false);
     if !is_root {
         return out;
     }
-    match myco_git::is_detached(worktree) {
+    match myco_ops::vcs::is_detached(worktree) {
         // a detached ledger worktree: every commit is unreferenced
         Some(true) => {
             out.push(Finding::at(
@@ -2026,7 +2026,7 @@ fn worktree_findings(worktree: &Path) -> Vec<Finding> {
         None => return out,
         Some(false) => {}
     }
-    match myco_git::worktree_branch(worktree).as_deref() {
+    match myco_ops::vcs::worktree_branch(worktree).as_deref() {
         Some(BRANCH) => {}
         Some(other) => out.push(Finding::warn(
             ".",
@@ -2043,9 +2043,9 @@ fn worktree_findings(worktree: &Path) -> Vec<Finding> {
     // clone leaves `origin/<branch>` stale forever); no tracked ref =
     // never published, or no remote at all — a repo-level choice, not
     // this verb's business.
-    if myco_git::tracks_branch(worktree, "origin", BRANCH) {
+    if myco_ops::vcs::tracks_branch(worktree, "origin", BRANCH) {
         let remote = format!("refs/remotes/origin/{BRANCH}");
-        if let Some(ahead) = myco_git::commits_ahead(worktree, &remote) {
+        if let Some(ahead) = myco_ops::vcs::commits_ahead(worktree, &remote) {
             if ahead > 0 {
                 out.push(Finding::warn(
                     ".",
@@ -2057,7 +2057,7 @@ fn worktree_findings(worktree: &Path) -> Vec<Finding> {
                 ));
             }
         }
-        if let Some(behind) = myco_git::commits_behind(worktree, &remote) {
+        if let Some(behind) = myco_ops::vcs::commits_behind(worktree, &remote) {
             if behind > 0 {
                 out.push(Finding::warn(
                     ".",
@@ -2208,7 +2208,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
     let health = worktree_findings(wt);
     let mut fixes_applied = 0usize;
     if fix && health.iter().any(|f| f.fixable) {
-        myco_git::attach_branch(wt, myco_ops::discover::BRANCH)
+        myco_ops::vcs::attach_branch(wt, myco_ops::discover::BRANCH)
             .map_err(|e| format!("reattach {}: {e}", wt.display()))?;
         fixes_applied += 1;
     }

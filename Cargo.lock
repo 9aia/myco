@@ -899,6 +899,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "lasius-vcs"
+version = "0.4.0"
+source = "git+ssh://git@github.com/9aia/lasius.git?rev=52d8150bc40070f130c14b114da396fc8f570cb6#52d8150bc40070f130c14b114da396fc8f570cb6"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "lasius-vcs-git"
+version = "0.4.0"
+source = "git+ssh://git@github.com/9aia/lasius.git?rev=52d8150bc40070f130c14b114da396fc8f570cb6#52d8150bc40070f130c14b114da396fc8f570cb6"
+dependencies = [
+ "lasius-vcs",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1062,7 +1078,6 @@ dependencies = [
  "insta",
  "miette",
  "myco-core",
- "myco-git",
  "myco-index",
  "myco-index-redb",
  "myco-ops",
@@ -1116,15 +1131,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "myco-git"
-version = "0.2.0"
-dependencies = [
- "temp-env",
- "tempfile",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "myco-index"
 version = "0.2.0"
 dependencies = [
@@ -1157,8 +1163,9 @@ version = "0.2.0"
 dependencies = [
  "camino",
  "lasius-core",
+ "lasius-vcs",
+ "lasius-vcs-git",
  "myco-core",
- "myco-git",
  "myco-index",
  "myco-index-redb",
  "myco-store",
@@ -1222,7 +1229,6 @@ dependencies = [
  "camino",
  "crossterm",
  "myco-core",
- "myco-git",
  "myco-ops",
  "myco-store",
  "myco-store-md",

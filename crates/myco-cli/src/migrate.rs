@@ -399,7 +399,7 @@ fn migrate_pm(
     let (c1, c2) = match commits {
         Ok(pair) => pair,
         Err(e) => {
-            let _ = myco_git::git_out(&root, &["restore", "--source=HEAD", "--", "pm"]);
+            let _ = myco_ops::vcs::git_out(&root, &["restore", "--source=HEAD", "--", "pm"]);
             return Err(e);
         }
     };
@@ -430,20 +430,20 @@ fn commit_pm_removal(root: &Path, enabled: bool) -> Result<bool, String> {
     }
     // `add -u` errors when pm/ holds no tracked files at all —
     // untracked leftovers aren't ours to commit
-    if myco_git::git_out(root, &["ls-files", "--", "pm"])
+    if myco_ops::vcs::git_out(root, &["ls-files", "--", "pm"])
         .map_err(|e| e.to_string())?
         .is_empty()
     {
         return Ok(false);
     }
-    myco_git::git_out(root, &["add", "-u", "--", "pm"]).map_err(|e| e.to_string())?;
-    let dirty = myco_git::git_out(root, &["status", "--porcelain", "--", "pm"])
+    myco_ops::vcs::git_out(root, &["add", "-u", "--", "pm"]).map_err(|e| e.to_string())?;
+    let dirty = myco_ops::vcs::git_out(root, &["status", "--porcelain", "--", "pm"])
         .map_err(|e| e.to_string())?;
     if dirty.is_empty() {
         return Ok(false);
     }
     let msg = ops::commit_msg("chore: migrate pm/ → project/", None);
-    myco_git::git_ident(root, &["commit", "-m", &msg, "--", "pm"])
+    myco_ops::vcs::git_ident(root, &["commit", "-m", &msg, "--", "pm"])
         .map_err(|e| e.to_string())
         .map(|_| true)
 }

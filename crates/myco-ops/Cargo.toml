@@ -8,7 +8,6 @@ repository.workspace = true
 
 [dependencies]
 myco-core.workspace = true
-myco-git.workspace = true
 myco-index.workspace = true
 myco-store.workspace = true
 camino.workspace = true
@@ -18,6 +17,8 @@ time.workspace = true
 scarab-config.workspace = true
 scarab-config-toml.workspace = true
 lasius-core.workspace = true
+lasius-vcs.workspace = true
+lasius-vcs-git.workspace = true
 
 [dev-dependencies]
 myco-store-md.workspace = true

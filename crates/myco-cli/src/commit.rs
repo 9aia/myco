@@ -26,7 +26,7 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
     let _lock = ops::lock_worktree(&proj.worktree)?;
     let msg = message.unwrap_or_else(|| DEFAULT_MSG.to_string());
     let enabled = ops::commits_enabled(no_commit);
-    let dirty = myco_git::has_changes(&proj.worktree).map_err(|e| e.to_string())?;
+    let dirty = myco_ops::vcs::has_changes(&proj.worktree).map_err(|e| e.to_string())?;
     // the verb's own message still rides the shared autocommit
     // path so it gains the `Actor:` trailer like every myco commit
     let committed = ops::autocommit(&proj.worktree, &msg, None, enabled && dirty)?;

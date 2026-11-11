@@ -17,7 +17,6 @@ categories = ["development-tools"]
 
 [dependencies]
 myco-core = { workspace = true, features = ["schema"] }
-myco-git.workspace = true
 myco-index.workspace = true
 myco-index-redb.workspace = true
 myco-ops.workspace = true

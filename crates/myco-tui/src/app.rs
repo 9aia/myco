@@ -1688,7 +1688,7 @@ impl Model {
                 return;
             }
         };
-        let subject = myco_git::log(&wt, Some(1))
+        let subject = myco_ops::vcs::log(&wt, Some(1))
             .ok()
             .and_then(|l| l.into_iter().next())
             .map(|e| e.subject);
@@ -1781,7 +1781,7 @@ impl Model {
                 return;
             }
         };
-        let subject = myco_git::git_out(&wt, &["log", "-1", "--format=%s", "HEAD@{1}"])
+        let subject = myco_ops::vcs::git_out(&wt, &["log", "-1", "--format=%s", "HEAD@{1}"])
             .ok()
             .filter(|s| !s.is_empty());
         let what = match (self.selected_repo(), subject) {

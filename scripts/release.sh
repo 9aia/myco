@@ -16,14 +16,14 @@ fi
 changed="$(git diff --name-only "${last}..HEAD")"
 
 touched=""
-for c in myco-core myco-git myco-ops myco-shell myco-cli; do
+for c in myco-core myco-ops myco-shell myco-cli; do
     grep -q "^crates/$c/" <<<"$changed" && touched="$touched $c"
 done
 # the bin re-publishes whenever any crate changed
 [ -n "$touched" ] && touched="$touched myco"
 if [ -z "$touched" ]; then echo "no crate changes since $last"; exit 0; fi
 
-order="myco-core myco-git myco-ops myco-shell myco"
+order="myco-core myco-ops myco-shell myco"
 published=""
 tags=""
 # every crate inherits `version.workspace` — one bump moves them

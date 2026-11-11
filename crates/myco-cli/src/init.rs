@@ -118,7 +118,7 @@ pub fn ensure(
     // refuse early: an existing non-worktree dir must not be
     // clobbered — check before creating any branch
     if worktree.exists()
-        && myco_git::worktree_branch(&worktree).as_deref() != Some(discover::BRANCH)
+        && myco_ops::vcs::worktree_branch(&worktree).as_deref() != Some(discover::BRANCH)
     {
         return Err(format!(
             "{} exists but is not a myco project worktree — move it away or use --dir",
@@ -133,14 +133,14 @@ pub fn ensure(
     // would fork the audit trail into unrelated histories (the
     // tarsi incident). Fetch is best-effort: offline init still
     // works against the last-known remote refs.
-    let _ = myco_git::sync(&root);
+    let _ = myco_ops::vcs::sync(&root);
     let remote_ref = format!("refs/remotes/origin/{}", discover::BRANCH);
-    let remote_exists = myco_git::has_commit(&root, &remote_ref);
-    let created_branch = !myco_git::branch_exists(&root, discover::BRANCH);
+    let remote_exists = myco_ops::vcs::has_commit(&root, &remote_ref);
+    let created_branch = !myco_ops::vcs::branch_exists(&root, discover::BRANCH);
     let adopted_remote = created_branch && remote_exists;
     if created_branch {
         if remote_exists {
-            myco_git::git_out(
+            myco_ops::vcs::git_out(
                 &root,
                 &[
                     "branch",
@@ -151,7 +151,7 @@ pub fn ensure(
             )
             .map_err(|e| format!("adopt origin/{}: {e}", discover::BRANCH))?;
         } else {
-            myco_git::create_orphan_branch(
+            myco_ops::vcs::create_orphan_branch(
                 &root,
                 discover::BRANCH,
                 &ops::commit_msg("chore: init project branch", None),
@@ -162,12 +162,12 @@ pub fn ensure(
 
     // worktree: reuse a valid one, or `worktree add`
     if !worktree.exists() {
-        if let Err(e) = myco_git::worktree_add_branch(&root, &worktree, discover::BRANCH) {
+        if let Err(e) = myco_ops::vcs::worktree_add_branch(&root, &worktree, discover::BRANCH) {
             // roll back the branch we just created — a failed
             // init shouldn't leave a `project` ref pointing at
             // an empty root
             if created_branch {
-                let _ = myco_git::git_out(
+                let _ = myco_ops::vcs::git_out(
                     &root,
                     &[
                         "update-ref",
@@ -420,7 +420,7 @@ mod tests {
         let e = ensure(None, Some(d.path()), false).unwrap_err();
         assert!(e.contains("not a myco project worktree"), "{e}");
         // the dir conflict is detected before the branch is created
-        assert!(!myco_git::branch_exists(d.path(), "project"));
+        assert!(!myco_ops::vcs::branch_exists(d.path(), "project"));
     }
 
     #[test]

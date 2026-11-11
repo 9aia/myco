@@ -205,7 +205,7 @@ fn init_fails_when_branch_checked_out_elsewhere() {
     let d = repo();
     // create + check out the project branch in another worktree —
     // `git worktree add project project` then refuses
-    myco_git_shim(d.path());
+    init_project_branch(d.path());
     git(d.path(), &["worktree", "add", "other", "project"]);
     let out = run(d.path(), &["init"]);
     assert_eq!(code(&out), 2);
@@ -214,7 +214,7 @@ fn init_fails_when_branch_checked_out_elsewhere() {
 }
 
 /// Create the orphan `project` branch the way init does.
-fn myco_git_shim(root: &Path) {
+fn init_project_branch(root: &Path) {
     let out = run(root, &["init", "--json"]);
     assert_eq!(code(&out), 0, "{out:?}");
     // drop the worktree but keep the branch

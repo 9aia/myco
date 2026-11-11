@@ -254,7 +254,7 @@ mod tests {
         git(&r, &["init", "-q"]);
         git(&r, &["config", "user.email", "t@t"]);
         git(&r, &["config", "user.name", "t"]);
-        myco_git::create_orphan_branch(&r, "project", "init").unwrap();
+        crate::vcs::create_orphan_branch(&r, "project", "init").unwrap();
         git(&r, &["worktree", "add", "project", "project"]);
         std::fs::write(r.join("project/TODO.md"), "# TODO — x\n").unwrap();
         r

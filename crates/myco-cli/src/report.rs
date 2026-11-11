@@ -78,7 +78,7 @@ pub struct WeekTally {
 /// Per-week velocity from worktree git history — `ISO-week →
 /// {new, done}`, weeks sorted ascending. Entries with unparseable
 /// dates or non-`chore:` subjects are skipped.
-pub fn velocity(log: &[myco_git::LogEntry]) -> BTreeMap<(i32, u8), WeekTally> {
+pub fn velocity(log: &[myco_ops::vcs::LogEntry]) -> BTreeMap<(i32, u8), WeekTally> {
     let mut weeks: BTreeMap<(i32, u8), WeekTally> = BTreeMap::new();
     for e in log {
         let Some(v) = classify(&e.subject) else {
@@ -140,7 +140,7 @@ pub fn report_json(
     let scan = digest::scan(store)?;
     let today = items::today();
     let aging = aging(scan.active(), today);
-    let log = myco_git::log(worktree, None).map_err(|e| e.to_string())?;
+    let log = myco_ops::vcs::log(worktree, None).map_err(|e| e.to_string())?;
     let velocity = velocity(&log);
     let blocked = scan.in_status(Status::Blocked);
     let stale = stale_claims(store, &scan, today)?;
@@ -187,7 +187,7 @@ pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, 
     let scan = digest::scan(&store)?;
     let today = items::today();
     let aging = aging(scan.active(), today);
-    let log = myco_git::log(&proj.worktree, None).map_err(|e| e.to_string())?;
+    let log = myco_ops::vcs::log(&proj.worktree, None).map_err(|e| e.to_string())?;
     let velocity = velocity(&log);
     let blocked = scan.in_status(Status::Blocked);
     let stale = stale_claims(&store, &scan, today)?;
@@ -226,8 +226,8 @@ mod tests {
     use super::*;
     use myco_core::{ItemId, ItemKind};
 
-    fn entry(date: &str, subject: &str) -> myco_git::LogEntry {
-        myco_git::LogEntry {
+    fn entry(date: &str, subject: &str) -> myco_ops::vcs::LogEntry {
+        myco_ops::vcs::LogEntry {
             hash: "h".into(),
             date: date.into(),
             subject: subject.into(),

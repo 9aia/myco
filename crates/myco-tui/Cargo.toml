@@ -9,7 +9,6 @@ repository.workspace = true
 [dependencies]
 myco-core.workspace = true
 myco-ops.workspace = true
-myco-git.workspace = true
 myco-store.workspace = true
 myco-store-md.workspace = true
 ratatui.workspace = true

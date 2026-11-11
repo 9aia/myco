@@ -1,5 +1,6 @@
 //! myco-shell — run an arbitrary command in a working directory via
-//! `bash -c`. Git plumbing lives in `myco-git`; this crate is for the
+//! `bash -c`. Git plumbing lives in `myco-ops::vcs` (over the
+//! `lasius-vcs` port); this crate is for the
 //! other shell-outs a PM tool needs (hooks, importers, user scripts).
 //!
 //! `cmd` goes through a shell — interpolate ONLY validated inputs

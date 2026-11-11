@@ -4,7 +4,6 @@ members = [
     "crates/myco-cli",
     "crates/myco-core",
     "crates/myco-driver",
-    "crates/myco-git",
     "crates/myco-index",
     "crates/myco-index-redb",
     "crates/myco-ops",
@@ -31,7 +30,6 @@ lto = "thin"
 [workspace.dependencies]
 myco = { path = "crates/myco-cli", version = "0.2.0" }
 myco-core = { path = "crates/myco-core", version = "0.2.0" }
-myco-git = { path = "crates/myco-git", version = "0.2.0" }
 myco-index = { path = "crates/myco-index", version = "0.2.0" }
 myco-index-redb = { path = "crates/myco-index-redb", version = "0.2.0" }
 myco-ops = { path = "crates/myco-ops", version = "0.2.0" }
@@ -69,6 +67,8 @@ sigpipe = "0.1"
 scarab-config = { git = "ssh://git@github.com/9aia/scarab.git", rev = "ae457aad3112140339cc02af631657f90b01fab5", version = "0.1" }
 scarab-config-toml = { git = "ssh://git@github.com/9aia/scarab.git", rev = "ae457aad3112140339cc02af631657f90b01fab5", version = "0.1" }
 lasius-core = { git = "ssh://git@github.com/9aia/lasius.git", rev = "52d8150bc40070f130c14b114da396fc8f570cb6" }
+lasius-vcs = { git = "ssh://git@github.com/9aia/lasius.git", rev = "52d8150bc40070f130c14b114da396fc8f570cb6" }
+lasius-vcs-git = { git = "ssh://git@github.com/9aia/lasius.git", rev = "52d8150bc40070f130c14b114da396fc8f570cb6" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

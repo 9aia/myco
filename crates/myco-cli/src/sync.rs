@@ -28,7 +28,7 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
 
     // --abort bails a stopped rebase/merge without touching refs
     if a.flag("abort") {
-        myco_git::rebase_abort(&wt).map_err(|e| format!("rebase --abort: {e}"))?;
+        myco_ops::vcs::rebase_abort(&wt).map_err(|e| format!("rebase --abort: {e}"))?;
         if json_out {
             ops::print_json(&json!({"action": "abort"}));
         } else {
@@ -40,8 +40,8 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
     let _lock = ops::lock_worktree(&wt)?;
 
     // a rebase already stopped mid-flight: report state, don't restart
-    if myco_git::rebase_in_progress(&wt) {
-        let conflicts = myco_git::unmerged_files(&wt);
+    if myco_ops::vcs::rebase_in_progress(&wt) {
+        let conflicts = myco_ops::vcs::unmerged_files(&wt);
         return finish(
             json_out,
             "conflict",
@@ -54,7 +54,7 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
         );
     }
 
-    let Some(branch) = myco_git::worktree_branch(&wt) else {
+    let Some(branch) = myco_ops::vcs::worktree_branch(&wt) else {
         return Err(format!(
             "{} is not on a branch — run `myco check --fix` to reattach it",
             wt.display()
@@ -65,13 +65,13 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
 
     // fetch is best-effort — offline sync still reconciles against
     // the last-known remote refs; a failed fetch is reported, not fatal
-    let fetched = myco_git::sync(&proj.root);
+    let fetched = myco_ops::vcs::sync(&proj.root);
     let offline = if fetched {
         ""
     } else {
         " (fetch failed — offline?)"
     };
-    if !myco_git::has_commit(&proj.root, &remote_ref) {
+    if !myco_ops::vcs::has_commit(&proj.root, &remote_ref) {
         return finish(
             json_out,
             "no-remote",
@@ -84,8 +84,8 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
         );
     }
 
-    let ahead = myco_git::commits_ahead(&wt, &remote_ref).unwrap_or(0);
-    let behind = myco_git::commits_behind(&wt, &remote_ref).unwrap_or(0);
+    let ahead = myco_ops::vcs::commits_ahead(&wt, &remote_ref).unwrap_or(0);
+    let behind = myco_ops::vcs::commits_behind(&wt, &remote_ref).unwrap_or(0);
 
     // fast-forward when local has nothing to replay; rebase the
     // local commits onto the remote tip when diverged. Up-to-date
@@ -101,12 +101,12 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
     };
     if behind > 0 {
         let result = if ahead == 0 {
-            myco_git::merge_ff(&wt, &remote)
+            myco_ops::vcs::merge_ff(&wt, &remote)
         } else {
-            myco_git::rebase(&wt, &remote)
+            myco_ops::vcs::rebase(&wt, &remote)
         };
         if let Err(e) = result {
-            let conflicts = myco_git::unmerged_files(&wt);
+            let conflicts = myco_ops::vcs::unmerged_files(&wt);
             if conflicts.is_empty() {
                 return Err(format!("git {action} onto `{remote}` failed: {e}"));
             }

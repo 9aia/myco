@@ -36,7 +36,7 @@ pub struct WorktreeLock {
 /// inside itself (nothing can autocommit there anyway, and the
 /// ledger spec ignores dotfiles).
 fn lock_path(dir: &Path) -> Result<PathBuf, String> {
-    match myco_git::common_dir(dir) {
+    match crate::vcs::common_dir(dir) {
         Ok(git) => Ok(git.join(LOCK_FILE)),
         Err(_) => {
             if dir.is_dir() {
@@ -203,7 +203,7 @@ pub fn resolve_actor(dir: Option<&Path>, explicit: Option<&Actor>) -> Actor {
         }
     }
     if let Some(d) = dir {
-        if let Ok(name) = myco_git::git_out(d, &["config", "user.name"]) {
+        if let Ok(name) = crate::vcs::git_out(d, &["config", "user.name"]) {
             let sanitized = sanitize_actor_name(name.trim());
             if !sanitized.is_empty() {
                 if let Ok(a) = Actor::new(&format!("human:{sanitized}")) {
@@ -233,7 +233,7 @@ pub fn commit_msg(msg: &str, actor: Option<&Actor>) -> String {
 /// trail is gone the moment the worktree moves. `check` reports and
 /// repairs it; every write path refuses it first.
 pub fn ensure_committable(dir: &Path) -> Result<(), String> {
-    if myco_git::is_detached(dir) == Some(true) {
+    if crate::vcs::is_detached(dir) == Some(true) {
         return Err(format!(
             "{} is on a detached HEAD — refusing to write a ledger whose commits would be \
              unreachable; run `myco check --fix` to reattach it",
@@ -257,17 +257,17 @@ pub fn ensure_committable(dir: &Path) -> Result<(), String> {
 /// Untracked branches (never pushed, no remote) pass — pushing is
 /// a repo-level choice, not this verb's business.
 pub fn ensure_synced(dir: &Path, auto_fetch: bool) -> Result<(), String> {
-    let Some(branch) = myco_git::worktree_branch(dir) else {
+    let Some(branch) = crate::vcs::worktree_branch(dir) else {
         return Ok(());
     };
     if auto_fetch {
-        let _ = myco_git::fetch_branch(dir, "origin", &branch);
+        let _ = crate::vcs::fetch_branch(dir, "origin", &branch);
     }
-    if !myco_git::tracks_branch(dir, "origin", &branch) {
+    if !crate::vcs::tracks_branch(dir, "origin", &branch) {
         return Ok(());
     }
     let remote = format!("refs/remotes/origin/{branch}");
-    let Some(behind) = myco_git::commits_behind(dir, &remote) else {
+    let Some(behind) = crate::vcs::commits_behind(dir, &remote) else {
         return Ok(());
     };
     if behind > 0 {
@@ -291,7 +291,7 @@ pub fn autocommit(
     actor: Option<&Actor>,
     enabled: bool,
 ) -> Result<bool, String> {
-    if !enabled || !myco_git::has_changes(dir).map_err(|e| e.to_string())? {
+    if !enabled || !crate::vcs::has_changes(dir).map_err(|e| e.to_string())? {
         return Ok(false);
     }
     let resolved;
@@ -302,7 +302,7 @@ pub fn autocommit(
             &resolved
         }
     };
-    myco_git::commit_all(dir, &commit_msg(msg, Some(actor)))
+    crate::vcs::commit_all(dir, &commit_msg(msg, Some(actor)))
         .map_err(|e| format!("git commit failed in {}: {e}", dir.display()))?;
     Ok(true)
 }
@@ -329,13 +329,13 @@ pub fn commit_paths(
     }
     let mut args = vec!["status", "--porcelain", "--"];
     args.extend_from_slice(paths);
-    let dirty = myco_git::git_out(dir, &args).map_err(|e| e.to_string())?;
+    let dirty = crate::vcs::git_out(dir, &args).map_err(|e| e.to_string())?;
     if dirty.is_empty() {
         return Ok(false);
     }
     let mut add = vec!["add", "--"];
     add.extend_from_slice(paths);
-    myco_git::git_out(dir, &add).map_err(|e| e.to_string())?;
+    crate::vcs::git_out(dir, &add).map_err(|e| e.to_string())?;
     let resolved;
     let actor = match actor {
         Some(a) => a,
@@ -347,7 +347,7 @@ pub fn commit_paths(
     let msg = commit_msg(msg, Some(actor));
     let mut commit = vec!["commit", "-m", msg.as_str(), "--"];
     commit.extend_from_slice(paths);
-    myco_git::git_ident(dir, &commit)
+    crate::vcs::git_ident(dir, &commit)
         .map_err(|e| e.to_string())
         .map(|_| true)
 }
@@ -396,24 +396,24 @@ const MULTI_COMMIT_SUBJECTS: &[&str] = &[
 /// `dir` is the `project/` worktree (or any dir inside it).
 pub fn undo_last(dir: &Path, force: bool) -> Result<UndoOutcome, String> {
     ensure_committable(dir)?;
-    let entry = myco_git::log(dir, Some(1))
+    let entry = crate::vcs::log(dir, Some(1))
         .map_err(|e| e.to_string())?
         .into_iter()
         .next()
         .ok_or_else(|| "nothing to undo — the ledger branch has no commits".to_string())?;
-    let base = myco_git::git_out(dir, &["rev-parse", "--verify", "HEAD~1"])
+    let base = crate::vcs::git_out(dir, &["rev-parse", "--verify", "HEAD~1"])
         .map_err(|_| format!("nothing to undo — {} is the root commit", entry.hash))?;
-    if myco_git::has_changes(dir).map_err(|e| e.to_string())? {
+    if crate::vcs::has_changes(dir).map_err(|e| e.to_string())? {
         return Err(
             "uncommitted changes in the worktree — `myco commit` them or clean the tree first; \
              undo only rewinds committed state"
                 .into(),
         );
     }
-    if let Some(branch) = myco_git::worktree_branch(dir) {
+    if let Some(branch) = crate::vcs::worktree_branch(dir) {
         let remote = format!("refs/remotes/origin/{branch}");
-        let published = myco_git::tracks_branch(dir, "origin", &branch)
-            && myco_git::commits_ahead(dir, &remote) == Some(0);
+        let published = crate::vcs::tracks_branch(dir, "origin", &branch)
+            && crate::vcs::commits_ahead(dir, &remote) == Some(0);
         if published && !force {
             return Err(format!(
                 "the tip commit is already published on origin/{branch} — undo would rewrite \
@@ -421,7 +421,7 @@ pub fn undo_last(dir: &Path, force: bool) -> Result<UndoOutcome, String> {
             ));
         }
     }
-    myco_git::git_out(dir, &["reset", "--hard", "HEAD~1"])
+    crate::vcs::git_out(dir, &["reset", "--hard", "HEAD~1"])
         .map_err(|e| format!("git reset failed in {}: {e}", dir.display()))?;
     let mut warnings = multi_commit_warnings(&entry.subject);
     // Record the undone commit for `redo`. The journal self-
@@ -480,14 +480,14 @@ pub fn redo_last(dir: &Path) -> Result<UndoOutcome, String> {
         let _ = crate::history::save(dir, &j);
         return Err("nothing to redo — the ledger moved since the last undo".into());
     }
-    if myco_git::has_changes(dir).map_err(|e| e.to_string())? {
+    if crate::vcs::has_changes(dir).map_err(|e| e.to_string())? {
         return Err(
             "uncommitted changes in the worktree — `myco commit` them or clean the tree first; \
              redo only rewinds committed state"
                 .into(),
         );
     }
-    if myco_git::git_out(
+    if crate::vcs::git_out(
         dir,
         &[
             "rev-parse",
@@ -502,7 +502,7 @@ pub fn redo_last(dir: &Path) -> Result<UndoOutcome, String> {
             &top.target[..12]
         ));
     }
-    myco_git::git_out(dir, &["reset", "--hard", &top.target])
+    crate::vcs::git_out(dir, &["reset", "--hard", &top.target])
         .map_err(|e| format!("git reset failed in {}: {e}", dir.display()))?;
     j.future.pop();
     let mut warnings = multi_commit_warnings(&top.subject);
@@ -669,7 +669,7 @@ mod tests {
         git(d.path(), &["init", "-q"]);
         git(d.path(), &["config", "user.email", "t@t"]);
         git(d.path(), &["config", "user.name", "t"]);
-        myco_git::create_orphan_branch(d.path(), "project", "init").unwrap();
+        crate::vcs::create_orphan_branch(d.path(), "project", "init").unwrap();
         git(d.path(), &["worktree", "add", "project", "project"]);
         // locking from the worktree and from the repo root
         // contend — same lock file

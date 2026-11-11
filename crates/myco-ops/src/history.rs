@@ -62,7 +62,7 @@ impl Default for Journal {
 /// `<git-common-dir>/myco-history.json` — `None` outside a git
 /// repo (callers treat that as "no history", same as empty).
 fn path(dir: &Path) -> Option<PathBuf> {
-    myco_git::common_dir(dir).ok().map(|d| d.join(FILE))
+    crate::vcs::common_dir(dir).ok().map(|d| d.join(FILE))
 }
 
 fn is_sha(s: &str) -> bool {
@@ -117,7 +117,7 @@ pub(crate) fn save(dir: &Path, j: &Journal) -> Result<(), String> {
 
 /// `HEAD`'s sha — the anchor every validity check compares against.
 pub fn head_sha(dir: &Path) -> Result<String, String> {
-    myco_git::git_out(dir, &["rev-parse", "HEAD"]).map_err(|e| e.to_string())
+    crate::vcs::git_out(dir, &["rev-parse", "HEAD"]).map_err(|e| e.to_string())
 }
 
 /// Is the stack's top still anchored? `anchor` is the HEAD the

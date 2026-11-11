@@ -58,13 +58,12 @@ domain (no I/O); ports are traits, impls are separate crates;
 | Crate | Role |
 | --- | --- |
 | `crates/myco-core` | Item models, ID registry, state machine, deps, the `Config` model — pure, no I/O |
-| `crates/myco-git` | Git plumbing via the `git` CLI — `project` orphan branch, worktree, auto-commit, log |
 | `crates/myco-shell` | `bash -c <cmd>` in a workdir — generic shell-out |
 | `crates/myco-store` | Store port — the `project/` persistence trait |
 | `crates/myco-store-md` | Markdown impl — strict parse/emit; owns the file spec |
 | `crates/myco-index` | Index port — the derived, disposable cache (registry + snapshots); `LedgerMode` re-exported from `myco-core` |
 | `crates/myco-index-redb` | Index impl — redb snapshots + `repos.toml` under `~/.local/share/myco` |
-| `crates/myco-ops` | Ops I/O shell — discovery, store open/save, commit-per-mutation, verb plumbing; pure pieces live in core. Owns the `myco.toml` loader (`config::TOML` — scarab-config-toml parsing + myco's two-layer merge; the `myco-config*` crates are gone) and the index `universe` (lasius clones ∪ `repos.toml`, P-026; deps: `scarab-config`, `scarab-config-toml`, `lasius-core`) |
+| `crates/myco-ops` | Ops I/O shell — discovery, store open/save, commit-per-mutation, verb plumbing; pure pieces live in core. Owns the `myco.toml` loader (`config::TOML` — scarab-config-toml parsing + myco's two-layer merge; the `myco-config*` crates are gone) and the index `universe` (lasius clones ∪ `repos.toml`, P-026; deps: `scarab-config`, `scarab-config-toml`, `lasius-core`) and `vcs` (all git access through the shared `lasius-vcs` port — `lasius-vcs-git` impl; ledger policy like the `myco` committer fallback and `commit_all` lives here, deps: `lasius-vcs`, `lasius-vcs-git`) |
 | `crates/myco-testkit` | Golden fixtures + conformance for the file spec |
 | `crates/myco-driver` | `tamias-driver-myco` — pavo view driver over `project/` + engine ops (`ops` manifest derived from the `VERBS` table, `cli.<verb>` wire queries re-exec `run`) **plus the `cli` bins[] shim passthrough** (strips `--dir`/`--name` → `myco::run_from`, inherited stdio — the `myco` command itself) and an optional `mcp` surface feature; writes always ride the engine's own verbs |
 | `crates/myco-tui` | `myco ui` — interactive board TUI (ratatui) over `myco-ops`; default `tui` feature on `myco-cli` |
@@ -127,7 +126,8 @@ commit their contents to `main`.
   means no warnings tolerated. Tests `#![allow]` liberally.
 - No `unsafe`. Edition 2021.
 - Keep the binary dependency-light and sync; no async runtime.
-- Git access = shell out to the `git` CLI (`myco-git`) — no git2/gix.
+- Git access = the shared `lasius-vcs` port (`myco-ops::vcs`, git
+  CLI impl) — no git2/gix, no per-repo git crate.
 - Markdown in `project/` is the file spec — deterministic output,
   stable ordering, minimal diffs; golden fixtures are frozen output.
 - Agents never hand-edit `project/` when a `myco` verb exists (if
