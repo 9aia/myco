@@ -13,8 +13,10 @@ Opt out with `--no-commit` or `$MYCO_NO_COMMIT` (tests, dry runs);
 batch up later with `myco commit -m "…"`.
 
 Each commit body carries an `Actor: <id>` trailer — the verb's
-`--actor`/`--owner` where it takes one, else `cli`. Author/committer
-stay the repo's git identity; actor attribution lives in the trailer.
+`--actor`/`--owner` where it takes one, else the resolved actor
+(`$MYCO_ACTOR` → `human:<git user.name>` → `cli`).
+Author/committer stay the repo's git identity; actor attribution
+lives in the trailer.
 
 ## `myco init` — scaffold a repo
 
@@ -63,6 +65,26 @@ Auto-detects two modes:
 
 Always read the JSON report (`--json`) and spot-check
 `git -C project log`/`diff` for content loss afterward.
+
+## `myco sync` — reconcile the ledger branch
+
+Mutating verbs refuse while the `project` branch is behind
+`origin/<branch>` — every verb commit would deepen the divergence.
+`myco sync` fetches, fast-forwards or rebases local commits onto
+the remote tip, then heals merge damage: `meta.toml` counters
+reconcile and duplicate ids renumber **remote-wins** — the pushed
+item keeps its id, the local one moves to a fresh id, inbound
+`blocks:`/`links:`/supersede refs rebind to it, and a `renumbered
+<old> → <new>` handoff entry records the audit.
+
+Before the behind-check, mutating verbs run a best-effort
+`git fetch origin <branch>` — `[sync] auto_fetch = false` in
+`myco.toml` opts out (a stale remote-tracking ref can only
+*under*-report divergence; the fetch is never fatal when it
+fails).
+
+A rebase conflict stops mid-flight: resolve + `git rebase
+--continue` + `myco sync` again, or `myco sync --abort` to bail.
 
 ## `myco commit` — manual sweep
 

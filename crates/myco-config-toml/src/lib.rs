@@ -89,6 +89,12 @@ impl ConfigSource for TomlSource {
                 .as_ref()
                 .and_then(|c| c.default_view.clone())
                 .or_else(|| user_cfg.as_ref().and_then(|c| c.default_view.clone())),
+            // `[sync]` merges like the scalars — repo layer wins
+            // the whole table (today it holds one key)
+            sync: repo_cfg
+                .as_ref()
+                .and_then(|c| c.sync.clone())
+                .or_else(|| user_cfg.as_ref().and_then(|c| c.sync.clone())),
             ..Default::default()
         };
         for cfg in [&repo_cfg, &user_cfg].into_iter().flatten() {

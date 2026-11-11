@@ -248,8 +248,13 @@ pub fn open_with_index<S: Store>(
     // the store opens (`check --fix` repairs the worktree itself)
     ops::ensure_committable(&proj.worktree)?;
     // a ledger behind its remote must sync before mutating —
-    // every verb commit would otherwise deepen the divergence
-    ops::ensure_synced(&proj.worktree)?;
+    // every verb commit would otherwise deepen the divergence.
+    // `sync.auto_fetch` (default on) refreshes the remote-tracking
+    // ref first — best-effort, a failed fetch never blocks.
+    ops::ensure_synced(
+        &proj.worktree,
+        crate::config::sync_auto_fetch_for(&proj.root, cfg),
+    )?;
     let kinds = crate::config::kinds_for(&proj.root, cfg);
     let lock = ops::lock_worktree(&proj.worktree)?;
     let store = mk(&proj.worktree, &kinds)?;

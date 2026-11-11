@@ -1660,6 +1660,7 @@ fn repoint_doc_line(src: &str, item: &Item, new: &ItemId) -> Option<String> {
 
 /// One pending id move — `old` keeps its inbound refs (the
 /// remote item); the local item at `loc` gets `new`.
+#[derive(Clone)]
 struct IdMove {
     old: ItemId,
     new: ItemId,
@@ -1667,13 +1668,69 @@ struct IdMove {
     loc: String,
 }
 
+/// Every `*.md` file under `dir` (recursive — `archive/` included),
+/// worktree-relative, sorted for determinism.
+fn md_files_under(wt: &Path, dir: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_string()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(wt.join(&d)) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                if let Some(n) = p.file_name().and_then(|n| n.to_str()) {
+                    stack.push(format!("{d}/{n}"));
+                }
+            } else if p.extension().is_some_and(|x| x == "md") {
+                if let Ok(rel) = p.strip_prefix(wt) {
+                    out.push(rel.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Append the `renumbered <old> → <new>` audit entry to the healed
+/// item's handoff file — created fresh when the id move left none.
+/// Runs after `apply_fixes`, so a handoff the rename just landed
+/// is the file this extends.
+fn renumber_handoff(wt: &Path, m: &IdMove) -> Result<(), String> {
+    let rel = format!("handoffs/{}.md", m.new);
+    let path = wt.join(&rel);
+    let mut entries = if path.is_file() {
+        let src = std::fs::read_to_string(&path).map_err(|e| format!("read {rel}: {e}"))?;
+        let (fid, entries) =
+            myco_store_md::parse_handoff_file(&src, &rel).map_err(|e| e.to_string())?;
+        if fid != m.new {
+            return Err(format!("{rel} belongs to {fid}, not {}", m.new));
+        }
+        entries
+    } else {
+        Vec::new()
+    };
+    entries.push(myco_core::HandoffEntry {
+        date: myco_ops::items::today(),
+        actor: ops::resolve_actor(Some(wt), None),
+        session: None,
+        note: format!("renumbered {} → {}", m.old, m.new),
+    });
+    let text = myco_store_md::emit_handoff_file(&m.new, &entries).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| format!("write {rel}: {e}"))
+}
+
 /// Heal `duplicate-id` findings after a sync: remote-side items
 /// keep their ids, local-side items move to fresh ones. Returns
 /// `(fixes applied, report lines)` — the report names every move
 /// plus anything left for manual resolution. `remote` is a rev
-/// like `origin/project`. Inbound refs to the old id stay bound
-/// to the remote item — that ambiguity is the price of "pushed
-/// wins", and it's reported, not hidden.
+/// like `origin/project`. Inbound `blocks:`/`links:`/supersede
+/// refs to the old id rebind to the new one across the repo, and
+/// each healed item records a `renumbered <old> → <new>` handoff
+/// entry; a ref that can't be rewritten safely is left for
+/// `check` to report.
 pub(crate) fn renumber_duplicates(
     wt: &Path,
     kinds: &myco_core::KindTable,
@@ -1732,6 +1789,7 @@ pub(crate) fn renumber_duplicates(
 
     let mut fixes: Vec<Fix> = Vec::new();
     let mut path_renames: Vec<(String, String)> = Vec::new();
+    let mut applied_moves: Vec<IdMove> = Vec::new();
     for m in &moves {
         let hfrom = format!("handoffs/{}.md", m.old);
         let hto = format!("handoffs/{}.md", m.new);
@@ -1742,10 +1800,13 @@ pub(crate) fn renumber_duplicates(
         if DOC_LOCS.contains(&m.loc.as_str()) {
             if let Read::Ok(src) = read(wt, &m.loc) {
                 match repoint_doc_line(&src, &m.item, &m.new) {
-                    Some(text) => fixes.push(Fix::Write {
-                        rel: m.loc.clone(),
-                        contents: text,
-                    }),
+                    Some(text) => {
+                        fixes.push(Fix::Write {
+                            rel: m.loc.clone(),
+                            contents: text,
+                        });
+                        applied_moves.push(m.clone());
+                    }
                     None => report.push(format!(
                         "{} → {}: {} — line match ambiguous, resolve manually",
                         m.old, m.new, m.loc
@@ -1780,6 +1841,7 @@ pub(crate) fn renumber_duplicates(
                                         contents: text,
                                     });
                                     path_renames.push((m.loc.clone(), to));
+                                    applied_moves.push(m.clone());
                                 }
                             }
                             Err(e) => report.push(format!("{}: emit failed: {e}", m.old)),
@@ -1809,6 +1871,35 @@ pub(crate) fn renumber_duplicates(
         return Ok((0, report));
     }
 
+    // inbound refs follow the moved item: every `blocks:`/`links:`
+    // (and supersede) pointer at the old id rebinds to the new
+    // one, across the doc ledgers and every item file (live +
+    // archive). Refs that meant the *remote* item rebind too —
+    // remote-wins can't tell them apart; what can't be rewritten
+    // safely is left for `check` to report.
+    let refmap: BTreeMap<ItemId, ItemId> = applied_moves.iter().map(|m| (m.old, m.new)).collect();
+    if !refmap.is_empty() {
+        for doc in DOC_LOCS {
+            transform_file(wt, &mut fixes, doc, doc, &|src: &str| {
+                repoint_blocks_tokens(src, &refmap)
+            });
+        }
+        for spec in kinds.file_backed() {
+            for rel in md_files_under(wt, &spec.dir_name()) {
+                // a file the move itself renames has its pending
+                // Write at the *new* path — transform that
+                let write_rel = path_renames
+                    .iter()
+                    .find(|(from, _)| *from == rel)
+                    .map(|(_, to)| to.clone())
+                    .unwrap_or_else(|| rel.clone());
+                transform_file(wt, &mut fixes, &rel, &write_rel, &|src: &str| {
+                    repoint_frontmatter(src, &refmap)
+                });
+            }
+        }
+    }
+
     // index.md links item files by path — repoint moved paths
     for (from, to) in &path_renames {
         transform_file(wt, &mut fixes, "index.md", "index.md", &|src: &str| {
@@ -1829,6 +1920,17 @@ pub(crate) fn renumber_duplicates(
         }
     }
     let applied = apply_fixes(wt, &fixes)?;
+    // the audit trail — every healed item records both ids in a
+    // `renumbered` handoff entry; failures report, never abort
+    // (the id move itself already landed)
+    for m in &applied_moves {
+        if let Err(e) = renumber_handoff(wt, m) {
+            report.push(format!(
+                "{} → {}: renumbered but the handoff entry failed: {e}",
+                m.old, m.new
+            ));
+        }
+    }
     Ok((applied, report))
 }
 

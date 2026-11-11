@@ -7,13 +7,18 @@ use myco_store::Store;
 use serde_json::json;
 
 use crate::items;
+use crate::ops;
 use crate::registry::{Args, Ctx};
 
 /// The set-verb flag bundle — applied to an `Item` after the
 /// status transition check.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct SetFlags {
     pub(crate) status: Option<Status>,
+    /// `--steal` — take an item over from a different owner
+    /// (claim transitions and owner reassignment on work-state
+    /// items are guarded; see [`ownership_guard`]).
+    pub(crate) steal: bool,
     pub(crate) pri: Option<Priority>,
     pub(crate) owner: Option<Actor>,
     pub(crate) label: Vec<String>,
@@ -37,6 +42,7 @@ pub(crate) struct SetFlags {
 pub(crate) fn set_flags(a: &Args) -> Result<SetFlags, String> {
     Ok(SetFlags {
         status: a.parsed("status")?,
+        steal: a.flag("steal"),
         pri: a.parsed("pri")?,
         owner: a.parsed("owner")?,
         label: a.many("label"),
@@ -88,6 +94,33 @@ fn signed(s: &str) -> (bool, &str) {
         Some(rest) => (false, rest),
         None => (true, s.strip_prefix('+').unwrap_or(s)),
     }
+}
+
+/// The ownership guard — assigning an item whose owner is someone
+/// else is refused unless `--steal` is passed. It fires on claim
+/// transitions (`→ claimed`) and on owner reassignment while the
+/// item sits in a work state (`claimed`/`in-progress`); open-item
+/// triage stays free. `me` is the resolved actor
+/// ([`ops::resolve_actor`] — `--owner` already folded in).
+fn ownership_guard(item: &Item, flags: &SetFlags, me: &Actor) -> Result<(), String> {
+    if flags.steal || flags.owner.is_none() {
+        return Ok(());
+    }
+    let Some(existing) = &item.owner else {
+        return Ok(());
+    };
+    if *existing == *me {
+        return Ok(());
+    }
+    let claim_transition = flags.status == Some(Status::Claimed);
+    let work_state = matches!(item.status, Status::Claimed | Status::InProgress);
+    if claim_transition || work_state {
+        return Err(format!(
+            "{}: owned by {existing} — `--steal` takes it over",
+            item.id
+        ));
+    }
+    Ok(())
 }
 
 /// Apply every set flag to `item` — status first (machine-checked),
@@ -215,29 +248,92 @@ fn graph(store: &impl Store) -> myco_ops::links::LiveGraph {
     graph
 }
 
+/// What [`set_item`] produced — the post-mutation item, the
+/// location label, the session claim entry when one was written,
+/// and the previous owner when `--steal` took the item over.
+pub(crate) struct SetOutcome {
+    /// The item after mutation (`None` when `done` removed a task
+    /// line).
+    pub item: Option<Item>,
+    /// Ledger location label for reporting.
+    pub location: String,
+    /// The `claimed` handoff entry `--session` wrote, if any.
+    pub claim: Option<myco_core::HandoffEntry>,
+    /// The owner `--steal` took the item from, if a takeover
+    /// happened — reported so callers can surface it.
+    pub taken_from: Option<Actor>,
+}
+
 /// `item set` + an optional `--session` claim tag — the shared
 /// mutation path when absent, [`crate::continuity::tag_claim`]
 /// (mutation + `claimed` entry, atomically) when present.
-/// Returns the post-mutation item, the location label, and the
-/// claim entry when one was written.
+/// `me` is the resolved actor ([`ops::resolve_actor`] with the
+/// verb's explicit actor already folded in). A `→ claimed`
+/// transition with no `--owner` assigns `me`; a `--steal`
+/// takeover appends a `taken over from <actor>` handoff entry —
+/// both ride the caller's one commit.
 pub(crate) fn set_item(
     store: &impl Store,
     id: ItemId,
     flags: &SetFlags,
     session: Option<String>,
-) -> Result<(Option<Item>, String, Option<myco_core::HandoffEntry>), String> {
-    match session {
+    me: &Actor,
+) -> Result<SetOutcome, String> {
+    let mut flags = flags.clone();
+    // →claimed assigns the resolved actor when no owner named —
+    // the claim always names its claimer
+    if flags.status == Some(Status::Claimed) && flags.owner.is_none() {
+        flags.owner = Some(me.clone());
+    }
+    // snapshot for takeover detection — decidable up front: the
+    // post-mutation owner is `flags.owner` whenever one is set
+    let prior_owner = items::find_item(store, id)?.and_then(|(i, _, _)| i.owner);
+    let taken_from = if flags.steal && flags.owner.is_some() {
+        prior_owner.filter(|p| flags.owner.as_ref() != Some(p))
+    } else {
+        None
+    };
+    let outcome = match session {
         Some(s) => {
             let actor = flags.owner.clone();
             let (item, location, entry) =
-                crate::continuity::tag_claim(store, id, flags, actor, &s)?;
-            Ok((item, location, Some(entry)))
+                crate::continuity::tag_claim(store, id, &flags, actor, &s, me)?;
+            SetOutcome {
+                item,
+                location,
+                claim: Some(entry),
+                taken_from: None, // filled below
+            }
         }
         None => {
-            let (item, location) = mutate_item(store, id, flags)?;
-            Ok((item, location, None))
+            let (item, location) = mutate_item(store, id, &flags, me)?;
+            SetOutcome {
+                item,
+                location,
+                claim: None,
+                taken_from: None, // filled below
+            }
         }
+    };
+    // the takeover audit entry — same commit as the mutation
+    // (the caller's autocommit sweeps both). Skipped when the
+    // mutation removed the item entirely (`done` on a task) —
+    // there's nothing live left to hang the note on.
+    if let (Some(from), Some(_)) = (&taken_from, &outcome.item) {
+        let entry = myco_core::HandoffEntry {
+            date: items::today(),
+            actor: me.clone(),
+            session: None,
+            note: format!("taken over from {from}"),
+        };
+        store
+            .append_handoff(id, &entry)
+            .map_err(|e| e.to_string())?;
     }
+    Ok(SetOutcome {
+        taken_from,
+        ..outcome
+    })
 }
 
 /// The `item set` verb.
@@ -257,20 +353,27 @@ pub fn h_set(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         return Ok(1);
     }
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
-    let (item, location, claim) = set_item(&store, id, &flags, session)?;
+    // `--owner` doubles as the actor here (the resolution chain's
+    // first rung) — the guard and the commit trailer agree
+    let me = ops::resolve_actor(Some(&proj.worktree), flags.owner.as_ref());
+    let outcome = set_item(&store, id, &flags, session, &me)?;
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: set {id}"),
-        flags.owner.as_ref(),
+        Some(&me),
         ctx.no_commit,
     )?;
-    let human = item
+    let human = outcome
+        .item
         .as_ref()
         .map(|i| format!("set {}", items::compact(i)))
         .unwrap_or_else(|| format!("set {id} done — line removed"));
-    let mut payload = json!({"item": item, "location": location});
-    if let Some(entry) = claim {
+    let mut payload = json!({"item": outcome.item, "location": outcome.location});
+    if let Some(entry) = outcome.claim {
         payload["claim"] = json!(entry);
+    }
+    if let Some(from) = outcome.taken_from {
+        payload["taken_from"] = json!(from);
     }
     items::report(payload, committed, ctx.json, &human)
 }
@@ -472,12 +575,15 @@ fn put_back(
 /// Apply `flags` to one item anywhere in the ledger and save —
 /// the shared mutation behind `item set` and `interrupt`. Writes
 /// but does NOT commit; the caller owns the commit message.
-/// Returns the post-mutation item (`None` when done removed a task
-/// line) and a location label for reporting.
+/// `me` is the resolved actor — the ownership guard compares the
+/// item's owner against it. Returns the post-mutation item
+/// (`None` when done removed a task line) and a location label
+/// for reporting.
 pub(crate) fn mutate_item(
     store: &impl Store,
     id: ItemId,
     flags: &SetFlags,
+    me: &Actor,
 ) -> Result<(Option<Item>, String), String> {
     let mut ledger = items::load_ledger(store)?;
     if let Some(loc) = ledger.locate(id) {
@@ -492,6 +598,7 @@ pub(crate) fn mutate_item(
         let Some(target) = ledger.item_mut(&loc) else {
             return Err(format!("{id}: no such task"));
         };
+        ownership_guard(target, flags, me)?;
         apply_set(target, flags)?;
         if status_change {
             let Some(current) = ledger.item(&loc) else {
@@ -552,6 +659,7 @@ pub(crate) fn mutate_item(
         Ok((item, "tasks".to_string()))
     } else {
         let mut file = items::item_for_edit(store, id)?;
+        ownership_guard(&file.meta, flags, me)?;
         apply_set(&mut file.meta, flags)?;
         let item = file.meta.clone();
         store.save_item(&file).map_err(|e| e.to_string())?;

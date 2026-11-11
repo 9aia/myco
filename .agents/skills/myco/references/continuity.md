@@ -11,8 +11,15 @@ myco status --prompt     # token-sized digest, safe to paste into context
 ```
 
 One line of counts (`tasks 2o/0c/1ip/0b backlog 5 issues 1o …`) plus
-the open items with id, priority, title. `status` without `--prompt`
-is the fuller digest; `--json` is the structured form.
+the open items with id, priority, title. Items owned by *your*
+resolved actor carry a `⚑` mark — scan for it first; `⚡` still
+marks interrupted items. `status` without `--prompt` is the fuller
+digest; `--json` is the structured form.
+
+The actor is the shared resolution chain (`--actor`/`--owner` →
+`$MYCO_ACTOR` → `human:<git user.name>` → `cli`) — export
+`$MYCO_ACTOR` once and claims, handoffs, and commit trailers all
+attribute to you.
 
 ## Session end — `myco handoff`
 

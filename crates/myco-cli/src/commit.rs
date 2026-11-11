@@ -19,7 +19,10 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
     // committing sweeps pending writes — don't catch another
     // verb mid-mutation, and don't deepen a behind-remote
     // divergence (`myco sync` closes it)
-    ops::ensure_synced(&proj.worktree)?;
+    ops::ensure_synced(
+        &proj.worktree,
+        myco_ops::config::sync_auto_fetch_for(&proj.root, ops::CONFIG),
+    )?;
     let _lock = ops::lock_worktree(&proj.worktree)?;
     let msg = message.unwrap_or_else(|| DEFAULT_MSG.to_string());
     let enabled = ops::commits_enabled(no_commit);

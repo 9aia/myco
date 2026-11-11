@@ -55,6 +55,7 @@ fn run(dir: &Path, args: &[&str]) -> Output {
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
         .env_remove("MYCO_NO_COMMIT")
+        .env_remove("MYCO_ACTOR")
         .output()
         .unwrap()
 }
@@ -168,11 +169,15 @@ fn next_claim_mutates_and_commits() {
     let (d, wt) = project();
     run(d.path(), &["todo", "add", "pick me"]);
 
-    // default claimer is `cli` (the handoff/interrupt fallback)
+    // default claimer is the resolved actor — `human:<git
+    // user.name>` here (the fixture repo sets `user.name = t`)
     let out = run(d.path(), &["next", "--claim"]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     let s = stdout(&out);
-    assert!(s.contains("T-001 claimed pri:med owner:cli pick me"), "{s}");
+    assert!(
+        s.contains("T-001 claimed pri:med owner:human:t pick me"),
+        "{s}"
+    );
     assert_eq!(
         git(&wt, &["log", "-1", "--format=%s"]),
         "chore: claim T-001"
@@ -180,7 +185,7 @@ fn next_claim_mutates_and_commits() {
     // on disk: status + owner in TODO.md
     let todo = std::fs::read_to_string(wt.join("TODO.md")).unwrap();
     assert!(
-        todo.contains("owner:cli") || todo.contains("claimed"),
+        todo.contains("owner:human:t") || todo.contains("claimed"),
         "{todo}"
     );
 
@@ -205,6 +210,48 @@ fn next_claim_mutates_and_commits() {
         &["next", "--claim", "--owner", "devin", "--owner", "cli"],
     );
     assert_eq!(code(&out), 2);
+}
+
+#[test]
+fn next_claim_respects_ownership_and_steal() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "contested"]);
+    // devin owns the open item (owner can be set while open)
+    run(d.path(), &["item", "set", "T-001", "--owner", "devin"]);
+
+    // --claim by another actor refuses — the ownership guard
+    // fires on the open→claimed transition
+    let out = run(d.path(), &["next", "--claim", "--owner", "agent-x"]);
+    assert_eq!(code(&out), 2, "{out:?}");
+    assert!(stderr(&out).contains("owned by devin"), "{}", stderr(&out));
+
+    // --steal takes it: owner flips, `taken_from` reports
+    let out = run(
+        d.path(),
+        &["next", "--claim", "--owner", "agent-x", "--steal", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["item"]["owner"], "agent-x");
+    assert_eq!(v["item"]["status"], "claimed");
+    assert_eq!(v["taken_from"], "devin");
+    assert!(std::fs::read_to_string(wt.join("handoffs/T-001.md"))
+        .unwrap()
+        .contains("taken over from devin"));
+
+    // $MYCO_ACTOR is the claimer when --owner is absent
+    run(d.path(), &["todo", "add", "env claimed"]);
+    let out = myco_cmd()
+        .current_dir(d.path())
+        .args(["next", "--claim", "--json"])
+        .env("MYCO_CONFIG", "/nonexistent/myco.toml")
+        .env("MYCO_ACTOR", "agent-env")
+        .env_remove("MYCO_NO_COMMIT")
+        .output()
+        .unwrap();
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["item"]["owner"], "agent-env");
 }
 
 #[test]

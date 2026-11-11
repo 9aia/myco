@@ -45,7 +45,7 @@ myco <verb> --help     # every verb, self-documenting
 | Session start / where things stand | `myco status --prompt` |
 | Add a task | `myco todo add "title" [--pri high] [--owner devin]` |
 | Park / re-activate a task | `myco todo defer T-NNN` / `myco backlog promote T-NNN` |
-| Claim / start / block / finish | `myco item set T-NNN --status claimed|in-progress|blocked|done` |
+| Claim / start / block / finish | `myco item set T-NNN --status claimed|in-progress|blocked|done` (`--steal` takes an item owned by another actor) |
 | Done a task | `myco todo done T-NNN` (archives subtree → `DONE.md`) |
 | Done tasks / filters | `myco done list` · every `list` verb takes `--status --owner --label --pri --epic --milestone --due --est --cycle --query --limit` |
 | Undo the last mutation | `myco undo` (resets the `project` tip one commit — refuses dirty/pushed tips) |
@@ -55,20 +55,27 @@ myco <verb> --help     # every verb, self-documenting
 | Session end (resumable state) | `myco handoff T-NNN --note "done/next/open"` |
 | Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
 | Restart work on an item | `myco resume T-NNN` (`item show`/`resume` take 1..n ids) |
-| Pick the top item | `myco next [--claim]` — open task/issue by `pri,id`; filter flags shared with `view` |
+| Pick the top item | `myco next [--claim [--steal] [--owner <actor>]]` — open task/issue by `pri,id`; filter flags shared with `view` |
 | Views | `myco view [name]` (`board`/`open`/`epic`/`milestone` presets + `--epic`/`--milestone`/`--status`/`--group-by`/`--sort`/`--format` flags; `default_view` in myco.toml is the bare-`view` landing) · `myco report` · read-only viz via pavo (`tamias-driver-myco` → `pavo view myco:board`) |
 | Config verbs | `[verbs.<name>]` in myco.toml — `emit` (a baked `ViewSpec` → table/json/ids/first) or `target`+`args` (alias for a read-only builtin); works on CLI, batch, serve |
 | Served surface | `myco serve` (JSON-RPC 2.0 on stdio, for pipe-holding embedders) · `myco batch` (one-shot: NDJSON requests stdin/`--file` → NDJSON responses) |
-| Cross-repo | `myco index add <repo>` (ledger-less repos register `ledger = "none"`, no snapshot; `--org` marks the one global ledger) · `myco item move <ID> --to <repo>` (re-files an item in another repo's ledger; source closes `done` + `moved to` handoff) · `myco view org-status` · `myco view org-board` · `[views.x] source="index" format="repos"` → one row per repo (org/items/open/claimed/err). In a registered ledger-less repo, project verbs resolve to the org ledger's worktree |
+| Cross-repo | `myco index add <repo>` (ledger-less repos register `ledger = "none"`, no snapshot; `--org` marks the one global ledger) · `myco item move <ID> --to <repo> [--dry-run]` (re-files an item in another repo's ledger; source closes `done` + `moved to`/`moved from` handoffs — `--finish` completes a move that died mid-flight) · `myco view org-status` · `myco view org-board` · `[views.x] source="index" format="repos"` → one row per repo (org/items/open/claimed/err). In a registered ledger-less repo, project verbs resolve to the org ledger's worktree |
 | Housekeeping | `myco init` · `check` · `migrate` · `commit` · `undo` · `org init` |
 
 ## The daily loop
 
-1. `myco status --prompt` — token-sized digest of the ledger.
+1. `myco status --prompt` — token-sized digest of the ledger;
+   items you own are marked `⚑`.
 2. Work. Track state as you go: `--status claimed` on pickup,
-   `in-progress` when started, `blocked` when stuck.
+   `in-progress` when started, `blocked` when stuck. An item owned
+   by another actor refuses reassignment — `--steal` takes it over
+   (recorded in the handoff log).
 3. Exit: `myco item set <ID> --status done` for finished work,
    `myco handoff <ID> --note …` for anything resumable.
+
+Your actor id resolves once per verb: `--actor`/`--owner` flag →
+`$MYCO_ACTOR` → `human:<git user.name>` → `cli`. It lands on
+handoff entries, item owners, and every commit's `Actor:` trailer.
 
 ## References — read only what the task needs
 

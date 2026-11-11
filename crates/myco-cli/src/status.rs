@@ -50,16 +50,19 @@ fn in_group<'a>(groups: &'a [ViewGroup<'a>], status: Status) -> &'a [Scoped<'a>]
         .unwrap_or(&[])
 }
 
-/// `<id> <pri> <title> [⚡]` — one prompt line, no prose; `⚡`
-/// marks an interrupted item (latest handoff is an interrupt).
-fn prompt_item(i: &Item, interrupted: bool) -> String {
-    format!(
-        "{} {} {}{}",
-        i.id,
-        i.priority.token(),
-        i.title,
-        if interrupted { " ⚡" } else { "" }
-    )
+/// `<id> <pri> <title> [⚡] [⚑]` — one prompt line, no prose;
+/// `⚡` marks an interrupted item (latest handoff is an interrupt),
+/// `⚑` marks an item owned by the resolved actor (`me`) — the
+/// "yours" signal an agent scans for first.
+fn prompt_item(i: &Item, interrupted: bool, me: Option<&myco_core::Actor>) -> String {
+    let mut marks = String::new();
+    if interrupted {
+        marks.push_str(" ⚡");
+    }
+    if me.is_some_and(|m| i.owner.as_ref() == Some(m)) {
+        marks.push_str(" ⚑");
+    }
+    format!("{} {} {}{}", i.id, i.priority.token(), i.title, marks)
 }
 
 /// The `--prompt` block, hard-capped at [`PROMPT_MAX_LINES`].
@@ -70,7 +73,11 @@ fn prompt_item(i: &Item, interrupted: bool) -> String {
 /// dropped last. A truncated group keeps a `… +N more <name>`
 /// marker; a fully cut group disappears (the counts line still
 /// summarizes it).
-pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> String {
+pub fn prompt_block(
+    scan: &digest::Scan,
+    interrupted: &BTreeSet<ItemId>,
+    me: Option<&myco_core::Actor>,
+) -> String {
     let c = digest::counts(scan);
     let evaled = active_groups(scan);
     // every bucket is already pri,id-sorted by the engine — the
@@ -123,7 +130,7 @@ pub fn prompt_block(scan: &digest::Scan, interrupted: &BTreeSet<ItemId>) -> Stri
         out.extend(
             shown
                 .iter()
-                .map(|i| prompt_item(i.item, interrupted.contains(&i.item.id))),
+                .map(|i| prompt_item(i.item, interrupted.contains(&i.item.id), me)),
         );
         if *hidden > 0 {
             out.push(format!("… +{hidden} more {name}"));
@@ -167,25 +174,31 @@ pub fn status_json(store: &impl Store) -> Result<serde_json::Value, String> {
 }
 
 /// The `--prompt` block payload — `{"prompt": "<block>"}` for
-/// `myco serve`, where the digest isn't a useful shape.
-pub fn prompt_json(store: &impl Store) -> Result<serde_json::Value, String> {
+/// `myco serve`, where the digest isn't a useful shape. `me` is
+/// the resolved actor — items it owns get the `⚑` mark.
+pub fn prompt_json(
+    store: &impl Store,
+    me: Option<&myco_core::Actor>,
+) -> Result<serde_json::Value, String> {
     let scan = digest::scan(store)?;
     let interrupted = crate::continuity::interrupted_set(store, scan.live())?;
-    Ok(json!({"prompt": prompt_block(&scan, &interrupted)}))
+    Ok(json!({"prompt": prompt_block(&scan, &interrupted, me)}))
 }
 
 /// The `status` verb.
 pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
     let prompt = a.flag("prompt");
     let json_out = ctx.json;
-    let (_proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let (proj, store) = items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let scan = digest::scan(&store)?;
     let interrupted = crate::continuity::interrupted_set(&store, scan.live())?;
+    // the resolved actor — `--prompt` marks its items `⚑`
+    let me = ops::resolve_actor(Some(&proj.worktree), None);
     if prompt {
         if json_out {
-            ops::print_json(&json!({"prompt": prompt_block(&scan, &interrupted)}));
+            ops::print_json(&json!({"prompt": prompt_block(&scan, &interrupted, Some(&me))}));
         } else {
-            println!("{}", prompt_block(&scan, &interrupted));
+            println!("{}", prompt_block(&scan, &interrupted, Some(&me)));
         }
         return Ok(0);
     }
@@ -252,7 +265,7 @@ mod tests {
             Item::new(ItemId::new(ItemKind::Task, 4), "done").status(Status::Done),
             Item::new(ItemId::new(ItemKind::Task, 6), "parked").status(Status::Deferred),
         ];
-        let block = prompt_block(&scan_with(v.clone()), &BTreeSet::new());
+        let block = prompt_block(&scan_with(v.clone()), &BTreeSet::new(), None);
         let lines: Vec<&str> = block.lines().collect();
         assert_eq!(
             lines[0],
@@ -278,10 +291,33 @@ mod tests {
                 format!("task {n}"),
             ));
         }
-        let block = prompt_block(&scan_with(v), &BTreeSet::new());
+        let block = prompt_block(&scan_with(v), &BTreeSet::new(), None);
         let lines: Vec<&str> = block.lines().collect();
         assert!(lines.len() <= PROMPT_MAX_LINES, "{}", lines.len());
         assert!(block.contains("… +"), "{}", block);
+    }
+
+    #[test]
+    fn prompt_block_marks_the_resolved_actors_items() {
+        let mut owned = Item::new(ItemId::new(ItemKind::Task, 1), "mine");
+        owned.owner = Some(myco_core::Actor::new("agent-x").unwrap());
+        owned.status = Status::Claimed;
+        let mut other = Item::new(ItemId::new(ItemKind::Task, 2), "theirs");
+        other.owner = Some(myco_core::Actor::new("devin").unwrap());
+        other.status = Status::Claimed;
+        let block = prompt_block(
+            &scan_with(vec![owned, other]),
+            &BTreeSet::new(),
+            Some(&myco_core::Actor::new("agent-x").unwrap()),
+        );
+        assert!(block.contains("T-001 med mine ⚑"), "{block}");
+        assert!(
+            block.contains("T-002 med theirs") && !block.contains("theirs ⚑"),
+            "{block}"
+        );
+        // no actor resolved → no marks
+        let block = prompt_block(&scan_with(Vec::new()), &BTreeSet::new(), None);
+        assert!(!block.contains('⚑'));
     }
 
     #[test]
@@ -314,7 +350,7 @@ mod tests {
                 format!("open {n}"),
             ));
         }
-        let block = prompt_block(&scan_with(v), &BTreeSet::new());
+        let block = prompt_block(&scan_with(v), &BTreeSet::new(), None);
         let lines: Vec<&str> = block.lines().collect();
         assert!(lines.len() <= PROMPT_MAX_LINES, "{}", lines.len());
         // in-progress is the last section cut — survives whole
@@ -335,7 +371,7 @@ mod tests {
             Item::new(ItemId::new(ItemKind::Task, 1), "wip").status(Status::InProgress),
             Item::new(ItemId::new(ItemKind::Task, 2), "stuck").status(Status::Blocked),
         ];
-        let block = prompt_block(&scan_with(v), &BTreeSet::new());
+        let block = prompt_block(&scan_with(v), &BTreeSet::new(), None);
         assert!(block.contains("in-progress:"), "{block}");
         assert!(!block.contains("open:"), "{block}");
     }

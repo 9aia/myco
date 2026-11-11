@@ -137,7 +137,7 @@ pub fn document() -> serde_json::Value {
         },
         "commits": {
             "subject": "chore: <verb> <id>…",
-            "trailer": "Actor: <actor> — the verb's actor (`--actor`/`--owner` where the verb takes one, else `cli`)",
+            "trailer": "Actor: <actor> — the verb's actor (`--actor`/`--owner` where the verb takes one, else the resolved actor: `$MYCO_ACTOR` → `human:<git user.name>` → `cli`)",
             "identity": "author/committer = repo git config (`user.name`/`user.email`, `myco@localhost` fallback) — actor attribution is a trailer, never a per-actor author",
             "timing": "one atomic commit per mutating verb, only when the worktree changed",
         },

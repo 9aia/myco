@@ -54,6 +54,7 @@ fn run(dir: &Path, args: &[&str]) -> Output {
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
         .env_remove("MYCO_NO_COMMIT")
+        .env_remove("MYCO_ACTOR")
         .output()
         .unwrap()
 }
@@ -64,6 +65,7 @@ fn run_stdin(dir: &Path, args: &[&str], stdin: &str) -> Output {
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
         .env_remove("MYCO_NO_COMMIT")
+        .env_remove("MYCO_ACTOR")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -191,8 +193,9 @@ fn handoff_every_kind_and_append_only() {
     );
     assert_eq!(code(&out), 0);
     let v = json(&out);
-    // default actor is `cli`; no session key
-    assert_eq!(v["entry"]["actor"], "cli");
+    // default actor is the resolved chain — `human:<git user.name>`
+    // here; no session key
+    assert_eq!(v["entry"]["actor"], "human:t");
     assert!(v["entry"].as_object().unwrap().get("session").is_none());
     let after = read(&wt, "handoffs/T-001.md");
     assert!(after.starts_with(&before), "{after}");

@@ -20,6 +20,9 @@ pub(crate) struct NextFlags {
     pub(crate) filter: view::FilterPatch,
     pub(crate) sort: Vec<myco_core::SortKey>,
     pub(crate) claim: bool,
+    /// `--steal` — take the item over from a different owner
+    /// (requires `--claim`).
+    pub(crate) steal: bool,
     /// `--session` — tags the claim (requires `--claim`).
     pub(crate) session: Option<String>,
 }
@@ -40,13 +43,18 @@ pub(crate) fn base_spec() -> ViewSpec {
 /// read-only `next` there's no claim to tag.
 pub(crate) fn next_flags(a: &Args) -> Result<NextFlags, String> {
     let session = a.opt("session").map(str::to_string);
+    let steal = a.flag("steal");
     if session.is_some() && !a.flag("claim") {
         return Err("next: --session needs --claim (it tags the claim being taken)".into());
+    }
+    if steal && !a.flag("claim") {
+        return Err("next: --steal needs --claim (it overrides the ownership guard)".into());
     }
     Ok(NextFlags {
         filter: view::filter_args(a)?,
         sort: a.many_parsed("sort")?,
         claim: a.flag("claim"),
+        steal,
         session,
     })
 }
@@ -86,14 +94,14 @@ pub(crate) fn pick<'a>(
         .find_map(|g| g.items.first().map(|s| s.item))
 }
 
-/// Who a `--claim` assigns — `--owner`'s single actor (under
-/// `--claim` it names the claimer, not a filter), else the
-/// `handoff`/`interrupt` fallback (`cli`). Several `--owner`s
-/// can't name one claimer, so that's an error.
-fn claim_owner(flags: &NextFlags) -> Result<Actor, String> {
+/// Who a `--claim` assigns when `--owner` names one — under
+/// `--claim` it names the claimer, not a filter. `None` means
+/// "use the resolved actor" ([`ops::resolve_actor`]). Several
+/// `--owner`s can't name one claimer, so that's an error.
+fn claim_owner(flags: &NextFlags) -> Result<Option<Actor>, String> {
     match flags.filter.owner.as_slice() {
-        [] => Actor::new(continuity::DEFAULT_ACTOR).map_err(|e| e.to_string()),
-        [owner] => Ok(owner.clone()),
+        [] => Ok(None),
+        [owner] => Ok(Some(owner.clone())),
         _ => Err("next --claim: pass one --owner (the claimer), not several".into()),
     }
 }
@@ -115,12 +123,21 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let flags = next_flags(a)?;
     let json_out = ctx.json;
     let no_commit = ctx.no_commit;
-    let owner = flags.claim.then(|| claim_owner(&flags)).transpose()?;
+    let explicit_owner = flags
+        .claim
+        .then(|| claim_owner(&flags))
+        .transpose()?
+        .flatten();
     let (proj, store) = if flags.claim {
         items::open(ctx.dir.as_deref(), ctx.root.as_deref())?
     } else {
         items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())?
     };
+    // the claimer — `--owner` is the chain's first rung, then
+    // `$MYCO_ACTOR` → `human:<git user.name>` → `cli`
+    let me = flags
+        .claim
+        .then(|| ops::resolve_actor(Some(&proj.worktree), explicit_owner.as_ref()));
     let spec = spec(&proj.root, &flags)?;
     let scan = digest::scan(&store)?;
     let Some(item) = pick(&scan, &spec, store.kinds()).cloned() else {
@@ -131,7 +148,7 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         }
         return Ok(0);
     };
-    let Some(owner) = owner else {
+    let Some(me) = me else {
         if json_out {
             ops::print_json(&json!({"item": item}));
         } else {
@@ -144,23 +161,28 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         // identity isn't a transition — an already-claimed item
         // just re-stamps the owner
         status: (item.status != Status::Claimed).then_some(Status::Claimed),
-        owner: Some(owner.clone()),
+        owner: Some(me.clone()),
+        steal: flags.steal,
         ..Default::default()
     };
     // `--session` tags the claim — the mutation and the `claimed`
     // handoff entry pair through the atomic claim path
-    let (item, _location, _claim) = itemcmd::set_item(&store, id, &set, flags.session)?;
+    let outcome = itemcmd::set_item(&store, id, &set, flags.session, &me)?;
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: claim {id}"),
-        Some(&owner),
+        Some(&me),
         no_commit,
     )?;
-    let human = match &item {
+    let human = match &outcome.item {
         Some(i) => line(&store, i)?,
         None => format!("claimed {id}"),
     };
-    items::report(json!({"item": item}), committed, json_out, &human)
+    let mut payload = json!({"item": outcome.item});
+    if let Some(from) = outcome.taken_from {
+        payload["taken_from"] = json!(from);
+    }
+    items::report(payload, committed, json_out, &human)
 }
 
 #[cfg(test)]
@@ -196,6 +218,7 @@ mod tests {
             },
             sort: vec!["-id".parse().unwrap()],
             claim: false,
+            steal: false,
             session: None,
         };
         let dir = tempfile::tempdir().unwrap();
@@ -210,9 +233,10 @@ mod tests {
     #[test]
     fn claim_owner_resolution() {
         let mut flags = NextFlags::default();
-        assert_eq!(claim_owner(&flags).unwrap().as_str(), "cli");
+        // no --owner → the resolved actor chain decides
+        assert_eq!(claim_owner(&flags).unwrap(), None);
         flags.filter.owner = vec!["devin".parse().unwrap()];
-        assert_eq!(claim_owner(&flags).unwrap().as_str(), "devin");
+        assert_eq!(claim_owner(&flags).unwrap().unwrap().as_str(), "devin");
         flags.filter.owner = vec!["devin".parse().unwrap(), "human:x".parse().unwrap()];
         assert!(claim_owner(&flags).is_err());
     }

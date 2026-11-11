@@ -29,10 +29,6 @@ use serde_json::json;
 
 use crate::{items, ops};
 
-/// `--actor` fallback — the local CLI wrote it. Also `next
-/// --claim`'s owner default and the `Actor:` commit trailer's.
-pub(crate) use myco_ops::ops::DEFAULT_ACTOR;
-
 /// Handoff entries shown by default (`--last` overrides).
 const DEFAULT_LAST: usize = 10;
 
@@ -158,13 +154,15 @@ fn read_note(note: &str) -> Result<String, String> {
 /// ledger (any kind, live or archived). Validates the note and
 /// the session id, appends the entry, and returns it plus the
 /// worktree-relative path (the file lands wherever it already
-/// lived). Caller commits.
+/// lived). `actor` is the resolved actor
+/// ([`ops::resolve_actor`] — callers fold `--actor` in first).
+/// Caller commits.
 pub fn record_handoff(
     store: &impl Store,
     worktree: &std::path::Path,
     id: ItemId,
     note: String,
-    actor: Option<Actor>,
+    actor: &Actor,
     session: Option<String>,
 ) -> Result<(HandoffEntry, String), String> {
     if items::find_item(store, id)?.is_none() {
@@ -179,10 +177,7 @@ pub fn record_handoff(
     }
     let entry = HandoffEntry {
         date: items::today(),
-        actor: match actor {
-            Some(a) => a,
-            None => Actor::new(DEFAULT_ACTOR).map_err(|e| e.to_string())?,
-        },
+        actor: actor.clone(),
         session,
         note,
     };
@@ -202,15 +197,17 @@ pub fn record_handoff(
 /// The `handoff` verb — `-` reads the note from stdin.
 pub fn h_handoff(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let id = a.req::<ItemId>("id")?;
+    let explicit: Option<Actor> = a.parsed("actor")?;
+    let me = ops::resolve_actor(Some(&proj.worktree), explicit.as_ref());
     let (entry, rel) = record_handoff(
         &store,
         &proj.worktree,
-        a.req::<ItemId>("id")?,
+        id,
         read_note(a.text("note")?)?,
-        a.parsed("actor")?,
+        &me,
         a.opt("session").map(str::to_string),
     )?;
-    let id = a.req::<ItemId>("id")?;
     let committed = items::commit(
         &proj.worktree,
         &format!("chore: handoff {id}"),
@@ -240,7 +237,7 @@ pub fn interrupt_item(
     store: &impl Store,
     id: ItemId,
     note: Option<&str>,
-    actor: Option<Actor>,
+    actor: &Actor,
     session: Option<String>,
 ) -> Result<HandoffEntry, String> {
     let Some((item, _, _)) = items::find_item(store, id)? else {
@@ -274,10 +271,7 @@ pub fn interrupt_item(
     };
     let entry = HandoffEntry {
         date: items::today(),
-        actor: match actor {
-            Some(a) => a,
-            None => Actor::new(DEFAULT_ACTOR).map_err(|e| e.to_string())?,
-        },
+        actor: actor.clone(),
         session,
         note,
     };
@@ -287,7 +281,12 @@ pub fn interrupt_item(
     let pre = preimage(store, id)?;
     // revert through the shared mutation path (relocation rules
     // included), then the marker handoff
-    crate::itemcmd::mutate_item(store, id, &crate::itemcmd::SetFlags::status(Status::Open))?;
+    crate::itemcmd::mutate_item(
+        store,
+        id,
+        &crate::itemcmd::SetFlags::status(Status::Open),
+        actor,
+    )?;
     if let Err(e) = store.append_handoff(id, &entry) {
         let stuck = restore(store, &pre);
         return Err(if stuck.is_empty() {
@@ -312,13 +311,14 @@ pub fn interrupt_item(
 /// claim, and an open item has none. Caller commits — one commit
 /// covers both writes; a failed tag rolls the mutation back.
 /// `actor` names the claimer (falls back to the item's
-/// post-mutation owner, then `cli`).
+/// post-mutation owner, then `me` — the resolved actor).
 pub(crate) fn tag_claim(
     store: &impl Store,
     id: ItemId,
     flags: &crate::itemcmd::SetFlags,
     actor: Option<Actor>,
     session: &str,
+    me: &Actor,
 ) -> Result<(Option<myco_core::Item>, String, HandoffEntry), String> {
     let Some((item, _, _)) = items::find_item(store, id)? else {
         return Err(format!("{id}: no such item"));
@@ -331,12 +331,12 @@ pub(crate) fn tag_claim(
     }
     validate_session(session)?;
     let pre = preimage(store, id)?;
-    let (item, location) = crate::itemcmd::mutate_item(store, id, flags)?;
+    let (item, location) = crate::itemcmd::mutate_item(store, id, flags, me)?;
     let entry = HandoffEntry {
         date: items::today(),
         actor: actor
             .or_else(|| item.as_ref().and_then(|i| i.owner.clone()))
-            .unwrap_or(Actor::new(DEFAULT_ACTOR).map_err(|e| e.to_string())?),
+            .unwrap_or_else(|| me.clone()),
         session: Some(session.to_string()),
         note: CLAIM_NOTE.to_string(),
     };
@@ -374,7 +374,7 @@ pub fn interrupt_session(
     store: &impl Store,
     session: &str,
     note: Option<&str>,
-    actor: Option<Actor>,
+    actor: &Actor,
 ) -> Result<SessionInterrupts, String> {
     validate_session(session)?;
     let scan = crate::digest::scan(store)?;
@@ -395,7 +395,7 @@ pub fn interrupt_session(
     for id in candidates {
         match claim_session(store, id) {
             Ok(Some(held)) if held == session => {
-                match interrupt_item(store, id, note, actor.clone(), Some(session.to_string())) {
+                match interrupt_item(store, id, note, actor, Some(session.to_string())) {
                     Ok(entry) => out.interrupted.push((id, entry)),
                     Err(e) => out.errors.push((id, e)),
                 }
@@ -460,9 +460,11 @@ pub fn h_interrupt(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Res
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     let id: Option<ItemId> = a.parsed("id")?;
     let session = a.opt("session").map(str::to_string);
+    let explicit: Option<Actor> = a.parsed("actor")?;
+    let me = ops::resolve_actor(Some(&proj.worktree), explicit.as_ref());
     match (id, session) {
         (Some(id), session) => {
-            let entry = interrupt_item(&store, id, a.opt("note"), a.parsed("actor")?, session)?;
+            let entry = interrupt_item(&store, id, a.opt("note"), &me, session)?;
             let committed = items::commit(
                 &proj.worktree,
                 &format!("chore: interrupt {id}"),
@@ -477,12 +479,11 @@ pub fn h_interrupt(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Res
             )
         }
         (None, Some(session)) => {
-            let actor: Option<Actor> = a.parsed("actor")?;
-            let out = interrupt_session(&store, &session, a.opt("note"), actor.clone())?;
+            let out = interrupt_session(&store, &session, a.opt("note"), &me)?;
             let committed = items::commit(
                 &proj.worktree,
                 &format!("chore: interrupt session {session}"),
-                actor.as_ref(),
+                Some(&me),
                 ctx.no_commit,
             )?;
             Ok(session_interrupt_report(
@@ -718,6 +719,11 @@ mod tests {
         }
     }
 
+    /// The resolved actor the verb handlers would pass down.
+    fn me() -> Actor {
+        Actor::new("cli").unwrap()
+    }
+
     fn task(store: &MdStore, n: u32, status: Status) -> ItemId {
         let id = ItemId::new(ItemKind::Task, n);
         let mut todo = store.todo().unwrap();
@@ -762,14 +768,14 @@ mod tests {
             .append_handoff(id, &entry(Some("s1"), "claimed"))
             .unwrap();
         // another session can't interrupt it
-        let err = interrupt_item(&store, id, None, None, Some("s2".into())).unwrap_err();
+        let err = interrupt_item(&store, id, None, &me(), Some("s2".into())).unwrap_err();
         assert!(err.contains("claimed under session s1"), "{err}");
         assert_eq!(
             store.todo().unwrap().items().next().unwrap().status,
             Status::Claimed
         );
         // its own session can
-        let e = interrupt_item(&store, id, None, None, Some("s1".into())).unwrap();
+        let e = interrupt_item(&store, id, None, &me(), Some("s1".into())).unwrap();
         assert_eq!(e.session.as_deref(), Some("s1"));
         assert_eq!(
             store.todo().unwrap().items().next().unwrap().status,
@@ -777,7 +783,7 @@ mod tests {
         );
         // untagged interrupt stays unconditional
         let id2 = task(&store, 2, Status::InProgress);
-        interrupt_item(&store, id2, None, None, None).unwrap();
+        interrupt_item(&store, id2, None, &me(), None).unwrap();
     }
 
     #[test]
@@ -789,7 +795,7 @@ mod tests {
             owner: Some(Actor::new("devin").unwrap()),
             ..Default::default()
         };
-        let (item, _loc, e) = tag_claim(&store, id, &flags, None, "s9").unwrap();
+        let (item, _loc, e) = tag_claim(&store, id, &flags, None, "s9", &me()).unwrap();
         assert_eq!(item.unwrap().status, Status::Claimed);
         assert_eq!(e.note, CLAIM_NOTE);
         assert_eq!(e.session.as_deref(), Some("s9"));
@@ -799,7 +805,7 @@ mod tests {
         // open items have no claim to tag
         let id2 = task(&store, 2, Status::Open);
         let flags = crate::itemcmd::SetFlags::default();
-        assert!(tag_claim(&store, id2, &flags, None, "s9").is_err());
+        assert!(tag_claim(&store, id2, &flags, None, "s9", &me()).is_err());
     }
 
     #[test]
@@ -815,7 +821,7 @@ mod tests {
         store
             .append_handoff(t2, &entry(Some("s2"), "claimed"))
             .unwrap();
-        let out = interrupt_session(&store, "s1", None, None).unwrap();
+        let out = interrupt_session(&store, "s1", None, &me()).unwrap();
         assert_eq!(out.interrupted.len(), 1);
         assert_eq!(out.interrupted[0].0, t1);
         assert!(out.errors.is_empty());
@@ -825,7 +831,7 @@ mod tests {
         assert_eq!(status_of(t2), Status::Claimed);
         assert_eq!(status_of(t3), Status::InProgress);
         // s2's teardown lands the rest, t3 untouched
-        let out = interrupt_session(&store, "s2", None, None).unwrap();
+        let out = interrupt_session(&store, "s2", None, &me()).unwrap();
         assert_eq!(out.interrupted.len(), 1);
         assert_eq!(out.interrupted[0].0, t2);
     }

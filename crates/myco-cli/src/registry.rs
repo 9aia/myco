@@ -888,7 +888,7 @@ const INTERRUPT_PARAMS: &[Param] = &[
         "Extra context appended to the `interrupted` note.",
     )
     .vname("TEXT"),
-    opt("actor", Val::Actor, "Who interrupted it (default `cli`)."),
+    opt("actor", Val::Actor, "Who interrupted it (default: the resolved actor)."),
     opt(
         "session",
         Val::Str,
@@ -1117,7 +1117,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "sync",
-        about: "Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves, refs stay bound to the remote). Mutating verbs refuse while behind (`ensure_synced`), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.",
+        about: "Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves to a fresh id, inbound `blocks:`/`links:`/supersede refs rebind to it, and a `renumbered` handoff entry records the audit). Mutating verbs refuse while behind (`ensure_synced`; `sync.auto_fetch` config fetches first), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.",
         params: &[&[flag(
             "abort",
             "Abort a stopped rebase/merge (`git rebase --abort`) and return to the pre-sync tip.",
@@ -1478,6 +1478,10 @@ pub static VERBS: &[Verb] = &[
             opt("cycle", Val::Str, "Cycle name (`[A-Za-z0-9_.-]+`) — `\"\"` clears the cycle."),
             opt("session", Val::Str, "Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state."),
             flag(
+                "steal",
+                "Take the item even when another actor owns the claim — records a `taken from` handoff entry.",
+            ),
+            flag(
                 "yes",
                 "Skip the `--status done` confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
             )
@@ -1491,21 +1495,28 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "item.move",
-        about: "Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.",
+        about: "Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids — and the drop is recorded as plain text in both provenance handoffs), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree. `--dry-run` previews the plan (prospective dest id, dropped refs) with no writes; `--finish` completes a move that died after the destination copy + `moved to` pointer landed but before the source close committed — the pointer is the resume handle.",
         params: &[&[
             pos("id", Val::Id, "Any item id."),
             opt(
                 "to",
                 Val::Path,
-                "Destination — a repo root, its `project/` worktree, or a registered repo name.",
-            )
-            .req(),
+                "Destination — a repo root, its `project/` worktree, or a registered repo name. Required unless `--finish`.",
+            ),
             opt(
                 "note",
                 Val::Str,
                 "Extra context appended to the source's `moved to` handoff note.",
             ),
-            opt("actor", Val::Actor, "Who moved it (default `cli`)."),
+            opt("actor", Val::Actor, "Who moved it (default: resolved actor)."),
+            flag(
+                "dry-run",
+                "Validate + report the plan (prospective destination id, dropped refs) — no writes, no commits.",
+            ),
+            flag(
+                "finish",
+                "Complete a partial move — finds the `moved to` handoff pointer, verifies the destination copy exists, closes the source, commits both worktrees. No `--to`.",
+            ),
             flag(
                 "yes",
                 "Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
@@ -1541,7 +1552,8 @@ pub static VERBS: &[Verb] = &[
                 .multi()
                 .delim()
                 .cli(),
-            flag("claim", "Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else `cli`); `--owner` names the claimer here and doesn't filter. Mutating: one commit.").cli(),
+            flag("claim", "Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else the resolved actor); `--owner` names the claimer here and doesn't filter. Mutating: one commit.").cli(),
+            flag("steal", "With `--claim`: take the item even when another actor owns the claim — records a `taken from` handoff entry.").cli(),
             opt("session", Val::Str, "With `--claim`: tag the claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it).").cli(),
         ], SPEC_PATCH],
         kind_lock: None,
@@ -1652,7 +1664,7 @@ pub static VERBS: &[Verb] = &[
             opt("note", Val::Str, "Handoff note — done/next/open. `-` reads stdin.")
                 .req()
                 .vname("TEXT|-"),
-            opt("actor", Val::Actor, "Who wrote it (`devin`, `human:luis`, …; default `cli`)."),
+            opt("actor", Val::Actor, "Who wrote it (`devin`, `human:luis`, …; default: the resolved actor)."),
             opt("session", Val::Str, "Session provenance — a sepia session id, `cli:<pid>`, any id string."),
         ]],
         kind_lock: None,

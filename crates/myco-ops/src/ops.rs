@@ -153,12 +153,67 @@ pub fn commits_enabled(no_commit: bool) -> bool {
     !no_commit && std::env::var_os("MYCO_NO_COMMIT").is_none()
 }
 
-/// Fallback actor for the `Actor:` commit trailer — the local
-/// CLI wrote it. Verbs that name an actor (`--actor` on
-/// `handoff`/`interrupt`, `--owner` on `add`/`new`/`set`/`--claim`)
-/// stamp that id instead; the same default those flags already
-/// fall back to.
+/// Fallback actor for the `Actor:` commit trailer and every
+/// actor default — the local CLI wrote it. The last rung of
+/// [`resolve_actor`]'s chain; verbs that name an actor
+/// (`--actor`/`--owner`) resolve through the chain instead.
 pub const DEFAULT_ACTOR: &str = "cli";
+
+/// Sanitize a `user.name` into actor-id shape — actor ids allow
+/// `[A-Za-z0-9._:-]`; anything else collapses to `-` so "Luis P."
+/// becomes `human:Luis-P.` rather than failing validation.
+fn sanitize_actor_name(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut dash = false;
+    for c in name.trim().chars() {
+        if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+            out.push(c);
+            dash = false;
+        } else if !dash {
+            out.push('-');
+            dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
+}
+
+/// The actor-resolution chain every verb shares — explicit flag
+/// first, then environment, then git identity, then the CLI
+/// fallback:
+///
+/// 1. `explicit` — the verb's `--actor`/`--owner` value.
+/// 2. `$MYCO_ACTOR` — the agent/hook-set identity (invalid values
+///    fall through rather than fail).
+/// 3. `human:<git user.name>` — the repo's configured identity,
+///    sanitized into actor-id shape. `dir` is any path inside the
+///    repo (the project worktree works); outside a repo or with
+///    no `user.name` this rung skips.
+/// 4. [`DEFAULT_ACTOR`] — `cli`.
+///
+/// There is no session-env rung: sepia sessions reach myco as
+/// `--session` values on the continuity verbs, not as an actor
+/// convention — nothing in the org sets one.
+pub fn resolve_actor(dir: Option<&Path>, explicit: Option<&Actor>) -> Actor {
+    if let Some(a) = explicit {
+        return a.clone();
+    }
+    if let Ok(v) = std::env::var("MYCO_ACTOR") {
+        if let Ok(a) = Actor::new(v.trim()) {
+            return a;
+        }
+    }
+    if let Some(d) = dir {
+        if let Ok(name) = myco_git::git_out(d, &["config", "user.name"]) {
+            let sanitized = sanitize_actor_name(name.trim());
+            if !sanitized.is_empty() {
+                if let Ok(a) = Actor::new(&format!("human:{sanitized}")) {
+                    return a;
+                }
+            }
+        }
+    }
+    Actor::new(DEFAULT_ACTOR).unwrap_or_else(|_| unreachable!("DEFAULT_ACTOR is a valid actor id"))
+}
 
 /// `msg` + the `Actor:` trailer — every myco commit names the
 /// verb's actor in the message body (T-011: actor-tagged
@@ -190,15 +245,24 @@ pub fn ensure_committable(dir: &Path) -> Result<(), String> {
 
 /// Refuse a mutation while the ledger branch is behind its
 /// tracked remote — every verb commit would deepen the divergence
-/// `myco sync` exists to close. Uses the last-fetched
-/// `refs/remotes/origin/<branch>` (no network): stale refs can
-/// only *under*-report, and `myco sync` does the real fetch.
+/// `myco sync` exists to close.
+///
+/// `auto_fetch` (`sync.auto_fetch`, default on) runs a
+/// best-effort `git fetch origin <branch>` first: the cached
+/// `refs/remotes/origin/<branch>` can only *under*-report
+/// divergence, so refreshing it before the check is what makes
+/// the gate honest. A failed fetch (offline, no remote, bad
+/// creds) is never fatal — the check falls back to the stale
+/// ref exactly as before. `false` skips the fetch entirely.
 /// Untracked branches (never pushed, no remote) pass — pushing is
 /// a repo-level choice, not this verb's business.
-pub fn ensure_synced(dir: &Path) -> Result<(), String> {
+pub fn ensure_synced(dir: &Path, auto_fetch: bool) -> Result<(), String> {
     let Some(branch) = myco_git::worktree_branch(dir) else {
         return Ok(());
     };
+    if auto_fetch {
+        let _ = myco_git::fetch_branch(dir, "origin", &branch);
+    }
     if !myco_git::tracks_branch(dir, "origin", &branch) {
         return Ok(());
     }
@@ -218,7 +282,8 @@ pub fn ensure_synced(dir: &Path) -> Result<(), String> {
 /// One atomic commit of everything under `dir` — the
 /// auto-commit-per-verb path. `msg` gains the `Actor:` trailer
 /// ([`commit_msg`]; `actor` is the verb's actor, `None` →
-/// [`DEFAULT_ACTOR`]). No commit when disabled or when the
+/// [`resolve_actor`] over `dir` — `$MYCO_ACTOR` → `human:<git
+/// user.name>` → `cli`). No commit when disabled or when the
 /// tree is clean. Returns whether a commit was made.
 pub fn autocommit(
     dir: &Path,
@@ -229,7 +294,15 @@ pub fn autocommit(
     if !enabled || !myco_git::has_changes(dir).map_err(|e| e.to_string())? {
         return Ok(false);
     }
-    myco_git::commit_all(dir, &commit_msg(msg, actor))
+    let resolved;
+    let actor = match actor {
+        Some(a) => a,
+        None => {
+            resolved = resolve_actor(Some(dir), None);
+            &resolved
+        }
+    };
+    myco_git::commit_all(dir, &commit_msg(msg, Some(actor)))
         .map_err(|e| format!("git commit failed in {}: {e}", dir.display()))?;
     Ok(true)
 }
@@ -263,7 +336,15 @@ pub fn commit_paths(
     let mut add = vec!["add", "--"];
     add.extend_from_slice(paths);
     myco_git::git_out(dir, &add).map_err(|e| e.to_string())?;
-    let msg = commit_msg(msg, actor);
+    let resolved;
+    let actor = match actor {
+        Some(a) => a,
+        None => {
+            resolved = resolve_actor(Some(dir), None);
+            &resolved
+        }
+    };
+    let msg = commit_msg(msg, Some(actor));
     let mut commit = vec!["commit", "-m", msg.as_str(), "--"];
     commit.extend_from_slice(paths);
     myco_git::git_ident(dir, &commit)
@@ -630,6 +711,39 @@ mod tests {
     }
 
     #[test]
+    fn resolve_actor_chain() {
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "Luis P."]);
+        // explicit wins over everything
+        let devin = Actor::new("devin").unwrap();
+        temp_env::with_vars([("MYCO_ACTOR", Some("agent-x"))], || {
+            assert_eq!(resolve_actor(Some(d.path()), Some(&devin)), devin);
+            // MYCO_ACTOR beats the git rung
+            assert_eq!(
+                resolve_actor(Some(d.path()), None),
+                Actor::new("agent-x").unwrap()
+            );
+        });
+        // invalid MYCO_ACTOR falls through to the git identity —
+        // sanitized into actor-id shape
+        temp_env::with_var("MYCO_ACTOR", Some("not an actor!!"), || {
+            assert_eq!(
+                resolve_actor(Some(d.path()), None),
+                Actor::new("human:Luis-P.").unwrap()
+            );
+        });
+        // no env, no repo → the cli fallback
+        temp_env::with_vars([("MYCO_ACTOR", None::<&str>)], || {
+            assert_eq!(
+                resolve_actor(None, None),
+                Actor::new(DEFAULT_ACTOR).unwrap()
+            );
+        });
+    }
+
+    #[test]
     fn autocommit_stamps_actor_trailer() {
         let d = tempfile::tempdir().unwrap();
         git(d.path(), &["init", "-q"]);
@@ -654,11 +768,13 @@ mod tests {
         let b = body();
         assert!(b.contains("Actor: devin"), "{b}");
         assert_eq!(b.lines().next().unwrap(), "chore: first");
-        // no actor → `cli`; git author stays the repo identity
+        // no actor → the resolved chain (`human:<git user.name>`
+        // here — the repo sets `user.name = t`); git author stays
+        // the repo identity
         std::fs::write(d.path().join("b.md"), "x").unwrap();
         assert!(autocommit(d.path(), "chore: second", None, true).unwrap());
         let b = body();
-        assert!(b.contains("Actor: cli"), "{b}");
+        assert!(b.contains("Actor: human:t"), "{b}");
         let author = String::from_utf8(
             Command::new("git")
                 .arg("-C")

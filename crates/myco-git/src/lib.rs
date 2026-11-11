@@ -308,6 +308,13 @@ pub fn sync(repo: &Path) -> bool {
     git(repo, &["fetch", "origin", "--prune"])
 }
 
+/// `git fetch <remote> <branch>` — best-effort refresh of one
+/// remote-tracking ref (no prune). `false` on any failure —
+/// callers treat fetch as advisory, never a hard gate.
+pub fn fetch_branch(repo: &Path, remote: &str, branch: &str) -> bool {
+    git(repo, &["fetch", remote, branch])
+}
+
 /// True when `rev` resolves to an object (`cat-file -e`).
 pub fn has_commit(repo: &Path, rev: &str) -> bool {
     git(repo, &["cat-file", "-e", rev])

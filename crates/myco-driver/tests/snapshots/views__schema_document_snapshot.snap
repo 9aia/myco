@@ -1,5 +1,5 @@
 ---
-source: crates/myco-cli/tests/views.rs
+source: crates/myco-driver/tests/views.rs
 expression: "serde_json::to_string_pretty(&v).unwrap()"
 ---
 {
@@ -7,7 +7,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "identity": "author/committer = repo git config (`user.name`/`user.email`, `myco@localhost` fallback) — actor attribution is a trailer, never a per-actor author",
     "subject": "chore: <verb> <id>…",
     "timing": "one atomic commit per mutating verb, only when the worktree changed",
-    "trailer": "Actor: <actor> — the verb's actor (`--actor`/`--owner` where the verb takes one, else `cli`)"
+    "trailer": "Actor: <actor> — the verb's actor (`--actor`/`--owner` where the verb takes one, else the resolved actor: `$MYCO_ACTOR` → `human:<git user.name>` → `cli`)"
   },
   "files": {
     "BACKLOG.md": {

@@ -26,7 +26,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
-    backlog, check, continuity, digest, itemcmd, items, movecmd, next, report, schema, status, todo,
+    backlog, check, continuity, digest, itemcmd, items, movecmd, next, ops, report, schema, status,
+    todo,
 };
 
 // ---------------------------------------------------------------- wire
@@ -529,10 +530,13 @@ pub(crate) fn w_schema(_s: &Server, _a: &crate::registry::Args) -> Result<Value,
 }
 
 /// `status` — `{prompt}` picks the digest or the prompt block.
+/// `--prompt` marks items owned by the resolved actor (`⚑`) so an
+/// agent sees its own claims at a glance.
 pub(crate) fn w_status(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
-    let (_proj, store) = s.open_read()?;
+    let (proj, store) = s.open_read()?;
     if a.flag("prompt") {
-        status::prompt_json(&store).map_err(Fail::Verb)
+        let me = ops::resolve_actor(Some(&proj.worktree), None);
+        status::prompt_json(&store, Some(&me)).map_err(Fail::Verb)
     } else {
         status::status_json(&store).map_err(Fail::Verb)
     }
@@ -744,38 +748,67 @@ pub(crate) fn w_item_set(s: &Server, a: &crate::registry::Args) -> Result<Value,
                 to,
             })?;
     }
-    let (item, location, claim) =
-        itemcmd::set_item(&store, id, &flags, session).map_err(Fail::Verb)?;
-    let committed = s.commit(
-        &proj.worktree,
-        &format!("chore: set {id}"),
-        flags.owner.as_ref(),
-    )?;
-    let mut payload = json!({"item": item, "location": location, "committed": committed});
-    if let Some(entry) = claim {
+    let me = ops::resolve_actor(Some(&proj.worktree), flags.owner.as_ref());
+    let outcome = itemcmd::set_item(&store, id, &flags, session, &me).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: set {id}"), Some(&me))?;
+    let mut payload =
+        json!({"item": outcome.item, "location": outcome.location, "committed": committed});
+    if let Some(entry) = outcome.claim {
         payload["claim"] = json!(entry);
+    }
+    if let Some(from) = outcome.taken_from {
+        payload["taken_from"] = json!(from);
     }
     Ok(payload)
 }
 
-/// `item.move` — `{id, to, note?, actor?}`; the destination is
-/// resolved and committed like the CLI path (two worktrees, two
-/// autocommits — both reported in the payload).
+/// `item.move` — `{id, to?, note?, actor?, dry_run?, finish?}`;
+/// the destination is resolved and committed like the CLI path
+/// (two worktrees, two autocommits — both reported in the
+/// payload). `dry_run` previews the plan with no writes;
+/// `finish` completes a partial move off its `moved to` pointer.
 pub(crate) fn w_item_move(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
-    let to = a.text("to").map_err(Fail::BadParams)?.to_string();
+    let to = a.opt("to").map(str::to_string);
     let note = a.opt("note").map(str::to_string);
     let actor: Option<Actor> = a.parsed("actor").map_err(Fail::BadParams)?;
-    let m = movecmd::do_move(
-        s.dir(),
-        s.root(),
-        id,
-        &to,
-        note.as_deref(),
-        actor,
-        s.no_commit(),
-    )
-    .map_err(Fail::Verb)?;
+    let finish = a.flag("finish");
+    let dry_run = a.flag("dry-run");
+    if finish && (dry_run || to.is_some()) {
+        return Err(Fail::BadParams(
+            "item move: `finish` takes no `to`/`dry_run`".into(),
+        ));
+    }
+    if !finish && to.is_none() {
+        return Err(Fail::BadParams(
+            "item move: `to` is required (or `finish`)".into(),
+        ));
+    }
+    if dry_run {
+        let p = movecmd::move_plan(
+            s.dir(),
+            s.root(),
+            id,
+            to.as_deref().unwrap_or_default(),
+            note.as_deref(),
+        )
+        .map_err(Fail::Verb)?;
+        return Ok(movecmd::plan_json(&p));
+    }
+    let m = if finish {
+        movecmd::finish_move(s.dir(), s.root(), id, actor, s.no_commit()).map_err(Fail::Verb)?
+    } else {
+        movecmd::do_move(
+            s.dir(),
+            s.root(),
+            id,
+            to.as_deref().unwrap_or_default(),
+            note.as_deref(),
+            actor,
+            s.no_commit(),
+        )
+        .map_err(Fail::Verb)?
+    };
     Ok(movecmd::moved_json(&m))
 }
 
@@ -791,7 +824,8 @@ pub(crate) fn w_handoff(s: &Server, a: &crate::registry::Args) -> Result<Value, 
     let actor: Option<Actor> = a.parsed("actor").map_err(Fail::BadParams)?;
     let session = a.opt("session").map(str::to_string);
     let (proj, store) = s.open()?;
-    let (entry, rel) = continuity::record_handoff(&store, &proj.worktree, id, note, actor, session)
+    let me = ops::resolve_actor(Some(&proj.worktree), actor.as_ref());
+    let (entry, rel) = continuity::record_handoff(&store, &proj.worktree, id, note, &me, session)
         .map_err(Fail::Verb)?;
     let committed = s.commit(
         &proj.worktree,
@@ -811,9 +845,10 @@ pub(crate) fn w_interrupt(s: &Server, a: &crate::registry::Args) -> Result<Value
     let actor: Option<Actor> = a.parsed("actor").map_err(Fail::BadParams)?;
     let session = a.opt("session").map(str::to_string);
     let (proj, store) = s.open()?;
+    let me = ops::resolve_actor(Some(&proj.worktree), actor.as_ref());
     match (id, session) {
         (Some(id), session) => {
-            let entry = continuity::interrupt_item(&store, id, note.as_deref(), actor, session)
+            let entry = continuity::interrupt_item(&store, id, note.as_deref(), &me, session)
                 .map_err(Fail::Verb)?;
             let committed = s.commit(
                 &proj.worktree,
@@ -825,13 +860,12 @@ pub(crate) fn w_interrupt(s: &Server, a: &crate::registry::Args) -> Result<Value
             )
         }
         (None, Some(session)) => {
-            let out =
-                continuity::interrupt_session(&store, &session, note.as_deref(), actor.clone())
-                    .map_err(Fail::Verb)?;
+            let out = continuity::interrupt_session(&store, &session, note.as_deref(), &me)
+                .map_err(Fail::Verb)?;
             let committed = s.commit(
                 &proj.worktree,
                 &format!("chore: interrupt session {session}"),
-                actor.as_ref(),
+                Some(&me),
             )?;
             Ok(json!({
                 "session": session,

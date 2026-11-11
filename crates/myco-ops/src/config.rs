@@ -49,6 +49,21 @@ pub fn default_view_for(root: &Path, cfg: ConfigLoader) -> Option<String> {
         .and_then(|c| c.default_view)
 }
 
+/// `sync.auto_fetch` for the repo rooted at `root` — same path
+/// policy as [`kinds_for`]. Missing/broken config → `true` (the
+/// documented default); the fetch itself is best-effort either
+/// way, so a config read failure can't strand a mutation.
+pub fn sync_auto_fetch_for(root: &Path, cfg: ConfigLoader) -> bool {
+    let path = std::env::var("MYCO_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    cfg.load(Some(&path))
+        .ok()
+        .and_then(|c| c.sync)
+        .map(|s| s.auto_fetch)
+        .unwrap_or(true)
+}
+
 /// The kind table for the repo rooted at `root` — the repo-layer
 /// `myco.toml` (or `$MYCO_CONFIG`), same path policy as
 /// `discover`'s `project_dir` read. The prelude on absence *or*

@@ -61,7 +61,7 @@ myco adr supersede ADR-1 --by ADR-2             # reciprocal links
 myco item show T-NNN          # any kind, live or archived
 myco item set T-NNN --status in-progress --owner devin \
     --label +urgent --unlabel stale --blocks +I-3 --links +PL-1 --epic v2
-myco item move T-NNN --to /path/to/other-repo   # cross-repo transfer
+myco item move T-NNN --to /path/to/other-repo [--dry-run|--finish]
 ```
 
 `item set` mutates metadata in place; `--status` is the only field
@@ -71,16 +71,36 @@ take `+`/`-` prefixes (`--unlink` also removes a link);
 confirms on a tty (`--yes`/`$MYCO_YES` skips; non-interactive runs
 never prompt). Same for `todo done` and `item move`.
 
+### Ownership — the `--steal` guard
+
+Assigning an item that another actor owns is refused on claim
+transitions (`→ claimed`) and on owner reassignment while the item
+sits in a work state (`claimed`/`in-progress`); open-item triage
+stays free. `--steal` takes it over — the mutation records a
+`taken over from <actor>` handoff entry and the JSON reports
+`taken_from`. `next --claim` shares the guard (its `--owner`
+names the claimer; `--steal` overrides).
+
 `item move` re-files an item in another repo's ledger: `--to` takes
 the destination repo root, its `project/` worktree, or a registered
-repo name (`myco index list`). The destination copy gets the next id
-in *its* sequence (kind, title, body, pri/owner/labels/epic/
-milestone carried; `blocks:`/`links:` are dropped — they name
-source-ledger ids), plus a `moved from <repo>:<ID>` handoff. The source gets a
-`moved to <repo>:<ID>` handoff, then closes `done` — a task's line
-leaves TODO.md and its handoff drops to `handoffs/archive/`; a
-file-backed item keeps its file at status `done`. Two commits, one
-per worktree; `--note` adds context to the source handoff.
+repo name (`myco index list`). `--dry-run` validates and reports
+the plan — prospective destination id, dropped refs — with no
+writes. The destination copy gets the next id in *its* sequence
+(kind, title, body, pri/owner/labels/epic/milestone carried;
+`blocks:`/`links:` are dropped — they name source-ledger ids — and
+the drop is recorded as a `dropped refs:` line in both provenance
+handoffs), plus a `moved from <repo>:<ID>` handoff. The source gets a
+`moved to <repo>:<ID>` handoff (with a `dest: <root>` resume line),
+then closes `done` — a task's line leaves TODO.md and its handoff
+drops to `handoffs/archive/`; a file-backed item keeps its file at
+status `done`. Two commits, one per worktree; `--note` adds context
+to the source handoff.
+
+A move that dies after the destination copy + pointer land but
+before the source close commits is resumable: `item move <ID>
+--finish` finds the `moved to` pointer, verifies the destination
+copy exists, closes the source, and commits both worktrees —
+idempotent, safe to re-run.
 
 ## Metadata tokens
 
@@ -94,6 +114,15 @@ per worktree; `--note` adds context to the source handoff.
   ids are clickable
 - `--epic` / `--milestone` — `[A-Za-z0-9_.-]+` grouping names, feed
   `myco view epic` / `myco view milestone` / `view board --epic/--milestone`
+
+### Actors
+
+One resolution chain serves every verb: the explicit flag
+(`--actor`/`--owner`) → `$MYCO_ACTOR` → `human:<git user.name>` →
+`cli`. The result lands on handoff entries, item owners (a
+`→ claimed` transition with no `--owner` assigns it), and every
+commit's `Actor:` trailer — so set `$MYCO_ACTOR` once per agent
+session and the whole ledger attributes correctly.
 
 ## Importing
 

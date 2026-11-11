@@ -56,7 +56,8 @@ fn run_env(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
         .env_remove("MYCO_NO_COMMIT")
-        .env_remove("MYCO_HOME");
+        .env_remove("MYCO_HOME")
+        .env_remove("MYCO_ACTOR");
     for (k, v) in env {
         c.env(k, v);
     }
@@ -899,9 +900,19 @@ fn sync_adopts_ff_and_renumbers() {
     assert_eq!(code(&out), 0, "{out:?}");
     assert_eq!(json(&out)["action"], "ff");
 
-    // diverge on a dir-kind id: both sides mint P-001 — filenames
-    // differ and the counter bump is identical, so the rebase is
-    // clean and the dup-id healer runs
+    // diverge on a dir-kind id: B mints P-001 + an inbound ref
+    // while legitimately synced (auto_fetch keeps the gate
+    // honest — mutations only land on the published tip), then
+    // A publishes the same id. Filenames differ and the counter
+    // bump is identical, so the rebase is clean and the dup-id
+    // healer runs
+    assert_eq!(code(&run(&wt, &["proposal", "new", "beta prop"])), 0);
+    // an inbound ref to the *local* P-001 — after the heal it must
+    // rebind to the fresh id, not stay ambiguous on the remote one
+    assert_eq!(
+        code(&run(&wt, &["todo", "add", "gate", "--blocks", "P-001"])),
+        0
+    );
     assert_eq!(
         code(&run(
             &a.path().join("project"),
@@ -910,7 +921,6 @@ fn sync_adopts_ff_and_renumbers() {
         0
     );
     git(a.path(), &["push", "-q", "origin", "project"]);
-    assert_eq!(code(&run(&wt, &["proposal", "new", "beta prop"])), 0);
     let out = run(&wt, &["sync", "--json"]);
     assert_eq!(code(&out), 0, "{out:?}");
     let v = json(&out);
@@ -934,8 +944,94 @@ fn sync_adopts_ff_and_renumbers() {
         names.iter().any(|n| n.starts_with("proposal-0002-beta")),
         "{names:?}"
     );
+    // the gate's blocks: ref followed the local item to P-002
+    let todo = std::fs::read_to_string(wt.join("TODO.md")).unwrap();
+    assert!(todo.contains("blocks:P-002"), "{todo}");
+    assert!(!todo.contains("blocks:P-001"), "{todo}");
+    // and the healed item carries the renumber audit in its
+    // handoff file
+    let h = std::fs::read_to_string(wt.join("handoffs/P-002.md")).unwrap();
+    assert!(h.contains("renumbered P-001 → P-002"), "{h}");
     let out = run(&wt, &["check", "--json"]);
     assert_eq!(code(&out), 0, "{out:?}");
+}
+
+/// `sync.auto_fetch` (default on): a mutating verb refreshes
+/// `origin/<branch>` before the behind-check, so a stale
+/// remote-tracking ref can't hide divergence. `auto_fetch =
+/// false` opts back out to the cached-ref check.
+#[test]
+fn auto_fetch_gates_mutations_and_config_opts_out() {
+    let a = repo();
+    let bare = tempfile::tempdir().unwrap();
+    git(bare.path(), &["init", "-q", "--bare"]);
+    git(
+        a.path(),
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    let branch = git(a.path(), &["branch", "--show-current"]);
+    git(
+        bare.path(),
+        &["symbolic-ref", "HEAD", &format!("refs/heads/{branch}")],
+    );
+    assert_eq!(code(&run(a.path(), &["init"])), 0);
+    git(a.path(), &["push", "-q", "origin", &branch, "project"]);
+
+    let bdir = tempfile::tempdir().unwrap();
+    let b = bdir.path().join("b");
+    git(
+        a.path(),
+        &[
+            "clone",
+            "-q",
+            bare.path().to_str().unwrap(),
+            b.to_str().unwrap(),
+        ],
+    );
+    git(&b, &["config", "user.email", "t@t"]);
+    git(&b, &["config", "user.name", "t"]);
+    assert_eq!(code(&run(&b, &["init"])), 0);
+    let wt = b.join("project");
+
+    // A publishes a ledger commit; B never fetches by hand —
+    // auto_fetch must refresh the ref before the behind-check
+    assert_eq!(
+        code(&run(&a.path().join("project"), &["todo", "add", "alpha"])),
+        0
+    );
+    git(a.path(), &["push", "-q", "origin", "project"]);
+    let out = run(&wt, &["todo", "add", "refused"]);
+    assert_eq!(code(&out), 2, "{out:?}");
+    assert!(stderr(&out).contains("myco sync"), "{out:?}");
+
+    // catch B up — now HEAD == the cached remote tip
+    let out = run(&wt, &["sync"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    // opt out — A publishes again; with `auto_fetch = false` the
+    // cached ref stays at the old tip, the behind-check sees
+    // "up to date", and the mutation lands on a diverged ledger.
+    // `$MYCO_CONFIG` is the explicit-path rung — it must name
+    // the repo file.
+    let cfg = b.join("myco.toml");
+    std::fs::write(&cfg, "[sync]\nauto_fetch = false\n").unwrap();
+    assert_eq!(
+        code(&run(
+            &a.path().join("project"),
+            &["todo", "add", "alpha two"]
+        )),
+        0
+    );
+    git(a.path(), &["push", "-q", "origin", "project"]);
+    let out = run_env(
+        &wt,
+        &["todo", "add", "lands anyway"],
+        &[("MYCO_CONFIG", cfg.to_str().unwrap())],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    // sanity: with the default the same mutation refuses again
+    let out = run(&wt, &["todo", "add", "refused again"]);
+    assert_eq!(code(&out), 2, "{out:?}");
 }
 
 // ---------- migrate ----------

@@ -179,6 +179,27 @@ pub struct Config {
     /// vocabulary is shared surface.
     #[serde(default)]
     pub kinds: Vec<KindSpec>,
+    /// `[sync]` — ledger-branch sync policy. `None` = defaults.
+    /// Repo layer wins the table like the scalars.
+    pub sync: Option<SyncConfig>,
+}
+
+/// The `[sync]` config table — how `myco sync` and the mutating
+/// verbs' divergence gate treat the ledger branch's remote.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SyncConfig {
+    /// Fetch `origin/<branch>` before the behind-check every
+    /// mutating verb runs — a stale remote-tracking ref can only
+    /// *under*-report divergence. `false` opts out (offline-first
+    /// repos); fetch failure never blocks a mutation either way.
+    /// Default `true`.
+    #[serde(default = "default_auto_fetch")]
+    pub auto_fetch: bool,
+}
+
+fn default_auto_fetch() -> bool {
+    true
 }
 
 impl Config {

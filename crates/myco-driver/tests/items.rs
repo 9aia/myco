@@ -54,6 +54,7 @@ fn run(dir: &Path, args: &[&str]) -> Output {
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
         .env_remove("MYCO_NO_COMMIT")
+        .env_remove("MYCO_ACTOR")
         .output()
         .unwrap()
 }
@@ -178,10 +179,23 @@ fn commits_carry_actor_trailer() {
     // subject line is untouched — `%s` parses never see the trailer
     assert_eq!(git(&wt, &["log", "-1", "--format=%s"]), "chore: add T-001");
 
-    // no actor flag → the `cli` default
+    // no actor flag → the resolved chain: `human:<git user.name>`
+    // (the fixture repo sets `user.name = t`)
     run(d.path(), &["todo", "done", "T-001"]);
     let body = git(&wt, &["log", "-1", "--format=%B"]);
-    assert!(body.contains("Actor: cli"), "{body}");
+    assert!(body.contains("Actor: human:t"), "{body}");
+
+    // $MYCO_ACTOR outranks the git rung
+    let out = myco_cmd()
+        .current_dir(d.path())
+        .args(["todo", "add", "env actor"])
+        .env("MYCO_CONFIG", "/nonexistent/myco.toml")
+        .env("MYCO_ACTOR", "agent-x")
+        .output()
+        .unwrap();
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let body = git(&wt, &["log", "-1", "--format=%B"]);
+    assert!(body.contains("Actor: agent-x"), "{body}");
 
     // `--actor` on continuity verbs
     run(d.path(), &["todo", "add", "another"]);
@@ -915,6 +929,64 @@ fn item_set_status_keeps_its_section() {
 }
 
 #[test]
+fn item_set_ownership_guard_and_steal() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "contested"]);
+    // devin claims it
+    let out = run(
+        d.path(),
+        &[
+            "item", "set", "T-001", "--status", "claimed", "--owner", "devin", "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    // another actor's owner reassignment on a work-state item
+    // refuses without --steal
+    let out = run(d.path(), &["item", "set", "T-001", "--owner", "agent-x"]);
+    assert_eq!(code(&out), 2, "{out:?}");
+    assert!(stderr(&out).contains("owned by devin"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("--steal"), "{}", stderr(&out));
+    // the owner didn't move
+    let out = run(d.path(), &["item", "show", "T-001", "--json"]);
+    assert_eq!(json(&out)["item"]["owner"], "devin");
+
+    // --steal takes it: owner flips, `taken_from` reports, and a
+    // `taken from` handoff entry records the takeover
+    let out = run(
+        d.path(),
+        &[
+            "item", "set", "T-001", "--owner", "agent-x", "--steal", "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["item"]["owner"], "agent-x");
+    assert_eq!(v["taken_from"], "devin");
+    let h = read(&wt, "handoffs/T-001.md");
+    assert!(h.contains("taken over from devin"), "{h}");
+
+    // the same actor re-assigning its own claim needs no --steal
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "in-progress"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    // `--steal` without an ownership conflict is a plain set
+    run(d.path(), &["todo", "add", "unclaimed-ish"]);
+    let out = run(
+        d.path(),
+        &[
+            "item", "set", "T-002", "--status", "claimed", "--steal", "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    // no --owner → the resolved actor (`human:t` — git user.name)
+    assert_eq!(json(&out)["item"]["owner"], "human:t");
+}
+
+#[test]
 fn item_move_cross_repo() {
     // `--to` falls back to registered repo names when the arg
     // isn't a path — pin MYCO_HOME so that lookup never touches
@@ -1043,6 +1115,135 @@ fn item_move_cross_repo() {
     assert!(stderr(&out).contains("not a myco repo"), "{}", stderr(&out));
     // nothing burned on the failures
     assert!(read(&src_wt, "TODO.md").contains("T-002 stay"));
+}
+
+#[test]
+fn item_move_dry_run_finish_and_dropped_refs() {
+    let home = tempfile::tempdir().unwrap();
+    let run = |dir: &Path, args: &[&str]| {
+        myco_cmd()
+            .current_dir(dir)
+            .args(args)
+            .env("MYCO_CONFIG", "/nonexistent/myco.toml")
+            .env("MYCO_HOME", home.path())
+            .env_remove("MYCO_NO_COMMIT")
+            .env_remove("MYCO_ACTOR")
+            .output()
+            .unwrap()
+    };
+    let (src, src_wt) = project();
+    let (dst, dst_wt) = project();
+    // T-001 stays; T-002 carries a blocks dep that can't cross —
+    // it names a source-ledger id
+    run(src.path(), &["todo", "add", "stay behind"]);
+    run(
+        src.path(),
+        &["todo", "add", "port this", "--blocks", "T-001"],
+    );
+
+    // --dry-run: the plan reports, nothing is written anywhere.
+    // The dest ledger is empty → the copy would land T-001 there.
+    let todo_before = read(&src_wt, "TODO.md");
+    let out = run(
+        src.path(),
+        &[
+            "item",
+            "move",
+            "T-002",
+            "--to",
+            dst.path().to_str().unwrap(),
+            "--dry-run",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["dry_run"], true);
+    assert_eq!(v["to"]["id"], "T-001");
+    assert_eq!(v["dropped"], "dropped refs: blocks T-001");
+    assert_eq!(read(&src_wt, "TODO.md"), todo_before);
+    assert!(!read(&dst_wt, "TODO.md").contains("port this"));
+    assert!(!dst_wt.join("handoffs/T-001.md").exists());
+
+    // the real move records the dropped refs in both provenance
+    // handoffs
+    let out = run(
+        src.path(),
+        &[
+            "item",
+            "move",
+            "T-002",
+            "--to",
+            dst.path().to_str().unwrap(),
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(read(&dst_wt, "handoffs/T-001.md").contains("dropped refs: blocks T-001"));
+    // the source handoff is archived with the pointer + the drop
+    let h = read(&src_wt, "handoffs/archive/T-002.md");
+    assert!(
+        h.contains("moved to") && h.contains("dropped refs: blocks T-001"),
+        "{h}"
+    );
+
+    // --finish on a completed move is idempotent — the archived
+    // pointer still resolves, the source is already closed
+    let out = run(src.path(), &["item", "move", "T-002", "--finish", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["already_closed"], true);
+    assert_eq!(v["to"]["id"], "T-001");
+
+    // --finish on an item that was never moved refuses
+    run(src.path(), &["todo", "add", "never moved"]);
+    let out = run(src.path(), &["item", "move", "T-003", "--finish"]);
+    assert_eq!(code(&out), 2, "{out:?}");
+    assert!(
+        stderr(&out).contains("no `moved to` handoff"),
+        "{}",
+        stderr(&out)
+    );
+    // and --finish rejects a --to
+    let out = run(
+        src.path(),
+        &[
+            "item",
+            "move",
+            "T-002",
+            "--finish",
+            "--to",
+            dst.path().to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code(&out), 2, "{out:?}");
+
+    // a *partial* move finishes: the destination copy exists and
+    // the `moved to` pointer is on file, but the source line is
+    // still open — simulate the crash state by hand (the pointer
+    // names the dst repo root; its T-001 plays the copy)
+    let (src2, src2_wt) = project();
+    let (dst2, _dst2_wt) = project();
+    run(src2.path(), &["todo", "add", "half moved"]);
+    run(dst2.path(), &["todo", "add", "dest seed"]);
+    let out = run(
+        src2.path(),
+        &[
+            "handoff",
+            "T-001",
+            "--note",
+            &format!("moved to {}:T-001", dst2.path().display()),
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let out = run(
+        src2.path(),
+        &["item", "move", "T-001", "--finish", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["already_closed"], false);
+    assert!(!read(&src2_wt, "TODO.md").contains("half moved"));
 }
 
 #[test]
