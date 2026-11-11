@@ -8,7 +8,7 @@ priority = "med"
 
 # ledger convergence: remote adoption, sync, dup-id renumbering
 
-Status: **accepted** · Created: 2026-11-11 · Implemented: 8ad39b0f
+Status: **done** · Created: 2026-11-11 · Implemented: 8ad39b0f
 
 ## Goal & Overview
 
