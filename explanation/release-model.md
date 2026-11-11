@@ -14,18 +14,18 @@ still applies, and it pushes commits and tags to `main`.
 ## What a release run does
 
 1. **Diff since the last tag** — the release set is a *fixed*
-   list of six crates: `myco-core`, `myco-git`, `myco-config`,
-   `myco-config-toml`, `myco-shell`, `myco-cli`. Only changes
-   under `crates/<one-of-those>/` count; changes to `myco-ops`,
-   `myco-store*`, `myco-index*`, `myco-tui`, `myco-driver`, or
-   `myco-testkit` trigger nothing. The `myco` binary re-publishes
-   whenever any of the six changed. No release-set changes, no
-   release.
+   list of five crates: `myco-core`, `myco-git`, `myco-ops`,
+   `myco-shell`, `myco-cli` (`myco-ops` carries the config
+   loader and index universe since the `myco-config*` crates
+   were retired). Only changes under `crates/<one-of-those>/`
+   count; changes to `myco-store*`, `myco-index*`, `myco-tui`,
+   `myco-driver`, or `myco-testkit` trigger nothing. The `myco`
+   binary re-publishes whenever any of the five changed. No
+   release-set changes, no release.
 2. **Per-crate patch bump + publish** —
    `cargo set-version -p <crate> --bump patch`, then
    `cargo publish` with retries, in dependency order
-   (`myco-core myco-config myco-git myco-shell myco-config-toml
-   myco`).
+   (`myco-core myco-git myco-ops myco-shell myco`).
    Each crate gets its own tag `<crate>-v<ver>` — versions
    diverge independently in the monorepo.
 3. **Commit + push** — one `release: bump crate versions` commit,

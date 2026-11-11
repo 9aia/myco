@@ -1,17 +1,26 @@
 # See work across repos
 
-`myco index` registers repos into a machine-wide cache;
-index-sourced `myco view` specs render cross-repo views over it.
-The org is just a view over the index universe — every filter,
-grouping, and format the view engine has applies to it.
+`myco view --source index` renders cross-repo views over the
+**index universe** — a disposable derived cache (redb under
+`$MYCO_HOME`, else `~/.local/share/myco`). The org is just a
+view over the universe — every filter, grouping, and format the
+view engine has applies to it.
 
-## The index
+## The universe
 
-The index lives under `$MYCO_HOME`, else `$XDG_DATA_HOME/myco`,
-else `~/.local/share/myco`:
+Inside a **lasius workspace** (`lasius.toml` found walking up
+from the cwd) the universe is the workspace's clones —
+`<root>/<repos_dir>/*` git checkouts, minus `exclude` globs —
+unioned with `repos.toml` registrations outside the workspace
+(`index list` marks each row `lasius`/`registry`). Outside
+lasius the universe is the `repos.toml` registry alone, so
+`myco index add` is still how repos join there.
+
+The index dir holds:
 
 - `repos.toml` — the registry (`[[repo]] path name`), a plain
-  file you can inspect
+  file you can inspect; inside lasius it also carries
+  registrations outside the workspace
 - `index.redb` — one `snapshots` table: repo path → JSON snapshot
 
 It is a **derived, disposable cache** — markdown in each repo's
@@ -21,53 +30,55 @@ It is a **derived, disposable cache** — markdown in each repo's
 ## Register repos
 
 ```sh
-myco index add ~/GitHub/9aia/sepia    # repo root or its project/ worktree
+myco index list                       # universe + snapshot freshness
+myco index rebuild [<path>]           # re-scan one or all
+myco index add ~/GitHub/9aia/sepia    # explicit registration —
+                                      #   required outside lasius
 myco index add .                      # register the repo you're in
-myco index list                       # repos + snapshot freshness
+myco index remove ~/GitHub/9aia/sepia # unregister a repos.toml entry
 ```
 
-`add` takes an initial snapshot. Snapshots go stale as ledgers
-change — `list` marks them `stale`; index-sourced views
-auto-rebuild stale entries on read, or rebuild explicitly:
-
-```sh
-myco index rebuild                    # all registered repos
-myco index rebuild ~/GitHub/9aia/sepia
-myco index remove ~/GitHub/9aia/sepia # unregister + drop snapshot
-```
+Inside lasius every clone joins the universe automatically — no
+`index add` needed. `add` still records an explicit registry
+entry (and takes an initial snapshot); snapshots go stale as
+ledgers change — `list` marks them `stale`; index-sourced views
+auto-rebuild stale entries on read, or rebuild explicitly.
 
 ## Ledger-less repos — one org-wide ledger
 
-The registry distinguishes three ledger states per repo, via the
-`ledger` key in `repos.toml` (absent = `local`, the conventional
-reading):
+Each universe repo has a ledger state — `local` (the
+conventional reading), `none` (explicitly ledger-less), or
+`org` (the org/global ledger: the *one* repo whose worktree
+every ledger-less member resolves to).
 
-- `local` — the repo's own `project/` worktree (the `worktree`
-  key, else `<path>/project`).
-- `none` — explicitly ledger-less: an org member with no
-  `project/` at all.
-- `org` — the org/global ledger: the *one* repo whose worktree
-  every ledger-less member resolves to.
+The designation lives in the repo's own `myco.toml`:
 
-`myco index add` observes the state: a git repo with no
-qualifying worktree registers as `none` and takes no snapshot;
-`--org` marks the global ledger (and clears the mark on any
-other entry — at most one).
-
-```sh
-myco index add ~/GitHub/9aia/project --org   # the one global ledger
-myco index add ~/GitHub/handl-lang/engine    # ledger-less → "none"
+```toml
+[index]
+ledger = "org"   # or "none" — "local" is the default
 ```
 
-Inside a registered `none` repo, verbs that need a project —
-`status`, `todo add`, `view`, writes included — resolve to the
-org ledger's worktree instead of failing. Unregistered repos
-still fail as before; `--dir`, `--root`, `MYCO_CONFIG`, and
-`project_dir` keep top precedence. `none` entries are omitted
-from index-sourced org views (no rows, no warnings), report
-`no-ledger` under `index rebuild`/`index list`, and are skipped
-by `org init` — the rollout never scaffolds `project/` into
-them. `ledger` is a plain hand-editable `repos.toml` key.
+Resolution order: `myco.toml [index] ledger` → a legacy
+`repos.toml` `ledger` key (`org`/`none`; `local` is the default,
+not a mark — `myco index add --org` still writes it) →
+derivation: a universe repo with no qualifying `project/`
+worktree is `none`, one with a worktree `local`.
+
+```sh
+# myco.toml in the ledger repo:        [index] ledger = "org"
+# or the registry equivalent:
+myco index add ~/GitHub/9aia/project --org   # the one global ledger
+```
+
+Inside a `none` repo, verbs that need a project — `status`,
+`todo add`, `view`, writes included — resolve to the org
+ledger's worktree instead of failing. Repos outside the
+universe still fail as before; `--dir`, `--root`, `MYCO_CONFIG`,
+and `project_dir` keep top precedence. `none` entries are
+omitted from index-sourced org views (no rows, no warnings),
+report `no-ledger` under `index rebuild`/`index list`, and are
+skipped by `org init` — the rollout never scaffolds `project/`
+into them.
 
 ## Org views — `view --source index`
 

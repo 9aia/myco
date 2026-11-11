@@ -12,7 +12,6 @@ WST = (ROOT / "Cargo.toml").read_text()
 LAYER = {
     "myco": "binary",
     "myco-core": "domain",
-    "myco-config": "port",
     "myco-store": "port",
     "myco-index": "port",
     "myco-ops": "ops",

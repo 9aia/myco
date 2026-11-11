@@ -2,10 +2,14 @@
 
 Ports-and-adapters over a flat `crates/` workspace:
 `myco-core` is pure domain — item models, the id registry, the
-state machine — with no I/O. Ports are traits (`myco-store`,
-`myco-config`, `myco-index`); impls live in separate crates;
-`crates/myco-cli` (package `myco`) is the composition root that
-wires impls to verbs.
+state machine, the `Config`/`LedgerMode` models — with no I/O.
+Ports are traits (`myco-store`, `myco-index`); impls live in
+separate crates. Config loading is delegated to scarab
+(`scarab-config-toml` parsing behind `myco-ops`'s `config::TOML`
+loader — the `myco-config*` crates were retired) and workspace
+discovery to lasius (`lasius-core` behind `myco-ops`'s
+`universe`); `crates/myco-cli` (package `myco`) is the
+composition root that wires impls to verbs.
 
 Design rules:
 
@@ -26,11 +30,9 @@ Design rules:
 | crate | layer | purpose |
 |---|---|---|
 | `myco-core` | domain | myco domain core: item models, ID registry, state machine — pure, no I/O |
-| `myco-config` | port | Config port: where myco.toml-shaped config comes from |
 | `myco-index` | port | Index port: the derived, disposable cache powering status/board/report/org views |
 | `myco-store` | port | Store port: where project/ state (TODO.md, BACKLOG.md, meta.toml, item files) is persisted |
 | `myco-ops` | ops | myco — ops I/O shell: project discovery, store open/save, commit-per-mutation, verb plumbing |
-| `myco-config-toml` | adapter | Config impl: myco.toml file (explicit path, env, ./, ~/.config) |
 | `myco-driver` | adapter | tamias-driver-myco — pavo view driver over a repo's project/ ledger (reads via myco-ops) |
 | `myco-git` | adapter | Git plumbing for myco — shells out to the git CLI; owns the project branch/worktree mechanics |
 | `myco-index-redb` | adapter | Index impl: redb snapshots + repos.toml registry under ~/.local/share/myco (disposable derived cache) |
