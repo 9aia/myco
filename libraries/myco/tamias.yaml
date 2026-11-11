@@ -27,7 +27,7 @@
 # are separate `type:` packages; installing this pack does not
 # deploy ledger content.
 name: myco
-version: "0.1.3"
+version: "0.2.0"
 type: files
 description: >-
   Agent-first project management — tasks, issues, proposals, plans,

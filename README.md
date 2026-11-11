@@ -70,7 +70,7 @@ the engine lib — full argv parity with the retired `myco` binary,
 including `myco serve` (JSON-RPC stdio) and `myco ui`.
 
 ```sh
-tamias install 9aia:myco@0.1.3   # org registry (needs TAMIAS_REGISTRY_TOKEN)
+tamias install 9aia:myco@0.2.0   # org registry (needs TAMIAS_REGISTRY_TOKEN)
 npm install -g 9aia/myco         # launcher → finds the tamias shim on PATH; bootstraps tamias + the pack on first run
 cargo xtask pack && tamias install --allow-drivers ./libraries/myco   # from a checkout
 cargo xtask install        # driver binary → ~/.cargo/bin (dev convenience)

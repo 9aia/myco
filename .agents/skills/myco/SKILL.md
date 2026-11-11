@@ -21,7 +21,7 @@ re-validate and `myco check --fix` to repair drift.
 
 ```bash
 command -v myco   # missing? install the tamias pack:
-tamias install 9aia:myco@0.1.3    # org registry (needs TAMIAS_REGISTRY_TOKEN)
+tamias install 9aia:myco@0.2.0    # org registry (needs TAMIAS_REGISTRY_TOKEN)
 # or: tamias install git:9aia/myco//libraries/myco --allow-drivers
 # from a checkout instead: cargo xtask pack && tamias install --allow-drivers ./libraries/myco
 # (cargo xtask install only stages the driver binary → ~/.cargo/bin)

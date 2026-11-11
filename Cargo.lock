@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "myco"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "camino",
  "clap",
@@ -1075,14 +1075,14 @@ dependencies = [
 
 [[package]]
 name = "myco-config"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "myco-core",
 ]
 
 [[package]]
 name = "myco-config-toml"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "myco-config",
  "myco-core",
@@ -1092,7 +1092,7 @@ dependencies = [
 
 [[package]]
 name = "myco-core"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "myco-core",
  "schemars",
@@ -1105,7 +1105,7 @@ dependencies = [
 
 [[package]]
 name = "myco-driver"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "camino",
  "insta",
@@ -1127,7 +1127,7 @@ dependencies = [
 
 [[package]]
 name = "myco-git"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "temp-env",
  "tempfile",
@@ -1136,7 +1136,7 @@ dependencies = [
 
 [[package]]
 name = "myco-index"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "camino",
  "myco-core",
@@ -1148,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "myco-index-redb"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "camino",
  "myco-core",
@@ -1163,7 +1163,7 @@ dependencies = [
 
 [[package]]
 name = "myco-ops"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "camino",
  "myco-config",
@@ -1183,11 +1183,11 @@ dependencies = [
 
 [[package]]
 name = "myco-shell"
-version = "0.1.3"
+version = "0.2.0"
 
 [[package]]
 name = "myco-store"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "myco-core",
  "thiserror 2.0.21",
@@ -1195,7 +1195,7 @@ dependencies = [
 
 [[package]]
 name = "myco-store-md"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "camino",
  "markdown",
@@ -1213,7 +1213,7 @@ dependencies = [
 
 [[package]]
 name = "myco-testkit"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "insta",
  "myco-core",
@@ -1226,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "myco-tui"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "camino",
  "crossterm",
@@ -2909,7 +2909,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "xtask"
-version = "0.1.3"
+version = "0.2.0"
 
 [[package]]
 name = "xxhash-rust"
