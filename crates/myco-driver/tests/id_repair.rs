@@ -1,7 +1,7 @@
 //! Id-preservation tests — `myco migrate` honoring filename
 //! numbers when adopting frontmatter-less item files, and
 //! `myco check --fix` repairing `id-title-mismatch` (the
-//! renumbering repair), driving the real binary against tempdir
+//! renumbering repair), driving the engine (`tamias-driver-myco run`) against tempdir
 //! git repos.
 //!
 //! `MYCO_CONFIG` is pinned at a nonexistent path so a stray user
@@ -14,7 +14,14 @@ use std::process::{Command, Output};
 
 use serde_json::Value;
 
-const MYCO: &str = env!("CARGO_BIN_EXE_myco");
+/// Spawn the engine through the driver's `run` passthrough —
+/// `tamias-driver-myco run <myco argv>` ≡ the retired `myco` bin
+/// (same path the bins[] `cli` shim and `cli.*` wire queries use).
+fn myco_cmd() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_tamias-driver-myco"));
+    c.arg("run");
+    c
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -44,7 +51,7 @@ fn repo() -> tempfile::TempDir {
 }
 
 fn run(dir: &Path, args: &[&str]) -> Output {
-    Command::new(MYCO)
+    myco_cmd()
         .current_dir(dir)
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")

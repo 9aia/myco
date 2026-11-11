@@ -8,9 +8,12 @@ repository.workspace = true
 keywords = ["pm", "myco"]
 categories = ["development-tools"]
 
-[[bin]]
-name = "myco"
-path = "src/main.rs"
+# No `[[bin]]`: the `myco` command ships as the tamias pack in
+# `libraries/myco/` (`bins: [{name: myco, shim: cli, driver: myco}]`,
+# T-006) — `tamias bin exec` → `tamias-driver-myco cli --dir <pkg>
+# --name myco <argv>` → this lib's `run_from` in-process. Engine e2e
+# tests live in `myco-driver/tests/` and spawn
+# `tamias-driver-myco run`.
 
 [dependencies]
 myco-core = { workspace = true, features = ["schema"] }

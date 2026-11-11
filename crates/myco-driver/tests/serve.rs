@@ -1,4 +1,4 @@
-//! End-to-end `myco serve` — spawn the real binary, pipe JSON-RPC
+//! End-to-end `myco serve` — spawn `tamias-driver-myco run`, pipe JSON-RPC
 //! lines through it, and check both the wire behavior (id echo,
 //! error codes, resilience, EOF exit) and the verb semantics
 //! (writes commit on the project branch, in order).
@@ -11,7 +11,14 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use serde_json::{json, Value};
 
-const MYCO: &str = env!("CARGO_BIN_EXE_myco");
+/// Spawn the engine through the driver's `run` passthrough —
+/// `tamias-driver-myco run <myco argv>` ≡ the retired `myco` bin
+/// (same path the bins[] `cli` shim and `cli.*` wire queries use).
+fn myco_cmd() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_tamias-driver-myco"));
+    c.arg("run");
+    c
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -41,7 +48,7 @@ fn repo() -> tempfile::TempDir {
 }
 
 fn init(d: &Path) {
-    let out = Command::new(MYCO)
+    let out = myco_cmd()
         .current_dir(d)
         .args(["init", "--json"])
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
@@ -59,7 +66,7 @@ struct Serve {
 
 impl Serve {
     fn spawn(dir: &Path) -> Serve {
-        let mut child = Command::new(MYCO)
+        let mut child = myco_cmd()
             .current_dir(dir)
             .arg("serve")
             .env("MYCO_CONFIG", "/nonexistent/myco.toml")
@@ -188,7 +195,7 @@ fn serve_no_commit_flag_and_env() {
     let d = repo();
     init(d.path());
     // --no-commit: writes land but stay uncommitted
-    let mut child = Command::new(MYCO)
+    let mut child = myco_cmd()
         .current_dir(d.path())
         .args(["serve", "--no-commit"])
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")

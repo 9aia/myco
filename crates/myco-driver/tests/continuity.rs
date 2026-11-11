@@ -1,6 +1,6 @@
 //! End-to-end continuity tests — `myco handoff` / `myco resume`
 //! over `handoffs/<ID>.md`, plus `check`'s orphan/parse handling —
-//! driving the real binary against tempdir git repos.
+//! driving the engine (`tamias-driver-myco run`) against tempdir git repos.
 //!
 //! `MYCO_CONFIG` is pinned at a nonexistent path so a stray user
 //! config can't leak `project_dir` into discovery.
@@ -12,7 +12,14 @@ use std::process::{Command, Output, Stdio};
 
 use serde_json::Value;
 
-const MYCO: &str = env!("CARGO_BIN_EXE_myco");
+/// Spawn the engine through the driver's `run` passthrough —
+/// `tamias-driver-myco run <myco argv>` ≡ the retired `myco` bin
+/// (same path the bins[] `cli` shim and `cli.*` wire queries use).
+fn myco_cmd() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_tamias-driver-myco"));
+    c.arg("run");
+    c
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -42,7 +49,7 @@ fn repo() -> tempfile::TempDir {
 }
 
 fn run(dir: &Path, args: &[&str]) -> Output {
-    Command::new(MYCO)
+    myco_cmd()
         .current_dir(dir)
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
@@ -52,7 +59,7 @@ fn run(dir: &Path, args: &[&str]) -> Output {
 }
 
 fn run_stdin(dir: &Path, args: &[&str], stdin: &str) -> Output {
-    let mut child = Command::new(MYCO)
+    let mut child = myco_cmd()
         .current_dir(dir)
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")

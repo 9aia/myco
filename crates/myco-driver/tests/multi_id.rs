@@ -11,7 +11,14 @@ use std::process::{Command, Output};
 
 use serde_json::Value;
 
-const MYCO: &str = env!("CARGO_BIN_EXE_myco");
+/// Spawn the engine through the driver's `run` passthrough —
+/// `tamias-driver-myco run <myco argv>` ≡ the retired `myco` bin
+/// (same path the bins[] `cli` shim and `cli.*` wire queries use).
+fn myco_cmd() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_tamias-driver-myco"));
+    c.arg("run");
+    c
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -41,7 +48,7 @@ fn repo() -> tempfile::TempDir {
 }
 
 fn run(dir: &Path, args: &[&str]) -> Output {
-    Command::new(MYCO)
+    myco_cmd()
         .current_dir(dir)
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
@@ -53,7 +60,7 @@ fn run(dir: &Path, args: &[&str]) -> Output {
 /// `run` + extra env vars — for pinning `MYCO_HOME` somewhere
 /// dead when a test wants to prove the index isn't consulted.
 fn run_env(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
-    let mut c = Command::new(MYCO);
+    let mut c = myco_cmd();
     c.current_dir(dir)
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")

@@ -12,7 +12,14 @@ use std::process::{Command, Output};
 
 use serde_json::Value;
 
-const MYCO: &str = env!("CARGO_BIN_EXE_myco");
+/// Spawn the engine through the driver's `run` passthrough —
+/// `tamias-driver-myco run <myco argv>` ≡ the retired `myco` bin
+/// (same path the bins[] `cli` shim and `cli.*` wire queries use).
+fn myco_cmd() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_tamias-driver-myco"));
+    c.arg("run");
+    c
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -42,7 +49,7 @@ fn repo() -> tempfile::TempDir {
 }
 
 fn run(dir: &Path, args: &[&str]) -> Output {
-    Command::new(MYCO)
+    myco_cmd()
         .current_dir(dir)
         .args(args)
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
@@ -914,7 +921,7 @@ fn item_move_cross_repo() {
     // the real index.
     let home = tempfile::tempdir().unwrap();
     let run = |dir: &Path, args: &[&str]| {
-        Command::new(MYCO)
+        myco_cmd()
             .current_dir(dir)
             .args(args)
             .env("MYCO_CONFIG", "/nonexistent/myco.toml")
@@ -1072,7 +1079,7 @@ fn issue_body_from_file_and_stdin() {
     assert!(read(&wt, "issues/issue-0001-from-file.md").contains("full body"));
 
     // --body - reads stdin
-    let out = Command::new(MYCO)
+    let out = myco_cmd()
         .current_dir(d.path())
         .args(["issue", "new", "piped", "--body", "-"])
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")

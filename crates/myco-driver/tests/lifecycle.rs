@@ -1,5 +1,5 @@
 //! End-to-end lifecycle tests — `myco init | check | migrate |
-//! commit` driving the real binary against tempdir git repos.
+//! commit` driving the engine (`tamias-driver-myco run`) against tempdir git repos.
 //!
 //! `MYCO_CONFIG` is pinned at a nonexistent path so a stray user
 //! config can't leak `project_dir` into discovery.
@@ -11,7 +11,14 @@ use std::process::{Command, Output};
 
 use serde_json::Value;
 
-const MYCO: &str = env!("CARGO_BIN_EXE_myco");
+/// Spawn the engine through the driver's `run` passthrough —
+/// `tamias-driver-myco run <myco argv>` ≡ the retired `myco` bin
+/// (same path the bins[] `cli` shim and `cli.*` wire queries use).
+fn myco_cmd() -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_tamias-driver-myco"));
+    c.arg("run");
+    c
+}
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -41,7 +48,7 @@ fn repo() -> tempfile::TempDir {
 }
 
 fn run(dir: &Path, args: &[&str]) -> Output {
-    Command::new(MYCO)
+    myco_cmd()
         .current_dir(dir)
         .args(args)
         // deterministic config search: no myco.toml anywhere
@@ -391,7 +398,7 @@ fn no_commit_flag_and_env_suppress() {
     assert!(git(d.path(), &["status", "--porcelain"]).contains(".gitignore"));
     // env var suppresses too
     std::fs::write(wt.join("x.txt"), "x").unwrap();
-    let out = Command::new(MYCO)
+    let out = myco_cmd()
         .current_dir(&wt)
         .args(["commit", "--json"])
         .env("MYCO_CONFIG", "/nonexistent/myco.toml")
