@@ -1,7 +1,7 @@
 {
   "name": "@9aia/myco",
   "version": "0.1.0",
-  "description": "myco — agent-first project management CLI. Rust binary; the `myco` shim builds it via cargo on first use.",
+  "description": "myco — agent-first project management CLI. Ships as a tamias bins[] shim (`tamias install git:9aia/myco//libraries/myco`); this launcher execs it.",
   "license": "MIT",
   "repository": {
     "type": "git",

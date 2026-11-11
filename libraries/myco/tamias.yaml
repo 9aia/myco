@@ -1,0 +1,41 @@
+# myco — the agent-first PM engine as a tamias package (T-006, the
+# last repo in the org-wide bins[] migration: cuora/sepia/lasius/
+# kuda/bupha/cicada/peregrin already ship this shape).
+#
+# `cargo xtask pack` release-builds `tamias-driver-myco` into
+# `drivers/bin/<host-triple>/` (gitignored — a build artifact) and
+# this manifest ships it as a bundled driver. `tamias install
+# ./libraries/myco` (or `git:9aia/myco//libraries/myco#main`, or the
+# packed `.tgz`) registers the driver into `<tamias-home>/drivers/`
+# and deploys the `myco` bin below by default.
+#
+# The `myco` shim is a generated script → `tamias bin exec` →
+# `tamias-driver-myco cli --dir <pkg> --name myco <argv>` → the
+# engine lib's `run_from` in-process with inherited stdio. That is
+# full argv parity with the retired `myco` binary: `--help`/
+# `--version`, every bounded verb (`status`/`commit`/`todo`/`issue`/
+# `proposal`/`plan`/`adr`/`item`/`view`/`handoff`/`resume`/`next`/
+# `check`/…), and the unbounded surfaces — `myco serve` (JSON-RPC
+# 2.0 on stdio, consumed by peregrin and other tooling) and `myco
+# ui` (the ratatui board, `tui` feature) — all stream end-to-end.
+# No `tools/bin/` payload bin: the surfaces are verbs, not second
+# binaries — they ride the same shim. `myco-tui` stays a real
+# binary (standalone TUI entry).
+#
+# NOTE: this pack is the *command* surface. myco also ships content
+# packs of its own (`myco-config` kinds/views/templates) — those
+# are separate `type:` packages; installing this pack does not
+# deploy ledger content.
+name: myco
+version: "0.1.3"
+type: files
+description: >-
+  Agent-first project management — tasks, issues, proposals, plans,
+  ADRs and handoffs in a repo's `project/` worktree. Every verb rides
+  the tamias-driver-myco engine passthrough; `myco serve` is the
+  JSON-RPC stdio surface embedders (peregrin) consume.
+
+bins:
+  - name: myco
+    shim: cli
+    driver: myco

@@ -7,6 +7,9 @@ coverage/
 project/
 docs/
 
+# tamias pack driver payload — build artifact (`cargo xtask pack`)
+/libraries/myco/drivers/
+
 .kuda/index.sqlite
 .kuda/meta.json
 target-agent/

@@ -5,7 +5,12 @@
 //! - `test`     — `cargo nextest run` when installed, else `cargo test`
 //! - `coverage` — `cargo llvm-cov` (HTML → target/llvm-cov/html);
 //!   extra args pass through, e.g. `--fail-under-lines 100`
-//! - `install`  — release-install `myco` into ~/.cargo/bin
+//! - `install`  — release-build `tamias-driver-myco` → ~/.cargo/bin
+//!   (the `myco` command itself is the tamias pack's generated
+//!   bins[] shim — `cargo xtask pack` + `tamias install
+//!   ./libraries/myco`)
+//! - `pack`     — stage libraries/myco driver payload
+//!   (release tamias-driver-myco → drivers/bin/<triple>/)
 //! - `site`     — build the docs site (docs/ worktree, VitePress)
 
 use std::process::{Command, ExitStatus};
@@ -104,9 +109,102 @@ fn coverage(extra: &[String]) -> i32 {
 }
 
 fn install() -> i32 {
-    run(&["cargo", "install", "--path", "crates/myco-cli", "--force"])
-        .code()
-        .unwrap_or(1)
+    // There is no `myco` cargo bin — the command ships as the
+    // tamias pack (`cargo xtask pack` + `tamias install
+    // ./libraries/myco`); the driver serves both the pavo view
+    // surface and the `cli` bins[] shim passthrough. Installing the
+    // driver binary alone keeps `tamias-driver-myco` resolvable on
+    // PATH for dev; the pack install registers it under
+    // <tamias-home>/drivers/ durably.
+    if !run(&["cargo", "build", "--release", "-p", "myco-driver"]).success() {
+        return 1;
+    }
+    let src = target_dir().join("release").join("tamias-driver-myco");
+    let home = match std::env::var("HOME") {
+        Ok(h) => h,
+        Err(_) => {
+            eprintln!(
+                "xtask: $HOME unset — copy {} onto PATH yourself",
+                src.display()
+            );
+            return 1;
+        }
+    };
+    let dst = std::path::Path::new(&home)
+        .join(".cargo/bin")
+        .join("tamias-driver-myco");
+    if let Err(e) = std::fs::copy(&src, &dst) {
+        eprintln!("xtask: copy {} → {}: {e}", src.display(), dst.display());
+        return 1;
+    }
+    println!("installed tamias-driver-myco → {}", dst.display());
+    println!("install the myco command (generated bins[] shim):");
+    println!("  cargo xtask pack && tamias install --allow-drivers ./libraries/myco");
+    0
+}
+
+/// Effective target dir — `CARGO_TARGET_DIR` when set, else the
+/// workspace `target/` (keeps `pack`/`install` correct under a
+/// shared target dir without needing cargo metadata parsing).
+fn target_dir() -> std::path::PathBuf {
+    std::env::var_os("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("target"))
+}
+
+/// Host target triple — the `drivers/bin/<triple>/` selector
+/// tamias uses for compiled driver payloads.
+fn host_triple() -> String {
+    let out = Command::new("rustc")
+        .args(["-vV"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|v| {
+            v.lines()
+                .find_map(|l| l.strip_prefix("host: ").map(str::to_string))
+        })
+        .unwrap_or_else(|| "x86_64-unknown-linux-gnu".to_string());
+    out
+}
+
+/// `cargo xtask pack` — stage the tamias pack payload (T-006):
+/// release-build `tamias-driver-myco` and drop it under
+/// `libraries/myco/drivers/bin/<host-triple>/` — the
+/// bundled-driver dir `tamias install` registers into
+/// `<tamias-home>/drivers/`. Gitignored on purpose: the binary is a
+/// build artifact; the committed pack is just `tamias.yaml` + this
+/// staging verb.
+fn pack() -> i32 {
+    if !run(&["cargo", "build", "--release", "-p", "myco-driver"]).success() {
+        return 1;
+    }
+    let triple = host_triple();
+    let dest_dir = std::path::Path::new("libraries/myco/drivers/bin").join(&triple);
+    if let Err(e) = std::fs::create_dir_all(&dest_dir) {
+        eprintln!("xtask: create {}: {e}", dest_dir.display());
+        return 1;
+    }
+    let src = target_dir().join("release").join("tamias-driver-myco");
+    let dest = dest_dir.join("tamias-driver-myco");
+    if let Err(e) = std::fs::copy(&src, &dest) {
+        eprintln!("xtask: copy {} → {}: {e}", src.display(), dest.display());
+        return 1;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755));
+    }
+    println!("pack staged: {}", dest.display());
+    println!();
+    println!("install the myco command (generated bins[] shim):");
+    println!("  tamias install --allow-drivers ./libraries/myco");
+    println!(
+        "  # or a pinned ref: tamias install 'git:9aia/myco//libraries/myco#main' --allow-drivers"
+    );
+    0
 }
 
 fn site() -> i32 {
@@ -135,10 +233,11 @@ fn main() {
         "test" => test(),
         "coverage" => coverage(&rest),
         "install" => install(),
+        "pack" => pack(),
         "site" => site(),
         other => {
             eprintln!(
-                "usage: cargo xtask <check|test|coverage|install|site>\n  unknown verb: {other:?}"
+                "usage: cargo xtask <check|test|coverage|install|pack|site>\n  unknown verb: {other:?}"
             );
             2
         }

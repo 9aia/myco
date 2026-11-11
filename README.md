@@ -64,10 +64,16 @@ error `--fix` repairs, because every commit there is unreachable.
 
 ## Install
 
+The `myco` command ships as a tamias `bins[]` shim (T-006): a
+generated script → `tamias bin exec` → `tamias-driver-myco cli` →
+the engine lib — full argv parity with the retired `myco` binary,
+including `myco serve` (JSON-RPC stdio) and `myco ui`.
+
 ```sh
-npm install -g 9aia/myco    # shim → cargo install --git on first run (needs Rust; npm≥12: --allow-git=root)
-cargo install --git https://github.com/9aia/myco myco
-cargo xtask install        # from a checkout → ~/.cargo/bin
+tamias install git:9aia/myco//libraries/myco --allow-drivers
+npm install -g 9aia/myco    # launcher → finds the tamias shim on PATH; bootstraps tamias + the pack on first run
+cargo xtask pack && tamias install --allow-drivers ./libraries/myco   # from a checkout
+cargo xtask install        # driver binary → ~/.cargo/bin (dev convenience)
 ```
 
 ## Docs

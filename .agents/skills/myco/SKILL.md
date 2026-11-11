@@ -20,8 +20,10 @@ re-validate and `myco check --fix` to repair drift.
 ## Bootstrap
 
 ```bash
-command -v myco   # missing? install from the repo:
-cargo xtask install        # in 9aia/myco — installs to ~/.cargo/bin
+command -v myco   # missing? install the tamias pack:
+tamias install git:9aia/myco//libraries/myco --allow-drivers
+# from a checkout instead: cargo xtask pack && tamias install --allow-drivers ./libraries/myco
+# (cargo xtask install only stages the driver binary → ~/.cargo/bin)
 ```
 
 ## Discovery — prefer asking the CLI over reading docs

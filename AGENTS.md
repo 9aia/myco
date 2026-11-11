@@ -68,10 +68,11 @@ domain (no I/O); ports are traits, impls are separate crates;
 | `crates/myco-index-redb` | Index impl — redb snapshots + `repos.toml` under `~/.local/share/myco` |
 | `crates/myco-ops` | Ops I/O shell — discovery, store open/save, commit-per-mutation, verb plumbing; pure pieces live in core |
 | `crates/myco-testkit` | Golden fixtures + conformance for the file spec |
-| `crates/myco-driver` | `tamias-driver-myco` — pavo view driver over `project/` + engine ops (`ops` manifest derived from the `VERBS` table, `cli.<verb>` wire queries re-exec `run`, optional `cli`/`mcp` surface features); writes always ride the engine's own verbs |
+| `crates/myco-driver` | `tamias-driver-myco` — pavo view driver over `project/` + engine ops (`ops` manifest derived from the `VERBS` table, `cli.<verb>` wire queries re-exec `run`) **plus the `cli` bins[] shim passthrough** (strips `--dir`/`--name` → `myco::run_from`, inherited stdio — the `myco` command itself) and an optional `mcp` surface feature; writes always ride the engine's own verbs |
 | `crates/myco-tui` | `myco ui` — interactive board TUI (ratatui) over `myco-ops`; default `tui` feature on `myco-cli` |
-| `crates/myco-cli` | The `myco` engine (package `myco`, lib target) + compat bin — `src/lib.rs` is the engine (`run() = dispatch(&parse())`, `parse_from`/`run_from` for drivers), `src/main.rs` a 6-line compat bin; clap, `--json` everywhere, `manifest`/`gen-cli-docs` |
-| `xtask` | check / test / coverage / install / site |
+| `crates/myco-cli` | The `myco` engine (package `myco`, **lib only — no `[[bin]]`**) — `src/lib.rs` is the engine (`run() = dispatch(&parse())`, `parse_from`/`run_from` for drivers); clap, `--json` everywhere, `manifest`/`gen-cli-docs`. The `myco` command ships as the tamias pack in `libraries/myco/` (T-006); engine e2e tests live in `myco-driver/tests/` and spawn `tamias-driver-myco run` |
+| `libraries/myco` | the tamias pack — `tamias.yaml` declares `bins: [{name: myco, shim: cli, driver: myco}]`; `cargo xtask pack` stages `drivers/bin/<triple>/tamias-driver-myco` (gitignored) |
+| `xtask` | check / test / coverage / install / pack / site |
 
 Planned (per `project/proposals/proposal-0001-*.md`): `myco-template`.
 
@@ -99,7 +100,13 @@ between actors, it belongs to peregrin, not here.
 ```bash
 cargo xtask check          # fmt + clippy -D warnings
 cargo xtask test           # whole suite (nextest if present)
-cargo xtask install        # release-install myco → ~/.cargo/bin
+cargo xtask pack           # stage libraries/myco driver payload
+                           # (release tamias-driver-myco → drivers/bin/<triple>/)
+cargo xtask install        # release-build tamias-driver-myco →
+                           # ~/.cargo/bin; the `myco` command itself is
+                           # the tamias pack's generated bins[] shim —
+                           # `cargo xtask pack` + `tamias install
+                           # --allow-drivers ./libraries/myco`
 cargo xtask coverage       # llvm-cov report (HTML → target/llvm-cov/html);
                            # extra args pass through, e.g. --fail-under-lines 100
 cargo xtask site           # build the docs site (needs docs/ worktree)

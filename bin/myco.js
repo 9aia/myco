@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// myco npm launcher — the real binary is the Rust build under
-// $CARGO_HOME/bin (or ~/.cargo/bin). Node (always present — npm
-// installed us) finds it cross-platform and execs it; when it's
-// missing, bootstrap via `cargo install --git` on first use.
+// myco npm launcher — the real command is the tamias bins[] shim
+// (a `# tamias-bin:` script → `tamias bin exec` →
+// `tamias-driver-myco cli` → the myco engine lib), deployed by
+// `tamias install git:9aia/myco//libraries/myco`. Node (always
+// present — npm installed us) finds the shim on PATH and execs it;
+// when it's missing, bootstrap via tamias on first use.
 //
 // There is deliberately no postinstall: npm deletes the package
 // cwd before lifecycle scripts on git installs, which crashed a
@@ -58,34 +60,55 @@ function findBin() {
     return null;
 }
 
-function haveCargo() {
-    const r = spawnSync("cargo", ["--version"], { stdio: "ignore" });
+function haveOnPath(tool) {
+    const r = spawnSync(tool, ["--version"], { stdio: "ignore" });
     return !r.error && r.status === 0;
 }
 
-let bin = findBin();
-if (!bin) {
-    if (!haveCargo()) {
-        console.error("myco: binary not found and cargo is not installed.");
-        console.error(
-            "Install Rust (https://rustup.rs), then run `myco` once to build."
+function bootstrap() {
+    // The `myco` command is a tamias bins[] shim — installing it
+    // means installing tamias, then the myco pack (which registers
+    // tamias-driver-myco and deploys the shim into the tamias bin
+    // dir, ~/.local/bin by default).
+    if (!haveOnPath("tamias")) {
+        if (!haveOnPath("cargo")) {
+            console.error("myco: shim not found and neither tamias nor cargo is installed.");
+            console.error(
+                "Install tamias (https://github.com/9aia/tamias), then run `myco` once to fetch the myco pack."
+            );
+            process.exit(1);
+        }
+        console.error("myco: installing tamias (first run, ~1-2 min)…");
+        const r = spawnSync(
+            "cargo",
+            ["install", "--git", "https://github.com/9aia/tamias", "tamias"],
+            { stdio: "inherit" }
         );
-        process.exit(1);
+        if (r.status !== 0) process.exit(r.status ?? 1);
     }
-    console.error("myco: building the Rust binary (first run, ~1-2 min)…");
+    console.error("myco: installing the myco pack via tamias (first run)…");
     const r = spawnSync(
-        "cargo",
+        "tamias",
         [
             "install",
-            "--git",
-            "https://github.com/9aia/myco",
-            "myco",
-            "--locked",
+            "git:9aia/myco//libraries/myco#main",
+            "--allow-drivers",
         ],
         { stdio: "inherit" }
     );
     if (r.status !== 0) process.exit(r.status ?? 1);
-    bin = path.join(cargoHome(), "bin", exe);
+}
+
+let bin = findBin();
+if (!bin) {
+    bootstrap();
+    bin = findBin();
+    if (!bin) {
+        console.error(
+            "myco: installed but the shim isn't on PATH — check that the tamias bin dir (~/.local/bin) is on PATH."
+        );
+        process.exit(1);
+    }
 }
 
 const res = spawnSync(bin, process.argv.slice(2), { stdio: "inherit" });
