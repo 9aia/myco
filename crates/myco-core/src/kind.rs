@@ -15,12 +15,12 @@
 //! would reinterpret every existing id. New names must not
 //! collide on name or prefix.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{is_valid_label, ItemKind, Status};
 
 /// How a kind's items persist.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Storage {
@@ -39,7 +39,7 @@ fn default_done() -> Status {
 }
 
 /// One `[[kinds]]` entry — or one prelude row.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct KindSpec {

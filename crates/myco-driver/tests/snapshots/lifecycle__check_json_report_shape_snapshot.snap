@@ -1,33 +1,34 @@
 ---
-source: crates/myco-cli/tests/lifecycle.rs
+source: crates/myco-driver/tests/lifecycle.rs
+assertion_line: 558
 expression: "serde_json::to_string_pretty(&v).unwrap()"
 ---
 {
+  "ok": false,
+  "worktree": "[WT]",
+  "repo_root": "[ROOT]",
   "agents_md": "ok",
   "errors": [
     {
-      "code": "done-item",
-      "col": 1,
       "file": "TODO.md",
-      "fixable": true,
       "line": 3,
+      "col": 1,
+      "code": "done-item",
       "msg": "1 done item(s) — done tasks are removed from TODO.md",
+      "fixable": true,
       "severity": "error"
     },
     {
-      "code": "parse",
-      "col": 1,
       "file": "TODO.md",
-      "fixable": false,
       "line": 3,
+      "col": 1,
+      "code": "parse",
       "msg": "checked item — done tasks are removed from TODO.md",
+      "fixable": false,
       "severity": "error"
     }
   ],
-  "fixes_applied": 0,
-  "fixes_available": 1,
-  "ok": false,
-  "repo_root": "[ROOT]",
   "warnings": 0,
-  "worktree": "[WT]"
+  "fixes_available": 1,
+  "fixes_applied": 0
 }

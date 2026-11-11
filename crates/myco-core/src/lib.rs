@@ -41,7 +41,7 @@ pub use view::{
 };
 pub use walk::{status_path, targets, walk_descendants_to, walk_to};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 /// A revision is path-safe — rejects path-injection payloads before
@@ -99,7 +99,7 @@ impl Default for Seen {
 /// built-in; a view-emit binds a [`ViewSpec`] to an emit mode.
 /// Mutations stay builtin — the state machine, id alloc, locking
 /// and commit semantics aren't config data.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ConfigVerb {
     /// `target = "<builtin>"` + baked `args` — `myco <name>` runs
@@ -111,7 +111,7 @@ pub enum ConfigVerb {
 }
 
 /// The `alias` config verb — name → builtin + baked args.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AliasVerb {
     /// The built-in verb it invokes (`view`, `status`, `todo.list`, …).
@@ -125,7 +125,7 @@ pub struct AliasVerb {
 
 /// The `view-emit` config verb — a [`ViewSpec`] (every field
 /// inline, like `[views.<name>]`) + an emit mode.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ViewEmitVerb {
     /// The view's spec — same fields as `[views.<name>]`.
@@ -136,7 +136,7 @@ pub struct ViewEmitVerb {
 }
 
 /// How a `view-emit` verb renders its evaluated spec.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EmitMode {
     /// The rendered table/board text.
@@ -149,10 +149,10 @@ pub enum EmitMode {
     First,
 }
 
-/// The `myco.toml`-shaped config value every `myco-config` source
-/// loads. Fields grow per phase; unknown keys are rejected so a typo
+/// The `myco.toml`-shaped config value the config loader
+/// (`myco_ops::config`) produces. Fields grow per phase; unknown keys are rejected so a typo
 /// fails loud instead of silently doing nothing.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Path to the project worktree, relative to the repo root.
@@ -186,7 +186,7 @@ pub struct Config {
 
 /// The `[sync]` config table — how `myco sync` and the mutating
 /// verbs' divergence gate treat the ledger branch's remote.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SyncConfig {
     /// Fetch `origin/<branch>` before the behind-check every

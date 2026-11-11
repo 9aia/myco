@@ -15,12 +15,10 @@ camino.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
+scarab-config.workspace = true
+scarab-config-toml.workspace = true
 
 [dev-dependencies]
-## config impls for `config::test_loader` — the port + TOML are
-## injected by the composition root, so they're test-only here.
-myco-config.workspace = true
-myco-config-toml.workspace = true
 myco-store-md.workspace = true
 myco-index-redb.workspace = true
 tempfile.workspace = true

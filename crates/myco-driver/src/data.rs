@@ -31,22 +31,9 @@ use myco_ops::{
 use myco_store::Store;
 use myco_store_md::MdStore;
 
-/// Layered TOML — `Some(path)` pins the repo layer, `None` runs
-/// the impl's default search. Same wiring `myco`/`myco-tui` use:
-/// ops keeps the *which path* policy, this names the format.
-fn config_layered(path: Option<&Path>) -> Result<myco_core::Config, String> {
-    use myco_config::ConfigSource;
-    myco_config_toml::TomlSource {
-        path: path.map(|p| p.to_string_lossy().into_owned()),
-    }
-    .load()
-}
-
-/// The config impl ops calls share — a `const` like the CLI's.
-pub const CONFIG: myco_ops::config::ConfigLoader = myco_ops::config::ConfigLoader {
-    layered: config_layered,
-    file: myco_config_toml::load_file,
-};
+/// The config impl ops calls share — the scarab-backed TOML
+/// loader `myco-ops` owns, same as the CLI's `ops::CONFIG`.
+pub const CONFIG: myco_ops::config::ConfigLoader = myco_ops::config::TOML;
 
 /// `MdStore` rooted at a worktree path, resolving item layout
 /// through the repo's kind table — identical to the CLI's

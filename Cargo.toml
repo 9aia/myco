@@ -2,8 +2,6 @@
 resolver = "2"
 members = [
     "crates/myco-cli",
-    "crates/myco-config",
-    "crates/myco-config-toml",
     "crates/myco-core",
     "crates/myco-driver",
     "crates/myco-git",
@@ -32,8 +30,6 @@ lto = "thin"
 
 [workspace.dependencies]
 myco = { path = "crates/myco-cli", version = "0.2.0" }
-myco-config = { path = "crates/myco-config", version = "0.2.0" }
-myco-config-toml = { path = "crates/myco-config-toml", version = "0.2.0" }
 myco-core = { path = "crates/myco-core", version = "0.2.0" }
 myco-git = { path = "crates/myco-git", version = "0.2.0" }
 myco-index = { path = "crates/myco-index", version = "0.2.0" }
@@ -70,6 +66,9 @@ terminal_size = "0.4"
 unicode-width = "0.2"
 csv = "1"
 sigpipe = "0.1"
+scarab-config = { git = "ssh://git@github.com/9aia/scarab.git", rev = "ae457aad3112140339cc02af631657f90b01fab5", version = "0.1" }
+scarab-config-toml = { git = "ssh://git@github.com/9aia/scarab.git", rev = "ae457aad3112140339cc02af631657f90b01fab5", version = "0.1" }
+lasius-core = { git = "ssh://git@github.com/9aia/lasius.git", rev = "52d8150bc40070f130c14b114da396fc8f570cb6" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

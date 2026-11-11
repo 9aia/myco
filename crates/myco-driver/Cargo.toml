@@ -25,8 +25,6 @@ mcp = ["pavo-driver-kit/mcp"]
 [dependencies]
 myco.workspace = true
 myco-core.workspace = true
-myco-config.workspace = true
-myco-config-toml.workspace = true
 myco-ops.workspace = true
 myco-store.workspace = true
 myco-store-md.workspace = true

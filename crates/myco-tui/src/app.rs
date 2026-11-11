@@ -34,22 +34,9 @@ fn store_at(worktree: &Path, kinds: &myco_core::KindTable) -> Result<MdStore, St
     Ok(MdStore::with_kinds(root, kinds.clone()))
 }
 
-/// Layered TOML — `Some(path)` pins the repo layer, `None` runs
-/// the impl's default search. Same story as `store_at`: ops keeps
-/// the *which path* policy, the front-end names the format.
-fn config_layered(path: Option<&Path>) -> Result<myco_core::Config, String> {
-    use myco_config::ConfigSource;
-    myco_config_toml::TomlSource {
-        path: path.map(|p| p.to_string_lossy().into_owned()),
-    }
-    .load()
-}
-
-/// The config impl ops calls share.
-const CONFIG: myco_ops::config::ConfigLoader = myco_ops::config::ConfigLoader {
-    layered: config_layered,
-    file: myco_config_toml::load_file,
-};
+/// The config impl ops calls share — the scarab-backed TOML
+/// loader `myco-ops` owns, same as the CLI's `ops::CONFIG`.
+const CONFIG: myco_ops::config::ConfigLoader = myco_ops::config::TOML;
 
 /// Which ledger doc the board tab shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

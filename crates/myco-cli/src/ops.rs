@@ -16,20 +16,8 @@ pub fn store_at(
     Ok(myco_store_md::MdStore::with_kinds(root, kinds.clone()))
 }
 
-/// Layered TOML — `Some(path)` pins the repo layer, `None` runs
-/// the impl's default search. `myco-ops` keeps the *which path*
-/// policy; this only names the format.
-fn config_layered(path: Option<&std::path::Path>) -> Result<myco_core::Config, String> {
-    use myco_config::ConfigSource;
-    myco_config_toml::TomlSource {
-        path: path.map(|p| p.to_string_lossy().into_owned()),
-    }
-    .load()
-}
-
-/// The config impl ops verbs share — cli-local like `store_at`:
-/// the composition root names it, ops stays impl-free.
-pub const CONFIG: myco_ops::config::ConfigLoader = myco_ops::config::ConfigLoader {
-    layered: config_layered,
-    file: myco_config_toml::load_file,
-};
+/// The config impl ops verbs share — the scarab-backed TOML
+/// loader `myco-ops` owns (the per-repo `myco-config*` crates are
+/// gone); cli-local like `store_at`: the composition root names
+/// it, ops stays format-free.
+pub const CONFIG: myco_ops::config::ConfigLoader = myco_ops::config::TOML;
