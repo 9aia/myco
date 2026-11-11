@@ -197,6 +197,68 @@ pub fn commits_ahead(dir: &Path, rev: &str) -> Option<usize> {
         .ok()
 }
 
+/// How many commits `rev` has that `HEAD` doesn't — the mirror of
+/// [`commits_ahead`]; `None` when `rev` doesn't resolve.
+pub fn commits_behind(dir: &Path, rev: &str) -> Option<usize> {
+    git_out(dir, &["rev-list", "--count", &format!("HEAD..{rev}")])
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// `git merge --ff-only <rev>` — fast-forward `HEAD` to `rev`.
+/// Fails when the histories diverged (that's `rebase`'s job).
+pub fn merge_ff(dir: &Path, rev: &str) -> Result<(), Error> {
+    git_out(dir, &["merge", "--ff-only", rev])?;
+    Ok(())
+}
+
+/// `git rebase --autostash <rev>` — replay local commits onto
+/// `rev`, stashing any dirty tree first. A conflict stops the
+/// rebase mid-flight (see [`rebase_in_progress`]/[`unmerged_files`])
+/// and surfaces as `Err`.
+pub fn rebase(dir: &Path, rev: &str) -> Result<(), Error> {
+    git_out(dir, &["rebase", "--autostash", rev])?;
+    Ok(())
+}
+
+/// `git rebase --abort` — bail a conflicted rebase, restoring the
+/// pre-rebase tip (autostash pops the worktree back too).
+pub fn rebase_abort(dir: &Path) -> Result<(), Error> {
+    git_out(dir, &["rebase", "--abort"])?;
+    Ok(())
+}
+
+/// A rebase/merge is stopped mid-flight in `dir` — the state dirs
+/// exist (`REBASE_HEAD` alone persists after a *finished* rebase,
+/// so it can't be the signal).
+pub fn rebase_in_progress(dir: &Path) -> bool {
+    ["rebase-merge", "rebase-apply"].iter().any(|state| {
+        git_out(dir, &["rev-parse", "--git-path", state])
+            .map(|p| {
+                let p = Path::new(&p);
+                // --git-path may answer relative to `dir`'s cwd
+                dir.join(p).exists() || p.exists()
+            })
+            .unwrap_or(false)
+    }) || git(dir, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])
+}
+
+/// Worktree-relative paths with unresolved merge conflicts
+/// (`status --porcelain` `XY` codes where both sides moved).
+pub fn unmerged_files(dir: &Path) -> Vec<String> {
+    git_out(dir, &["diff", "--name-only", "--diff-filter=U"])
+        .map(|s| {
+            s.lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// `git rev-parse --path-format=absolute --git-common-dir` — the
 /// shared git dir for all of `dir`'s worktrees (`<main>/.git`),
 /// resolved from inside any of them.

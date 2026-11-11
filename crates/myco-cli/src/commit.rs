@@ -17,7 +17,9 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
     let no_commit = ctx.no_commit;
     let proj = discover::discover(ctx.dir.as_deref(), ctx.root.as_deref())?;
     // committing sweeps pending writes — don't catch another
-    // verb mid-mutation
+    // verb mid-mutation, and don't deepen a behind-remote
+    // divergence (`myco sync` closes it)
+    ops::ensure_synced(&proj.worktree)?;
     let _lock = ops::lock_worktree(&proj.worktree)?;
     let msg = message.unwrap_or_else(|| DEFAULT_MSG.to_string());
     let enabled = ops::commits_enabled(no_commit);

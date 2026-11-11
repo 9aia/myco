@@ -22,6 +22,11 @@ api:
   file: docs/reference/crate-api.md
   line: 1
   module: docs
+- name: Declare custom item kinds
+  kind: record
+  file: docs/how-to/custom-kinds.md
+  line: 1
+  module: docs
 - name: Getting started
   kind: record
   file: docs/getting-started.md
@@ -123,6 +128,7 @@ provenance:
   - docs/gen-crate-map.py
   - docs/getting-started.md
   - docs/how-to/agent-loop.md
+  - docs/how-to/custom-kinds.md
   - docs/how-to/handoff.md
   - docs/how-to/import-work.md
   - docs/how-to/init-repo.md
@@ -140,33 +146,34 @@ provenance:
   - docs/tutorials/first-item.md
   - docs/vite.config.ts
   hashes:
-  - a76b9e150d679e599b11c1b2c609c4e8c6423d91
-  - 75f9d9f4be46bf152cbc8d303041e78d3289ca33
-  - ddeae3e2875e1b96a96cf1fc9f9bf61899306df2
-  - 50387968d76960436368ba7e6947e8418324be5e
+  - 9cee25793655247427dcddffc3ee55468eb58f17
+  - 508d4a2390733b56efe00c188c47da1f6cf661e7
+  - 7ec29239fdbf192b8296ced5c4cfcd95421537c0
+  - 33a6b8a3802df2c5e25271da8316301fa9eb3623
   - 7292a355bd32c42b55880e0b3c5e82cbf8605315
   - 33012524fba6dafdf3bb0dae2578ba070c12a7ce
-  - 16f3fa46a9d43a7380f82f180c8e66a35303eda4
-  - 5bf7b6328f8f69dcb99cc21aeea655bf0486adb6
+  - b60402245d41ce02fc1f2e687f09547e80f1dcf0
+  - a4f5b02f86f07fba4789d155a1e35f27a4fd59d2
   - 710dd5e260de45f47719035e55463e966c9a357f
-  - a76a0d6b2eb10fdc9668dade20ce1df364ba2443
-  - 83be80a8733d6e74a39c34cc82575adfb2e7a14f
-  - abe16ac796f2bfa0e0923fb952eef8cd36dc1ec5
+  - 01651862cac1cbc2f6625ff7452988e3fe959249
+  - 81fdf6727e8545068e9d2187ea4a8e9c13f72cc8
+  - f3a5d3e072bc43bd6835863782c7be6c99ca1d8a
+  - a6fce71e9c8a6908f924424a37af11963f82d1a5
   - 2a92f8bc6de519d7f56ca07dd095bc68f44426b9
-  - 7fc26398cc5e042c70e958f860978bc9dc1c6b9e
+  - 22aae381f26712e4dd09208aa2c3dcaa52470591
   - 7b54eff20702bc7855da3e3dceab643ad671a1ed
-  - 1ca3b1780aeca623dd24902d74297c6c670c702a
-  - 8a52300ad3c64405753aa9d8a0902f4357662a34
-  - 66a015472d280525e6e8705d8fa057e7c86360fd
+  - 06fca331b87d82920a3ccd92c6eebb4be782d065
+  - 33ca9597f104a11b83cd2394aa8758422b370d69
+  - 73531653d3beeaa14c84aaf39a51a3e28ddebb4f
   - 3e8c357c268c199694a760fd4b23fd94ab1fb3c5
   - 0ded149bb23144edb4c17246b6200460fb509c0b
   - 175fa4f47aecdc02e902d243a1c29914eb2ee258
-  - 2c598a8339f9727f5082514f921f61e72ed40dbe
-  - 6976122b8ea163092e789b3320473c298c6b324e
+  - b670b9811cb8577ed4278023fbd3034d4653714c
+  - 984347320ecd5ab978a3ec2e7dbcec603e4391e5
   - 6fb184856e5ff43337a75acaedf86cc5a87b969c
   - a053d47e8def4496e069ca3a3c51eebe2bb96ae1
-  - 7d6bd5f9eedd462c9186d3732497da9cc0083b06
+  - 4a86a5ec092837324807f92202dc49372a7ae587
   - 469a0c695c609805c8771b4301839917207b7efb
-  commit_sha: 0ef8b7951a973a91f5d14b106b38ff7ef6cf1a2f
-  generated_at: '1794325596'
+  commit_sha: 07fb8c74e971eeee64a11145bc7de41d56d09d46
+  generated_at: '1794361812'
   generator: kuda-template/0.1.2

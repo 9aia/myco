@@ -141,9 +141,15 @@ enum Fix {
 
 /// One analysis pass over the worktree.
 #[derive(Default)]
-struct Analysis {
+pub(crate) struct Analysis {
     findings: Vec<Finding>,
     fixes: Vec<Fix>,
+    /// Every id → the ledger locations claiming it (the
+    /// `duplicate-id` input; `myco sync`'s renumber reads it too).
+    pub(crate) ids: BTreeMap<ItemId, Vec<String>>,
+    /// Every parsed item with its location — the renumber's
+    /// title lookup for doc-storage dup ids.
+    pub(crate) items: Vec<Located>,
 }
 
 fn normalize(src: &str) -> String {
@@ -566,9 +572,9 @@ fn strip_done(path: &Path) -> Result<(), String> {
 
 /// One item anywhere in the ledger, with where it lives for
 /// diagnostics.
-struct Located {
-    item: Item,
-    loc: String,
+pub(crate) struct Located {
+    pub(crate) item: Item,
+    pub(crate) loc: String,
 }
 
 /// `analyze` over the prelude table — the shape tests and
@@ -581,7 +587,7 @@ fn analyze(wt: &Path) -> Analysis {
 /// `analyze` resolved against `kinds` — `[[kinds]]` (P-008) makes
 /// the file-spec vocabulary data: dir scans, filename grammar,
 /// and "is this kind declared" all read the table.
-fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
+pub(crate) fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
     let mut a = Analysis::default();
     let mut items: Vec<Located> = Vec::new();
     let mut ids: BTreeMap<ItemId, Vec<String>> = BTreeMap::new();
@@ -1502,7 +1508,264 @@ fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis {
         }
     }
 
+    a.ids = ids;
+    a.items = items;
     a
+}
+
+// ---------- duplicate-id healing (`myco sync`) -------------------
+//
+// Two writers minting the same id is the one collision git can't
+// resolve: the id lives in filenames, frontmatter, handoff names,
+// `blocks:`/`links:` refs and prose. The heal rule is "remote
+// wins": the item whose location exists on `origin/<branch>`
+// keeps the id — inbound refs stay bound to it — and the local
+// item moves to a fresh id, its own files/refs rewritten. Doc-
+// storage items (TODO/BACKLOG/DONE lines) match their remote
+// side by title; anything ambiguous is reported, never guessed.
+
+/// Ledger docs whose items share one file — loc strings, not
+/// paths, so "which line is whose" needs the title lookup.
+const DOC_LOCS: &[&str] = &["TODO.md", "BACKLOG.md", "DONE.md"];
+
+/// Does `remote:<loc>` hold *this* item? File kinds answer by
+/// path existence; doc kinds by a line carrying both the id and
+/// the title (two dup items share the id — the title is the only
+/// discriminator).
+fn remote_holds(wt: &Path, remote: &str, item: &Item, loc: &str) -> bool {
+    if DOC_LOCS.contains(&loc) {
+        let Ok(src) = myco_git::git_out(wt, &["show", &format!("{remote}:{loc}")]) else {
+            return false;
+        };
+        let idtok = item.id.to_string();
+        src.lines()
+            .any(|l| l.contains(&idtok) && l.contains(&item.title))
+    } else {
+        // cat-file -e via git_out — a miss is expected here, and
+        // the bool `git()` helper would leak `fatal:` on stderr
+        myco_git::git_out(wt, &["cat-file", "-e", &format!("{remote}:{loc}")]).is_ok()
+    }
+}
+
+/// Rewrite a doc item's own id token on its line — the first
+/// token after the list marker (`- [ ] T-076 …`). `None` unless
+/// exactly one line matches (ambiguous dups are reported, never
+/// guessed).
+fn repoint_doc_line(src: &str, item: &Item, new: &ItemId) -> Option<String> {
+    let idtok = item.id.to_string();
+    let mut out = String::with_capacity(src.len());
+    let mut changed = false;
+    let mut matched = 0usize;
+    for line in src.split_inclusive('\n') {
+        let body = line.strip_suffix('\n').unwrap_or(line);
+        let head_end = body.find('·').unwrap_or(body.len());
+        let head = &body[..head_end];
+        // the item's own id is the first token after `- [ ]` —
+        // `t` stays a suffix of `head`, so its offset is exact
+        let mut t = head.trim_start();
+        if let Some(r) = t.strip_prefix(['-', '*', '+']) {
+            t = r.trim_start();
+        }
+        for cb in ["[ ]", "[x]", "[X]"] {
+            if let Some(r) = t.strip_prefix(cb) {
+                t = r.trim_start();
+                break;
+            }
+        }
+        let own = t
+            .strip_prefix(idtok.as_str())
+            .is_some_and(|rest| rest.chars().next().is_none_or(char::is_whitespace))
+            && head.contains(&item.title);
+        if own {
+            matched += 1;
+            if matched == 1 {
+                let pos = head.len() - t.len();
+                let mut l = String::with_capacity(line.len() + 8);
+                l.push_str(&line[..pos]);
+                l.push_str(&new.to_string());
+                l.push_str(&line[pos + idtok.len()..]);
+                out.push_str(&l);
+                changed = true;
+                continue;
+            }
+        }
+        out.push_str(line);
+    }
+    (changed && matched == 1).then_some(out)
+}
+
+/// One pending id move — `old` keeps its inbound refs (the
+/// remote item); the local item at `loc` gets `new`.
+struct IdMove {
+    old: ItemId,
+    new: ItemId,
+    item: Item,
+    loc: String,
+}
+
+/// Heal `duplicate-id` findings after a sync: remote-side items
+/// keep their ids, local-side items move to fresh ones. Returns
+/// `(fixes applied, report lines)` — the report names every move
+/// plus anything left for manual resolution. `remote` is a rev
+/// like `origin/project`. Inbound refs to the old id stay bound
+/// to the remote item — that ambiguity is the price of "pushed
+/// wins", and it's reported, not hidden.
+pub(crate) fn renumber_duplicates(
+    wt: &Path,
+    kinds: &myco_core::KindTable,
+    remote: &str,
+) -> Result<(usize, Vec<String>), String> {
+    let analysis = analyze_with(wt, kinds);
+    let mut report = Vec::new();
+    let meta_src = match read(wt, "meta.toml") {
+        Read::Ok(s) => s,
+        _ => return Ok((0, report)),
+    };
+    let meta = myco_store_md::parse_meta(&meta_src).map_err(|e| e.to_string())?;
+    let mut reg = meta.registry();
+    reg.observe_all(analysis.ids.keys().copied());
+
+    let mut by_id: BTreeMap<ItemId, Vec<&Located>> = BTreeMap::new();
+    for l in &analysis.items {
+        by_id.entry(l.item.id).or_default().push(l);
+    }
+
+    let mut moves: Vec<IdMove> = Vec::new();
+    for (id, locs) in &analysis.ids {
+        if locs.len() < 2 {
+            continue;
+        }
+        let Some(cands) = by_id.get(id) else { continue };
+        let flags: Vec<bool> = cands
+            .iter()
+            .map(|l| remote_holds(wt, remote, &l.item, &l.loc))
+            .collect();
+        let n_remote = flags.iter().filter(|f| **f).count();
+        if n_remote > 1 {
+            report.push(format!(
+                "{id}: duplicate exists on {remote} too — resolve manually"
+            ));
+            continue;
+        }
+        for (i, cand) in cands.iter().enumerate() {
+            // remote wins; with no remote claimant the first
+            // candidate (stable item order) keeps the id
+            if flags[i] || (n_remote == 0 && i == 0) {
+                continue;
+            }
+            let new = reg.alloc(id.kind());
+            moves.push(IdMove {
+                old: *id,
+                new,
+                item: cand.item.clone(),
+                loc: cand.loc.clone(),
+            });
+        }
+    }
+    if moves.is_empty() {
+        return Ok((0, report));
+    }
+
+    let mut fixes: Vec<Fix> = Vec::new();
+    let mut path_renames: Vec<(String, String)> = Vec::new();
+    for m in &moves {
+        let hfrom = format!("handoffs/{}.md", m.old);
+        let hto = format!("handoffs/{}.md", m.new);
+        // the handoff file follows the item only when the remote
+        // side doesn't own one already
+        let remote_handoff =
+            myco_git::git_out(wt, &["cat-file", "-e", &format!("{remote}:{hfrom}")]).is_ok();
+        if DOC_LOCS.contains(&m.loc.as_str()) {
+            if let Read::Ok(src) = read(wt, &m.loc) {
+                match repoint_doc_line(&src, &m.item, &m.new) {
+                    Some(text) => fixes.push(Fix::Write {
+                        rel: m.loc.clone(),
+                        contents: text,
+                    }),
+                    None => report.push(format!(
+                        "{} → {}: {} — line match ambiguous, resolve manually",
+                        m.old, m.new, m.loc
+                    )),
+                }
+            }
+        } else {
+            let Some(spec) = kinds.spec_of(m.old.kind()) else {
+                report.push(format!("{}: no kind spec — resolve manually", m.old));
+                continue;
+            };
+            let Some(dir) = myco_store_md::item_dir(spec) else {
+                report.push(format!("{}: doc-storage kind at {}?", m.old, m.loc));
+                continue;
+            };
+            if let Read::Ok(src) = read(wt, &m.loc) {
+                match myco_store_md::parse_item_file(&src, spec, &m.loc) {
+                    Ok(mut nf) => {
+                        nf.meta.id = m.new;
+                        match myco_store_md::emit_item_file(&nf) {
+                            Ok(text) => {
+                                if let Some(fname) =
+                                    myco_store_md::item_filename(spec, &m.new, &nf.meta.title)
+                                {
+                                    let to = format!("{dir}/{fname}");
+                                    fixes.push(Fix::Rename {
+                                        from: m.loc.clone(),
+                                        to: to.clone(),
+                                    });
+                                    fixes.push(Fix::Write {
+                                        rel: to.clone(),
+                                        contents: text,
+                                    });
+                                    path_renames.push((m.loc.clone(), to));
+                                }
+                            }
+                            Err(e) => report.push(format!("{}: emit failed: {e}", m.old)),
+                        }
+                    }
+                    Err(e) => report.push(format!("{}: {} doesn't parse: {e}", m.old, m.loc)),
+                }
+            }
+        }
+        if !remote_handoff {
+            if let Read::Ok(src) = read(wt, &hfrom) {
+                if let Some(text) = repoint_handoff(&src, &m.old, &m.new) {
+                    fixes.push(Fix::Rename {
+                        from: hfrom,
+                        to: hto.clone(),
+                    });
+                    fixes.push(Fix::Write {
+                        rel: hto,
+                        contents: text,
+                    });
+                }
+            }
+        }
+        report.push(format!("{} → {} ({})", m.old, m.new, m.loc));
+    }
+    if fixes.is_empty() {
+        return Ok((0, report));
+    }
+
+    // index.md links item files by path — repoint moved paths
+    for (from, to) in &path_renames {
+        transform_file(wt, &mut fixes, "index.md", "index.md", &|src: &str| {
+            src.contains(from.as_str())
+                .then(|| src.replace(from.as_str(), to.as_str()))
+        });
+    }
+    // counters reconcile — the fresh ids must be reflected in
+    // meta.toml before the commit lands
+    let mut m = meta.clone();
+    m.next = reg.counters();
+    if m.next != meta.next {
+        if let Ok(text) = myco_store_md::emit_meta(&m) {
+            fixes.push(Fix::Write {
+                rel: "meta.toml".into(),
+                contents: text,
+            });
+        }
+    }
+    let applied = apply_fixes(wt, &fixes)?;
+    Ok((applied, report))
 }
 
 fn apply_fixes(wt: &Path, fixes: &[Fix]) -> Result<usize, String> {
@@ -1615,7 +1878,8 @@ fn worktree_findings(worktree: &Path) -> Vec<Finding> {
     // never published, or no remote at all — a repo-level choice, not
     // this verb's business.
     if myco_git::tracks_branch(worktree, "origin", BRANCH) {
-        if let Some(ahead) = myco_git::commits_ahead(worktree, "refs/remotes/origin/project") {
+        let remote = format!("refs/remotes/origin/{BRANCH}");
+        if let Some(ahead) = myco_git::commits_ahead(worktree, &remote) {
             if ahead > 0 {
                 out.push(Finding::warn(
                     ".",
@@ -1623,6 +1887,18 @@ fn worktree_findings(worktree: &Path) -> Vec<Finding> {
                     format!(
                         "{ahead} commit(s) on `{BRANCH}` not pushed to `origin/{BRANCH}` — the \
                          audit trail exists on this machine only"
+                    ),
+                ));
+            }
+        }
+        if let Some(behind) = myco_git::commits_behind(worktree, &remote) {
+            if behind > 0 {
+                out.push(Finding::warn(
+                    ".",
+                    "worktree-behind",
+                    format!(
+                        "{behind} commit(s) on `origin/{BRANCH}` not in this ledger — mutating \
+                         verbs refuse until `myco sync` rebases onto them"
                     ),
                 ));
             }
@@ -1708,7 +1984,7 @@ fn verb_findings(root: &std::path::Path) -> Vec<Finding> {
 /// `[[kinds]]` for a repo — the repo-layer myco.toml (or
 /// `$MYCO_CONFIG`), prelude on absence; a broken config resolves
 /// to the prelude here and reports through [`kind_findings`].
-fn repo_kinds(root: &std::path::Path) -> myco_core::KindTable {
+pub(crate) fn repo_kinds(root: &std::path::Path) -> myco_core::KindTable {
     let path = std::env::var("MYCO_CONFIG")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| root.join("myco.toml"));

@@ -188,6 +188,33 @@ pub fn ensure_committable(dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Refuse a mutation while the ledger branch is behind its
+/// tracked remote — every verb commit would deepen the divergence
+/// `myco sync` exists to close. Uses the last-fetched
+/// `refs/remotes/origin/<branch>` (no network): stale refs can
+/// only *under*-report, and `myco sync` does the real fetch.
+/// Untracked branches (never pushed, no remote) pass — pushing is
+/// a repo-level choice, not this verb's business.
+pub fn ensure_synced(dir: &Path) -> Result<(), String> {
+    let Some(branch) = myco_git::worktree_branch(dir) else {
+        return Ok(());
+    };
+    if !myco_git::tracks_branch(dir, "origin", &branch) {
+        return Ok(());
+    }
+    let remote = format!("refs/remotes/origin/{branch}");
+    let Some(behind) = myco_git::commits_behind(dir, &remote) else {
+        return Ok(());
+    };
+    if behind > 0 {
+        return Err(format!(
+            "the ledger is {behind} commit(s) behind origin/{branch} — run `myco sync` \
+             first so mutations land on the published tip"
+        ));
+    }
+    Ok(())
+}
+
 /// One atomic commit of everything under `dir` — the
 /// auto-commit-per-verb path. `msg` gains the `Actor:` trailer
 /// ([`commit_msg`]; `actor` is the verb's actor, `None` →

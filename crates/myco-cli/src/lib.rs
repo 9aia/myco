@@ -58,6 +58,7 @@ pub mod report;
 pub mod schema;
 pub mod serve;
 pub mod status;
+pub mod sync;
 pub mod templates;
 pub mod todo;
 pub mod undo;

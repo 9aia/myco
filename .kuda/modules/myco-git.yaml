@@ -15,12 +15,12 @@ api:
 - name: LogEntry
   kind: type
   file: crates/myco-git/src/lib.rs
-  line: 358
+  line: 420
   module: myco-git
 - name: arg_path
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 256
+  line: 318
   module: myco-git
 - name: attach_branch
   kind: function
@@ -30,12 +30,12 @@ api:
 - name: branch
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 290
+  line: 352
   module: myco-git
 - name: branch_commit_cycle
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 420
+  line: 482
   module: myco-git
 - name: branch_exists
   kind: function
@@ -45,22 +45,22 @@ api:
 - name: commit_all
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 304
+  line: 366
   module: myco-git
 - name: commit_all_refuses_foreign_staged_changes
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 623
+  line: 685
   module: myco-git
 - name: commit_all_scopes_staging_to_dir
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 610
+  line: 672
   module: myco-git
 - name: commit_identity_falls_back_when_unconfigured
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 639
+  line: 701
   module: myco-git
 - name: commits_ahead
   kind: function
@@ -70,17 +70,22 @@ api:
 - name: commits_ahead_counts_local_only_work
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 573
+  line: 635
+  module: myco-git
+- name: commits_behind
+  kind: function
+  file: crates/myco-git/src/lib.rs
+  line: 202
   module: myco-git
 - name: common_dir
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 203
+  line: 265
   module: myco-git
 - name: configured_identity_wins_over_fallback
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 663
+  line: 725
   module: myco-git
 - name: create_orphan_branch
   kind: function
@@ -90,27 +95,27 @@ api:
 - name: create_orphan_branch_refuses_existing_branch
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 710
+  line: 772
   module: myco-git
 - name: create_orphan_branch_update_ref_failure
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 698
+  line: 760
   module: myco-git
 - name: detached_worktree_is_detected_refused_and_reattached
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 493
+  line: 555
   module: myco-git
 - name: error_display_variants
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 781
+  line: 843
   module: myco-git
 - name: fetch_push_without_origin_fail_quietly
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 757
+  line: 819
   module: myco-git
 - name: git
   kind: function
@@ -130,47 +135,47 @@ api:
 - name: git_out_captures_and_errors
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 443
+  line: 505
   module: myco-git
 - name: git_runs_in_dir
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 406
+  line: 468
   module: myco-git
 - name: has_changes
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 240
+  line: 302
   module: myco-git
 - name: has_changes_scopes_to_dir_and_propagates_errors
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 595
+  line: 657
   module: myco-git
 - name: has_changes_tracks_porcelain
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 585
+  line: 647
   module: myco-git
 - name: has_commit
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 250
+  line: 312
   module: myco-git
 - name: has_commit_false_on_non_repo
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 413
+  line: 475
   module: myco-git
 - name: head_commit
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 352
+  line: 414
   module: myco-git
 - name: head_commit_and_log
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 672
+  line: 734
   module: myco-git
 - name: is_detached
   kind: function
@@ -185,24 +190,19 @@ api:
 - name: log
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 370
+  line: 432
   module: myco-git
 - name: main_worktree
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 214
+  line: 276
   module: myco-git
 - name: main_worktree_compat
   kind: function
   file: crates/myco-git/src/lib.rs
-  line: 226
+  line: 288
   module: myco-git
-- name: main_worktree_none_on_bare_repo
-  kind: function
-  file: crates/myco-git/src/lib.rs
-  line: 749
-  module: myco-git
-api_omitted: 20
+api_omitted: 26
 deps:
 - thiserror
 - temp-env
@@ -217,7 +217,7 @@ provenance:
   - crates/myco-git/src/lib.rs
   hashes:
   - 432464a491cc0c5d00b71a63bd0392634e09f7b3
-  - 8ce44d65db3f3c6f3b7c4fa3987b21bc858394f3
-  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
-  generated_at: '1794272278'
+  - 66ee802b714a7098ac41c69e3738bc7bf02bd053
+  commit_sha: 07fb8c74e971eeee64a11145bc7de41d56d09d46
+  generated_at: '1794361812'
   generator: kuda-template/0.1.2

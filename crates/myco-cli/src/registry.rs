@@ -1116,6 +1116,20 @@ pub static VERBS: &[Verb] = &[
         wire: Some(serve::w_redo),
     },
     Verb {
+        name: "sync",
+        about: "Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves, refs stay bound to the remote). Mutating verbs refuse while behind (`ensure_synced`), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.",
+        params: &[&[flag(
+            "abort",
+            "Abort a stopped rebase/merge (`git rebase --abort`) and return to the pre-sync tip.",
+        )
+        .cli()]],
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::sync::h),
+        wire: None,
+    },
+    Verb {
         name: "absorb.comments",
         about: "Sweep code comments into the ledger via ripgrep (`rg` must be installed — respects `.gitignore`; `project/`, `docs/`, `target/` are excluded).",
         params: &[&[

@@ -822,6 +822,115 @@ fn check_warns_on_unpushed_ledger_commits() {
     );
 }
 
+// ---------- sync ----------
+
+/// Two clones of one repo: A publishes ledger commits, B's `init`
+/// must adopt `origin/project` (never orphan-fork), mutations
+/// refuse while behind, `sync` fast-forwards, and a diverged
+/// rebase heals duplicate ids remote-wins.
+#[test]
+fn sync_adopts_ff_and_renumbers() {
+    let a = repo();
+    let bare = tempfile::tempdir().unwrap();
+    git(bare.path(), &["init", "-q", "--bare"]);
+    git(
+        a.path(),
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    let branch = git(a.path(), &["branch", "--show-current"]);
+    git(
+        bare.path(),
+        &["symbolic-ref", "HEAD", &format!("refs/heads/{branch}")],
+    );
+    assert_eq!(code(&run(a.path(), &["init"])), 0);
+    assert_eq!(
+        code(&run(&a.path().join("project"), &["todo", "add", "base"])),
+        0
+    );
+    git(a.path(), &["push", "-q", "origin", &branch, "project"]);
+
+    // clone B — init must adopt the remote ledger, not fork it
+    let bdir = tempfile::tempdir().unwrap();
+    let b = bdir.path().join("b");
+    git(
+        a.path(),
+        &[
+            "clone",
+            "-q",
+            bare.path().to_str().unwrap(),
+            b.to_str().unwrap(),
+        ],
+    );
+    git(&b, &["config", "user.email", "t@t"]);
+    git(&b, &["config", "user.name", "t"]);
+    let out = run(&b, &["init", "--json"]);
+    assert_eq!(code(&out), 0, "init: {}", stderr(&out));
+    let wt = b.join("project");
+    // adopted: same tip as origin, tracking set
+    assert_eq!(
+        git(&wt, &["rev-parse", "HEAD"]),
+        git(&wt, &["rev-parse", "origin/project"]),
+    );
+    assert_eq!(
+        git(&wt, &["rev-parse", "--symbolic-full-name", "@{u}"]),
+        "refs/remotes/origin/project"
+    );
+
+    // A publishes a task; B (after fetch) must refuse mutations
+    assert_eq!(
+        code(&run(&a.path().join("project"), &["todo", "add", "alpha"])),
+        0
+    );
+    git(a.path(), &["push", "-q", "origin", "project"]);
+    git(&b, &["fetch", "-q", "origin"]);
+    let out = run(&wt, &["todo", "add", "refused"]);
+    assert_eq!(code(&out), 2, "{out:?}");
+    assert!(stderr(&out).contains("myco sync"), "{out:?}");
+
+    // sync fast-forwards (B has nothing local to replay)
+    let out = run(&wt, &["sync", "--json"]);
+    assert_eq!(code(&out), 0, "{out:?}");
+    assert_eq!(json(&out)["action"], "ff");
+
+    // diverge on a dir-kind id: both sides mint P-001 — filenames
+    // differ and the counter bump is identical, so the rebase is
+    // clean and the dup-id healer runs
+    assert_eq!(
+        code(&run(
+            &a.path().join("project"),
+            &["proposal", "new", "alpha prop"]
+        )),
+        0
+    );
+    git(a.path(), &["push", "-q", "origin", "project"]);
+    assert_eq!(code(&run(&wt, &["proposal", "new", "beta prop"])), 0);
+    let out = run(&wt, &["sync", "--json"]);
+    assert_eq!(code(&out), 0, "{out:?}");
+    let v = json(&out);
+    assert_eq!(v["action"], "rebase", "{v}");
+    let ren = v["renumbered"].as_array().unwrap();
+    assert!(
+        ren.iter()
+            .any(|r| r.as_str().unwrap().starts_with("P-001 → P-")),
+        "{v}"
+    );
+    // remote's P-001 kept, local moved to the next free id
+    let props = std::fs::read_dir(wt.join("proposals")).unwrap();
+    let names: Vec<String> = props
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        names.iter().any(|n| n.starts_with("proposal-0001-alpha")),
+        "{names:?}"
+    );
+    assert!(
+        names.iter().any(|n| n.starts_with("proposal-0002-beta")),
+        "{names:?}"
+    );
+    let out = run(&wt, &["check", "--json"]);
+    assert_eq!(code(&out), 0, "{out:?}");
+}
+
 // ---------- migrate ----------
 
 #[test]

@@ -30,7 +30,7 @@ api:
 - name: DEFAULT_PAGER
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 449
+  line: 476
   module: myco-ops
 - name: DIR
   kind: const
@@ -45,7 +45,7 @@ api:
 - name: Filter
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 329
+  line: 332
   module: myco-ops
 - name: HistoryEntry
   kind: type
@@ -80,7 +80,7 @@ api:
 - name: MULTI_COMMIT_SUBJECTS
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 266
+  line: 293
   module: myco-ops
 - name: NamedVerb
   kind: type
@@ -95,7 +95,7 @@ api:
 - name: NewItem
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 431
+  line: 434
   module: myco-ops
 - name: Origin
   kind: type
@@ -130,7 +130,7 @@ api:
 - name: UndoOutcome
   kind: type
   file: crates/myco-ops/src/ops.rs
-  line: 249
+  line: 276
   module: myco-ops
 - name: VERSION
   kind: const
@@ -170,12 +170,12 @@ api:
 - name: autocommit
   kind: function
   file: crates/myco-ops/src/ops.rs
-  line: 196
+  line: 223
   module: myco-ops
 - name: autocommit_stamps_actor_trailer
   kind: function
   file: crates/myco-ops/src/ops.rs
-  line: 606
+  line: 633
   module: myco-ops
 - name: backlog
   kind: function
@@ -202,7 +202,7 @@ api:
   file: crates/myco-ops/src/view.rs
   line: 274
   module: myco-ops
-api_omitted: 204
+api_omitted: 205
 deps:
 - camino
 - myco-core
@@ -256,12 +256,12 @@ provenance:
   - eaff06f7145e1435cf37a599f48e49139ce531db
   - e32236a7fbef4a549c16f14a53f3e811399afd31
   - d68f4d02abaec478c8ca1ab8258a72a98ba5bbbf
-  - e775f5fafac41b21ba371d158e8a9135f015a921
+  - 4599db0a188ac84bce10990e111aef3683ad1f15
   - 692efc8e5656308c8cd3fd2f4d6d6e8fe2f229cd
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
-  - 24b9910925fdd3a237b722338f2010e023b0055a
+  - 2306fd8212883f99c494a537ee14dbebd8d0d9cd
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: deff1b5457e259b477a1b463ced9907a38260687
-  generated_at: '1794272278'
+  commit_sha: 07fb8c74e971eeee64a11145bc7de41d56d09d46
+  generated_at: '1794361812'
   generator: kuda-template/0.1.2

@@ -35,6 +35,10 @@ pub struct InitOutcome {
     /// `myco.toml` was seeded with the commented `[[kinds]]`
     /// prelude this run.
     pub myco_toml_seeded: bool,
+    /// The local `project` branch was created tracking
+    /// `origin/project` this run — the ledger already existed
+    /// remotely and was adopted rather than orphan-forked.
+    pub adopted_remote: bool,
     /// A commit was made (worktree scaffold or root files).
     pub committed: bool,
 }
@@ -122,15 +126,38 @@ pub fn ensure(
         ));
     }
 
-    // branch: reuse or create as an orphan root via plumbing
+    // branch: reuse, adopt the remote ledger, or create an orphan
+    // root via plumbing. A remote `project` branch means the
+    // ledger already exists — fetching first and branching from
+    // `origin/project` is the only correct move; a fresh orphan
+    // would fork the audit trail into unrelated histories (the
+    // tarsi incident). Fetch is best-effort: offline init still
+    // works against the last-known remote refs.
+    let _ = myco_git::sync(&root);
+    let remote_ref = format!("refs/remotes/origin/{}", discover::BRANCH);
+    let remote_exists = myco_git::has_commit(&root, &remote_ref);
     let created_branch = !myco_git::branch_exists(&root, discover::BRANCH);
+    let adopted_remote = created_branch && remote_exists;
     if created_branch {
-        myco_git::create_orphan_branch(
-            &root,
-            discover::BRANCH,
-            &ops::commit_msg("chore: init project branch", None),
-        )
-        .map_err(|e| format!("create project branch: {e}"))?;
+        if remote_exists {
+            myco_git::git_out(
+                &root,
+                &[
+                    "branch",
+                    "--track",
+                    discover::BRANCH,
+                    &format!("origin/{}", discover::BRANCH),
+                ],
+            )
+            .map_err(|e| format!("adopt origin/{}: {e}", discover::BRANCH))?;
+        } else {
+            myco_git::create_orphan_branch(
+                &root,
+                discover::BRANCH,
+                &ops::commit_msg("chore: init project branch", None),
+            )
+            .map_err(|e| format!("create project branch: {e}"))?;
+        }
     }
 
     // worktree: reuse a valid one, or `worktree add`
@@ -215,6 +242,7 @@ pub fn ensure(
         gitignore_updated,
         agents_md_updated,
         myco_toml_seeded,
+        adopted_remote,
         committed,
     })
 }
@@ -274,6 +302,7 @@ pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, 
             "gitignore_updated": out.gitignore_updated,
             "agents_md_updated": out.agents_md_updated,
             "myco_toml_seeded": out.myco_toml_seeded,
+            "adopted_remote": out.adopted_remote,
             "committed": out.committed,
         }));
     } else {
@@ -298,6 +327,9 @@ pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, 
         }
         if out.myco_toml_seeded {
             println!("  myco.toml seeded (commented [[kinds]] prelude)");
+        }
+        if out.adopted_remote {
+            println!("  adopted existing origin/project ledger (no fork)");
         }
         if !out.committed {
             println!("  (no commits — nothing changed or --no-commit)");

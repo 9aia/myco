@@ -247,6 +247,9 @@ pub fn open_with_index<S: Store>(
     // a detached worktree would swallow the write — refuse before
     // the store opens (`check --fix` repairs the worktree itself)
     ops::ensure_committable(&proj.worktree)?;
+    // a ledger behind its remote must sync before mutating —
+    // every verb commit would otherwise deepen the divergence
+    ops::ensure_synced(&proj.worktree)?;
     let kinds = crate::config::kinds_for(&proj.root, cfg);
     let lock = ops::lock_worktree(&proj.worktree)?;
     let store = mk(&proj.worktree, &kinds)?;
