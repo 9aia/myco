@@ -3,6 +3,12 @@ url: /myco/explanation/release-model.md
 ---
 # Release model
 
+> User-facing install is the tamias pack (`libraries/myco` →
+> `tamias install 9aia:myco@<ver>`); the `myco` crates are lib-only
+> engines behind `tamias-driver-myco` — there is no cargo-installed
+> `myco` binary. This page describes the crate/tag release pipeline
+> that feeds it.
+
 Releases are manual: `scripts/release.sh` is run by an operator
 on `main`. The script's
 leading debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
@@ -40,12 +46,13 @@ by tagging once.
 
 * The crates.io name `myco` is currently held by an unrelated
   project, so `cargo publish` of the CLI package depends on
-  resolving that; installs should use
-  `cargo install --git https://github.com/9aia/myco` regardless.
+  resolving that; and since T-006 the `myco` crates ship no
+  `[[bin]]` — installs go through the tamias pack
+  (`tamias install 9aia:myco@<ver>`), not `cargo install`.
 * Only the six release-set crates publish — the rest of the
   workspace (`myco-ops`, `myco-store*`, `myco-index*`, `myco-tui`,
-  `myco-driver`, `myco-testkit`) is internal and installs via
-  `cargo install --git`.
+  `myco-driver`, `myco-testkit`) is internal; `myco-driver` still
+  builds a real `tamias-driver-myco` bin for dev installs.
 
 ## CI and docs deploys
 

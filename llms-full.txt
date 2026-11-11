@@ -2457,6 +2457,12 @@ url: /myco/explanation/release-model.md
 ---
 # Release model
 
+> User-facing install is the tamias pack (`libraries/myco` →
+> `tamias install 9aia:myco@<ver>`); the `myco` crates are lib-only
+> engines behind `tamias-driver-myco` — there is no cargo-installed
+> `myco` binary. This page describes the crate/tag release pipeline
+> that feeds it.
+
 Releases are manual: `scripts/release.sh` is run by an operator
 on `main`. The script's
 leading debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
@@ -2494,12 +2500,13 @@ by tagging once.
 
 * The crates.io name `myco` is currently held by an unrelated
   project, so `cargo publish` of the CLI package depends on
-  resolving that; installs should use
-  `cargo install --git https://github.com/9aia/myco` regardless.
+  resolving that; and since T-006 the `myco` crates ship no
+  `[[bin]]` — installs go through the tamias pack
+  (`tamias install 9aia:myco@<ver>`), not `cargo install`.
 * Only the six release-set crates publish — the rest of the
   workspace (`myco-ops`, `myco-store*`, `myco-index*`, `myco-tui`,
-  `myco-driver`, `myco-testkit`) is internal and installs via
-  `cargo install --git`.
+  `myco-driver`, `myco-testkit`) is internal; `myco-driver` still
+  builds a real `tamias-driver-myco` bin for dev installs.
 
 ## CI and docs deploys
 
@@ -2526,35 +2533,37 @@ handoffs — that lives on its own orphan branch.
 
 ## Install
 
-The crates.io name `myco` belongs to an unrelated project —
-install from the repo. Pick one:
+The `myco` command is a tamias `bins[]` pack (`libraries/myco`) —
+a generated shim → `tamias bin exec` → `tamias-driver-myco cli`
+→ the engine lib. There is no cargo-installed `myco` binary. With
+[tamias](https://github.com/9aia/tamias) installed:
 
 ```sh
-npm install -g 9aia/myco      # easiest — first `myco` run builds via cargo
-cargo install --git https://github.com/9aia/myco myco
+tamias install 9aia:myco@0.1.3    # org registry (needs TAMIAS_REGISTRY_TOKEN)
 ```
 
-On npm ≥ 12, git fetches are gated — add `--allow-git=root`:
-`npm install -g --allow-git=root 9aia/myco`.
+Or the npm launcher — a thin shim that finds the `myco` bin on
+PATH and bootstraps tamias + the pack on first run:
 
-The npm package is a thin shim — the first `myco` run builds the
-Rust binary via `cargo install --git … myco` (there's no
-postinstall; npm breaks lifecycle-script cwds on git installs),
-so **Rust + cargo are still required** — the first build takes a
-minute or two.
+```sh
+npm install -g 9aia/myco
+# npm ≥ 12 gates git fetches: npm install -g --allow-git=root 9aia/myco
+```
 
-The trailing `myco` on the cargo command selects the package —
-the repo is a workspace, so cargo needs to know which member to
-install. To also get the
+From a checkout of this repo:
+
+```sh
+cargo xtask pack && tamias install --allow-drivers ./libraries/myco
+cargo xtask install        # tamias-driver-myco → ~/.cargo/bin (dev convenience)
+```
+
+To also get the
 [pavo](https://github.com/9aia/pavo) view driver
 (`tamias-driver-myco`, see below):
 
 ```sh
 cargo install --git https://github.com/9aia/myco myco-driver
 ```
-
-From a checkout of this repo: `cargo xtask install` builds and
-installs the release binary to `~/.cargo/bin/myco`.
 
 ## Set up a repo
 
@@ -2619,12 +2628,10 @@ needed; `R` forces one anyway.
 ledger for the cross-repo index universe — rows are `repo:ID` and
 verbs write the owning repo's worktree.
 
-The TUI is a default cargo feature — for a lean binary without
-it, install with `--no-default-features`:
-
-```sh
-cargo install --git https://github.com/9aia/myco myco --no-default-features
-```
+The TUI is a default cargo feature of the engine — the pack build
+includes it, and since the crates are lib-only there is no
+`--no-default-features` install path; feature selection is a
+pack-build concern.
 
 ## Visual views — pavo
 
