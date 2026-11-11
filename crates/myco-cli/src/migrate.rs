@@ -777,6 +777,34 @@ fn adopt_or_normalize(
         stats.unparsed.push(rel.to_string());
         return Ok(None);
     }
+    // 2b) `---` YAML frontmatter — hand-authored files reach for
+    //     the ubiquitous convention; rewrite as `+++` TOML, then
+    //     re-emit canonically like step 1. Unparseable repairs
+    //     are left for `myco check` to report.
+    if let Some(rs) = myco_store_md::repair_frontmatter(src) {
+        return match myco_store_md::parse_item_file(&rs, spec, rel) {
+            Ok(file) => {
+                let id = file.meta.id;
+                store.save_item(&file).map_err(|e| e.to_string())?;
+                let canonical =
+                    myco_store_md::item_filename(spec, &id, &file.meta.title).map(|f| {
+                        format!(
+                            "{}/{}",
+                            myco_store_md::item_dir(spec).unwrap_or_default(),
+                            f
+                        )
+                    });
+                if canonical.as_deref() != Some(rel) {
+                    let _ = std::fs::remove_file(wt.join(rel));
+                }
+                Ok(canonical.filter(|c| *c != rel))
+            }
+            Err(_) => {
+                stats.unparsed.push(rel.to_string());
+                Ok(None)
+            }
+        };
+    }
     // 3) no frontmatter at all → adopt: honor the filename number
     //    when free (legacy ids like `0001-gha-compat.md` encode
     //    real numbering), else probe the next number no other

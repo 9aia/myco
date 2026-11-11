@@ -1063,8 +1063,72 @@ pub(crate) fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis 
                             });
                         }
                         None => {
-                            a.findings.push(Finding::parse(&e, false));
-                            ids_incomplete = true;
+                            // `---` YAML frontmatter — hand-authored
+                            // files reach for the ubiquitous
+                            // convention; `--fix` rewrites the block
+                            // as `+++` TOML and re-emits canonically
+                            let repaired = myco_store_md::repair_frontmatter(&src).and_then(|rs| {
+                                myco_store_md::parse_item_file(&rs, spec, &rel)
+                                    .ok()
+                                    .and_then(|file| {
+                                        myco_store_md::emit_item_file(&file)
+                                            .ok()
+                                            .map(|text| (file, text, rs))
+                                    })
+                            });
+                            match repaired {
+                                Some((file, text, rsrc)) => {
+                                    let id = file.meta.id;
+                                    let canonical =
+                                        myco_store_md::item_filename(spec, &id, &file.meta.title)
+                                            .map(|f| format!("{dir_name}/{f}"));
+                                    let target = canonical.clone().unwrap_or_else(|| rel.clone());
+                                    a.findings.push(Finding::at(
+                                        &rel,
+                                        "frontmatter",
+                                        format!(
+                                            "{rel} uses `---` frontmatter — \
+                                             `--fix` rewrites it as `+++` TOML"
+                                        ),
+                                        true,
+                                    ));
+                                    if canonical.as_deref() != Some(rel.as_str()) {
+                                        a.findings.push(Finding::at(
+                                            &rel,
+                                            "filename",
+                                            format!(
+                                                "{rel} should be {target} \
+                                                 (kind/id/slug mismatch)"
+                                            ),
+                                            true,
+                                        ));
+                                        a.fixes.push(Fix::Rename {
+                                            from: rel.clone(),
+                                            to: target.clone(),
+                                        });
+                                    }
+                                    a.fixes.push(Fix::Write {
+                                        rel: target.clone(),
+                                        contents: text,
+                                    });
+                                    ids.entry(id).or_default().push(rel.clone());
+                                    items.push(Located {
+                                        item: file.meta.clone(),
+                                        loc: rel.clone(),
+                                    });
+                                    let start = frontmatter_end(&rsrc);
+                                    prose.push(ProseRef {
+                                        rel,
+                                        zones: vec![(start, rsrc.len())],
+                                        self_ids: self_ids(&file),
+                                        src: rsrc,
+                                    });
+                                }
+                                None => {
+                                    a.findings.push(Finding::parse(&e, false));
+                                    ids_incomplete = true;
+                                }
+                            }
                         }
                     }
                 }
@@ -2511,6 +2575,54 @@ mod tests {
             .fixes
             .iter()
             .any(|f| matches!(f, Fix::Write { rel, .. } if rel == "TODO.md")));
+    }
+
+    #[test]
+    fn analyze_repairs_yaml_frontmatter() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        let meta = ProjectMeta::new("x");
+        write(wt, "meta.toml", &myco_store_md::emit_meta(&meta).unwrap());
+        write(wt, "TODO.md", "# TODO — x\n");
+        write(
+            wt,
+            "BACKLOG.md",
+            &myco_store_md::emit_backlog(&myco_core::BacklogDoc::default()).unwrap(),
+        );
+        write(wt, "index.md", "# x\n");
+        // the shape hand-authored files arrive in — `---` fence,
+        // `key: value` scalars
+        write(
+            wt,
+            "proposals/proposal-0001-x.md",
+            "---\nid: P-001\ntitle: A proposal\nstatus: open\n---\n\n## Thesis\n\nbody\n",
+        );
+        let a = analyze(wt);
+        assert!(
+            a.findings
+                .iter()
+                .any(|f| f.code == "frontmatter" && f.fixable),
+            "{:?}",
+            codes(&a)
+        );
+        // no unfixable parse finding for the repaired file
+        assert!(!a
+            .findings
+            .iter()
+            .any(|f| f.code == "parse" && f.file.contains("proposal-0001")));
+        // the canonical slug differs → rename, then write `+++`
+        assert!(a.fixes.iter().any(|f| matches!(
+            f,
+            Fix::Rename { from, to }
+                if from == "proposals/proposal-0001-x.md"
+                    && to == "proposals/proposal-0001-a-proposal.md"
+        )));
+        assert!(a.fixes.iter().any(|f| matches!(
+            f,
+            Fix::Write { rel, contents }
+                if rel == "proposals/proposal-0001-a-proposal.md"
+                    && contents.starts_with("+++\n")
+        )));
     }
 
     #[test]

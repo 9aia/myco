@@ -117,6 +117,112 @@ pub fn frontmatter_id(src: &str) -> Option<ItemId> {
     None // window exhausted — never closed
 }
 
+/// Deepest line [`repair_frontmatter`] will read — same bound as
+/// [`FRONTMATTER_PROBE_MAX`]; real frontmatter is ~10 keys.
+const REPAIR_MAX: usize = FRONTMATTER_PROBE_MAX;
+
+/// Strip one layer of `'`/`"` quoting a hand-written YAML scalar
+/// carries.
+fn unquote(s: &str) -> &str {
+    let b = s.as_bytes();
+    if b.len() >= 2
+        && ((b[0] == b'"' && b[b.len() - 1] == b'"') || (b[0] == b'\'' && b[b.len() - 1] == b'\''))
+    {
+        &s[1..s.len() - 1]
+    } else {
+        s
+    }
+}
+
+/// Escape a string for a TOML basic string.
+fn toml_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// `key` is a TOML bare key — letter/`_` then alnum/`_`/`-`.
+fn is_bare_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Rewrite a leading `---` YAML frontmatter block as the canonical
+/// `+++` TOML fence — the repair half of [`parse_item_file`]'s
+/// strictness. Agents hand-authoring item files reach for the
+/// ubiquitous `---` + `key: value` convention; this converts the
+/// simple subset — top-level `key: scalar`, `key: [a, b]` inline
+/// lists, `#` comments, blank lines — and returns the source with
+/// a `+++` fence, still *unvalidated*: callers re-parse. `None`
+/// when the file doesn't open with a closed `---` block, the block
+/// exceeds [`REPAIR_MAX`] lines, or a frontmatter line isn't
+/// `key: value` at column 0 (nested maps, `- ` list items — shapes
+/// this doesn't claim to understand).
+pub fn repair_frontmatter(src: &str) -> Option<String> {
+    let mut lines = src.split_inclusive('\n');
+    let first = lines.next()?;
+    if first.trim_end() != "---" {
+        return None;
+    }
+    let fm_start = first.len();
+    let mut off = fm_start;
+    let mut close = None;
+    for line in lines.by_ref().take(REPAIR_MAX) {
+        if line.trim_end() == "---" {
+            close = Some((off, off + line.len()));
+            break;
+        }
+        off += line.len();
+    }
+    let (fm_end, body_start) = close?;
+    let mut toml = String::new();
+    for raw in src[fm_start..fm_end].lines() {
+        // indented lines are nested YAML — out of scope
+        if raw.starts_with(|c: char| c.is_whitespace()) {
+            if !raw.trim().is_empty() {
+                return None;
+            }
+            continue;
+        }
+        let l = raw.trim();
+        if l.is_empty() || l.starts_with('#') {
+            continue;
+        }
+        let (key, val) = l.split_once(':')?;
+        if !is_bare_key(key) {
+            return None;
+        }
+        let val = val.trim();
+        if val.starts_with('[') && val.ends_with(']') {
+            let inner = &val[1..val.len() - 1];
+            let items: Vec<String> = inner
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| format!("\"{}\"", toml_escape(unquote(s))))
+                .collect();
+            toml.push_str(&format!("{} = [{}]\n", key, items.join(", ")));
+        } else {
+            let v = unquote(val);
+            // a bare u32 (`estimate: 3`) — everything else is a
+            // TOML string, which every stringly-typed frontmatter
+            // field (and `de_opt_created`'s date forms) accepts
+            if !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit()) {
+                toml.push_str(&format!("{key} = {v}\n"));
+            } else {
+                toml.push_str(&format!("{key} = \"{}\"\n", toml_escape(v)));
+            }
+        }
+    }
+    let mut out = String::from("+++\n");
+    out.push_str(&toml);
+    out.push_str("+++\n");
+    out.push_str(&src[body_start..]);
+    Some(out)
+}
+
 /// Frontmatter DTO — stringly-typed so bad values point at the
 /// frontmatter block, not toml's internals.
 #[derive(Debug, Deserialize)]
@@ -221,8 +327,17 @@ pub fn parse_item_file(src: &str, spec: &KindSpec, path: &str) -> Result<ItemFil
     let at = |off: usize, len: usize, m: String| ParseError::at(path, src.clone(), off, len, m);
     let whole = |m: &str| ParseError::whole_file(path, src.clone(), m);
     let mut lines = src.split_inclusive('\n');
-    if lines.next().map(str::trim_end) != Some("+++") {
-        return Err(whole("expected `+++` TOML frontmatter fence on line 1"));
+    let first = lines.next().map(str::trim_end);
+    if first != Some("+++") {
+        // `---` is the YAML fence hand-authored files reach for —
+        // name the repair so the reader isn't stuck on the spec
+        let msg = if first == Some("---") {
+            "expected `+++` TOML frontmatter fence on line 1 — `---` YAML \
+             frontmatter isn't the file spec; `myco check --fix` rewrites it"
+        } else {
+            "expected `+++` TOML frontmatter fence on line 1"
+        };
+        return Err(whole(msg));
     }
     // find the closing `+++` line (byte offsets into src)
     let fm_start = "+++\n".len();
@@ -654,6 +769,68 @@ mod tests {
         }
         src.push_str("id = \"I-1\"\n+++\n");
         assert_eq!(frontmatter_id(&src), None);
+    }
+
+    #[test]
+    fn repair_frontmatter_rewrites_yaml_fence() {
+        // the shape hand-authored files arrive in — `---` fence,
+        // `key: value` scalars, an inline list, comments
+        let src = "---\n\
+                   id: I-003\n\
+                   title: Memory leak\n\
+                   status: in-progress\n\
+                   created: 2026-02-01\n\
+                   owner: devin\n\
+                   priority: high\n\
+                   labels: [index, perf]\n\
+                   blocks: [T-010]\n\
+                   note: resumed\n\
+                   # a comment\n\
+                   ---\n\
+                   \n\
+                   ## Description\n\
+                   \n\
+                   Body text.\n";
+        let repaired = repair_frontmatter(src).unwrap();
+        assert!(repaired.starts_with("+++\n"), "{repaired}");
+        assert!(repaired.contains("id = \"I-003\""), "{repaired}");
+        assert!(
+            repaired.contains("labels = [\"index\", \"perf\"]"),
+            "{repaired}"
+        );
+        assert!(!repaired.contains("---\n# a comment"), "{repaired}");
+        // and it parses + re-emits canonically
+        let file = parse_item_file(&repaired, &spec(ItemKind::Issue), "issues/x.md").unwrap();
+        assert_eq!(file.meta.id, ItemId::new(ItemKind::Issue, 3));
+        assert_eq!(file.meta.status, Status::InProgress);
+        assert_eq!(file.meta.priority, Priority::High);
+        assert!(file.meta.labels.contains("perf"));
+        assert!(file.meta.blocks.contains(&ItemId::new(ItemKind::Task, 10)));
+        assert_eq!(file.body, "## Description\n\nBody text.");
+        assert_eq!(emit_item_file(&file).unwrap(), ISSUE);
+    }
+
+    #[test]
+    fn repair_frontmatter_declines_what_it_cant_read() {
+        // not a `---` file at all
+        assert_eq!(repair_frontmatter("+++\nid = \"I-1\"\n+++\n"), None);
+        assert_eq!(repair_frontmatter("no fence\n"), None);
+        // unclosed block
+        assert_eq!(repair_frontmatter("---\nid: I-1\n"), None);
+        // a `- ` list item isn't `key: value`
+        assert_eq!(repair_frontmatter("---\nlabels:\n  - a\n---\nbody\n"), None);
+        // indented (nested) YAML is out of scope
+        assert_eq!(
+            repair_frontmatter("---\nid: I-1\n  nested: x\n---\nbody\n"),
+            None
+        );
+        // over the probe bound
+        let mut src = "---\n".to_string();
+        for _ in 0..(REPAIR_MAX + 5) {
+            src.push_str("k: v\n");
+        }
+        src.push_str("---\nbody\n");
+        assert_eq!(repair_frontmatter(&src), None);
     }
 
     #[test]

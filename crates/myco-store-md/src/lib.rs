@@ -58,6 +58,7 @@ pub use handoff::{
 };
 pub use itemfile::{
     emit_item_file, frontmatter_id, item_dir, item_filename, parse_item_file, parse_item_filename,
+    repair_frontmatter,
 };
 pub use legacy::{parse_legacy_backlog, parse_legacy_todo, LegacyDoc, LegacyItem, LegacySection};
 pub use mdx::code_spans;

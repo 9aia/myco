@@ -202,7 +202,7 @@ api:
   file: project/issues/issue-0030-issue-0030-rust-toolchain-upgrade-2026.md
   line: 2
   module: project
-api_omitted: 76
+api_omitted: 78
 deps: []
 notes: ''
 verify:
@@ -290,11 +290,12 @@ provenance:
   - project/proposals/proposal-0011-multi-level-undo-redo-journal.md
   - project/proposals/proposal-0012-pm-parity-scheduling-fields-cycles-roadmap-stats.md
   - project/proposals/proposal-0013-typed-item-links-clickable-tui-related-ids.md
+  - project/proposals/proposal-0014-ledger-convergence-remote-adoption-sync-dup-id-renumbering.md
   hashes:
   - 9065e6f6e33503b5f7a4a773acd637396048731c
   - ff8c8167a3e7dd6182641214a7d5f22711bd86bc
   - df0ebe074d2ac166504a6b14391be3adebcda4d8
-  - c67928ee770b944863abf5aa0f2846bb7432cc7a
+  - 2a1f4d92599282d0f2ca1d063ec63f4ddb4ab476
   - d0f4ee292c12e5b88c8228e1de78b83bcc6eaa65
   - 8ee2b578c23f86be23573ebb29fa91ca8ad5cd53
   - f9deccb752376dfd2277072da18c40886f7ae381
@@ -363,6 +364,7 @@ provenance:
   - 276e5fa49f333a97aba698cf2dcb14988c79213b
   - 4d753c2b19260d670c606e98311ec53cd2e0b084
   - 6d02a11ce0ebc6b069c507b48bd39ad0d68a7643
-  commit_sha: 5c96eff724fc91c8f9608086ef58ca6a38110933
-  generated_at: '1794325853'
+  - b30eaaf057f56e1c38125d69e6152245620510c6
+  commit_sha: 4246abfa8862da3ec7efbd1917b33b848f60dfaf
+  generated_at: '1794402062'
   generator: kuda-template/0.1.2

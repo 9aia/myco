@@ -65,7 +65,7 @@ api:
 - name: FrontmatterIn
   kind: type
   file: crates/myco-store-md/src/itemfile.rs
-  line: 123
+  line: 229
   module: myco-store-md
 - name: FrontmatterOut
   kind: type
@@ -75,7 +75,7 @@ api:
 - name: FrontmatterOut
   kind: type
   file: crates/myco-store-md/src/itemfile.rs
-  line: 178
+  line: 284
   module: myco-store-md
 - name: HANDOFFS_ARCHIVE
   kind: const
@@ -90,7 +90,7 @@ api:
 - name: ISSUE
   kind: const
   file: crates/myco-store-md/src/itemfile.rs
-  line: 448
+  line: 563
   module: myco-store-md
 - name: LINE_START
   kind: const
@@ -131,6 +131,11 @@ api:
   kind: type
   file: crates/myco-store-md/src/error.rs
   line: 12
+  module: myco-store-md
+- name: REPAIR_MAX
+  kind: const
+  file: crates/myco-store-md/src/itemfile.rs
+  line: 122
   module: myco-store-md
 - name: SPEC
   kind: const
@@ -197,12 +202,7 @@ api:
   file: crates/myco-store-md/src/store.rs
   line: 621
   module: myco-store-md
-- name: at
-  kind: function
-  file: crates/myco-store-md/src/error.rs
-  line: 27
-  module: myco-store-md
-api_omitted: 263
+api_omitted: 270
 deps:
 - camino
 - markdown
@@ -266,14 +266,14 @@ provenance:
   - 5f9b9495f2861f0438e386ed3bc5863df483f37d
   - 0f4252f1d31daea262ee8ded1c3944f9a2cf6d72
   - cff97a0d5e3a7b92aee95b3462b96bac4239bfef
-  - f1e90740c3b030879d1ba0f74a0903e8cf0f0f45
+  - 6180a59c25e2e2ac2c5674562795e5970588bfb7
   - 2038f568bd992afec3b0163a934580bce1f58553
-  - eb3e3b3cbbcda1aab84778440d07157c855ae22a
+  - b697b0d7d223dda7b8a8883bf01a8a924f0a1bbc
   - 38b93fd873ca88a0a57e2920d4cf87f371fd078d
   - 0c92680d14f61194725ec9dac4d6476847479691
   - 319e13ac429e7e938d4f3bdafcde59f033c01ce2
   - 445f3fe811906a7abd23e0a7d4744f99db6b8b81
   - 65fc26278c9f3019ee010602a6f17a8874707379
-  commit_sha: 07fb8c74e971eeee64a11145bc7de41d56d09d46
-  generated_at: '1794361812'
+  commit_sha: 4246abfa8862da3ec7efbd1917b33b848f60dfaf
+  generated_at: '1794402062'
   generator: kuda-template/0.1.2
