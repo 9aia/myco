@@ -1684,6 +1684,33 @@ pub static VERBS: &[Verb] = &[
         wire: Some(serve::w_interrupt),
     },
     Verb {
+        name: "reap",
+        about: "Bulk stale-claim reaper — every live `claimed`/`in-progress` item whose last activity (latest handoff entry, else `created`) is older than `--idle-days` reverts to `open` + an `interrupted` handoff, ONE commit for the whole sweep. `--session <id>` scopes to items whose claim tag names that session; `--dry-run` lists the sweep with zero writes. Scheduler-facing — peregrin campaigns call it periodically; the no-hook safety net behind `report`'s stale-claims finding.",
+        params: &[&[
+            opt(
+                "idle-days",
+                Val::Count,
+                "Idle threshold in days — last activity older than this reaps. Default: the report's stale-claim threshold (3).",
+            )
+            .vname("N"),
+            opt(
+                "session",
+                Val::Str,
+                "Scope to items whose claim tag names this session (`interrupt --session`'s rule).",
+            ),
+            opt("actor", Val::Actor, "Who reaped it (default: the resolved actor)."),
+            flag(
+                "dry-run",
+                "List what would be reaped — no writes, no commit.",
+            ),
+        ]],
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::reap::h_reap),
+        wire: Some(serve::w_reap),
+    },
+    Verb {
         name: "resume",
         about: "Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call.",
         params: &[IDS, &[opt(

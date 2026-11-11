@@ -54,6 +54,7 @@ myco <verb> --help     # every verb, self-documenting
 | Inspect / mutate any item | `myco item show T-NNN` · `myco item set T-NNN …` (`--due`/`--est`/`--cycle` schedule; `""` clears) |
 | Session end (resumable state) | `myco handoff T-NNN --note "done/next/open"` |
 | Session died mid-work | `myco interrupt T-NNN` (→ open + interrupt handoff; ⚡ marker in status/board) |
+| Scheduled stale-claim sweep | `myco reap [--idle-days N] [--session <id>] [--dry-run]` (bulk interrupt — claimed/in-progress idle >N d → open, one commit) |
 | Restart work on an item | `myco resume T-NNN` (`item show`/`resume` take 1..n ids) |
 | Pick the top item | `myco next [--claim [--steal] [--owner <actor>]]` — open task/issue by `pri,id`; filter flags shared with `view` |
 | Views | `myco view [name]` (`board`/`open`/`epic`/`milestone` presets + `--epic`/`--milestone`/`--status`/`--group-by`/`--sort`/`--format` flags; `default_view` in myco.toml is the bare-`view` landing) · `myco report` · read-only viz via pavo (`tamias-driver-myco` → `pavo view myco:board`) |

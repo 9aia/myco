@@ -26,8 +26,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
-    backlog, check, continuity, digest, itemcmd, items, movecmd, next, ops, report, schema, status,
-    todo,
+    backlog, check, continuity, digest, itemcmd, items, movecmd, next, ops, reap, report, schema,
+    status, todo,
 };
 
 // ---------------------------------------------------------------- wire
@@ -886,6 +886,39 @@ pub(crate) fn w_interrupt(s: &Server, a: &crate::registry::Args) -> Result<Value
     }
 }
 
+/// `reap` — `{idle_days?, session?, actor?, dry_run?}` — the bulk
+/// stale-claim sweep: every live `claimed`/`in-progress` item idle
+/// past the threshold reverts to `open` in ONE commit. `dry_run`
+/// plans with zero writes; per-item failures land in `errors[]`
+/// without aborting the sweep.
+pub(crate) fn w_reap(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let idle_days = reap::idle_threshold(a).map_err(Fail::BadParams)?;
+    let session = a.opt("session").map(str::to_string);
+    let actor: Option<Actor> = a.parsed("actor").map_err(Fail::BadParams)?;
+    let dry_run = a.flag("dry-run");
+    // dry_run reads through the shared lock — zero writes either way
+    let (proj, store) = if dry_run { s.open_read()? } else { s.open()? };
+    let me = ops::resolve_actor(Some(&proj.worktree), actor.as_ref());
+    let p = reap::plan(&store, session.as_deref(), idle_days).map_err(Fail::Verb)?;
+    if dry_run {
+        return Ok(reap::payload(&p.hits, &p.errors, true, false));
+    }
+    let (reaped, errors) = reap::apply(&store, &p.hits, &me);
+    let mut all_errors = p.errors;
+    all_errors.extend(errors);
+    let hits: Vec<reap::ReapHit> = reaped.iter().map(|r| r.hit.clone()).collect();
+    let committed = if reaped.is_empty() {
+        false
+    } else {
+        s.commit(
+            &proj.worktree,
+            &format!("chore: reap {} stale claims", reaped.len()),
+            Some(&me),
+        )?
+    };
+    Ok(reap::payload(&hits, &all_errors, false, committed))
+}
+
 /// `next` — `{spec}` merges over the `next` named view; `limit`
 /// pinned at 1. `{"item": null}` when the backlog is clear.
 pub(crate) fn w_next(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
@@ -1354,6 +1387,68 @@ mod tests {
             call(&s, "interrupt", json!({})),
             Err(Fail::BadParams(_))
         ));
+    }
+
+    #[test]
+    fn reap_on_the_wire() {
+        let (d, s) = fixture();
+        call(&s, "todo.add", json!({"title": "stale wip"})).unwrap();
+        call(
+            &s,
+            "item.set",
+            json!({"id": "T-001", "status": "in-progress"}),
+        )
+        .unwrap();
+        call(&s, "todo.add", json!({"title": "fresh wip"})).unwrap();
+        call(
+            &s,
+            "item.set",
+            json!({"id": "T-002", "status": "in-progress"}),
+        )
+        .unwrap();
+        // backdate T-001's `created:` — T-002 stays fresh
+        let p = d.path().join("TODO.md");
+        let text = std::fs::read_to_string(&p).unwrap();
+        let mut out = String::with_capacity(text.len());
+        for line in text.lines() {
+            if line.split_whitespace().any(|t| t == "T-001") {
+                let pos = line.find("created:").unwrap() + "created:".len();
+                out.push_str(&line[..pos]);
+                out.push_str("2020-01-01");
+                out.push_str(&line[pos + 10..]);
+            } else {
+                out.push_str(line);
+            }
+            out.push('\n');
+        }
+        std::fs::write(&p, out).unwrap();
+
+        // dry_run plans with zero writes — same payload shape
+        let v = call(&s, "reap", json!({"dry-run": true})).unwrap();
+        assert_eq!(v["dry_run"], true);
+        assert_eq!(v["committed"], false);
+        assert_eq!(v["reaped"][0]["id"], "T-001");
+        assert!(v["reaped"][0]["idle_days"].as_i64().unwrap() > 100);
+        // the real sweep — no_commit server → committed false,
+        // but the status still reverted on disk
+        let v = call(&s, "reap", json!({"idle-days": 3})).unwrap();
+        assert_eq!(v["dry_run"], false);
+        assert_eq!(v["committed"], false);
+        assert_eq!(v["reaped"].as_array().unwrap().len(), 1);
+        assert_eq!(v["errors"], json!([]));
+        let v = call(&s, "todo.list", Value::Null).unwrap();
+        let mut statuses: Vec<(&str, &str)> = v
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| (i["id"].as_str().unwrap(), i["status"].as_str().unwrap()))
+            .collect();
+        statuses.sort();
+        assert_eq!(statuses, [("T-001", "open"), ("T-002", "in-progress")]);
+        // swept clean → empty plan, still a clean payload
+        let v = call(&s, "reap", json!({})).unwrap();
+        assert_eq!(v["reaped"], json!([]));
+        assert_eq!(v["committed"], false);
     }
 
     #[test]

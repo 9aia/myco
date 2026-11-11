@@ -54,6 +54,7 @@ pavo-testkit = { git = "https://github.com/9aia/pavo" }
 tempfile.workspace = true
 temp-env.workspace = true
 insta.workspace = true
+time.workspace = true
 
 [lints]
 workspace = true

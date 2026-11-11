@@ -52,6 +52,7 @@ pub mod ops;
 pub mod org;
 pub mod plan;
 pub mod proposal;
+pub mod reap;
 pub mod redo;
 pub mod registry;
 pub mod report;

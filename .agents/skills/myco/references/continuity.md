@@ -79,6 +79,31 @@ Interrupted items surface as `⚡` in `status`, `status --prompt`,
 interrupt is flagged under `report`'s "stale claims" — the
 no-hook safety net.
 
+## Scheduled sweep — `myco reap`
+
+```bash
+myco reap [--idle-days N] [--session sepia:<id>] [--dry-run] [--json]
+```
+
+The bulk form of `interrupt`, meant for a scheduler (a peregrin
+campaign, cron): every live `claimed`/`in-progress` item whose last
+activity — latest handoff entry, else `created` — is older than
+`--idle-days` (default 3, the same threshold `report`'s stale-claims
+finding uses) reverts to `open` with an `interrupted — reaped after
+N idle days` handoff. The whole sweep is **one commit**
+(`chore: reap N stale claims`); per-item failures land in
+`errors[]` without aborting the rest.
+
+`--session` scopes to items whose claim tag names that session —
+a reaper can drain one dead session's leftovers without touching
+anyone else's. `--dry-run` lists the sweep (`reaped[]` in `--json`)
+with zero writes. `--json` shape:
+`{"reaped": [{id, title, owner, session, idle_days}], "errors":
+[{id, error}], "dry_run": bool, "committed": bool}`. On the wire
+(`myco serve`/`batch`, method `reap`) the params are
+`{"idle-days": N, "session": "…", "actor": "…", "dry-run": true}` —
+same hyphenated names as `item.move`.
+
 ## Restart — `myco resume`
 
 ```bash

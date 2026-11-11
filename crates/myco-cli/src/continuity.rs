@@ -45,7 +45,7 @@ pub const INTERRUPT_NOTE: &str = "interrupted";
 pub const CLAIM_NOTE: &str = "claimed";
 
 /// `--session` values must fit the `session:<id>` heading token.
-fn validate_session(s: &str) -> Result<(), String> {
+pub(crate) fn validate_session(s: &str) -> Result<(), String> {
     if !is_valid_session(s) {
         return Err(format!(
             "invalid --session {s:?} — sessions match `[A-Za-z0-9._:-]+`"

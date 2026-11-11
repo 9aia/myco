@@ -658,3 +658,287 @@ fn session_tag_validation_and_edges() {
     let out = run(d.path(), &["interrupt", "--session", "sepia:s1", "--json"]);
     assert_eq!(json(&out)["interrupted"].as_array().unwrap().len(), 1);
 }
+
+// ---------------------------------------------------------------- reap
+
+/// `N` days before today as `YYYY-MM-DD` — the test clock the
+/// reap sweep's idle math reads (`created:`/handoff dates).
+fn days_ago(n: i64) -> String {
+    let d = time::OffsetDateTime::now_utc().date() - time::Duration::days(n);
+    myco_core::date::render(d)
+}
+
+/// Replace the 10-char date after `created:`/`created = "` in `s`.
+fn set_created_date(s: &str, needle: &str, date: &str) -> String {
+    match s.find(needle) {
+        Some(pos) => {
+            let start = pos + needle.len();
+            let end = (start + 10).min(s.len());
+            format!("{}{}{}", &s[..start], date, &s[end..])
+        }
+        None => s.to_string(),
+    }
+}
+
+/// Backdate the `created:` token on the TODO.md line carrying `id`
+/// — the idle clock for handoff-less items.
+fn backdate_created(wt: &Path, id: &str, date: &str) {
+    let p = wt.join("TODO.md");
+    let s = std::fs::read_to_string(&p).unwrap();
+    let out = s
+        .lines()
+        .map(|l| {
+            if l.split_whitespace().any(|t| t == id) {
+                set_created_date(l, "created:", date)
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let out = if s.ends_with('\n') {
+        format!("{out}\n")
+    } else {
+        out
+    };
+    std::fs::write(p, out).unwrap();
+}
+
+/// Same backdate for a file-backed item — the `created = "…"`
+/// frontmatter key (`rel` from `item show --json`'s `location`).
+fn backdate_file_created(wt: &Path, rel: &str, date: &str) {
+    let p = wt.join(rel);
+    let s = std::fs::read_to_string(&p).unwrap();
+    std::fs::write(p, set_created_date(&s, "created = \"", date)).unwrap();
+}
+
+/// Rewrite every `## YYYY-MM-DD` heading date in a handoffs file —
+/// the claim tag's write date feeds the idle clock too.
+fn backdate_handoffs(wt: &Path, id: &str, date: &str) {
+    let p = wt.join(format!("handoffs/{id}.md"));
+    let s = std::fs::read_to_string(&p).unwrap();
+    let out = s
+        .lines()
+        .map(|l| {
+            if l.starts_with("## ") && l.len() >= 13 {
+                format!("## {}{}", date, &l[13..])
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(p, format!("{out}\n")).unwrap();
+}
+
+/// The `reaped[].id` list of a reap `--json` payload.
+fn reaped_ids(v: &Value) -> Vec<String> {
+    v["reaped"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn reap_sweeps_idle_claims_in_one_commit() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "idle wip"]);
+    run(d.path(), &["todo", "add", "idle claim"]);
+    run(d.path(), &["todo", "add", "fresh wip"]);
+    run(d.path(), &["todo", "add", "untouched open"]);
+    run(d.path(), &["issue", "new", "idle bug"]);
+    run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "in-progress"],
+    );
+    run(
+        d.path(),
+        &[
+            "item", "set", "T-002", "--status", "claimed", "--owner", "devin",
+        ],
+    );
+    run(
+        d.path(),
+        &["item", "set", "T-003", "--status", "in-progress"],
+    );
+    run(
+        d.path(),
+        &["item", "set", "I-001", "--status", "in-progress"],
+    );
+    // everything idle 10d — tasks via the TODO line, the issue via
+    // its frontmatter
+    let old = days_ago(10);
+    for id in ["T-001", "T-002", "T-003", "T-004"] {
+        backdate_created(&wt, id, &old);
+    }
+    let out = run(d.path(), &["item", "show", "I-001", "--json"]);
+    let rel = json(&out)["location"].as_str().unwrap().to_string();
+    backdate_file_created(&wt, &rel, &old);
+    // T-003's latest handoff is today — last activity wins over
+    // `created`, so it survives the sweep
+    run(d.path(), &["handoff", "T-003", "--note", "still warm"]);
+
+    let before = git(&wt, &["rev-list", "--count", "HEAD"]);
+    let out = run(d.path(), &["reap", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["dry_run"], false);
+    assert_eq!(v["committed"], true);
+    assert!(v["errors"].as_array().unwrap().is_empty());
+    // ledger order — tasks first, file kinds after
+    assert_eq!(reaped_ids(&v), ["T-001", "T-002", "I-001"]);
+    let e = &v["reaped"][0];
+    assert_eq!(e["title"], "idle wip");
+    assert_eq!(e["owner"], Value::Null);
+    assert_eq!(e["session"], Value::Null);
+    assert!(e["idle_days"].as_i64().unwrap() >= 9, "{e}");
+    let e = &v["reaped"][1];
+    assert_eq!(e["owner"], "devin");
+
+    // ONE commit for the whole sweep
+    assert_eq!(
+        git(&wt, &["log", "-1", "--format=%s"]),
+        "chore: reap 3 stale claims"
+    );
+    assert_eq!(
+        git(&wt, &["rev-list", "--count", "HEAD"]),
+        (before.parse::<usize>().unwrap() + 1).to_string()
+    );
+
+    // every hit reverted to open + carries the reap marker
+    let todo = read(&wt, "TODO.md");
+    for id in ["T-001", "T-002"] {
+        assert!(todo.contains(&format!("- [ ] {id}")), "{todo}");
+    }
+    // T-003 (fresh handoff) and T-004 (open) untouched
+    assert!(todo.contains("status:in-progress"), "{todo}");
+    assert_eq!(todo.matches("status:in-progress").count(), 1, "{todo}");
+    assert!(!todo.contains("status:claimed"), "{todo}");
+    let h = read(&wt, "handoffs/T-001.md");
+    assert!(h.contains("interrupted — reaped after"), "{h}");
+    assert!(h.contains("idle days"), "{h}");
+    // the issue file reverted too — its handoff got the marker
+    let h = read(&wt, "handoffs/I-001.md");
+    assert!(h.contains("interrupted — reaped after"), "{h}");
+    let out = run(d.path(), &["item", "show", "I-001", "--json"]);
+    assert_eq!(json(&out)["item"]["status"], "open");
+    assert_eq!(json(&out)["interrupted"], true);
+
+    // a second sweep finds nothing — clean no-op, no commit
+    let before = git(&wt, &["rev-list", "--count", "HEAD"]);
+    let out = run(d.path(), &["reap", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(reaped_ids(&v), Vec::<String>::new());
+    assert_eq!(v["committed"], false);
+    assert_eq!(git(&wt, &["rev-list", "--count", "HEAD"]), before);
+}
+
+#[test]
+fn reap_idle_days_session_scope_and_dry_run() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "s1 work"]);
+    run(d.path(), &["todo", "add", "s2 work"]);
+    run(d.path(), &["todo", "add", "loose work"]);
+    run(
+        d.path(),
+        &[
+            "item",
+            "set",
+            "T-001",
+            "--status",
+            "in-progress",
+            "--session",
+            "sepia:s1",
+        ],
+    );
+    run(
+        d.path(),
+        &[
+            "item",
+            "set",
+            "T-002",
+            "--status",
+            "claimed",
+            "--owner",
+            "devin",
+            "--session",
+            "sepia:s2",
+        ],
+    );
+    run(
+        d.path(),
+        &["item", "set", "T-003", "--status", "in-progress"],
+    );
+    // everything idle 10d — created AND the claim-tag handoff
+    // entries (the tag's write date is the last activity)
+    let old = days_ago(10);
+    for id in ["T-001", "T-002", "T-003"] {
+        backdate_created(&wt, id, &old);
+    }
+    // the session-tagged claims have handoff entries — their write
+    // dates are the last activity too (T-003 has none: sessionless)
+    backdate_handoffs(&wt, "T-001", &old);
+    backdate_handoffs(&wt, "T-002", &old);
+
+    // --dry-run: lists the sweep, writes nothing
+    let before = git(&wt, &["rev-list", "--count", "HEAD"]);
+    let out = run(
+        d.path(),
+        &["reap", "--dry-run", "--session", "sepia:s1", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["dry_run"], true);
+    assert_eq!(v["committed"], false);
+    assert_eq!(reaped_ids(&v), ["T-001"]);
+    assert_eq!(v["reaped"][0]["session"], "sepia:s1");
+    assert_eq!(
+        git(&wt, &["rev-list", "--count", "HEAD"]),
+        before,
+        "dry-run committed"
+    );
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("status:in-progress"), "{todo}");
+
+    // --session scopes the real sweep the same way
+    let out = run(
+        d.path(),
+        &[
+            "reap",
+            "--session",
+            "sepia:s1",
+            "--idle-days",
+            "5",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(reaped_ids(&v), ["T-001"]);
+    assert_eq!(v["committed"], true);
+    assert_eq!(
+        git(&wt, &["log", "-1", "--format=%s"]),
+        "chore: reap 1 stale claims"
+    );
+    // the marker keeps the session tag — resume shows provenance
+    let h = read(&wt, "handoffs/T-001.md");
+    assert!(h.contains("session:sepia:s1"), "{h}");
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("status:claimed"), "{todo}"); // T-002
+    assert!(todo.contains("status:in-progress"), "{todo}"); // T-003
+
+    // --idle-days respected: 10d idle survives a 20d threshold
+    let out = run(d.path(), &["reap", "--idle-days", "20", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(reaped_ids(&json(&out)), Vec::<String>::new());
+    assert_eq!(json(&out)["committed"], false);
+    // …and a 5d threshold takes the rest, unscoped
+    let out = run(d.path(), &["reap", "--idle-days", "5", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(reaped_ids(&json(&out)), ["T-002", "T-003"]);
+    let todo = read(&wt, "TODO.md");
+    assert!(!todo.contains("status:"), "{todo}");
+}
