@@ -8,7 +8,6 @@ documented at source (doc comments).
 - [myco-store](/myco/api/myco_store/index.html) — port
 - [myco-ops](/myco/api/myco_ops/index.html) — ops
 - [myco-driver](/myco/api/myco_driver/index.html) — adapter
-- [myco-git](/myco/api/myco_git/index.html) — adapter
 - [myco-index-redb](/myco/api/myco_index_redb/index.html) — adapter
 - [myco-shell](/myco/api/myco_shell/index.html) — adapter
 - [myco-store-md](/myco/api/myco_store_md/index.html) — adapter
