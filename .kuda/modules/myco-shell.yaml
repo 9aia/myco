@@ -5,7 +5,7 @@ api:
 - name: captures_output
   kind: function
   file: crates/myco-shell/src/lib.rs
-  line: 54
+  line: 55
   module: myco-shell
 - name: myco-shell
   kind: module
@@ -15,27 +15,27 @@ api:
 - name: output
   kind: function
   file: crates/myco-shell/src/lib.rs
-  line: 25
+  line: 26
   module: myco-shell
 - name: run
   kind: function
   file: crates/myco-shell/src/lib.rs
-  line: 17
+  line: 18
   module: myco-shell
 - name: runs_in_worktree
   kind: function
   file: crates/myco-shell/src/lib.rs
-  line: 44
+  line: 45
   module: myco-shell
 - name: tests
   kind: module
   file: crates/myco-shell/src/lib.rs
-  line: 34
+  line: 35
   module: myco-shell
 - name: tmpdir
   kind: function
   file: crates/myco-shell/src/lib.rs
-  line: 37
+  line: 38
   module: myco-shell
 deps: []
 notes: ''
@@ -48,7 +48,7 @@ provenance:
   - crates/myco-shell/src/lib.rs
   hashes:
   - 29badfbe337fbf8e0367f2fa9a7857042662a868
-  - 1a9f28d5ae0c3fc4ea6587fa0e94a963aee430ea
-  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
-  generated_at: '1794437755'
+  - 3c7453d23d6724d0b6a47fe69f2152f71fdbba96
+  commit_sha: d1e0895c483db87c746252fc7ace2cfd503450d8
+  generated_at: '1794440143'
   generator: kuda-template/0.1.4

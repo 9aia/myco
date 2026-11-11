@@ -37,6 +37,11 @@ api:
   file: crates/myco-ops/src/discover.rs
   line: 21
   module: myco-ops
+- name: FALLBACK
+  kind: const
+  file: crates/myco-ops/src/vcs.rs
+  line: 53
+  module: myco-ops
 - name: FILE
   kind: const
   file: crates/myco-ops/src/history.rs
@@ -187,27 +192,23 @@ api:
   file: crates/myco-ops/src/universe.rs
   line: 42
   module: myco-ops
+- name: attach_branch
+  kind: function
+  file: crates/myco-ops/src/vcs.rs
+  line: 121
+  module: myco-ops
 - name: autocommit
   kind: function
   file: crates/myco-ops/src/ops.rs
   line: 288
   module: myco-ops
-- name: autocommit_stamps_actor_trailer
-  kind: function
-  file: crates/myco-ops/src/ops.rs
-  line: 747
-  module: myco-ops
-- name: backlog
-  kind: function
-  file: crates/myco-ops/src/items.rs
-  line: 160
-  module: myco-ops
-api_omitted: 243
+api_omitted: 278
 deps:
 - camino
 - lasius-core
+- lasius-vcs
+- lasius-vcs-git
 - myco-core
-- myco-git
 - myco-index
 - myco-store
 - scarab-config
@@ -226,6 +227,8 @@ deps:
 - serde
 - myco-index
 - myco-index-redb
+- lasius_vcs
+- lasius_vcs_git
 - camino
 - scarab_config
 notes: ''
@@ -239,7 +242,7 @@ verify:
 - crates/myco-ops/src/links.rs
 - crates/myco-ops/src/ops.rs
 - crates/myco-ops/src/universe.rs
-- crates/myco-ops/src/verb.rs
+- crates/myco-ops/src/vcs.rs
 provenance:
   files:
   - crates/myco-ops/Cargo.toml
@@ -251,20 +254,22 @@ provenance:
   - crates/myco-ops/src/links.rs
   - crates/myco-ops/src/ops.rs
   - crates/myco-ops/src/universe.rs
+  - crates/myco-ops/src/vcs.rs
   - crates/myco-ops/src/verb.rs
   - crates/myco-ops/src/view.rs
   hashes:
-  - 516e91db477a3e9fa80bc6986884ca52a64bd6f7
+  - 0e86d08e41a5fce70cb7cc17e958b5f205f628ec
   - 8a6e88cf229368476b17e144a17096b4e942c37a
-  - 4eb7d2e876d8152e7cdc662bd9d507e45b917c10
-  - d68f4d02abaec478c8ca1ab8258a72a98ba5bbbf
+  - 9a3c04a646346851a0326d448e9d7836d1905644
+  - 9e40ec197966b497677d61c378f6b9ad1e3d5e48
   - 8e19c076f4412a9ffb2df900ac9e83021e04f166
-  - ebed441ad483d591b17b7da5bee9fa07a7280d61
+  - fefad98d22881711edea0ee44b6a3f553b3b1687
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
-  - 4ec32aaded4ded15c7f683df03a98deb885e819f
-  - dbbbabb908dffd85b4bed4213d122d24398f8547
+  - 0cda1cfae63fb408b2386ddf344413afb715cc02
+  - a838d1a24cdaa1f6cf4109a4b8ec336c24dd9a25
+  - 13ebcffb627c04d4af7f1766ec043f867e63110e
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
-  generated_at: '1794439256'
+  commit_sha: d1e0895c483db87c746252fc7ace2cfd503450d8
+  generated_at: '1794440143'
   generator: kuda-template/0.1.4

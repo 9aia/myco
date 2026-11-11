@@ -207,7 +207,6 @@ deps:
 - camino
 - crossterm
 - myco-core
-- myco-git
 - myco-ops
 - myco-store
 - myco-store-md
@@ -241,12 +240,12 @@ provenance:
   - crates/myco-tui/src/render.rs
   - crates/myco-tui/tests/pty.rs
   hashes:
-  - 6a69e40e4c2615814ed5890e0d7efbe9b1380753
-  - 627393837c821489f297ffb7f2258ccb72b58acc
+  - 82131627bab7f97614482ed91e11f85ebd8adbf5
+  - c7dbefba729f441f1223618246883f4d69269f74
   - 437a7fc509d6717d52a2b32a7dc1fef8854be650
   - 7ac02453b56f59bc259c4117c493f3c16730bff7
   - 72a7123c096ed41deac8a13b02ca0c56a9fa663a
   - 6d3bdf9aaa624a5d2e34c1a6eb84fa757c96a0f0
-  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
-  generated_at: '1794439256'
+  commit_sha: d1e0895c483db87c746252fc7ace2cfd503450d8
+  generated_at: '1794440143'
   generator: kuda-template/0.1.4
