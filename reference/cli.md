@@ -56,6 +56,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco commit`↴](#myco-commit)
 * [`myco undo`↴](#myco-undo)
 * [`myco redo`↴](#myco-redo)
+* [`myco sync`↴](#myco-sync)
 * [`myco view`↴](#myco-view)
 * [`myco next`↴](#myco-next)
 * [`myco status`↴](#myco-status)
@@ -94,6 +95,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `commit` — Stage + commit worktree changes (conventional message).
 * `undo` — Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the undone commit is journaled for `redo`. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`). `--list` shows the redoable stack without mutating.
 * `redo` — Redo the last undo — pops the undo journal and restores the commit `myco undo` moved away from (`git reset --hard <target>`). Repeatable while entries remain; the stack self-invalidates when the ledger moves (any commit/pull/manual git op since the undo). Refuses on a dirty worktree.
+* `sync` — Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves, refs stay bound to the remote). Mutating verbs refuse while behind (`ensure_synced`), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.
 * `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit.
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized.
@@ -934,6 +936,18 @@ Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~
 Redo the last undo — pops the undo journal and restores the commit `myco undo` moved away from (`git reset --hard <target>`). Repeatable while entries remain; the stack self-invalidates when the ledger moves (any commit/pull/manual git op since the undo). Refuses on a dirty worktree.
 
 **Usage:** `myco redo`
+
+
+
+## `myco sync`
+
+Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves, refs stay bound to the remote). Mutating verbs refuse while behind (`ensure_synced`), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.
+
+**Usage:** `myco sync [OPTIONS]`
+
+###### **Options:**
+
+* `--abort` — Abort a stopped rebase/merge (`git rebase --abort`) and return to the pre-sync tip.
 
 
 
