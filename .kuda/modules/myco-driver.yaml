@@ -2,6 +2,11 @@ name: myco-driver
 path: crates/myco-driver/Cargo.toml
 purpose: tamias-driver-myco — pavo view driver over a repo's project/ ledger (reads via myco-ops)
 api:
+- name: BIN
+  kind: const
+  file: crates/myco-driver/tests/shim.rs
+  line: 20
+  module: myco-driver
 - name: CONFIG
   kind: const
   file: crates/myco-driver/src/data.rs
@@ -42,10 +47,80 @@ api:
   file: crates/myco-driver/src/ops.rs
   line: 30
   module: myco-driver
+- name: Serve
+  kind: type
+  file: crates/myco-driver/tests/serve.rs
+  line: 61
+  module: myco-driver
+- name: Serve
+  kind: type
+  file: crates/myco-driver/tests/shim.rs
+  line: 125
+  module: myco-driver
 - name: Snapshot
   kind: type
   file: crates/myco-driver/src/data.rs
   line: 79
+  module: myco-driver
+- name: absorb_comments_errors_and_dry_run
+  kind: function
+  file: crates/myco-driver/tests/edges.rs
+  line: 459
+  module: myco-driver
+- name: absorb_comments_rg_failure_and_garbage_output
+  kind: function
+  file: crates/myco-driver/tests/edges.rs
+  line: 487
+  module: myco-driver
+- name: absorb_comments_to_backlog_dedups
+  kind: function
+  file: crates/myco-driver/tests/parity.rs
+  line: 442
+  module: myco-driver
+- name: absorb_github_json_and_csv
+  kind: function
+  file: crates/myco-driver/tests/parity.rs
+  line: 642
+  module: myco-driver
+- name: absorb_github_sniffing_and_states
+  kind: function
+  file: crates/myco-driver/tests/edges.rs
+  line: 564
+  module: myco-driver
+- name: absorb_github_wrapped_and_row_warnings
+  kind: function
+  file: crates/myco-driver/tests/edges.rs
+  line: 639
+  module: myco-driver
+- name: absorb_jira_csv
+  kind: function
+  file: crates/myco-driver/tests/edges.rs
+  line: 518
+  module: myco-driver
+- name: absorb_jira_csv_imports_and_dedups
+  kind: function
+  file: crates/myco-driver/tests/parity.rs
+  line: 550
+  module: myco-driver
+- name: absorb_jira_tolerant_csv
+  kind: function
+  file: crates/myco-driver/tests/edges.rs
+  line: 594
+  module: myco-driver
+- name: adr_files
+  kind: function
+  file: crates/myco-driver/tests/id_repair.rs
+  line: 95
+  module: myco-driver
+- name: adr_new_and_supersede
+  kind: function
+  file: crates/myco-driver/tests/items.rs
+  line: 660
+  module: myco-driver
+- name: alias_appends_extra_args_via_cli_and_batch
+  kind: function
+  file: crates/myco-driver/tests/cfgverbs.rs
+  line: 110
   module: myco-driver
 - name: argv
   kind: function
@@ -61,6 +136,26 @@ api:
   kind: function
   file: crates/myco-driver/src/ops.rs
   line: 270
+  module: myco-driver
+- name: auto_fetch_gates_mutations_and_config_opts_out
+  kind: function
+  file: crates/myco-driver/tests/edges.rs
+  line: 964
+  module: myco-driver
+- name: backlog_add_and_list
+  kind: function
+  file: crates/myco-driver/tests/items.rs
+  line: 259
+  module: myco-driver
+- name: bad_config_verb_warns_and_is_skipped
+  kind: function
+  file: crates/myco-driver/tests/cfgverbs.rs
+  line: 198
+  module: myco-driver
+- name: board_views
+  kind: function
+  file: crates/myco-driver/tests/views.rs
+  line: 198
   module: myco-driver
 - name: body_payload
   kind: function
@@ -80,129 +175,34 @@ api:
 - name: capabilities_json
   kind: function
   file: crates/myco-driver/src/main.rs
-  line: 49
+  line: 57
   module: myco-driver
-- name: children_rows
+- name: check_conflict_claim_not_fixed
   kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 794
-  module: myco-driver
-- name: col
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 45
-  module: myco-driver
-- name: config_layered
-  kind: function
-  file: crates/myco-driver/src/data.rs
-  line: 37
-  module: myco-driver
-- name: data
-  kind: module
-  file: crates/myco-driver/src/main.rs
-  line: 40
-  module: myco-driver
-- name: default
-  kind: function
-  file: crates/myco-driver/src/data.rs
-  line: 101
-  module: myco-driver
-- name: degraded_snapshot_yields_error_payloads
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 1019
-  module: myco-driver
-- name: dispatch
-  kind: function
-  file: crates/myco-driver/src/main.rs
-  line: 59
-  module: myco-driver
-- name: driver_passes_pavo_conformance
-  kind: function
-  file: crates/myco-driver/tests/conformance.rs
-  line: 12
-  module: myco-driver
-- name: error_payload
-  kind: function
-  file: crates/myco-driver/src/data.rs
-  line: 127
-  module: myco-driver
-- name: every_binding_is_a_known_query
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 1010
-  module: myco-driver
-- name: failed
-  kind: function
-  file: crates/myco-driver/src/data.rs
-  line: 117
-  module: myco-driver
-- name: files_rows
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 484
-  module: myco-driver
-- name: find_item
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 677
-  module: myco-driver
-- name: graph
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 69
-  module: myco-driver
-- name: graph_payload
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 838
-  module: myco-driver
-- name: handoffs_rows
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 893
-  module: myco-driver
-- name: is_surface
-  kind: function
-  file: crates/myco-driver/src/ops.rs
-  line: 32
-  module: myco-driver
-- name: item
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 669
-  module: myco-driver
-- name: item_detail
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 693
-  module: myco-driver
-- name: item_filters
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 331
-  module: myco-driver
-- name: item_query_needs_id
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 1034
-  module: myco-driver
-- name: item_root
-  kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 948
-  module: myco-driver
-- name: item_row
-  kind: function
-  file: crates/myco-driver/src/views.rs
+  file: crates/myco-driver/tests/id_repair.rs
   line: 364
   module: myco-driver
-- name: item_tree
+- name: check_fix_collision_skips_loser
   kind: function
-  file: crates/myco-driver/src/views.rs
-  line: 558
+  file: crates/myco-driver/tests/id_repair.rs
+  line: 252
   module: myco-driver
-api_omitted: 45
+- name: check_fix_moves_misplaced_item_files
+  kind: function
+  file: crates/myco-driver/tests/lifecycle.rs
+  line: 252
+  module: myco-driver
+- name: check_fix_repoints_references
+  kind: function
+  file: crates/myco-driver/tests/id_repair.rs
+  line: 218
+  module: myco-driver
+- name: check_fix_skips_when_number_held
+  kind: function
+  file: crates/myco-driver/tests/id_repair.rs
+  line: 285
+  module: myco-driver
+api_omitted: 310
 deps:
 - camino
 - myco
@@ -216,7 +216,10 @@ deps:
 - pavo-protocol
 - serde
 - serde_json
+- insta
 - pavo-testkit
+- temp-env
+- tempfile
 - serde_json
 - myco-core
 - myco-ops
@@ -227,12 +230,15 @@ deps:
 notes: ''
 verify:
 - crates/myco-driver/Cargo.toml
-- crates/myco-driver/src/data.rs
 - crates/myco-driver/src/main.rs
+- crates/myco-driver/src/data.rs
 - crates/myco-driver/src/ops.rs
 - crates/myco-driver/src/surface.rs
 - crates/myco-driver/src/views.rs
+- crates/myco-driver/tests/cfgverbs.rs
 - crates/myco-driver/tests/conformance.rs
+- crates/myco-driver/tests/continuity.rs
+- crates/myco-driver/tests/edges.rs
 provenance:
   files:
   - crates/myco-driver/Cargo.toml
@@ -241,15 +247,39 @@ provenance:
   - crates/myco-driver/src/ops.rs
   - crates/myco-driver/src/surface.rs
   - crates/myco-driver/src/views.rs
+  - crates/myco-driver/tests/cfgverbs.rs
   - crates/myco-driver/tests/conformance.rs
+  - crates/myco-driver/tests/continuity.rs
+  - crates/myco-driver/tests/edges.rs
+  - crates/myco-driver/tests/id_repair.rs
+  - crates/myco-driver/tests/items.rs
+  - crates/myco-driver/tests/lifecycle.rs
+  - crates/myco-driver/tests/multi_id.rs
+  - crates/myco-driver/tests/next.rs
+  - crates/myco-driver/tests/parity.rs
+  - crates/myco-driver/tests/serve.rs
+  - crates/myco-driver/tests/shim.rs
+  - crates/myco-driver/tests/views.rs
   hashes:
-  - 36f747a58ea1d30b6b12a32374611f27db8f48ec
+  - e731c80f23fd3be915e277050395e1ac7dcc1331
   - 0f275d5c8939904eba41c54b9bacb80a1fbc902b
-  - 2c33e37d05f94b027a8338e7fbec7697814d3425
-  - 484efbc9be9e2219f7ff2f64f21ba8be9ce318ec
+  - 3372ffc3b052071813b8133dc09d79d496db3925
+  - d6c7303e4ae870d79025b49919ef785a9e9782ab
   - 70f88ad7103cc88539c46a8f2542392ec91f9b13
   - 62557dcc43c2e25a0c3af911492e4d63ed4e81c9
+  - a984eca8eea928be5520ffbb488388139c046536
   - bcf687da55f4d327b1667d16099ac7104b0abdb8
-  commit_sha: 07fb8c74e971eeee64a11145bc7de41d56d09d46
-  generated_at: '1794361812'
-  generator: kuda-template/0.1.2
+  - 64fb1bb7eb99a59c72bd9810d75e4ff707a57d49
+  - 705a0f8bb3ed1cfdc1757b49ec901dfe62635cba
+  - ae05ae717980ab1abe774f5d76666f1db10f4f86
+  - 988c5d7e2df98cb7d4dd4a2739a80dafc573ae50
+  - 342f2866ca4709df327f4542c88bb7505769dccd
+  - b76ec5f31761fe21c4c26f90b2b5305d05d090ee
+  - f22ec5cfb5fb7166ae7cbfc7fcc454eaf7cf0857
+  - b50248c6793d48d9a667149284bd1b56ca88225b
+  - 2a40dc06bdbccd62b0f3c6d4b29e9e75712b5331
+  - 7709e3b39bd7e361982e898600a0eb3c27bf67e5
+  - 95b6dfc21df06b1e82653f4b590d7c06572c2548
+  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
+  generated_at: '1794437755'
+  generator: kuda-template/0.1.4

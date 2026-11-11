@@ -18,12 +18,13 @@ modules:
 - myco-testkit
 - myco-tui
 - project
+- sturn-wal
 - xtask
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: b41dbc90f322875ffca3544d9f12bedf11d92ce3
-files_total: 249
+tree_digest: ba2683a89a23550c58bd80fbfedca70ca60c3199
+files_total: 275
 provenance:
   files:
   - Cargo.toml
@@ -45,13 +46,13 @@ provenance:
   - package.json
   - xtask/Cargo.toml
   hashes:
-  - a95fdb181eaecb3a7f1eda1a3100bba6d0bb1c94
-  - 92c3a907906b0dc8e0091905081744cc543b95e7
-  - af22350c9d0ea9600fd920c6f69729be43074044
+  - 81f000ed39b322feaf6c1a27119dc53584e3de20
+  - 10d3ec5848d7c3abacd357e8931a1d33583fbbf5
+  - 04a5fa68eb1f334cb250b7e0cadcfed88063a3aa
   - 23f74adbbc8eef38ec170c5b09d557ad1af36096
   - 1a25ef123f1406c0e6eb8b48a0d2be5084a400e9
   - f75323e2b82195a4149a5fb91548e75ba386acbf
-  - 36f747a58ea1d30b6b12a32374611f27db8f48ec
+  - e731c80f23fd3be915e277050395e1ac7dcc1331
   - 432464a491cc0c5d00b71a63bd0392634e09f7b3
   - 98ad0e8e8540bb83e139ee0ceadf6fc80dcf5348
   - ed7878723f2aeca5305d834b0ab071f7ba611399
@@ -61,8 +62,8 @@ provenance:
   - 25f507bd5a36d534979028b1f69ebc144b081884
   - df0b6d5c2130f3266885cbf75cf653df9869ea2c
   - 09b1d91010143e6a3d82af92584a4f393a6d5e74
-  - 8bff61b145c701208864f3d424121159d9078c8c
+  - a37048abfab3924287e580ee2e09f3ee8abd0dcc
   - 3bb61ce46463344ee41a3f06bc39d58040459339
-  commit_sha: 4246abfa8862da3ec7efbd1917b33b848f60dfaf
-  generated_at: '1794402062'
+  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
+  generated_at: '1794437755'
   generator: kuda/0.1.0

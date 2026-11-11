@@ -5,52 +5,67 @@ api:
 - name: check
   kind: function
   file: xtask/src/main.rs
-  line: 57
+  line: 62
   module: xtask
 - name: coverage
   kind: function
   file: xtask/src/main.rs
-  line: 86
+  line: 91
   module: xtask
 - name: have
   kind: function
   file: xtask/src/main.rs
-  line: 37
+  line: 42
   module: xtask
 - name: have_cargo_sub
   kind: function
   file: xtask/src/main.rs
-  line: 47
+  line: 52
+  module: xtask
+- name: host_triple
+  kind: function
+  file: xtask/src/main.rs
+  line: 157
   module: xtask
 - name: install
   kind: function
   file: xtask/src/main.rs
-  line: 106
+  line: 111
   module: xtask
 - name: main
   kind: function
   file: xtask/src/main.rs
-  line: 129
+  line: 227
+  module: xtask
+- name: pack
+  kind: function
+  file: xtask/src/main.rs
+  line: 179
   module: xtask
 - name: run
   kind: function
   file: xtask/src/main.rs
-  line: 13
+  line: 18
   module: xtask
 - name: run_in
   kind: function
   file: xtask/src/main.rs
-  line: 24
+  line: 29
   module: xtask
 - name: site
   kind: function
   file: xtask/src/main.rs
-  line: 112
+  line: 210
+  module: xtask
+- name: target_dir
+  kind: function
+  file: xtask/src/main.rs
+  line: 149
   module: xtask
 - name: test
   kind: function
   file: xtask/src/main.rs
-  line: 76
+  line: 81
   module: xtask
 - name: xtask
   kind: module
@@ -68,7 +83,7 @@ provenance:
   - xtask/src/main.rs
   hashes:
   - 3bb61ce46463344ee41a3f06bc39d58040459339
-  - 773f6d024b2b2368dd3b68fefe9d228b66fa67f6
-  commit_sha: 0f9aa52e4b492d362cf8e0492f6da923db480e0f
-  generated_at: '1793653566'
-  generator: kuda-template/0.1.2
+  - e4a0faad0471dbb07e8e09f691a7937ab106933c
+  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
+  generated_at: '1794437755'
+  generator: kuda-template/0.1.4

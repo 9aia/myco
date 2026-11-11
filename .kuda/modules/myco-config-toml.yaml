@@ -10,17 +10,17 @@ api:
 - name: default_search_builds_candidates
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 138
+  line: 144
   module: myco-config-toml
 - name: default_view_is_a_scalar_repo_wins
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 240
+  line: 246
   module: myco-config-toml
 - name: explicit_missing_file_errors
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 115
+  line: 121
   module: myco-config-toml
 - name: load
   kind: function
@@ -45,12 +45,12 @@ api:
 - name: parses_project_dir
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 124
+  line: 130
   module: myco-config-toml
 - name: tests
   kind: module
   file: crates/myco-config-toml/src/lib.rs
-  line: 111
+  line: 117
   module: myco-config-toml
 - name: user_layer
   kind: function
@@ -60,17 +60,17 @@ api:
 - name: verbs_parse_and_merge_with_repo_winning
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 169
+  line: 175
   module: myco-config-toml
 - name: verbs_reject_mixed_kinds_and_unknown_fields
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 216
+  line: 222
   module: myco-config-toml
 - name: views_merge_with_user_winning
   kind: function
   file: crates/myco-config-toml/src/lib.rs
-  line: 274
+  line: 280
   module: myco-config-toml
 deps:
 - myco-config
@@ -88,7 +88,7 @@ provenance:
   - crates/myco-config-toml/src/lib.rs
   hashes:
   - 1a25ef123f1406c0e6eb8b48a0d2be5084a400e9
-  - 5033f9280221c543c5f5c22cf635b87fc5a0cee8
-  commit_sha: 07fb8c74e971eeee64a11145bc7de41d56d09d46
-  generated_at: '1794361812'
-  generator: kuda-template/0.1.2
+  - edf955577bde3526891c4c686838f262a53e2ab4
+  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
+  generated_at: '1794437755'
+  generator: kuda-template/0.1.4

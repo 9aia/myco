@@ -202,7 +202,7 @@ api:
   file: crates/myco-core/src/kind.rs
   line: 182
   module: myco-core
-api_omitted: 384
+api_omitted: 386
 deps:
 - schemars
 - serde
@@ -265,13 +265,13 @@ provenance:
   - a1461918ab4b25d64c18a88bee7e27ac5ba89b61
   - 9141235a6cb438570b3221e892f9cfb86b7af42a
   - 35994c7e790eedc768987fd5c6b3e3d9b44338f3
-  - 729de5482a6022a91af244ac5eaaac086a2842fc
+  - 34c9a4a3ed8561768290a85211a422e2054479c0
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - f01971e1bcca257a19dcdaac97e6cc1c2448483c
   - e62184d264d30354071a59cf2b664a41e01e0334
   - 8151702a3a351e7e0190b10dc05471a8cf7de0b0
   - 50ec99c0465cc315ea710acd4c3a25693bc05290
   - 4cc27aecf26206465afb4fb0142882e4d8f87aae
-  commit_sha: 07fb8c74e971eeee64a11145bc7de41d56d09d46
-  generated_at: '1794361812'
-  generator: kuda-template/0.1.2
+  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
+  generated_at: '1794437755'
+  generator: kuda-template/0.1.4

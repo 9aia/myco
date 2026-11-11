@@ -25,12 +25,12 @@ api:
 - name: DEFAULT_ACTOR
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 161
+  line: 160
   module: myco-ops
 - name: DEFAULT_PAGER
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 476
+  line: 557
   module: myco-ops
 - name: DIR
   kind: const
@@ -45,7 +45,7 @@ api:
 - name: Filter
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 332
+  line: 337
   module: myco-ops
 - name: HistoryEntry
   kind: type
@@ -80,7 +80,7 @@ api:
 - name: MULTI_COMMIT_SUBJECTS
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 293
+  line: 374
   module: myco-ops
 - name: NamedVerb
   kind: type
@@ -95,7 +95,7 @@ api:
 - name: NewItem
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 434
+  line: 439
   module: myco-ops
 - name: Origin
   kind: type
@@ -130,7 +130,7 @@ api:
 - name: UndoOutcome
   kind: type
   file: crates/myco-ops/src/ops.rs
-  line: 276
+  line: 357
   module: myco-ops
 - name: VERSION
   kind: const
@@ -170,12 +170,12 @@ api:
 - name: autocommit
   kind: function
   file: crates/myco-ops/src/ops.rs
-  line: 223
+  line: 288
   module: myco-ops
 - name: autocommit_stamps_actor_trailer
   kind: function
   file: crates/myco-ops/src/ops.rs
-  line: 633
+  line: 747
   module: myco-ops
 - name: backlog
   kind: function
@@ -202,7 +202,7 @@ api:
   file: crates/myco-ops/src/view.rs
   line: 274
   module: myco-ops
-api_omitted: 205
+api_omitted: 209
 deps:
 - camino
 - myco-core
@@ -253,15 +253,15 @@ provenance:
   - crates/myco-ops/src/view.rs
   hashes:
   - d7573e374a2172c1a1e272176f8217878c1d8275
-  - eaff06f7145e1435cf37a599f48e49139ce531db
+  - deb022c86a9f4e7b261a0af80f9ba2361e8d64dd
   - e32236a7fbef4a549c16f14a53f3e811399afd31
   - d68f4d02abaec478c8ca1ab8258a72a98ba5bbbf
-  - 4599db0a188ac84bce10990e111aef3683ad1f15
+  - 8e19c076f4412a9ffb2df900ac9e83021e04f166
   - 692efc8e5656308c8cd3fd2f4d6d6e8fe2f229cd
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
-  - 2306fd8212883f99c494a537ee14dbebd8d0d9cd
+  - 4ec32aaded4ded15c7f683df03a98deb885e819f
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: 07fb8c74e971eeee64a11145bc7de41d56d09d46
-  generated_at: '1794361812'
-  generator: kuda-template/0.1.2
+  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
+  generated_at: '1794437755'
+  generator: kuda-template/0.1.4
