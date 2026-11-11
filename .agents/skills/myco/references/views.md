@@ -74,47 +74,63 @@ The index is a disposable derived cache (redb under
 `~/.local/share/myco`, `$MYCO_HOME` overrides) — rebuild freely, the
 markdown stays canonical.
 
-```bash
-myco index add <repo-path>     # register + snapshot (root or project/ path)
-myco index add <repo> --org    # designate the org/global ledger
-myco index list                # registered repos + snapshot freshness
-myco index rebuild [<path>]    # re-scan one or all
-myco index remove <path>       # unregister
+The **index universe** is what index-sourced views cover: inside a
+lasius workspace (`lasius.toml` found walking up from cwd) it's the
+workspace's clones — `<root>/<repos_dir>/*` git checkouts, minus
+`exclude` globs — unioned with `repos.toml` registrations outside
+the workspace. Outside lasius the universe is the registry alone.
+`index list` marks each row's source (`lasius`/`registry`) when a
+workspace is in play.
 
-myco view org-status           # per-repo grouped list (the old
-                               #   `org status` digest's substitute)
-myco view org-board            # org kanban, `repo:ID`-prefixed cards
-myco view org-board --kind task          # any filter flag applies
-myco view --source index --group-by status --format board   # ad-hoc org
+```bash
+myco index list                # universe repos + snapshot freshness
+myco index rebuild [<path>]    # re-scan one or all
+myco index add <repo-path>     # explicit registration — required
+                               #   outside lasius; inside one it
+                               #   just records a registry entry
+myco index add <repo> --org    # designate the org/global ledger
+myco index remove <path>       # unregister a repos.toml entry
 ```
 
-`source = "index"` views auto-rebuild stale snapshots — register each
-repo once with `index add`, then `view org-status` is the cheap
-org-wide answer to "what am I working on everywhere". Index-sourced
-items carry a `repo` tag: `group_by = "repo"` buckets by it, cards
-prefix `repo:ID`, JSON items gain a `"repo"` field. Snapshots have no
-handoffs — the `⚡`/`interrupted` flag is repo-source only.
-`org init` (re-scaffold every registered repo) is the only `org`
-subcommand left.
+`source = "index"` views auto-rebuild stale snapshots — inside a
+lasius workspace every clone joins the universe automatically (no
+`index add` needed); elsewhere register each repo once, then
+`view org-status` is the cheap org-wide answer to "what am I
+working on everywhere". Index-sourced items carry a `repo` tag:
+`group_by = "repo"` buckets by it, cards prefix `repo:ID`, JSON
+items gain a `"repo"` field. Snapshots have no handoffs — the
+`⚡`/`interrupted` flag is repo-source only. `org init`
+(re-scaffold every universe repo) is the only `org` subcommand
+left.
 
 ### Ledger-less repos — the org-ledger pattern
 
 One org can run a **single global ledger**: a dedicated repo
-registered with `myco index add <path> --org` holds the one
-`project/` worktree for every member repo. Member repos have no
-`project/` at all — registering one (`index add` on a git repo
-without a qualifying worktree) marks it `ledger = "none"` in
-`repos.toml` and takes no snapshot.
+designated the org ledger holds the one `project/` worktree for
+every member repo. Member repos have no `project/` at all — a
+universe repo without a qualifying worktree is `ledger = "none"`
+and takes no snapshot.
 
-Inside a registered ledger-less repo, verbs that need a project
-(`status`, `todo add`, `view`, …) resolve to the org ledger's
-worktree instead of failing — writes land in the global ledger.
-Unregistered repos still fail as before, and `--dir`/`--root`/
-`myco.toml project_dir` overrides keep top precedence. Ledger-less
-entries are omitted from index views (no rows, no warnings) and are
-skipped by `index rebuild` (`no-ledger`) and `org init` (never
-scaffolds `project/` into them). `ledger` is a plain `repos.toml`
-key — `local` (default), `org`, `none` — hand-editable.
+The designation lives in the repo's own `myco.toml`:
+
+```toml
+[index]
+ledger = "org"   # or "none" — "local" is the default
+```
+
+Resolution order: `myco.toml [index] ledger` → a legacy
+`repos.toml` `ledger` key (`org`/`none`; `local` is the default,
+not a mark — `index add --org` still writes it) → derivation
+(worktree → `local`, none → `none`).
+
+Inside a ledger-less repo, verbs that need a project (`status`,
+`todo add`, `view`, …) resolve to the org ledger's worktree
+instead of failing — writes land in the global ledger.
+Repos outside the universe still fail as before, and
+`--dir`/`--root`/`myco.toml project_dir` overrides keep top
+precedence. `none` entries are omitted from index views (no rows,
+no warnings) and are skipped by `index rebuild` (`no-ledger`) and
+`org init` (never scaffolds `project/` into them).
 
 ## When which
 

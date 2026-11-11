@@ -17,6 +17,7 @@ serde_json.workspace = true
 time.workspace = true
 scarab-config.workspace = true
 scarab-config-toml.workspace = true
+lasius-core.workspace = true
 
 [dev-dependencies]
 myco-store-md.workspace = true

@@ -24,30 +24,11 @@ use myco_core::{Item, ItemId};
 pub use links::{fingerprint, FileStamp, LinkIndex, Related};
 
 /// A registered repo's ledger relationship — the `ledger` key in
-/// `repos.toml`. Absent in registries written before the field
-/// existed → [`LedgerMode::Local`], the conventional reading.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum LedgerMode {
-    /// The repo's own ledger — `worktree`, else `<path>/project`.
-    #[default]
-    Local,
-    /// The org/global ledger — the one fallback target
-    /// ledger-less repos resolve to. At most one entry should
-    /// carry it (`myco index add --org` keeps it singular).
-    Org,
-    /// Explicitly ledger-less — an org member with no `project/`
-    /// worktree; verbs run inside it fall back to the `org`
-    /// entry's ledger, and index views contribute no items.
-    None,
-}
-
-impl LedgerMode {
-    /// `local` — the serde-skipped default.
-    pub fn is_local(&self) -> bool {
-        matches!(self, LedgerMode::Local)
-    }
-}
+/// `repos.toml` or `[index] ledger` in `myco.toml`. The type lives
+/// in `myco-core` (the config model names it); re-exported here so
+/// `myco_index::LedgerMode` paths keep working. Absent →
+/// [`LedgerMode::Local`], the conventional reading.
+pub use myco_core::LedgerMode;
 
 /// A registered repo — an entry in the index's registry.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

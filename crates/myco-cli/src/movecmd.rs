@@ -17,7 +17,6 @@
 use std::path::{Path, PathBuf};
 
 use myco_core::{Actor, HandoffEntry, Item, ItemFile, ItemId, ItemKind, NewItemMeta, Status};
-use myco_index::Index;
 use myco_store::Store;
 use serde_json::json;
 
@@ -74,9 +73,10 @@ fn resolve_dest(to: &str) -> Result<discover::Project, String> {
         return Ok(p);
     }
     if let Ok(index) = indexcmd::open_index() {
-        if let Ok(repos) = index.repos() {
-            if let Some(r) = repos.iter().find(|r| r.name == to) {
-                return indexcmd::repo_at(r.path.as_std_path());
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        if let Ok(uni) = myco_ops::universe::repos(&cwd, &index, crate::ops::CONFIG) {
+            if let Some(u) = uni.iter().find(|u| u.entry.name == to) {
+                return indexcmd::repo_at(u.entry.path.as_std_path());
             }
         }
     }

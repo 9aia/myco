@@ -1495,7 +1495,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "item.move",
-        about: "Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids — and the drop is recorded as plain text in both provenance handoffs), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree. `--dry-run` previews the plan (prospective dest id, dropped refs) with no writes; `--finish` completes a move that died after the destination copy + `moved to` pointer landed but before the source close committed — the pointer is the resume handle.",
+        about: "Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids — and the drop is recorded as plain text in both provenance handoffs), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or an index-universe repo name (`myco index list`). Two commits — one per worktree. `--dry-run` previews the plan (prospective dest id, dropped refs) with no writes; `--finish` completes a move that died after the destination copy + `moved to` pointer landed but before the source close committed — the pointer is the resume handle.",
         params: &[&[
             pos("id", Val::Id, "Any item id."),
             opt(
@@ -1531,7 +1531,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "view",
-        about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = \"repos\"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).",
+        about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = \"repos\"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).",
         params: &[&[
             pos("name", Val::Str, "View name — builtin preset or config view.").optional(),
             flag("list", "List defined views and exit.").cli(),
@@ -1587,7 +1587,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "index.add",
-        about: "Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger-less repos register as `ledger = \"none\"` with no snapshot; `--org` marks the org/global ledger.",
+        about: "Register a repo — `<path>` is a repo root (or its `project/` worktree). Needed outside a lasius workspace (clones under `lasius.toml`'s `repos_dir` join the index universe automatically); inside one it still records an explicit entry. Ledger-less repos register as `ledger = \"none\"` with no snapshot; `--org` marks the org/global ledger (equivalent to `[index] ledger = \"org\"]` in the repo's `myco.toml`).",
         params: &[
             &[
                 pos(
@@ -1597,7 +1597,7 @@ pub static VERBS: &[Verb] = &[
                 ),
                 flag(
                     "org",
-                    "Designate this repo as the org/global ledger — the fallback target verbs in ledger-less registered repos resolve to (at most one; clears the mark elsewhere).",
+                    "Designate this repo as the org/global ledger — the fallback target verbs in ledger-less universe repos resolve to (at most one; clears the mark elsewhere). `[index] ledger = \"org\"]` in the repo's myco.toml is the durable equivalent.",
                 ),
             ],
         ],

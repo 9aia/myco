@@ -6,8 +6,9 @@ dogfoods its own PM ledger (`project/`). Fork freely under MIT.
 ## Layout
 
 `crates/` — flat rust workspace, ports-and-adapters. `myco-core` is
-pure domain (no I/O); `myco-config` is a port, `myco-config-toml` its
-file impl; `myco-git` and `myco-shell` shell out; `myco`
+pure domain (no I/O); config loading is scarab-backed inside
+`myco-ops` (`config::TOML`), the index universe is lasius-backed
+(`universe`); `myco-git` and `myco-shell` shell out; `myco`
 (`crates/myco-cli`) is the composition root. `xtask/` is repo chores.
 
 ## Rules of thumb

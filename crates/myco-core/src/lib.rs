@@ -149,6 +149,44 @@ pub enum EmitMode {
     First,
 }
 
+/// A repo's ledger relationship in the org index — the `ledger`
+/// key in `repos.toml` (legacy registry) or `[index] ledger` in
+/// `myco.toml` (P-026). Absent → [`LedgerMode::Local`], the
+/// conventional reading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LedgerMode {
+    /// The repo's own ledger — `worktree`, else `<path>/project`.
+    #[default]
+    Local,
+    /// The org/global ledger — the one fallback target
+    /// ledger-less repos resolve to. At most one repo should
+    /// carry it.
+    Org,
+    /// Explicitly ledger-less — an org member with no `project/`
+    /// worktree; verbs run inside it fall back to the `org`
+    /// entry's ledger, and index views contribute no items.
+    None,
+}
+
+impl LedgerMode {
+    /// `local` — the serde-skipped default.
+    pub fn is_local(&self) -> bool {
+        matches!(self, LedgerMode::Local)
+    }
+}
+
+/// The `[index]` config table — the repo's designation in the org
+/// index universe (P-026).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IndexConfig {
+    /// `local` | `org` | `none` — the same vocabulary as the
+    /// legacy `repos.toml` `ledger` key, which is still honored
+    /// when `myco.toml` is silent.
+    pub ledger: Option<LedgerMode>,
+}
+
 /// The `myco.toml`-shaped config value the config loader
 /// (`myco_ops::config`) produces. Fields grow per phase; unknown keys are rejected so a typo
 /// fails loud instead of silently doing nothing.
@@ -182,6 +220,11 @@ pub struct Config {
     /// `[sync]` — ledger-branch sync policy. `None` = defaults.
     /// Repo layer wins the table like the scalars.
     pub sync: Option<SyncConfig>,
+    /// `[index]` — org-index designation (`ledger = "org"|"none"`).
+    /// The index universe reads the repo-layer `myco.toml`
+    /// directly, so a user-layer table can't leak a global
+    /// designation into every repo.
+    pub index: Option<IndexConfig>,
 }
 
 /// The `[sync]` config table — how `myco sync` and the mutating

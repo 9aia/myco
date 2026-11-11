@@ -32,16 +32,24 @@ pub struct RepoView {
     pub error: Option<String>,
 }
 
-/// Load every registered repo's snapshot, auto-rebuilding stale
+/// The index universe as registry entries — lasius clones ∪
+/// `repos.toml` registrations (P-026), anchored at the process
+/// cwd. `ledger = "none"` entries are ledger-less by design:
+/// they are omitted outright — no snapshot, no error, no
+/// rescan, no row — so org views skip them instead of warning.
+fn universe_entries(index: &impl Index) -> Result<Vec<myco_index::RepoEntry>, String> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    Ok(myco_ops::universe::repos(&cwd, index, crate::ops::CONFIG)?
+        .into_iter()
+        .map(|u| u.entry)
+        .collect())
+}
+
+/// Load every universe repo's snapshot, auto-rebuilding stale
 /// ones (head mismatch or missing). The per-repo `git`/fs work is
 /// parallel — redb opens lock the file, so index I/O stays serial.
-/// `ledger = "none"` entries are ledger-less by design: they are
-/// omitted outright — no snapshot, no error, no rescan, no row —
-/// so org views skip them instead of warning.
 pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
-    let repos = index
-        .repos()
-        .map_err(|e| e.to_string())?
+    let repos = universe_entries(index)?
         .into_iter()
         .filter(|r| r.has_ledger())
         .collect::<Vec<_>>();
@@ -97,17 +105,17 @@ pub fn load_fresh(index: &impl Index) -> Result<Vec<RepoView>, String> {
     Ok(out)
 }
 
-/// `init` over every registered repo — per-repo outcomes, errors
+/// `init` over every universe repo — per-repo outcomes, errors
 /// collected (one bad repo doesn't stop the rollout).
 /// `ledger = "none"` entries are skipped outright: the rollout
 /// refreshes repos that *have* (or should have, per the legacy
 /// `local` reading) ledgers — it must never scaffold a
 /// `project/` branch into an intentionally ledger-less org
-/// member. Mark such repos `none` in `repos.toml` (or re-run
-/// `myco index add` on them — ledger-less repos auto-register
-/// `none`).
+/// member. Mark such repos `none` — `[index] ledger = "none"`
+/// in the repo's `myco.toml`, or `ledger = "none"` in
+/// `repos.toml` / a ledger-less `index add` (all honored).
 fn init_all(index: &impl Index, json_out: bool, no_commit: bool) -> Result<i32, String> {
-    let repos = index.repos().map_err(|e| e.to_string())?;
+    let repos = universe_entries(index)?;
     let mut out = Vec::new();
     let mut failures = 0usize;
     for r in &repos {

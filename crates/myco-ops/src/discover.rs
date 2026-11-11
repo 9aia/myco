@@ -165,10 +165,10 @@ pub fn discover_with(
 }
 
 /// [`discover`] with an explicit cwd — the workhorse, and what
-/// tests drive (no process-global `set_current_dir` races). No
-/// index: the org-ledger fallback stays off.
-#[cfg(test)]
-fn discover_in(
+/// tests and the index universe drive (no process-global
+/// `set_current_dir` races). No index: the org-ledger fallback
+/// stays off.
+pub fn discover_at(
     cwd: &Path,
     dir: Option<&Path>,
     root: Option<&Path>,
@@ -218,7 +218,7 @@ fn discover_in_index(
         if qualifies(&worktree) {
             return Ok(Project { root, worktree });
         }
-        if let Some(p) = index.and_then(|i| org_fallback(&root, i)) {
+        if let Some(p) = index.and_then(|i| org_fallback(&root, i, cfg)) {
             return Ok(p);
         }
         return Err(format!(
@@ -267,11 +267,11 @@ fn discover_in_index(
         }
     }
 
-    // org-ledger fallback — only *registered* repos get here;
-    // unregistered ledger-less repos still fail
+    // org-ledger fallback — only repos in the index universe
+    // (lasius clones ∪ registry) get here; others still fail
     if let Some(index) = index {
         if let Ok(top) = myco_git::repo_root(&cwd) {
-            if let Some(p) = org_fallback(&top, index) {
+            if let Some(p) = org_fallback(&top, index, cfg) {
                 return Ok(p);
             }
         }
@@ -280,19 +280,26 @@ fn discover_in_index(
     Err(no_project_error(&cwd))
 }
 
-/// The registry-backed fallback — `repo` is the git toplevel cwd
-/// (or `--root`) resolved to. Two hits, in order:
+/// The index-backed fallback — `repo` is the git toplevel cwd
+/// (or `--root`) resolved to, and doubles as the lasius-workspace
+/// anchor: inside a workspace the universe is its clones (P-026),
+/// outside it the `repos.toml` registry. Two hits, in order:
 ///
-/// 1. the repo's own registered ledger when it qualifies —
-///    covers custom `worktree`s the cwd walk can't see;
+/// 1. the repo's own ledger when it qualifies — covers custom
+///    `worktree`s the cwd walk can't see;
 /// 2. the `ledger = "org"` entry's worktree — the org/global
-///    ledger ledger-less members resolve to.
+///    ledger ledger-less members resolve to (`myco.toml`
+///    `[index] ledger` or a legacy `repos.toml` mark).
 ///
-/// `None` when the repo isn't registered, has no qualifying
+/// `None` when the repo isn't in the universe, has no qualifying
 /// ledger anywhere, or no org ledger is designated/valid — the
 /// caller then reports the ordinary "no project" error.
-fn org_fallback(repo: &Path, index: &dyn myco_index::Index) -> Option<Project> {
-    let repos = index.repos().ok()?;
+fn org_fallback(repo: &Path, index: &dyn myco_index::Index, cfg: ConfigLoader) -> Option<Project> {
+    let repos = crate::universe::repos(repo, index, cfg)
+        .ok()?
+        .into_iter()
+        .map(|u| u.entry)
+        .collect::<Vec<_>>();
     // registry keys are canonical repo roots — match the arg and
     // its main worktree (cwd may sit in a linked worktree whose
     // toplevel isn't the registered root)
@@ -467,7 +474,7 @@ mod tests {
         std::fs::create_dir(&sub).unwrap();
         assert!(!qualifies(&sub));
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
-            let p = discover_in(&sub, None, None, test_loader()).unwrap();
+            let p = discover_at(&sub, None, None, test_loader()).unwrap();
             assert_eq!(p.worktree, d.path().join("project").canonicalize().unwrap());
             assert_eq!(p.root, d.path());
         });
@@ -484,11 +491,11 @@ mod tests {
         git(&b, &["init", "-q"]);
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
             assert!(
-                discover_in(&b, None, None, test_loader()).is_err(),
+                discover_at(&b, None, None, test_loader()).is_err(),
                 "nested repo attached the outer repo's project/"
             );
             // …while a's own tree still resolves as before
-            let p = discover_in(a.path(), None, None, test_loader()).unwrap();
+            let p = discover_at(a.path(), None, None, test_loader()).unwrap();
             assert_eq!(p.worktree, a.path().join("project").canonicalize().unwrap());
             assert_eq!(p.root, a.path());
         });
@@ -516,7 +523,7 @@ mod tests {
         std::fs::write(mounted.join("TODO.md"), "# TODO — c\n").unwrap();
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
             assert!(
-                discover_in(b.path(), None, None, test_loader()).is_err(),
+                discover_at(b.path(), None, None, test_loader()).is_err(),
                 "attached a foreign repo's worktree"
             );
             // …and B's *own* ledger resolves fine
@@ -526,7 +533,7 @@ mod tests {
                 b.path(),
                 &["worktree", "add", own.to_str().unwrap(), "project"],
             );
-            let p = discover_in(&own, None, None, test_loader()).unwrap();
+            let p = discover_at(&own, None, None, test_loader()).unwrap();
             assert_eq!(p.worktree, own.canonicalize().unwrap());
             assert_eq!(p.root, b.path());
         });
@@ -547,7 +554,7 @@ mod tests {
             std::fs::write(r.join("myco.toml"), "project_dir = \"pm\"\n").unwrap();
             let sub = r.join("sub");
             std::fs::create_dir(&sub).unwrap();
-            let p = discover_in(&sub, None, None, test_loader()).unwrap();
+            let p = discover_at(&sub, None, None, test_loader()).unwrap();
             assert_eq!(p.worktree, r.join("pm"));
 
             // `..` and absolute project_dir values are ignored —
@@ -555,7 +562,7 @@ mod tests {
             for bad in ["project_dir = \"../pm\"", "project_dir = \"/tmp/pm\""] {
                 std::fs::write(r.join("myco.toml"), format!("{bad}\n")).unwrap();
                 assert!(
-                    discover_in(&sub, None, None, test_loader()).is_err(),
+                    discover_at(&sub, None, None, test_loader()).is_err(),
                     "{bad}"
                 );
             }

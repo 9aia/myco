@@ -57,16 +57,14 @@ domain (no I/O); ports are traits, impls are separate crates;
 
 | Crate | Role |
 | --- | --- |
-| `crates/myco-core` | Item models, ID registry, state machine, deps — pure, no I/O |
-| `crates/myco-config` | Config port — where `myco.toml`-shaped config comes from |
-| `crates/myco-config-toml` | Config impl — explicit path → `$MYCO_CONFIG` → `./myco.toml` → `~/.config/myco/` |
+| `crates/myco-core` | Item models, ID registry, state machine, deps, the `Config` model — pure, no I/O |
 | `crates/myco-git` | Git plumbing via the `git` CLI — `project` orphan branch, worktree, auto-commit, log |
 | `crates/myco-shell` | `bash -c <cmd>` in a workdir — generic shell-out |
 | `crates/myco-store` | Store port — the `project/` persistence trait |
 | `crates/myco-store-md` | Markdown impl — strict parse/emit; owns the file spec |
-| `crates/myco-index` | Index port — the derived, disposable cache (registry + snapshots) |
+| `crates/myco-index` | Index port — the derived, disposable cache (registry + snapshots); `LedgerMode` re-exported from `myco-core` |
 | `crates/myco-index-redb` | Index impl — redb snapshots + `repos.toml` under `~/.local/share/myco` |
-| `crates/myco-ops` | Ops I/O shell — discovery, store open/save, commit-per-mutation, verb plumbing; pure pieces live in core |
+| `crates/myco-ops` | Ops I/O shell — discovery, store open/save, commit-per-mutation, verb plumbing; pure pieces live in core. Owns the `myco.toml` loader (`config::TOML` — scarab-config-toml parsing + myco's two-layer merge; the `myco-config*` crates are gone) and the index `universe` (lasius clones ∪ `repos.toml`, P-026; deps: `scarab-config`, `scarab-config-toml`, `lasius-core`) |
 | `crates/myco-testkit` | Golden fixtures + conformance for the file spec |
 | `crates/myco-driver` | `tamias-driver-myco` — pavo view driver over `project/` + engine ops (`ops` manifest derived from the `VERBS` table, `cli.<verb>` wire queries re-exec `run`) **plus the `cli` bins[] shim passthrough** (strips `--dir`/`--name` → `myco::run_from`, inherited stdio — the `myco` command itself) and an optional `mcp` surface feature; writes always ride the engine's own verbs |
 | `crates/myco-tui` | `myco ui` — interactive board TUI (ratatui) over `myco-ops`; default `tui` feature on `myco-cli` |

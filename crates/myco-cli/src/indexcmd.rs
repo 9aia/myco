@@ -209,20 +209,21 @@ fn sync_links(
     })
 }
 
-/// The registered entry matching `path`, else a "not registered"
-/// error. `path` may be the repo root or the worktree.
-fn registered_entry(index: &impl Index, path: &Path) -> Result<RepoEntry, String> {
+/// The universe entry matching `path`, else a "not in the
+/// universe" error. `path` may be the repo root or the worktree.
+fn universe_entry(
+    uni: &[myco_ops::universe::UniverseRepo],
+    path: &Path,
+) -> Result<RepoEntry, String> {
     let proj = repo_at(path)?;
     let key = Utf8PathBuf::from_path_buf(proj.root.clone())
         .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
-    index
-        .repos()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .find(|r| r.path == key)
+    uni.iter()
+        .find(|u| u.entry.path == key)
+        .map(|u| u.entry.clone())
         .ok_or_else(|| {
             format!(
-                "{}: not registered — `myco index add` it first",
+                "{}: not in the index universe — `myco index add` it first",
                 proj.root.display()
             )
         })
@@ -441,16 +442,23 @@ pub fn h_remove(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     }
 }
 
-/// The `index list` verb.
+/// The `index list` verb — the index *universe* (lasius clones
+/// ∪ `repos.toml` registrations, P-026), each row marked with
+/// its source when a lasius workspace is in play.
 pub fn h_list(ctx: &Ctx, _a: &Args) -> Result<i32, String> {
     let index = open_index()?;
     let json_out = ctx.json;
     {
-        let repos = index.repos().map_err(|e| e.to_string())?;
-        let heads = par_map(&repos, current_head);
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let uni = myco_ops::universe::repos(&cwd, &index, crate::ops::CONFIG)?;
+        let in_lasius = uni
+            .iter()
+            .any(|u| u.source == myco_ops::universe::RepoSource::Lasius);
+        let heads = par_map(&uni, |u| current_head(&u.entry));
         let mut rows = Vec::new();
         let mut out = Vec::new();
-        for (r, head) in repos.iter().zip(&heads) {
+        for (u, head) in uni.iter().zip(&heads) {
+            let r = &u.entry;
             let snap = index.snapshot(&r.path).map_err(|e| e.to_string())?;
             // ledger-less entries hold no snapshot by design —
             // "no-ledger", never "stale"
@@ -465,24 +473,32 @@ pub fn h_list(ctx: &Ctx, _a: &Args) -> Result<i32, String> {
                 "path": r.path,
                 "name": r.name,
                 "ledger": r.ledger,
+                "source": u.source.as_str(),
                 "head_commit": snap.as_ref().map(|s| s.head_commit.clone()),
                 "scanned_at": snap.as_ref().map(|s| s.scanned_at.clone()),
                 "items": snap.as_ref().map(|s| s.items.len()),
                 "stale": stale,
             }));
             rows.push(format!(
-                "{}\t{}\t{}\t{}",
+                "{}\t{}\t{}\t{}{}",
                 r.path,
                 r.name,
                 snap.as_ref()
                     .map(|s| s.items.len().to_string())
                     .unwrap_or_else(|| "-".into()),
                 if no_ledger {
-                    "no-ledger"
+                    "no-ledger".to_string()
                 } else if stale {
-                    "stale"
+                    "stale".to_string()
                 } else {
-                    "fresh"
+                    "fresh".to_string()
+                },
+                // inside a lasius workspace every row is marked —
+                // clones say `lasius`, registry extras `registry`
+                if in_lasius {
+                    format!("\t{}", u.source.as_str())
+                } else {
+                    String::new()
                 },
             ));
         }
@@ -503,9 +519,13 @@ pub fn h_rebuild(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let json_out = ctx.json;
     let path = a.opt("path").map(PathBuf::from);
     {
+        // the universe — lasius clones ∪ registry (P-026); a
+        // path arg resolves against it the same way
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let uni = myco_ops::universe::repos(&cwd, &index, crate::ops::CONFIG)?;
         let entries: Vec<RepoEntry> = match path {
-            Some(p) => vec![registered_entry(&index, &p)?],
-            None => index.repos().map_err(|e| e.to_string())?,
+            Some(p) => vec![universe_entry(&uni, &p)?],
+            None => uni.into_iter().map(|u| u.entry).collect(),
         };
         if entries.is_empty() {
             if json_out {
@@ -714,6 +734,11 @@ mod tests {
         temp_env::with_var("MYCO_HOME", Some(ds.as_str()), || {
             let d = repo_without_project();
             run_verb("index.add", &[d.path().to_string_lossy().into_owned()]).unwrap();
+            // the universe anchors at the process cwd — run from
+            // inside a lasius workspace it would union every org
+            // clone; the tempdir keeps this test registry-only
+            let prev = std::env::current_dir().unwrap();
+            std::env::set_current_dir(d.path()).unwrap();
             let index = RedbIndex::open().unwrap();
             let repos = index.repos().unwrap();
             assert_eq!(repos.len(), 1);
@@ -732,6 +757,7 @@ mod tests {
             // org views omit the ledger-less repo entirely
             let views = crate::org::load_fresh(&index).unwrap();
             assert!(views.is_empty());
+            std::env::set_current_dir(prev).unwrap();
         });
     }
 

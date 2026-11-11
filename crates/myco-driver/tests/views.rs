@@ -346,7 +346,7 @@ fn index_rejects_non_repos() {
         Some(home.path()),
     );
     assert_eq!(code(&out), 2);
-    assert!(String::from_utf8_lossy(&out.stderr).contains("not registered"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not in the index universe"));
 }
 
 #[test]
