@@ -142,6 +142,21 @@ api:
   file: crates/myco-driver/tests/edges.rs
   line: 964
   module: myco-driver
+- name: backdate_created
+  kind: function
+  file: crates/myco-driver/tests/continuity.rs
+  line: 685
+  module: myco-driver
+- name: backdate_file_created
+  kind: function
+  file: crates/myco-driver/tests/continuity.rs
+  line: 709
+  module: myco-driver
+- name: backdate_handoffs
+  kind: function
+  file: crates/myco-driver/tests/continuity.rs
+  line: 717
+  module: myco-driver
 - name: backlog_add_and_list
   kind: function
   file: crates/myco-driver/tests/items.rs
@@ -187,22 +202,7 @@ api:
   file: crates/myco-driver/tests/id_repair.rs
   line: 252
   module: myco-driver
-- name: check_fix_moves_misplaced_item_files
-  kind: function
-  file: crates/myco-driver/tests/lifecycle.rs
-  line: 252
-  module: myco-driver
-- name: check_fix_repoints_references
-  kind: function
-  file: crates/myco-driver/tests/id_repair.rs
-  line: 218
-  module: myco-driver
-- name: check_fix_skips_when_number_held
-  kind: function
-  file: crates/myco-driver/tests/id_repair.rs
-  line: 285
-  module: myco-driver
-api_omitted: 309
+api_omitted: 317
 deps:
 - camino
 - myco
@@ -218,6 +218,7 @@ deps:
 - pavo-testkit
 - temp-env
 - tempfile
+- time
 - serde_json
 - myco-core
 - myco-ops
@@ -258,7 +259,7 @@ provenance:
   - crates/myco-driver/tests/shim.rs
   - crates/myco-driver/tests/views.rs
   hashes:
-  - 8511cd2e5be60daa75694c8ef9cd35d93d939676
+  - c3f2b9ab7b34ed2556e29c4a50058d225b2e33d1
   - edd2329937f8894872790228623178588e4058d5
   - 3372ffc3b052071813b8133dc09d79d496db3925
   - d6c7303e4ae870d79025b49919ef785a9e9782ab
@@ -266,7 +267,7 @@ provenance:
   - 62557dcc43c2e25a0c3af911492e4d63ed4e81c9
   - a984eca8eea928be5520ffbb488388139c046536
   - bcf687da55f4d327b1667d16099ac7104b0abdb8
-  - 64fb1bb7eb99a59c72bd9810d75e4ff707a57d49
+  - 5554ccd3e5349944e3869bacb43010390f9fb2f0
   - d051414a4ba12230efdff515fc00e13bfbfe18ae
   - ae05ae717980ab1abe774f5d76666f1db10f4f86
   - 988c5d7e2df98cb7d4dd4a2739a80dafc573ae50
@@ -277,6 +278,6 @@ provenance:
   - 2a40dc06bdbccd62b0f3c6d4b29e9e75712b5331
   - 7709e3b39bd7e361982e898600a0eb3c27bf67e5
   - 92ac629d644dd0871e71bf1706e3055eaddf8bfd
-  commit_sha: d1e0895c483db87c746252fc7ace2cfd503450d8
-  generated_at: '1794440143'
+  commit_sha: 6d99b20a8de6e018dbfe646fae16870fc93aefc0
+  generated_at: '1794440733'
   generator: kuda-template/0.1.4

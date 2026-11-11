@@ -202,7 +202,7 @@ api:
   file: crates/myco-cli/src/serve.rs
   line: 43
   module: myco
-api_omitted: 727
+api_omitted: 740
 deps:
 - camino
 - clap
@@ -302,6 +302,7 @@ provenance:
   - crates/myco-cli/src/org.rs
   - crates/myco-cli/src/plan.rs
   - crates/myco-cli/src/proposal.rs
+  - crates/myco-cli/src/reap.rs
   - crates/myco-cli/src/redo.rs
   - crates/myco-cli/src/registry.rs
   - crates/myco-cli/src/report.rs
@@ -347,7 +348,7 @@ provenance:
   - f94baa7ff3516c385f86124091b5bc8da7bed17e
   - 5a82986ff57b33cb61e3756462d2503816b1c3e4
   - 43de5c03b4d0890f62879b20e00a512fff0fd655
-  - 0c8d8d25c5f91f93498b7fe24ce6326191de4418
+  - c97d6331dff4cf9536936644c267a6fc3d997824
   - 61c611ada34e412b977a86ad4d8461fda6899c7d
   - bccd1312b7c7ed43ca8f4a1dee6226a787fec70e
   - 5f4eaab917f0c079416dd7c58a958f5a6f05a464
@@ -356,7 +357,7 @@ provenance:
   - 8848edc08ccf6975edd7be9341878d1ff7806983
   - 63398ee6bbbfc8da0ca62d2d315fa0a8a2529f6d
   - 8b6f06aa86d65d4b44c4ccd4e8b85dee175f96f2
-  - 5482666000589e10574a59ae0ef837461b610058
+  - 31a03c57ff942ff429eba366c1bea0619ff44ba0
   - 831325260258889ac9cbd4c5a008022d1888a366
   - fda6a509445387132a4464279a6ae827ce79f0d5
   - 9ca7838924da020cf2ec3bedb2c7cbba46b42c8f
@@ -365,11 +366,12 @@ provenance:
   - 09e4392ae71bf3269c011931edb31cab0c623378
   - c329af7ef72f8af98b379c75735d07b566154bdb
   - 708073c26ba96e6cdc0a2c1b9050ee53896be78f
+  - cec360f303cc9125b97bdf633942bdded77c11b6
   - d5a8af631570da68b8c50faa2d48d469964887bb
-  - 4cafddce814542e93b4d628fcfa749a07193383a
+  - 51af7264f634f42ea2aad17dc4a74cfd41c31e4d
   - 6ac2386d1db5f6351d69e3884a28db8467b654ba
   - c0c6442aa2c8f66b7cd466b4f90243e482c24819
-  - 8ccf24c01410ba6513ae9496d3e1e39ec3e23bdc
+  - 32f46fe0d85cf633844fee6a73de3924ce64f557
   - 0ca93c1bced47ad5d3cb524367bea01bf1d4736d
   - 74943b1d2de535d5458c5c9012036e29d261f94b
   - 7be39d581a523abe21ae23e03481689006e804f0
@@ -377,6 +379,6 @@ provenance:
   - b284558b205e58fe6a803dd1e6112aacad7b1d4b
   - ffdf5d520f4ed131da9d64be2ed4565e4f60af3c
   - a37048abfab3924287e580ee2e09f3ee8abd0dcc
-  commit_sha: d1e0895c483db87c746252fc7ace2cfd503450d8
-  generated_at: '1794440143'
+  commit_sha: 6d99b20a8de6e018dbfe646fae16870fc93aefc0
+  generated_at: '1794440733'
   generator: kuda-template/0.1.4
