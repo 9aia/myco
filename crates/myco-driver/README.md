@@ -11,7 +11,19 @@ driver contract: `tamias-driver-myco`.
 | --- | --- |
 | `manifest` | the `DriverManifest` JSON (name `myco`, views, contributes) |
 | `capabilities` | `{"capabilities": ["pavo"], "verbs": ["manifest","serve"], …}` |
+| `ops` | the engine ops manifest — every `myco` verb as a `cli.<verb>` wire query, derived from `myco::registry::VERBS` |
+| `run <argv>` | engine passthrough — `tamias-driver-myco run status` ≡ `myco status`; also the child side of `cli.*` wire queries |
+| `cli <myco argv>` | the tamias `bins[]` shim verb — `tamias bin exec` calls `cli --dir <pkg> --name myco <argv>`; strips the driver flag pair, runs `myco::run_from` with inherited stdio (this IS the `myco` command — T-006) |
+| `mcp` | *(feature `mcp`)* the ops manifest as MCP tools on stdio |
 | `serve` | ndjson JSON-RPC on stdio — `{"op":"manifest"|"views"|"view"|"query"}` → `{"ok":true,"result":…}` / `{"ok":false,"error":…}` (pavo-protocol v1 wire) |
+
+The `myco` command ships as the tamias pack in `libraries/myco/`
+(`bins: [{name: myco, shim: cli, driver: myco}]`) — `cargo xtask
+pack` stages this binary into `drivers/bin/<triple>/` and `tamias
+install ./libraries/myco` registers it under `<tamias-home>/drivers/`
+and deploys the shim. Engine e2e tests live in `tests/` and spawn
+`tamias-driver-myco run <argv>` — the same path `cli.*` queries and
+the shim take.
 
 Install: `cargo build --release -p myco-driver` and put
 `target/release/tamias-driver-myco` on `PATH`, or into

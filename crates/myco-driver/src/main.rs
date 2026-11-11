@@ -13,6 +13,16 @@
 //!   board` ≡ `myco board`. Also the child side of `cli.*` wire
 //!   queries (`ops::run_verb` re-execs this same verb so engine
 //!   output never touches the serve stream).
+//! - `cli <myco argv>` — the tamias `bins[]` shim verb (T-006):
+//!   `tamias bin exec` calls it as `cli --dir <pkg> --name myco
+//!   <argv>` for the `shim: cli` bin declared in
+//!   `libraries/myco/tamias.yaml`. myco's engine IS the CLI, so
+//!   this is a passthrough — strip the two standard driver flags
+//!   and hand the rest to `myco::run_from` with inherited stdio.
+//!   That keeps full argv parity the retired `myco` binary had:
+//!   `--help`/`--version`, every bounded verb, and the unbounded
+//!   surfaces (`myco serve` JSON-RPC, `myco ui` TUI, `myco batch`)
+//!   all stream end-to-end.
 //! - `serve` — ndjson JSON-RPC on stdio: `{"op":"manifest"}`,
 //!   `{"op":"views"}`, `{"op":"view","view":…,"params":{…}}`,
 //!   `{"op":"query","query":…,"params":{…}}` →
@@ -20,13 +30,11 @@
 //!   `query:"ops"` answers the ops manifest; `query:"cli.<verb>"`
 //!   runs the engine op.
 //!
-//! Optional surfaces: features `cli`/`mcp` embed
-//! pavo-driver-kit's surface layer — `cli <op> [args]` is a
-//! generated CLI over the ops manifest (`serve`/`ui` ride as
-//! streaming subcommands), `mcp` serves the ops as MCP tools on
-//! stdio. Both are equivalent to the standalone
-//! `tamias-driver-cli`/`tamias-driver-mcp` surface drivers,
-//! minus the PATH/discovery hop.
+//! Optional surface: feature `mcp` embeds pavo-driver-kit's
+//! surface layer — `mcp` serves the ops manifest as MCP tools on
+//! stdio, equivalent to the standalone `tamias-driver-mcp` minus
+//! the PATH/discovery hop. There is no `cli` feature: `cli` is the
+//! shim verb above, not a generated surface.
 //!
 //! Which repo: each `view`/`query` resolves its own target —
 //! `params.dir`/`params.root` → `$MYCO_DIR` → cwd discovery
@@ -39,7 +47,7 @@
 
 mod data;
 mod ops;
-#[cfg(any(feature = "cli", feature = "mcp"))]
+#[cfg(feature = "mcp")]
 mod surface;
 mod views;
 
@@ -136,20 +144,27 @@ fn main() {
             let argv = std::iter::once("myco".to_string()).chain(args.iter().skip(1).cloned());
             std::process::exit(myco::run_from(argv));
         }
-        // Embedded surface verbs (feature-gated, optional): the
-        // pavo-driver-kit surface layer renders this driver's own
-        // ops manifest — `cli` = generated clap CLI (op →
-        // subcommand), `mcp` = ops → MCP tools over stdio. The
-        // standalone tamias-driver-cli/-mcp binaries do the same
-        // over process dispatch; these verbs need nothing on PATH.
-        #[cfg(feature = "cli")]
+        // The tamias `bins[]` shim verb (T-006): `tamias bin exec`
+        // runs `<driver> cli --dir <pkg> --name myco <myco argv>`
+        // for the declared `shim: cli` bin in
+        // `libraries/myco/tamias.yaml`. myco's engine IS the CLI,
+        // so this is a passthrough — strip the two standard driver
+        // flags and hand the rest to `myco::run_from` with
+        // inherited stdio. Full engine parity: `--help`/`--version`,
+        // every bounded verb, and the unbounded surfaces (`serve`
+        // JSON-RPC, `ui` TUI, `batch`) behave exactly like the
+        // retired `myco` binary — the ledger verbs other repos and
+        // agents call constantly.
         Some("cli") => {
-            let m = kit::surface::OpsManifest::from_value(&ops::manifest()).unwrap_or_default();
-            let argv: Vec<String> = std::iter::once("myco".to_string())
-                .chain(args.iter().skip(1).cloned())
-                .collect();
-            kit::surface::cli::run("myco", &m, &argv, &mut surface::Engine)
+            let argv = engine_argv(&args[1..]);
+            std::process::exit(myco::run_from(argv));
         }
+        // Optional embedded surface (feature-gated): the
+        // pavo-driver-kit surface layer renders this driver's own
+        // ops manifest as MCP tools over stdio — the ops→tools
+        // rendering of the same `cli.*` queries `serve` answers.
+        // (The engine's own surfaces — `myco serve`/`ui`/`batch` —
+        // are reached through `run`/`cli`, never this verb.)
         #[cfg(feature = "mcp")]
         Some("mcp") => {
             let m = kit::surface::OpsManifest::from_value(&ops::manifest()).unwrap_or_default();
@@ -164,10 +179,57 @@ fn main() {
         Some("serve") | None => serve(),
         _ => {
             eprintln!(
-                "usage: tamias-driver-myco manifest|capabilities|ops|run <argv>|serve\n       (feature `cli` adds `cli <op> [args]`; feature `mcp` adds `mcp`)"
+                "usage: tamias-driver-myco manifest|capabilities|ops|run <argv>|cli <myco argv>|serve\n       (feature `mcp` adds `mcp`)"
             );
             1
         }
     };
     std::process::exit(code);
+}
+
+/// `cli` verb argv (after the `cli` token) → engine argv (argv[0]
+/// included). `tamias bin exec` prepends the standard driver flags
+/// — exactly `--dir <entry> --name <pkg>` — which the engine
+/// doesn't know; consume that one leading pair (`--flag v` and
+/// `--flag=v` forms, either order) and pass everything else through
+/// untouched.
+///
+/// Deliberately NOT a "leading run" strip: myco's engine has its
+/// own global `--dir`/`--root` flags, so `myco --dir <wt> status`
+/// typed through the shim arrives as `cli --dir <entry> --name myco
+/// --dir <wt> status` — the second `--dir` is the user's and must
+/// reach the engine's parse. Each driver flag is consumed at most
+/// once; the first repeat ends the scan.
+fn engine_argv(args: &[String]) -> Vec<String> {
+    let mut out = vec!["myco".to_string()];
+    let mut seen_dir = false;
+    let mut seen_name = false;
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        let (flag, takes_value) = if a == "--dir" || a.starts_with("--dir=") {
+            ("dir", !a.contains('='))
+        } else if a == "--name" || a.starts_with("--name=") {
+            ("name", !a.contains('='))
+        } else {
+            break;
+        };
+        let seen = match flag {
+            "dir" => seen_dir,
+            _ => seen_name,
+        };
+        if seen {
+            break;
+        }
+        match flag {
+            "dir" => seen_dir = true,
+            _ => seen_name = true,
+        }
+        // `--flag v` consumes the value too (a trailing flag with
+        // no value just ends the scan); `--flag=v` is self-contained.
+        i += if takes_value { 2 } else { 1 };
+        i = i.min(args.len());
+    }
+    out.extend(args[i..].iter().cloned());
+    out
 }
