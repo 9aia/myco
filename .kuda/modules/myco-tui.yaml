@@ -10,22 +10,22 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 78
+  line: 65
   module: myco-tui
 - name: Board
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 56
+  line: 43
   module: myco-tui
 - name: CONFIG
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 49
+  line: 39
   module: myco-tui
 - name: ConfirmAction
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 108
+  line: 95
   module: myco-tui
 - name: Drained
   kind: type
@@ -35,12 +35,12 @@ api:
 - name: FP_FALLBACK_TICKS
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 2001
+  line: 1988
   module: myco-tui
 - name: FP_FULL_REHASH
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 1995
+  line: 1982
   module: myco-tui
 - name: Fixture
   kind: type
@@ -50,7 +50,7 @@ api:
 - name: FpEntry
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 2035
+  line: 2022
   module: myco-tui
 - name: Guard
   kind: type
@@ -65,12 +65,12 @@ api:
 - name: LOCK
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 3668
+  line: 3655
   module: myco-tui
 - name: LinkHit
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 199
+  line: 186
   module: myco-tui
 - name: MUTED
   kind: const
@@ -80,42 +80,42 @@ api:
 - name: Mode
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 83
+  line: 70
   module: myco-tui
 - name: Model
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 209
+  line: 196
   module: myco-tui
 - name: NavEntry
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 173
+  line: 160
   module: myco-tui
 - name: OrgCell
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 3412
+  line: 3399
   module: myco-tui
 - name: OrgLoader
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 152
+  line: 139
   module: myco-tui
 - name: OrgRepo
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 135
+  line: 122
   module: myco-tui
 - name: PendingConfirm
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 123
+  line: 110
   module: myco-tui
 - name: PreviewTarget
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 185
+  line: 172
   module: myco-tui
 - name: RelatedRow
   kind: type
@@ -125,37 +125,37 @@ api:
 - name: Row
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 156
+  line: 143
   module: myco-tui
 - name: STATUS_TTL
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 2005
+  line: 1992
   module: myco-tui
 - name: add_item
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1967
+  line: 1954
   module: myco-tui
 - name: add_mode_commits_title
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 2824
+  line: 2811
   module: myco-tui
 - name: add_mode_key_edges
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 4309
+  line: 4296
   module: myco-tui
 - name: add_on_backlog_creates_a_deferred_item
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 4115
+  line: 4102
   module: myco-tui
 - name: alt_arrows_reorder_and_alt_j_k_too
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 3995
+  line: 3982
   module: myco-tui
 - name: app
   kind: module
@@ -165,32 +165,32 @@ api:
 - name: apply_filter
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 894
+  line: 881
   module: myco-tui
 - name: apply_ledger
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1158
+  line: 1145
   module: myco-tui
 - name: apply_ledger_ignores_an_unknown_repo
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 4465
+  line: 4452
   module: myco-tui
 - name: arm_watch
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 703
+  line: 690
   module: myco-tui
 - name: arrow
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 3261
+  line: 3248
   module: myco-tui
 - name: back
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1317
+  line: 1304
   module: myco-tui
 - name: bind
   kind: function
@@ -200,14 +200,12 @@ api:
 - name: board_path
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 980
+  line: 967
   module: myco-tui
-api_omitted: 238
+api_omitted: 237
 deps:
 - camino
 - crossterm
-- myco-config
-- myco-config-toml
 - myco-core
 - myco-git
 - myco-ops
@@ -222,7 +220,6 @@ deps:
 - myco-ops
 - myco-store
 - myco-store-md
-- myco-config
 - camino
 - ratatui
 - app
@@ -244,12 +241,12 @@ provenance:
   - crates/myco-tui/src/render.rs
   - crates/myco-tui/tests/pty.rs
   hashes:
-  - 09b1d91010143e6a3d82af92584a4f393a6d5e74
-  - 868169c244fdc8de9aa87f5321e5421c63dae89b
+  - 6a69e40e4c2615814ed5890e0d7efbe9b1380753
+  - 627393837c821489f297ffb7f2258ccb72b58acc
   - 437a7fc509d6717d52a2b32a7dc1fef8854be650
   - 7ac02453b56f59bc259c4117c493f3c16730bff7
   - 72a7123c096ed41deac8a13b02ca0c56a9fa663a
   - 6d3bdf9aaa624a5d2e34c1a6eb84fa757c96a0f0
-  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
-  generated_at: '1794437755'
+  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
+  generated_at: '1794439256'
   generator: kuda-template/0.1.4

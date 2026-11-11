@@ -50,7 +50,7 @@ api:
 - name: Config
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 157
+  line: 195
   module: myco-core
 - name: ConfigVerb
   kind: type
@@ -152,6 +152,11 @@ api:
   file: crates/myco-core/src/handoff.rs
   line: 18
   module: myco-core
+- name: IndexConfig
+  kind: type
+  file: crates/myco-core/src/lib.rs
+  line: 183
+  module: myco-core
 - name: InvalidTransition
   kind: type
   file: crates/myco-core/src/status.rs
@@ -197,12 +202,7 @@ api:
   file: crates/myco-core/src/kind.rs
   line: 45
   module: myco-core
-- name: KindTable
-  kind: type
-  file: crates/myco-core/src/kind.rs
-  line: 182
-  module: myco-core
-api_omitted: 386
+api_omitted: 389
 deps:
 - schemars
 - serde
@@ -263,15 +263,15 @@ provenance:
   - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
   - ec34134e87bdf0b1515595800aa3a81ac74449dc
   - a1461918ab4b25d64c18a88bee7e27ac5ba89b61
-  - 9141235a6cb438570b3221e892f9cfb86b7af42a
+  - 5d220a111b00de9ca0d5d5cb9693a22644528fbc
   - 35994c7e790eedc768987fd5c6b3e3d9b44338f3
-  - 34c9a4a3ed8561768290a85211a422e2054479c0
+  - 0306aed7b584deb660a0702076f94533eb188713
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - f01971e1bcca257a19dcdaac97e6cc1c2448483c
   - e62184d264d30354071a59cf2b664a41e01e0334
   - 8151702a3a351e7e0190b10dc05471a8cf7de0b0
   - 50ec99c0465cc315ea710acd4c3a25693bc05290
   - 4cc27aecf26206465afb4fb0142882e4d8f87aae
-  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
-  generated_at: '1794437755'
+  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
+  generated_at: '1794439256'
   generator: kuda-template/0.1.4

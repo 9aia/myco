@@ -20,7 +20,7 @@ api:
 - name: ConfigLoader
   kind: type
   file: crates/myco-ops/src/config.rs
-  line: 19
+  line: 23
   module: myco-ops
 - name: DEFAULT_ACTOR
   kind: const
@@ -112,6 +112,11 @@ api:
   file: crates/myco-ops/src/links.rs
   line: 205
   module: myco-ops
+- name: RepoSource
+  kind: type
+  file: crates/myco-ops/src/universe.rs
+  line: 33
+  module: myco-ops
 - name: SCAFFOLD_DIRS
   kind: const
   file: crates/myco-ops/src/ops.rs
@@ -122,6 +127,11 @@ api:
   file: crates/myco-ops/src/links.rs
   line: 27
   module: myco-ops
+- name: TOML
+  kind: const
+  file: crates/myco-ops/src/config.rs
+  line: 162
+  module: myco-ops
 - name: Target
   kind: type
   file: crates/myco-ops/src/items.rs
@@ -131,6 +141,11 @@ api:
   kind: type
   file: crates/myco-ops/src/ops.rs
   line: 357
+  module: myco-ops
+- name: UniverseRepo
+  kind: type
+  file: crates/myco-ops/src/universe.rs
+  line: 53
   module: myco-ops
 - name: VERSION
   kind: const
@@ -167,6 +182,11 @@ api:
   file: crates/myco-ops/src/items.rs
   line: 187
   module: myco-ops
+- name: as_str
+  kind: function
+  file: crates/myco-ops/src/universe.rs
+  line: 42
+  module: myco-ops
 - name: autocommit
   kind: function
   file: crates/myco-ops/src/ops.rs
@@ -182,38 +202,19 @@ api:
   file: crates/myco-ops/src/items.rs
   line: 160
   module: myco-ops
-- name: bad_entries_warn_and_skip
-  kind: function
-  file: crates/myco-ops/src/verb.rs
-  line: 329
-  module: myco-ops
-- name: builtin_wins_and_warns
-  kind: function
-  file: crates/myco-ops/src/verb.rs
-  line: 310
-  module: myco-ops
-- name: builtins
-  kind: function
-  file: crates/myco-ops/src/view.rs
-  line: 35
-  module: myco-ops
-- name: builtins_are_valid
-  kind: function
-  file: crates/myco-ops/src/view.rs
-  line: 274
-  module: myco-ops
-api_omitted: 209
+api_omitted: 243
 deps:
 - camino
+- lasius-core
 - myco-core
 - myco-git
 - myco-index
 - myco-store
+- scarab-config
+- scarab-config-toml
 - serde
 - serde_json
 - time
-- myco-config
-- myco-config-toml
 - myco-index-redb
 - myco-store-md
 - temp-env
@@ -226,19 +227,19 @@ deps:
 - myco-index
 - myco-index-redb
 - camino
-- myco-config
+- scarab_config
 notes: ''
 verify:
 - crates/myco-ops/Cargo.toml
+- crates/myco-ops/src/lib.rs
 - crates/myco-ops/src/config.rs
 - crates/myco-ops/src/discover.rs
 - crates/myco-ops/src/history.rs
 - crates/myco-ops/src/items.rs
-- crates/myco-ops/src/lib.rs
 - crates/myco-ops/src/links.rs
 - crates/myco-ops/src/ops.rs
+- crates/myco-ops/src/universe.rs
 - crates/myco-ops/src/verb.rs
-- crates/myco-ops/src/view.rs
 provenance:
   files:
   - crates/myco-ops/Cargo.toml
@@ -249,19 +250,21 @@ provenance:
   - crates/myco-ops/src/lib.rs
   - crates/myco-ops/src/links.rs
   - crates/myco-ops/src/ops.rs
+  - crates/myco-ops/src/universe.rs
   - crates/myco-ops/src/verb.rs
   - crates/myco-ops/src/view.rs
   hashes:
-  - d7573e374a2172c1a1e272176f8217878c1d8275
-  - deb022c86a9f4e7b261a0af80f9ba2361e8d64dd
-  - e32236a7fbef4a549c16f14a53f3e811399afd31
+  - 516e91db477a3e9fa80bc6986884ca52a64bd6f7
+  - 8a6e88cf229368476b17e144a17096b4e942c37a
+  - 4eb7d2e876d8152e7cdc662bd9d507e45b917c10
   - d68f4d02abaec478c8ca1ab8258a72a98ba5bbbf
   - 8e19c076f4412a9ffb2df900ac9e83021e04f166
-  - 692efc8e5656308c8cd3fd2f4d6d6e8fe2f229cd
+  - ebed441ad483d591b17b7da5bee9fa07a7280d61
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
   - 4ec32aaded4ded15c7f683df03a98deb885e819f
+  - dbbbabb908dffd85b4bed4213d122d24398f8547
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
-  generated_at: '1794437755'
+  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
+  generated_at: '1794439256'
   generator: kuda-template/0.1.4

@@ -10,7 +10,7 @@ api:
 - name: CONFIG
   kind: const
   file: crates/myco-driver/src/data.rs
-  line: 46
+  line: 36
   module: myco-driver
 - name: Engine
   kind: type
@@ -35,7 +35,7 @@ api:
 - name: HandoffRow
   kind: type
   file: crates/myco-driver/src/data.rs
-  line: 63
+  line: 50
   module: myco-driver
 - name: ITEM_COLS
   kind: const
@@ -60,7 +60,7 @@ api:
 - name: Snapshot
   kind: type
   file: crates/myco-driver/src/data.rs
-  line: 79
+  line: 66
   module: myco-driver
 - name: absorb_comments_errors_and_dry_run
   kind: function
@@ -202,12 +202,10 @@ api:
   file: crates/myco-driver/tests/id_repair.rs
   line: 285
   module: myco-driver
-api_omitted: 310
+api_omitted: 309
 deps:
 - camino
 - myco
-- myco-config
-- myco-config-toml
 - myco-core
 - myco-ops
 - myco-store
@@ -225,7 +223,6 @@ deps:
 - myco-ops
 - myco-store
 - myco-store-md
-- myco-config
 - pavo_protocol
 notes: ''
 verify:
@@ -261,8 +258,8 @@ provenance:
   - crates/myco-driver/tests/shim.rs
   - crates/myco-driver/tests/views.rs
   hashes:
-  - e731c80f23fd3be915e277050395e1ac7dcc1331
-  - 0f275d5c8939904eba41c54b9bacb80a1fbc902b
+  - 8511cd2e5be60daa75694c8ef9cd35d93d939676
+  - edd2329937f8894872790228623178588e4058d5
   - 3372ffc3b052071813b8133dc09d79d496db3925
   - d6c7303e4ae870d79025b49919ef785a9e9782ab
   - 70f88ad7103cc88539c46a8f2542392ec91f9b13
@@ -279,7 +276,7 @@ provenance:
   - b50248c6793d48d9a667149284bd1b56ca88225b
   - 2a40dc06bdbccd62b0f3c6d4b29e9e75712b5331
   - 7709e3b39bd7e361982e898600a0eb3c27bf67e5
-  - 95b6dfc21df06b1e82653f4b590d7c06572c2548
-  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
-  generated_at: '1794437755'
+  - 92ac629d644dd0871e71bf1706e3055eaddf8bfd
+  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
+  generated_at: '1794439256'
   generator: kuda-template/0.1.4

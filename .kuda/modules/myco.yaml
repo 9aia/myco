@@ -50,7 +50,7 @@ api:
 - name: CONFIG
   kind: const
   file: crates/myco-cli/src/ops.rs
-  line: 32
+  line: 23
   module: myco
 - name: Change
   kind: type
@@ -209,8 +209,6 @@ deps:
 - clap-markdown
 - csv
 - miette
-- myco-config
-- myco-config-toml
 - myco-core
 - myco-git
 - myco-index
@@ -237,7 +235,6 @@ deps:
 - myco-store
 - unicode_width
 - serde
-- myco-config
 - camino
 - myco-index
 - clap
@@ -339,8 +336,8 @@ provenance:
   - e58c70bea39d5b252a1e819f242bbdcdf20e8b87
   - 30a263d674ef19de11c756d6f7537f91a421909e
   - 51b6a07dd57174197a937034b7eecebd5768ff8a
-  - 81f000ed39b322feaf6c1a27119dc53584e3de20
-  - 04a5fa68eb1f334cb250b7e0cadcfed88063a3aa
+  - 973c041f52c9bfa207aaed052f35933dcf231e5a
+  - 936daf83dfd15f4557bdbc7f0532d3086f394ca1
   - e4e9a6ea1f511d9183fb63d797870ba0134e65e8
   - 524380801d28b1b5b9b20225ea8c6ef3673810b6
   - b892bd1690a1b90660e5eb1b38633921aea838be
@@ -355,7 +352,7 @@ provenance:
   - 61c611ada34e412b977a86ad4d8461fda6899c7d
   - bccd1312b7c7ed43ca8f4a1dee6226a787fec70e
   - 5f4eaab917f0c079416dd7c58a958f5a6f05a464
-  - 51224457c1748f0aa3712a89b0f435af9ab2c1ea
+  - 157b93f0d35235aee31dcfdf532c74caca6da33b
   - 1578bc52117f023aa35e408d046ff654a02551eb
   - 8848edc08ccf6975edd7be9341878d1ff7806983
   - 63398ee6bbbfc8da0ca62d2d315fa0a8a2529f6d
@@ -363,14 +360,14 @@ provenance:
   - 5482666000589e10574a59ae0ef837461b610058
   - 831325260258889ac9cbd4c5a008022d1888a366
   - 45ffa04feeb10c5f975298195d75d797e2ebb73f
-  - f92060c275cbf3ffa8c660eaa98497258a3044f7
+  - 3d15fa2261a7f94f49a161827174f9f4bf643218
   - 137e3bae9f582d6bc51cf4dc0aee1cffa133aa04
-  - f2658c12900461dd123f49a479bfdb66d374ee47
-  - 7f6a735e5e219ff89fb4a3cbb110617f39dd1ac7
+  - 381afdd38edc10272cb7d9b2adf0a668510c40ab
+  - 09e4392ae71bf3269c011931edb31cab0c623378
   - c329af7ef72f8af98b379c75735d07b566154bdb
   - 708073c26ba96e6cdc0a2c1b9050ee53896be78f
   - d5a8af631570da68b8c50faa2d48d469964887bb
-  - 213c2b7cf82585471ebd11b92153c7037387b16a
+  - 4cafddce814542e93b4d628fcfa749a07193383a
   - 4699cb3c6ef39eaffc7b84950c13b63f6050f289
   - c0c6442aa2c8f66b7cd466b4f90243e482c24819
   - 8ccf24c01410ba6513ae9496d3e1e39ec3e23bdc
@@ -381,6 +378,6 @@ provenance:
   - b284558b205e58fe6a803dd1e6112aacad7b1d4b
   - ffdf5d520f4ed131da9d64be2ed4565e4f60af3c
   - a37048abfab3924287e580ee2e09f3ee8abd0dcc
-  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
-  generated_at: '1794437755'
+  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
+  generated_at: '1794439256'
   generator: kuda-template/0.1.4

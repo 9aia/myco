@@ -202,7 +202,7 @@ api:
   file: refs/sturn/wal/devin-i032
   line: 1
   module: sturn-wal
-api_omitted: 228
+api_omitted: 229
 deps: []
 notes: ''
 verify:
@@ -254,7 +254,7 @@ provenance:
   - a25badd268e24c1a3d7ba59930abbd9e2016918e
   - 7e8b2ae0b6d55b40ba24be5a1d5b9555b3170277
   - c2d80d97064be0335fe5d4663e7f640d17aaea84
-  - a121e44713b3c46b84f66f120bbb09e882b95241
+  - 656aadf2f66a1df4b49dfcaf3ef9af6bc4cc657d
   - 4abfe2cce0fb608c299ea4df3c8675cde091d45b
   - 4db6d34b86f0a90453a3b26e428ef14d5a372f17
   - fe5c77ef43ee7fa416d4938ed4828230e2d6ae53
@@ -271,6 +271,6 @@ provenance:
   - be47760863fcba0b65b50642186e0025d3af852d
   - 00c736d9efc103d1f2efb84c0d776df0b1c1f426
   - 88d65cf20e66d85851a7da4506773fee6be426ab
-  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
-  generated_at: '1794437755'
+  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
+  generated_at: '1794439256'
   generator: kuda-template/0.1.4

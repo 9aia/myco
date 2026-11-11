@@ -5,7 +5,7 @@ api:
 - name: Error
   kind: type
   file: crates/myco-index/src/lib.rs
-  line: 173
+  line: 154
   module: myco-index
 - name: FileStamp
   kind: type
@@ -15,12 +15,7 @@ api:
 - name: Index
   kind: trait
   file: crates/myco-index/src/lib.rs
-  line: 153
-  module: myco-index
-- name: LedgerMode
-  kind: type
-  file: crates/myco-index/src/lib.rs
-  line: 31
+  line: 134
   module: myco-index
 - name: LinkIndex
   kind: trait
@@ -35,12 +30,12 @@ api:
 - name: RepoEntry
   kind: type
   file: crates/myco-index/src/lib.rs
-  line: 54
+  line: 35
   module: myco-index
 - name: RepoSnapshot
   kind: type
   file: crates/myco-index/src/lib.rs
-  line: 123
+  line: 104
   module: myco-index
 - name: Stub
   kind: type
@@ -60,17 +55,17 @@ api:
 - name: entry_and_snapshot_serde
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 194
+  line: 175
   module: myco-index
 - name: entry_ledger_serde_backcompat
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 223
+  line: 204
   module: myco-index
 - name: error_display
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 247
+  line: 228
   module: myco-index
 - name: file_stamp_serde_roundtrip
   kind: function
@@ -90,12 +85,7 @@ api:
 - name: has_ledger
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 97
-  module: myco-index
-- name: is_local
-  kind: function
-  file: crates/myco-index/src/lib.rs
-  line: 47
+  line: 78
   module: myco-index
 - name: links
   kind: module
@@ -105,7 +95,7 @@ api:
 - name: live_items
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 144
+  line: 125
   module: myco-index
 - name: myco-index
   kind: module
@@ -115,7 +105,7 @@ api:
 - name: new
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 74
+  line: 55
   module: myco-index
 - name: purge
   kind: function
@@ -160,7 +150,7 @@ api:
 - name: tests
   kind: module
   file: crates/myco-index/src/lib.rs
-  line: 189
+  line: 170
   module: myco-index
 - name: tests
   kind: module
@@ -170,17 +160,17 @@ api:
 - name: with_ledger
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 90
+  line: 71
   module: myco-index
 - name: with_worktree
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 84
+  line: 65
   module: myco-index
 - name: worktree_path
   kind: function
   file: crates/myco-index/src/lib.rs
-  line: 104
+  line: 85
   module: myco-index
 deps:
 - camino
@@ -204,8 +194,8 @@ provenance:
   - crates/myco-index/src/links.rs
   hashes:
   - 98ad0e8e8540bb83e139ee0ceadf6fc80dcf5348
-  - 9184b0b5bafe0834cefd3e9e8b54e538869de899
+  - 91005c28b558865d3b8d9afca87fc0322375b2fc
   - ec22e4f9bbfd8ab271702836d063cc42d6f8cdc4
-  commit_sha: e7b996b3602bfb9c8b58fcb236d0b3ac57c28537
-  generated_at: '1794437755'
+  commit_sha: 9443a881e0984ed1ffaa9b7b41c6abbaf19a5c45
+  generated_at: '1794439256'
   generator: kuda-template/0.1.4
