@@ -27,23 +27,24 @@ if [ -z "$touched" ]; then echo "no crate changes since $last"; exit 0; fi
 order="myco-core myco-config myco-git myco-shell myco-config-toml myco"
 published=""
 tags=""
+# every crate inherits `version.workspace` — one bump moves them
+# all, so bump once up front rather than per touched crate (which
+# inflated the shared version once per crate). The version lives
+# in the root manifest, not the crate manifests.
+cargo set-version -p myco-core --bump patch
+ver="$(grep -m1 '^version = "' Cargo.toml | cut -d'"' -f2)"
 for c in $order; do
     p="${c}"; [ "$c" = myco-cli ] && p="myco"   # cli package name
-    dir="crates/$c"
     grep -q " ${c} \|^${c} \?$\| ${c}$" <<<" $touched " || continue
-    cargo set-version -p "$p" --bump patch
     for i in 1 2 3 4 5; do
         cargo publish -p "$p" --allow-dirty && break || sleep 30
     done
     published="$published $p"
-    # Per-crate tag — versions diverge independently in a monorepo.
-    ver_c="$(grep -m1 '^version' "crates/$p/Cargo.toml" | cut -d'"' -f2)"
-    tags="$tags $p-v$ver_c"
+    tags="$tags $p-v$ver"
 done
 
 git commit -aqm "release: bump crate versions"
 for t in $tags; do git tag "$t"; done
-ver="$(grep -m1 '^version' crates/myco-cli/Cargo.toml | cut -d'"' -f2)"
 git push -q origin HEAD:main --tags
 
 # binaries: local dist build (host arch) → GitHub Release.
