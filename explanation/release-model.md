@@ -14,6 +14,11 @@ on `main`. The script's
 leading debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
 still applies, and it pushes commits and tags to `main`.
 
+The org release plane is **tarsi** (`tarsi-serve` ops — project
+ADR-0005): `scripts/release.sh` is being converted to a thin shim
+over it (PL-014 E1), and until then this script implements the
+same tag-only + `tamias publish` model directly.
+
 ## What a release run does
 
 1. **Diff since the last tag** — release-worthy paths are the
