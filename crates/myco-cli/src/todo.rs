@@ -97,6 +97,34 @@ pub fn done_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
     Ok(item)
 }
 
+/// The `todo cancel` mutation — walks to `cancelled`, removes the
+/// line (subtree included), and archives the subtree into
+/// `DONE.md` with the cancelled status preserved (unlike `done`,
+/// the archive records *why* it left). Works on BACKLOG.md items
+/// too — cancelling parked work shouldn't require promoting it
+/// first. Caller commits. Returns the removed item.
+pub fn cancel_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
+    items::require_kind(id, ItemKind::Task, "todo cancel")?;
+    let mut ledger = items::load_ledger(store)?;
+    let loc = ledger
+        .locate(id)
+        .ok_or_else(|| format!("{id}: no such task"))?;
+    // load + stage the archive before any write — a parse error
+    // or duplicate id fails the verb with the ledger untouched
+    let mut done = items::load_done(store)?;
+    let mut item = ledger
+        .take(&loc)
+        .ok_or_else(|| format!("{id}: no such task"))?;
+    items::walk_to(&mut item, Status::Cancelled)?;
+    // DONE.md holds the terminal pair — the whole subtree
+    // archives cancelled, like `todo done` archives done
+    items::walk_descendants_to(&mut item, Status::Cancelled)?;
+    items::done_push(&mut done, item.clone())?;
+    items::save_ledger(store, &ledger)?;
+    items::save_done(store, &done)?;
+    Ok(item)
+}
+
 /// The `todo defer` mutation — walks to `deferred`, moves the
 /// line (subtree included) into BACKLOG.md. Caller commits.
 pub fn defer_item(store: &impl Store, id: ItemId) -> Result<Item, String> {
@@ -180,6 +208,33 @@ pub fn h_done(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         committed,
         ctx.json,
         &format!("done {id} — {}", item.title),
+    )
+}
+
+/// The `todo cancel` verb.
+pub fn h_cancel(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let id = a.req::<ItemId>("id")?;
+    if crate::confirm::needed(a.flag("yes"))
+        && !crate::confirm::ask(&format!(
+            "cancel {id} — archives it + its subtree into DONE.md as cancelled?"
+        ))
+    {
+        eprintln!("myco: cancelled");
+        return Ok(1);
+    }
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let item = cancel_item(&store, id)?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: cancel {id}"),
+        None,
+        ctx.no_commit,
+    )?;
+    items::report(
+        json!({"item": item, "file": "DONE.md"}),
+        committed,
+        ctx.json,
+        &format!("cancelled {id} — {}", item.title),
     )
 }
 

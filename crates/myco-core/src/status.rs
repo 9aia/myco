@@ -1,12 +1,13 @@
 //! Item status — the owned state machine.
 //!
 //! ```text
-//! open        → claimed | in-progress | deferred
-//! claimed     → in-progress | open | deferred
-//! in-progress → blocked | done | deferred | open
-//! blocked     → in-progress | open | deferred
-//! deferred    → open
+//! open        → claimed | in-progress | deferred | cancelled
+//! claimed     → in-progress | open | deferred | cancelled
+//! in-progress → blocked | done | deferred | open | cancelled
+//! blocked     → in-progress | open | deferred | cancelled
+//! deferred    → open | cancelled
 //! done        → (terminal)
+//! cancelled   → (terminal)
 //! ```
 //!
 //! Invalid transitions are typed errors, never panics.
@@ -32,17 +33,21 @@ pub enum Status {
     Done,
     /// Parked — lives in `BACKLOG.md`.
     Deferred,
+    /// Abandoned — terminal like `done`, but the work was never
+    /// done; archives into `DONE.md` with the status preserved.
+    Cancelled,
 }
 
 impl Status {
     /// All statuses, in declaration order.
-    pub const ALL: [Status; 6] = [
+    pub const ALL: [Status; 7] = [
         Status::Open,
         Status::Claimed,
         Status::InProgress,
         Status::Blocked,
         Status::Done,
         Status::Deferred,
+        Status::Cancelled,
     ];
 
     /// The `status:` token / serde value — `in-progress`, `claimed`, …
@@ -54,6 +59,7 @@ impl Status {
             Status::Blocked => "blocked",
             Status::Done => "done",
             Status::Deferred => "deferred",
+            Status::Cancelled => "cancelled",
         }
     }
 
@@ -62,12 +68,13 @@ impl Status {
     pub fn transitions(self) -> &'static [Status] {
         use Status::*;
         match self {
-            Open => &[Claimed, InProgress, Deferred],
-            Claimed => &[InProgress, Open, Deferred],
-            InProgress => &[Blocked, Done, Deferred, Open],
-            Blocked => &[InProgress, Open, Deferred],
-            Deferred => &[Open],
+            Open => &[Claimed, InProgress, Deferred, Cancelled],
+            Claimed => &[InProgress, Open, Deferred, Cancelled],
+            InProgress => &[Blocked, Done, Deferred, Open, Cancelled],
+            Blocked => &[InProgress, Open, Deferred, Cancelled],
+            Deferred => &[Open, Cancelled],
             Done => &[],
+            Cancelled => &[],
         }
     }
 
@@ -99,7 +106,7 @@ pub struct InvalidTransition {
 
 /// Failure to parse a [`Status`] token.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("invalid status {0:?} — expected open|claimed|in-progress|blocked|done|deferred")]
+#[error("invalid status {0:?} — expected open|claimed|in-progress|blocked|done|deferred|cancelled")]
 pub struct ParseStatusError(pub String);
 
 impl FromStr for Status {
@@ -144,6 +151,13 @@ mod tests {
             (Blocked, Open),
             (Blocked, Deferred),
             (Deferred, Open),
+            // every live status can be cancelled — "never doing
+            // this" is reachable from anywhere short of terminal
+            (Open, Cancelled),
+            (Claimed, Cancelled),
+            (InProgress, Cancelled),
+            (Blocked, Cancelled),
+            (Deferred, Cancelled),
         ] {
             assert!(from.can_transition_to(to), "{from} → {to}");
             assert_eq!(from.transition_to(to).unwrap(), to);
@@ -155,11 +169,18 @@ mod tests {
         for s in Status::ALL {
             // identity is never legal
             assert!(!s.can_transition_to(s));
-            // done is terminal
+            // done and cancelled are terminal
             assert!(!Done.can_transition_to(s));
-            // nothing else reaches done except in-progress
+            assert!(!Cancelled.can_transition_to(s));
+            // nothing reaches the terminals except their legal hops:
+            // done only from in-progress, cancelled from any live status
             if s != InProgress {
                 assert!(!s.can_transition_to(Done), "{s} → done");
+            }
+            if matches!(s, Done | Cancelled) {
+                // covered above — terminal sources reach nothing
+            } else {
+                assert!(s.can_transition_to(Cancelled), "{s} → cancelled");
             }
         }
         // spot-check the remaining holes
@@ -174,6 +195,9 @@ mod tests {
             (Deferred, Claimed),
             (Deferred, Done),
             (Deferred, Blocked),
+            (Done, Cancelled),
+            (Cancelled, Open),
+            (Cancelled, Done),
         ] {
             assert!(!from.can_transition_to(to), "{from} → {to}");
             assert_eq!(
@@ -185,9 +209,13 @@ mod tests {
 
     #[test]
     fn transitions_list() {
-        assert_eq!(Open.transitions(), &[Claimed, InProgress, Deferred]);
+        assert_eq!(
+            Open.transitions(),
+            &[Claimed, InProgress, Deferred, Cancelled]
+        );
         assert_eq!(Done.transitions(), &[]);
-        assert_eq!(Deferred.transitions(), &[Open]);
+        assert_eq!(Cancelled.transitions(), &[]);
+        assert_eq!(Deferred.transitions(), &[Open, Cancelled]);
     }
 
     #[test]

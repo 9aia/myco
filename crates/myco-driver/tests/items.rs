@@ -256,6 +256,69 @@ fn todo_defer_and_backlog_promote() {
 }
 
 #[test]
+fn todo_cancel_archives_as_cancelled() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "task one"]);
+    run(d.path(), &["todo", "add", "task two"]);
+    // give task two a child so the subtree archives together
+    let out = run(
+        d.path(),
+        &["todo", "add", "child", "--parent", "T-002", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    let out = run(d.path(), &["todo", "cancel", "T-002", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(json(&out)["item"]["status"], "cancelled");
+    assert_eq!(json(&out)["file"], "DONE.md");
+    assert!(!read(&wt, "TODO.md").contains("T-002"));
+    let done = read(&wt, "DONE.md");
+    assert!(
+        done.contains("- T-002 task two · status:cancelled"),
+        "{done}"
+    );
+    // the child archives cancelled with its parent
+    assert!(done.contains("status:cancelled"), "{done}");
+    assert_eq!(
+        git(&wt, &["log", "-1", "--format=%s"]),
+        "chore: cancel T-002"
+    );
+
+    // cancel again → terminal, no transition out
+    let out = run(d.path(), &["todo", "cancel", "T-002"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("no such task"), "{}", stderr(&out));
+
+    // `done list` shows the archive — cancelled keeps its status
+    let out = run(
+        d.path(),
+        &["done", "list", "--status", "cancelled", "--json"],
+    );
+    let rows = json(&out);
+    assert_eq!(rows.as_array().unwrap().len(), 2, "{rows}"); // parent + child
+
+    // cancel works straight from BACKLOG.md — no promote needed
+    run(d.path(), &["todo", "defer", "T-001"]);
+    let out = run(d.path(), &["todo", "cancel", "T-001", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(!read(&wt, "BACKLOG.md").contains("T-001"));
+    assert!(read(&wt, "DONE.md").contains("T-001"));
+
+    // `item set --status cancelled` lands in the same archive
+    // (T-003 is the child added above; "third" allocs T-004)
+    run(d.path(), &["todo", "add", "third"]);
+    let out = run(
+        d.path(),
+        &["item", "set", "T-004", "--status", "cancelled", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(read(&wt, "DONE.md").contains("T-004"));
+    // and cancelled is terminal — the archived item refuses mutation
+    let out = run(d.path(), &["item", "set", "T-004", "--status", "open"]);
+    assert_eq!(code(&out), 2);
+}
+
+#[test]
 fn backlog_add_and_list() {
     let (d, wt) = project();
     let out = run(

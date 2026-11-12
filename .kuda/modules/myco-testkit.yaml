@@ -10,7 +10,7 @@ api:
 - name: backlog_doc
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 250
+  line: 255
   module: myco-testkit
 - name: backlog_emit
   kind: function
@@ -35,7 +35,7 @@ api:
 - name: done_doc
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 259
+  line: 266
   module: myco-testkit
 - name: file_kind
   kind: function
@@ -55,7 +55,7 @@ api:
 - name: fixtures_exist
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 367
+  line: 380
   module: myco-testkit
 - name: fixtures_under
   kind: function
@@ -70,7 +70,7 @@ api:
 - name: handoff_entry
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 295
+  line: 308
   module: myco-testkit
 - name: handoffs_emit
   kind: function
@@ -90,7 +90,7 @@ api:
 - name: item_file
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 312
+  line: 325
   module: myco-testkit
 - name: item_id
   kind: function
@@ -150,7 +150,7 @@ api:
 - name: project_meta
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 268
+  line: 281
   module: myco-testkit
 - name: section_name
   kind: function
@@ -165,7 +165,7 @@ api:
 - name: session
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 289
+  line: 302
   module: myco-testkit
 - name: snap_name
   kind: function
@@ -190,7 +190,7 @@ api:
 - name: tests
   kind: module
   file: crates/myco-testkit/src/lib.rs
-  line: 363
+  line: 376
   module: myco-testkit
 - name: title
   kind: function
@@ -200,7 +200,7 @@ api:
 - name: todo_doc
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 241
+  line: 242
   module: myco-testkit
 api_omitted: 2
 deps:
@@ -230,10 +230,10 @@ provenance:
   - crates/myco-testkit/tests/roundtrip.rs
   hashes:
   - df0b6d5c2130f3266885cbf75cf653df9869ea2c
-  - b706f420e15600d299f14beb65976e682071d42d
+  - 0555f7cfc3e41fb2e69db0c404fbf3d5c6b65899
   - 133e73e3ea23e7e14db384409507f1fb6c051caa
   - 77e5524b8d718ad6be29c918e5a76630ae2c1d18
   - 73a0338011456bb4f14655e18c811934553dcbd9
-  commit_sha: 6d99b20a8de6e018dbfe646fae16870fc93aefc0
-  generated_at: '1794440733'
+  commit_sha: df384cacc63cab25744b7939516f384bfac68406
+  generated_at: '1794519344'
   generator: kuda-template/0.1.4

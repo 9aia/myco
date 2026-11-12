@@ -177,7 +177,9 @@ pub fn counts(scan: &Scan) -> Counts {
                 Status::InProgress => c.tasks_in_progress += 1,
                 Status::Blocked => c.tasks_blocked += 1,
                 Status::Deferred => c.backlog += 1,
-                Status::Done => {} // done tasks leave TODO.md
+                // terminal statuses leave the live docs — DONE.md
+                // is the archive, not the board
+                Status::Done | Status::Cancelled => {}
             }
         } else {
             let kind = i.id.kind();
@@ -191,7 +193,9 @@ pub fn counts(scan: &Scan) -> Counts {
                 // plans + user kinds share the last bucket
                 &mut c.plans
             };
-            if archived || i.status == Status::Done {
+            // terminal statuses count resolved — done and
+            // cancelled both mean "not happening anymore"
+            if archived || matches!(i.status, Status::Done | Status::Cancelled) {
                 slot.resolved += 1;
             } else {
                 slot.open += 1;

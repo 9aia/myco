@@ -95,6 +95,8 @@ pub enum Mode {
 pub(crate) enum ConfirmAction {
     /// `Space`/`dd` — `done_selected` through `mutate`.
     Done,
+    /// `x` — `cancel_selected` through `mutate`.
+    Cancel,
     /// `u` — `ops::undo_last` on the target repo's worktree.
     Undo,
     /// `U` — `ops::redo_last`, the undo's inverse.
@@ -1050,6 +1052,7 @@ impl Model {
             KeyCode::Char('d') if was_d => self.request_done(),
             KeyCode::Char('d') => self.pending = Some('d'),
             KeyCode::Char('D') => self.mutate(|m| m.defer_selected()),
+            KeyCode::Char('x') => self.request_cancel(),
             KeyCode::Char('p') => self.mutate(|m| m.promote_selected()),
             KeyCode::Char(' ') => self.request_done(),
             KeyCode::Char('u') => self.request_undo(),
@@ -1457,6 +1460,7 @@ impl Model {
                 self.mode = Mode::Normal;
                 match pending.map(|p| p.action) {
                     Some(ConfirmAction::Done) => self.mutate(|m| m.done_selected()),
+                    Some(ConfirmAction::Cancel) => self.mutate(|m| m.cancel_selected()),
                     Some(ConfirmAction::Undo) => self.undo_last(false),
                     Some(ConfirmAction::UndoForce) => self.undo_last(true),
                     Some(ConfirmAction::Redo) => self.redo_last(),
@@ -1676,6 +1680,26 @@ impl Model {
         self.mode = Mode::Confirm;
     }
 
+    /// `x` — ask before the terminal cancel, same gate as `dd`.
+    fn request_cancel(&mut self) {
+        let target = if self.board == Board::Files {
+            None
+        } else {
+            self.selected().map(|i| (i.id, i.title.clone()))
+        };
+        let Some((id, title)) = target else {
+            self.mutate(|m| m.cancel_selected());
+            return;
+        };
+        self.confirm = Some(PendingConfirm {
+            prompt: format!(
+                "cancel {id} — {title}: archive it + its subtree to DONE.md as cancelled? [y/n]"
+            ),
+            action: ConfirmAction::Cancel,
+        });
+        self.mode = Mode::Confirm;
+    }
+
     /// `u` — arm the undo confirm. The target worktree resolves
     /// *now* so a bad target reports in the status bar instead of
     /// after `y`; the last commit's subject (when the repo answers
@@ -1858,6 +1882,38 @@ impl Model {
         items::commit(&wt, &format!("chore: done {id}"), None, self.no_commit)?;
         self.apply_ledger(repo.as_deref(), ledger);
         self.say(format!("done {id} — {}", item.title));
+        let at = self.sel;
+        self.rebuild_rows();
+        self.reselect(None, repo.as_deref(), at);
+        Ok(())
+    }
+
+    /// `x` — `todo cancel`: walk to cancelled, archive the subtree
+    /// into DONE.md with `status:cancelled` preserved. Works on
+    /// BACKLOG items too — no promote needed.
+    fn cancel_selected(&mut self) -> Result<(), String> {
+        let Some(id) = self.selected_id() else {
+            return Ok(());
+        };
+        let (repo, wt, store) = self.target()?;
+        let _lock = ops::lock_worktree(&wt)?;
+        let mut ledger = items::load_ledger(&store)?;
+        let loc = ledger
+            .locate(id)
+            .ok_or_else(|| format!("{id}: no such task"))?;
+        let mut item = ledger
+            .take(&loc)
+            .ok_or_else(|| format!("{id}: stale task location"))?;
+        items::walk_to(&mut item, Status::Cancelled)?;
+        items::walk_descendants_to(&mut item, Status::Cancelled)?;
+        // stage the archive before any write, like `todo done`
+        let mut done = items::load_done(&store)?;
+        items::done_push(&mut done, item.clone())?;
+        items::save_ledger(&store, &ledger)?;
+        items::save_done(&store, &done)?;
+        items::commit(&wt, &format!("chore: cancel {id}"), None, self.no_commit)?;
+        self.apply_ledger(repo.as_deref(), ledger);
+        self.say(format!("cancelled {id} — {}", item.title));
         let at = self.sel;
         self.rebuild_rows();
         self.reselect(None, repo.as_deref(), at);
@@ -2211,7 +2267,10 @@ impl Model {
 /// live/deferred onto TODO/BACKLOG; file kinds go to FILES.
 fn tab_match(board: Board, i: &Item) -> bool {
     match board {
-        Board::Todo => i.id.kind() == ItemKind::Task && i.status != Status::Deferred,
+        Board::Todo => {
+            i.id.kind() == ItemKind::Task
+                && !matches!(i.status, Status::Deferred | Status::Cancelled)
+        }
         Board::Backlog => i.id.kind() == ItemKind::Task && i.status == Status::Deferred,
         Board::Files => i.id.kind() != ItemKind::Task,
     }

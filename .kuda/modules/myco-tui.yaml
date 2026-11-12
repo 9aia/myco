@@ -35,12 +35,12 @@ api:
 - name: FP_FALLBACK_TICKS
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 1988
+  line: 2044
   module: myco-tui
 - name: FP_FULL_REHASH
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 1982
+  line: 2038
   module: myco-tui
 - name: Fixture
   kind: type
@@ -50,7 +50,7 @@ api:
 - name: FpEntry
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 2022
+  line: 2078
   module: myco-tui
 - name: Guard
   kind: type
@@ -65,12 +65,12 @@ api:
 - name: LOCK
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 3655
+  line: 3714
   module: myco-tui
 - name: LinkHit
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 186
+  line: 188
   module: myco-tui
 - name: MUTED
   kind: const
@@ -85,37 +85,37 @@ api:
 - name: Model
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 196
+  line: 198
   module: myco-tui
 - name: NavEntry
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 160
+  line: 162
   module: myco-tui
 - name: OrgCell
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 3399
+  line: 3458
   module: myco-tui
 - name: OrgLoader
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 139
+  line: 141
   module: myco-tui
 - name: OrgRepo
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 122
+  line: 124
   module: myco-tui
 - name: PendingConfirm
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 110
+  line: 112
   module: myco-tui
 - name: PreviewTarget
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 172
+  line: 174
   module: myco-tui
 - name: RelatedRow
   kind: type
@@ -125,37 +125,37 @@ api:
 - name: Row
   kind: type
   file: crates/myco-tui/src/app.rs
-  line: 143
+  line: 145
   module: myco-tui
 - name: STATUS_TTL
   kind: const
   file: crates/myco-tui/src/app.rs
-  line: 1992
+  line: 2048
   module: myco-tui
 - name: add_item
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1954
+  line: 2010
   module: myco-tui
 - name: add_mode_commits_title
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 2811
+  line: 2870
   module: myco-tui
 - name: add_mode_key_edges
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 4296
+  line: 4355
   module: myco-tui
 - name: add_on_backlog_creates_a_deferred_item
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 4102
+  line: 4161
   module: myco-tui
 - name: alt_arrows_reorder_and_alt_j_k_too
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 3982
+  line: 4041
   module: myco-tui
 - name: app
   kind: module
@@ -165,32 +165,32 @@ api:
 - name: apply_filter
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 881
+  line: 883
   module: myco-tui
 - name: apply_ledger
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1145
+  line: 1148
   module: myco-tui
 - name: apply_ledger_ignores_an_unknown_repo
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 4452
+  line: 4511
   module: myco-tui
 - name: arm_watch
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 690
+  line: 692
   module: myco-tui
 - name: arrow
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 3248
+  line: 3307
   module: myco-tui
 - name: back
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 1304
+  line: 1307
   module: myco-tui
 - name: bind
   kind: function
@@ -200,9 +200,9 @@ api:
 - name: board_path
   kind: function
   file: crates/myco-tui/src/app.rs
-  line: 967
+  line: 969
   module: myco-tui
-api_omitted: 237
+api_omitted: 239
 deps:
 - camino
 - crossterm
@@ -241,11 +241,11 @@ provenance:
   - crates/myco-tui/tests/pty.rs
   hashes:
   - 82131627bab7f97614482ed91e11f85ebd8adbf5
-  - c7dbefba729f441f1223618246883f4d69269f74
+  - 24d13697f5f36bb64057de7493373c93198dca8a
   - 437a7fc509d6717d52a2b32a7dc1fef8854be650
   - 7ac02453b56f59bc259c4117c493f3c16730bff7
-  - 72a7123c096ed41deac8a13b02ca0c56a9fa663a
+  - ceb1bc28c7bea3da2f141747e1ff4d1327b8b79a
   - 6d3bdf9aaa624a5d2e34c1a6eb84fa757c96a0f0
-  commit_sha: 6d99b20a8de6e018dbfe646fae16870fc93aefc0
-  generated_at: '1794440733'
+  commit_sha: df384cacc63cab25744b7939516f384bfac68406
+  generated_at: '1794519344'
   generator: kuda-template/0.1.4

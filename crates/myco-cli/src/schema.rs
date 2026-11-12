@@ -106,7 +106,8 @@ pub fn document() -> serde_json::Value {
                 "line": "- T-NNN <title>[ · <token>]…",
                 "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
                 "default_status": "done",
-                "note": "append-only done-task archive — `todo done`/`item set --status done` land here; done is terminal",
+                "statuses": "done|cancelled — the terminal pair; cancelled keeps its `status:` token",
+                "note": "append-only terminal-task archive — `todo done`/`todo cancel`/`item set --status done|cancelled` land here; done and cancelled are terminal",
             },
             "index.md": {"format": "markdown", "verbatim": true},
             "kinds": {
@@ -148,7 +149,7 @@ pub fn document() -> serde_json::Value {
                       [· due:<YYYY-MM-DD>] [· est:<n>] [· cycle:<name>] [· note:<text>]",
             "token_order": ["status", "pri", "owner", "created", "#label", "blocks", "links", "epic", "ms", "due", "est", "cycle", "note"],
             "separator": "·",
-            "defaults": {"status": "doc default (open|deferred|done)", "pri": "med"},
+            "defaults": {"status": "doc default (open|deferred|done)", "pri": "med", "note": "cancelled is never a doc default — it archives in DONE.md with its token"},
             "label_pattern": "[A-Za-z0-9_-]+",
             "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms/cycle names — `ms` is the milestone token)",
             "estimate_bound": "0–1000 points (relative size, not hours)",
@@ -183,9 +184,10 @@ mod tests {
         // transitions mirror the state machine exactly
         assert_eq!(
             d["transitions"]["in-progress"],
-            json!(["blocked", "done", "deferred", "open"])
+            json!(["blocked", "done", "deferred", "open", "cancelled"])
         );
         assert_eq!(d["transitions"]["done"], json!([]));
+        assert_eq!(d["transitions"]["cancelled"], json!([]));
         assert_eq!(
             d["statuses"],
             json!([
@@ -194,7 +196,8 @@ mod tests {
                 "in-progress",
                 "blocked",
                 "done",
-                "deferred"
+                "deferred",
+                "cancelled"
             ])
         );
         // file spec data

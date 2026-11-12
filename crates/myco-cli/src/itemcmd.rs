@@ -344,13 +344,14 @@ pub fn h_set(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     if flags.is_noop() && session.is_none() {
         return Err("item set: nothing to change — pass at least one flag".into());
     }
-    // done is terminal — the one `item set` worth confirming
-    if flags.status == Some(Status::Done)
-        && crate::confirm::needed(a.flag("yes"))
-        && !crate::confirm::ask(&format!("set {id} → done? done is terminal."))
-    {
-        eprintln!("myco: cancelled");
-        return Ok(1);
+    // the terminals are one-way — the `item set` worth confirming
+    if let Some(to @ (Status::Done | Status::Cancelled)) = flags.status {
+        if crate::confirm::needed(a.flag("yes"))
+            && !crate::confirm::ask(&format!("set {id} → {to}? {to} is terminal."))
+        {
+            eprintln!("myco: cancelled");
+            return Ok(1);
+        }
     }
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
     // `--owner` doubles as the actor here (the resolution chain's
@@ -367,7 +368,14 @@ pub fn h_set(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         .item
         .as_ref()
         .map(|i| format!("set {}", items::compact(i)))
-        .unwrap_or_else(|| format!("set {id} done — line removed"));
+        .unwrap_or_else(|| {
+            format!(
+                "set {id} {} — line removed",
+                flags
+                    .status
+                    .map_or("done".to_string(), |s| s.token().to_string())
+            )
+        });
     let mut payload = json!({"item": outcome.item, "location": outcome.location});
     if let Some(entry) = outcome.claim {
         payload["claim"] = json!(entry);
@@ -605,13 +613,16 @@ pub(crate) fn mutate_item(
                 return Err(format!("{id}: no such task"));
             };
             match current.status {
-                Status::Done => {
+                Status::Done | Status::Cancelled => {
+                    let terminal = current.status;
                     let mut item = ledger
                         .take(&loc)
                         .ok_or_else(|| format!("{id}: no such task"))?;
-                    // DONE.md emit is done-only — archive the
-                    // whole subtree done, like `todo done`
-                    items::walk_descendants_to(&mut item, Status::Done)?;
+                    // DONE.md holds the terminal pair — archive
+                    // the whole subtree under the status it
+                    // reached (done drops its token, cancelled
+                    // keeps `status:cancelled`)
+                    items::walk_descendants_to(&mut item, terminal)?;
                     // stage before any write — a dup/parse
                     // failure leaves the ledger untouched
                     let mut doc = items::load_done(store)?;

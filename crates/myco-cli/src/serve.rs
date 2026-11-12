@@ -688,6 +688,15 @@ pub(crate) fn w_todo_done(s: &Server, a: &crate::registry::Args) -> Result<Value
     Ok(json!({"item": item, "committed": committed}))
 }
 
+/// `todo.cancel`.
+pub(crate) fn w_todo_cancel(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let (proj, store) = s.open()?;
+    let item = todo::cancel_item(&store, id).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: cancel {id}"), None)?;
+    Ok(json!({"item": item, "file": "DONE.md", "committed": committed}))
+}
+
 /// `todo.defer`.
 pub(crate) fn w_todo_defer(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;

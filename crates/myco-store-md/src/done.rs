@@ -1,11 +1,13 @@
 //! `DONE.md` — `# Done` plus optional `##` sections of `- T-NNN …`
-//! items. No checkboxes: done items are `Done` (a `status:` token
-//! must say `done` if present — the default, so canonical emit
-//! drops it). The append-only archive `todo done` /
-//! `item set --status done` land in: done tasks leave TODO.md but
-//! stay readable here. Items nest like BACKLOG.md — a `-` list
-//! indented under an item is its `children` (2 spaces per level,
-//! canonical).
+//! items. No checkboxes: archived items are terminal — `done` or
+//! `cancelled` (a `status:` token must say one of them if present;
+//! `done` is the default, so canonical emit drops it while
+//! `cancelled` stays explicit). The append-only archive
+//! `todo done` / `todo cancel` / `item set --status done|cancelled`
+//! land in: terminal tasks leave TODO.md but stay readable here —
+//! cancelled work keeps its status so the archive says *why* it
+//! left. Items nest like BACKLOG.md — a `-` list indented under an
+//! item is its `children` (2 spaces per level, canonical).
 
 use markdown::mdast::Node;
 use myco_core::{DoneDoc, Item, ItemKind, Section, Status};
@@ -20,6 +22,13 @@ const SPEC: LineSpec = LineSpec {
     default_status: Status::Done,
     file: FILE,
 };
+
+/// The statuses DONE.md archives — the machine's terminal pair.
+/// `done` is the doc default (token dropped on emit); `cancelled`
+/// keeps its explicit token so the archive records the difference.
+fn is_archived(status: Status) -> bool {
+    matches!(status, Status::Done | Status::Cancelled)
+}
 
 fn err(src: &str, node: &Node, msg: impl Into<String>) -> ParseError {
     match node.position() {
@@ -98,18 +107,18 @@ fn parse_li(
         return Err(err(
             src,
             node,
-            "done items have no checkbox — the file implies `done`",
+            "archived items have no checkbox — the file implies done/cancelled",
         ));
     }
     let (head, nested) = line::item_parts(li).map_err(|m| err(src, node, m))?;
     let text =
         mdx::single_text(head).ok_or_else(|| err(src, node, "item line must be plain text"))?;
     let mut parsed = line::parse_text(text, &SPEC).map_err(|m| err(src, node, m))?;
-    if parsed.status != Status::Done {
+    if !is_archived(parsed.status) {
         return Err(err(
             src,
             node,
-            "DONE.md holds done items only — live tasks belong in TODO.md/BACKLOG.md",
+            "DONE.md holds done/cancelled items only — live tasks belong in TODO.md/BACKLOG.md",
         ));
     }
     if let Some(list) = nested {
@@ -123,8 +132,8 @@ fn parse_li(
 }
 
 /// Canonical `DONE.md` — same layout as [`crate::emit_backlog`]
-/// with the done-only rule. Fails on non-done items and the same
-/// line-grammar limits as the other ledger docs.
+/// with the terminal-only rule. Fails on non-terminal items and
+/// the same line-grammar limits as the other ledger docs.
 pub fn emit_done(doc: &DoneDoc) -> Result<String, EmitError> {
     let err = |m: &str| EmitError::new(FILE, m);
     let mut out = String::from("# Done\n");
@@ -164,9 +173,9 @@ pub fn emit_done(doc: &DoneDoc) -> Result<String, EmitError> {
     Ok(out)
 }
 
-/// [`line::check_item`] + the done-only rule, applied to a whole
-/// subtree. Depth matches the parse-side cap so emit can't write
-/// a file parse would reject (or overflow the stack on).
+/// [`line::check_item`] + the terminal-only rule, applied to a
+/// whole subtree. Depth matches the parse-side cap so emit can't
+/// write a file parse would reject (or overflow the stack on).
 fn check_subtree(item: &Item, depth: usize) -> Result<(), EmitError> {
     if depth > line::MAX_ITEM_DEPTH {
         return Err(EmitError::new(
@@ -175,10 +184,10 @@ fn check_subtree(item: &Item, depth: usize) -> Result<(), EmitError> {
         ));
     }
     line::check_item(item, FILE)?;
-    if item.status != Status::Done {
+    if !is_archived(item.status) {
         return Err(EmitError::new(
             FILE,
-            format!("non-done item {} in DONE.md", item.id),
+            format!("non-terminal item {} in DONE.md", item.id),
         ));
     }
     for c in &item.children {
@@ -236,6 +245,23 @@ mod tests {
     }
 
     #[test]
+    fn cancelled_roundtrip() {
+        // cancelled is terminal like done but keeps its token —
+        // the archive records that the work never happened
+        let src = "# Done\n\n- T-001 shipped\n- T-002 wontfix · status:cancelled\n  - T-003 sub · status:cancelled\n";
+        let doc = parse_done(src).unwrap();
+        assert_eq!(doc.sections[0].items[0].status, Status::Done);
+        assert_eq!(doc.sections[0].items[1].status, Status::Cancelled);
+        assert_eq!(emit_done(&doc).unwrap(), src);
+        // explicit status:done still canonicalizes away
+        let src2 = "# Done\n\n- T-001 x · status:done\n- T-002 y · status:cancelled\n";
+        assert_eq!(
+            emit_done(&parse_done(src2).unwrap()).unwrap(),
+            "# Done\n\n- T-001 x\n- T-002 y · status:cancelled\n"
+        );
+    }
+
+    #[test]
     fn empty_doc() {
         let doc = DoneDoc::default();
         let out = emit_done(&doc).unwrap();
@@ -256,6 +282,7 @@ mod tests {
             ("# Done\n\n- [x] T-001 x\n", "checked"),
             ("# Done\n\n- T-001 x · status:open\n", "open status"),
             ("# Done\n\n- T-001 x · status:deferred\n", "deferred status"),
+            ("# Done\n\n- T-001 x · status:in-progress\n", "live status"),
             ("# Done\n\n- I-001 x\n", "wrong kind"),
             ("# Done\n\n- T-001\n  cont\n", "multi-line"),
             ("# Done\n\n1. T-001 x\n", "ordered"),

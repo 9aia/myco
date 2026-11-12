@@ -182,6 +182,11 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "description": "Parked — lives in `BACKLOG.md`.",
               "type": "string",
               "const": "deferred"
+            },
+            {
+              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "type": "string",
+              "const": "cancelled"
             }
           ]
         },
@@ -406,6 +411,11 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "description": "Parked — lives in `BACKLOG.md`.",
               "type": "string",
               "const": "deferred"
+            },
+            {
+              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "type": "string",
+              "const": "cancelled"
             }
           ]
         },
@@ -656,6 +666,11 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "description": "Parked — lives in `BACKLOG.md`.",
               "type": "string",
               "const": "deferred"
+            },
+            {
+              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "type": "string",
+              "const": "cancelled"
             }
           ]
         },
@@ -901,6 +916,11 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "description": "Parked — lives in `BACKLOG.md`.",
               "type": "string",
               "const": "deferred"
+            },
+            {
+              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "type": "string",
+              "const": "cancelled"
             }
           ]
         },
@@ -934,7 +954,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "DoneDoc": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "title": "DoneDoc",
-      "description": "`DONE.md` — `# Done` plus optional `##` sections of `- T-NNN …`\nitems (no checkbox; items are `Done`). The append-only archive\n`todo done`/`item set --status done` land in — done tasks leave\nTODO.md but stay readable here (`myco done list`, `item show`).",
+      "description": "`DONE.md` — `# Done` plus optional `##` sections of `- T-NNN …`\nitems (no checkbox; items are `Done` or `Cancelled` — the\nterminal pair). The append-only archive `todo done`/`todo\ncancel`/`item set --status done|cancelled` land in — terminal\ntasks leave TODO.md but stay readable here (`myco done list`,\n`item show`); cancelled items keep their `status:` token so the\narchive distinguishes \"finished\" from \"never doing this\".",
       "type": "object",
       "properties": {
         "sections": {
@@ -1146,6 +1166,11 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "description": "Parked — lives in `BACKLOG.md`.",
               "type": "string",
               "const": "deferred"
+            },
+            {
+              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "type": "string",
+              "const": "cancelled"
             }
           ]
         },
@@ -1375,6 +1400,11 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "description": "Parked — lives in `BACKLOG.md`.",
               "type": "string",
               "const": "deferred"
+            },
+            {
+              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "type": "string",
+              "const": "cancelled"
             }
           ]
         },
@@ -1562,6 +1592,11 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
           "description": "Parked — lives in `BACKLOG.md`.",
           "type": "string",
           "const": "deferred"
+        },
+        {
+          "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+          "type": "string",
+          "const": "cancelled"
         }
       ]
     },
@@ -1641,7 +1676,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "in-progress",
     "blocked",
     "done",
-    "deferred"
+    "deferred",
+    "cancelled"
   ],
   "priorities": [
     "low",
@@ -1653,28 +1689,34 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "open": [
       "claimed",
       "in-progress",
-      "deferred"
+      "deferred",
+      "cancelled"
     ],
     "claimed": [
       "in-progress",
       "open",
-      "deferred"
+      "deferred",
+      "cancelled"
     ],
     "in-progress": [
       "blocked",
       "done",
       "deferred",
-      "open"
+      "open",
+      "cancelled"
     ],
     "blocked": [
       "in-progress",
       "open",
-      "deferred"
+      "deferred",
+      "cancelled"
     ],
     "done": [],
     "deferred": [
-      "open"
-    ]
+      "open",
+      "cancelled"
+    ],
+    "cancelled": []
   },
   "ids": {
     "shape": "<prefix>-<number>, zero-padded per kind",
@@ -1745,7 +1787,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "line": "- T-NNN <title>[ · <token>]…",
       "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
       "default_status": "done",
-      "note": "append-only done-task archive — `todo done`/`item set --status done` land here; done is terminal"
+      "statuses": "done|cancelled — the terminal pair; cancelled keeps its `status:` token",
+      "note": "append-only terminal-task archive — `todo done`/`todo cancel`/`item set --status done|cancelled` land here; done and cancelled are terminal"
     },
     "index.md": {
       "format": "markdown",
@@ -1834,7 +1877,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "separator": "·",
     "defaults": {
       "status": "doc default (open|deferred|done)",
-      "pri": "med"
+      "pri": "med",
+      "note": "cancelled is never a doc default — it archives in DONE.md with its token"
     },
     "label_pattern": "[A-Za-z0-9_-]+",
     "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms/cycle names — `ms` is the milestone token)",

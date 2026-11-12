@@ -1,5 +1,6 @@
-//! `myco done list` — the DONE.md archive read. Done tasks leave
-//! TODO.md but stay here, filterable like every other list.
+//! `myco done list` — the DONE.md archive read. Terminal tasks
+//! (done and cancelled) leave TODO.md but stay here, filterable
+//! like every other list.
 
 use myco_core::Item;
 use myco_store::Store;

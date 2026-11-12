@@ -3,8 +3,8 @@
 //! Checks: strict parses (miette-rendered spans), `meta.toml`
 //! counters ≥ max id per kind, duplicate ids across the ledger,
 //! dangling `blocks:`/`links:` refs, kind/dir filename mismatches, `[x]`/
-//! `status:done` items (the rule: done items are deleted — git
-//! keeps history), title/frontmatter id mismatches (a file whose
+//! `status:done`/`status:cancelled` items (the rule: terminal
+//! items are deleted — git keeps history), title/frontmatter id mismatches (a file whose
 //! title or H1 still carries its old `ADR-0008:` number), stale
 //! `PREFIX-NNNN` prose references (a mention in a body, title,
 //! index or handoff that no live or archived id resolves — code
@@ -531,8 +531,9 @@ fn self_ids(file: &myco_core::ItemFile) -> Vec<ItemId> {
     v
 }
 
-/// Is `line` a done item? `[x]`/`[X]` checkbox, or a `· status:done`
-/// metadata token.
+/// Is `line` a terminal item? `[x]`/`[X]` checkbox, or a
+/// `· status:done`/`· status:cancelled` metadata token — both
+/// archive into DONE.md, so neither belongs in TODO.md.
 fn is_done_line(line: &str) -> bool {
     let t = line.trim_start();
     if ["- [x]", "- [X]", "* [x]", "* [X]", "+ [x]", "+ [X]"]
@@ -541,7 +542,9 @@ fn is_done_line(line: &str) -> bool {
     {
         return true;
     }
-    t.split('·').skip(1).any(|p| p.trim() == "status:done")
+    t.split('·')
+        .skip(1)
+        .any(|p| matches!(p.trim(), "status:done" | "status:cancelled"))
 }
 
 /// Delete done-item lines and their deeper-indented continuations
@@ -683,7 +686,7 @@ pub(crate) fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis 
                     col: 1,
                     code: "done-item",
                     msg: format!(
-                        "{} done item(s) — done tasks are removed from TODO.md",
+                        "{} terminal item(s) — done/cancelled tasks are removed from TODO.md",
                         done.len()
                     ),
                     severity: Severity::Error,
@@ -813,8 +816,8 @@ pub(crate) fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis 
     }
 
     // --- DONE.md ---------------------------------------------------
-    // the done-task archive — parses like BACKLOG.md but
-    // done-only. Ids join the ledger set (dup detection + ref
+    // the terminal-task archive — parses like BACKLOG.md but
+    // done/cancelled-only. Ids join the ledger set (dup detection + ref
     // resolution) while items skip the live-item checks — an
     // archived `blocks:` may legitimately dangle.
     match read(wt, "DONE.md") {

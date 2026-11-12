@@ -45,7 +45,7 @@ api:
 - name: COLUMNS
   kind: const
   file: crates/myco-cli/src/board.rs
-  line: 233
+  line: 234
   module: myco
 - name: CONFIG
   kind: const
@@ -100,7 +100,7 @@ api:
 - name: DOC_LOCS
   kind: const
   file: crates/myco-cli/src/check.rs
-  line: 1593
+  line: 1596
   module: myco
 - name: END
   kind: const
@@ -202,7 +202,7 @@ api:
   file: crates/myco-cli/src/serve.rs
   line: 43
   module: myco
-api_omitted: 740
+api_omitted: 743
 deps:
 - camino
 - clap
@@ -343,19 +343,19 @@ provenance:
   - b892bd1690a1b90660e5eb1b38633921aea838be
   - b75622af11afd8f4dc51d6b1be59f52ff7aff62c
   - 1bcf31dd6b9de31827e53e57d25d9081bd935fbe
-  - f4c875d2af3f274260ea075f765b6fc8429366ef
+  - 191a1cce28cf7e91ce09d18a0ff94d0cf2f2bc05
   - 2e182c8c710d7705517434be80d8bed48b39367c
-  - f94baa7ff3516c385f86124091b5bc8da7bed17e
+  - 0abff986a601719abf2349cd45fded42be1d772d
   - 5a82986ff57b33cb61e3756462d2503816b1c3e4
   - 43de5c03b4d0890f62879b20e00a512fff0fd655
   - c97d6331dff4cf9536936644c267a6fc3d997824
-  - 61c611ada34e412b977a86ad4d8461fda6899c7d
+  - d4138a8eeb7ba902373b96afda6cbbb67dda3354
   - bccd1312b7c7ed43ca8f4a1dee6226a787fec70e
-  - 5f4eaab917f0c079416dd7c58a958f5a6f05a464
+  - 51151f503dd4d78d7afe9d02bac6f1795be6b19a
   - 5e6c06d65911685a8dce2f9e6c5301fa7ce0297d
   - b753f7f3b03f98b9085718a5a2fb305c17dbfd30
   - 8848edc08ccf6975edd7be9341878d1ff7806983
-  - 63398ee6bbbfc8da0ca62d2d315fa0a8a2529f6d
+  - 46bdd5151102d609e43a3a716bd56f603a3695f7
   - 8b6f06aa86d65d4b44c4ccd4e8b85dee175f96f2
   - 31a03c57ff942ff429eba366c1bea0619ff44ba0
   - 831325260258889ac9cbd4c5a008022d1888a366
@@ -368,17 +368,17 @@ provenance:
   - 708073c26ba96e6cdc0a2c1b9050ee53896be78f
   - cec360f303cc9125b97bdf633942bdded77c11b6
   - d5a8af631570da68b8c50faa2d48d469964887bb
-  - 51af7264f634f42ea2aad17dc4a74cfd41c31e4d
+  - ef74f6d0354e50bc067e99864ea2e7062c8c46ed
   - 6ac2386d1db5f6351d69e3884a28db8467b654ba
-  - c0c6442aa2c8f66b7cd466b4f90243e482c24819
-  - 32f46fe0d85cf633844fee6a73de3924ce64f557
+  - 7906b70675931ac77067be85a514ba75051a182c
+  - 2dcb0e6e2be07bc372acd3d2266849b7b34e8289
   - 0ca93c1bced47ad5d3cb524367bea01bf1d4736d
   - 74943b1d2de535d5458c5c9012036e29d261f94b
   - 7be39d581a523abe21ae23e03481689006e804f0
-  - 0257c799b762d814cedb8e26e3a25fb4b211329e
+  - 245cb34ea26c318987af3304771f7e29c2977ef0
   - b284558b205e58fe6a803dd1e6112aacad7b1d4b
   - ffdf5d520f4ed131da9d64be2ed4565e4f60af3c
   - a37048abfab3924287e580ee2e09f3ee8abd0dcc
-  commit_sha: 2fb48b7b8884e020cfd9ac11a13b0ee5ee0a76b5
-  generated_at: '1794490880'
+  commit_sha: df384cacc63cab25744b7939516f384bfac68406
+  generated_at: '1794519344'
   generator: kuda-template/0.1.4

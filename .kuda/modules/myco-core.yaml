@@ -20,7 +20,7 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-core/src/status.rs
-  line: 39
+  line: 43
   module: myco-core
 - name: ALL
   kind: const
@@ -60,7 +60,7 @@ api:
 - name: DoneDoc
   kind: type
   file: crates/myco-core/src/doc.rs
-  line: 89
+  line: 92
   module: myco-core
 - name: Edge
   kind: type
@@ -100,7 +100,7 @@ api:
 - name: Err
   kind: type
   file: crates/myco-core/src/status.rs
-  line: 106
+  line: 113
   module: myco-core
 - name: Err
   kind: type
@@ -160,7 +160,7 @@ api:
 - name: InvalidTransition
   kind: type
   file: crates/myco-core/src/status.rs
-  line: 93
+  line: 100
   module: myco-core
 - name: Issue
   kind: const
@@ -180,7 +180,7 @@ api:
 - name: ItemFile
   kind: type
   file: crates/myco-core/src/doc.rs
-  line: 108
+  line: 111
   module: myco-core
 - name: ItemId
   kind: type
@@ -259,7 +259,7 @@ provenance:
   - f75323e2b82195a4149a5fb91548e75ba386acbf
   - 604b979a927c5d66c866f7f0b061a5285483be02
   - 06e989397088667febfffba9ce2aa5e36a6d671b
-  - e7e29dca7946d7bbcd82dbc8ee2b4c6cfc4c1174
+  - b3002daf43031e8f8486ee8b33e67dbda29ce1ff
   - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
   - ec34134e87bdf0b1515595800aa3a81ac74449dc
   - a1461918ab4b25d64c18a88bee7e27ac5ba89b61
@@ -269,9 +269,9 @@ provenance:
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - f01971e1bcca257a19dcdaac97e6cc1c2448483c
   - e62184d264d30354071a59cf2b664a41e01e0334
-  - 8151702a3a351e7e0190b10dc05471a8cf7de0b0
-  - 50ec99c0465cc315ea710acd4c3a25693bc05290
+  - d32a01bfebe532259cd950e2126bccf6fe720714
+  - 72e92f7c24d5596a99997c10286efcfc7e0061ba
   - 4cc27aecf26206465afb4fb0142882e4d8f87aae
-  commit_sha: 6d99b20a8de6e018dbfe646fae16870fc93aefc0
-  generated_at: '1794440733'
+  commit_sha: df384cacc63cab25744b7939516f384bfac68406
+  generated_at: '1794519344'
   generator: kuda-template/0.1.4

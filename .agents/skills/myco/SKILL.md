@@ -45,9 +45,10 @@ myco <verb> --help     # every verb, self-documenting
 | Session start / where things stand | `myco status --prompt` |
 | Add a task | `myco todo add "title" [--pri high] [--owner devin]` |
 | Park / re-activate a task | `myco todo defer T-NNN` / `myco backlog promote T-NNN` |
-| Claim / start / block / finish | `myco item set T-NNN --status claimed|in-progress|blocked|done` (`--steal` takes an item owned by another actor) |
+| Claim / start / block / finish | `myco item set T-NNN --status claimed|in-progress|blocked|done|cancelled` (`--steal` takes an item owned by another actor) |
 | Done a task | `myco todo done T-NNN` (archives subtree → `DONE.md`) |
-| Done tasks / filters | `myco done list` · every `list` verb takes `--status --owner --label --pri --epic --milestone --due --est --cycle --query --limit` |
+| Never doing it | `myco todo cancel T-NNN` (terminal — archives subtree → `DONE.md` as `status:cancelled`; works on BACKLOG.md items too) |
+| Archived tasks / filters | `myco done list` · every `list` verb takes `--status --owner --label --pri --epic --milestone --due --est --cycle --query --limit` |
 | Undo the last mutation | `myco undo` (resets the `project` tip one commit — refuses dirty/pushed tips) |
 | File / close an issue | `myco issue new "title"` / `myco issue resolve I-NNN` |
 | Design / plan / decision docs | `myco proposal new` · `myco plan new` · `myco adr new` |

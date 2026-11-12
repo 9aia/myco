@@ -80,9 +80,12 @@ impl BacklogDoc {
 }
 
 /// `DONE.md` — `# Done` plus optional `##` sections of `- T-NNN …`
-/// items (no checkbox; items are `Done`). The append-only archive
-/// `todo done`/`item set --status done` land in — done tasks leave
-/// TODO.md but stay readable here (`myco done list`, `item show`).
+/// items (no checkbox; items are `Done` or `Cancelled` — the
+/// terminal pair). The append-only archive `todo done`/`todo
+/// cancel`/`item set --status done|cancelled` land in — terminal
+/// tasks leave TODO.md but stay readable here (`myco done list`,
+/// `item show`); cancelled items keep their `status:` token so the
+/// archive distinguishes "finished" from "never doing this".
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(serde::Serialize, serde::Deserialize)]

@@ -52,8 +52,9 @@ pub fn save_done(store: &impl Store, doc: &myco_core::DoneDoc) -> Result<(), Str
 }
 
 /// Append `item` (subtree included — every node must already be
-/// `Status::Done`, emit rejects anything else) to the done doc's
-/// flat unsectioned list. Duplicate ids — the item's whole
+/// terminal, `Done` or `Cancelled`; emit rejects anything else)
+/// to the done doc's flat unsectioned list. Duplicate ids — the
+/// item's whole
 /// subtree — are refused: an id lives in exactly one place.
 pub fn done_push(doc: &mut myco_core::DoneDoc, item: Item) -> Result<(), String> {
     let live: std::collections::BTreeSet<_> = doc

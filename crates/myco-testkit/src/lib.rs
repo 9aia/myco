@@ -234,14 +234,19 @@ pub mod strat {
         })
     }
 
-    /// A `TodoDoc` — statuses exclude `Done` (removed) and
-    /// `Deferred` (BACKLOG.md's status), task ids only. The repo
+    /// A `TodoDoc` — statuses exclude the terminals (`Done`,
+    /// `Cancelled` — both archive into DONE.md) and `Deferred`
+    /// (BACKLOG.md's status), task ids only. The repo
     /// name shares the section-name charset — it fills
     /// `# TODO — <repo>` and must survive the heading too.
     pub fn todo_doc() -> impl Strategy<Value = TodoDoc> {
         (
             section_name(),
-            sections(line_item(&[Status::Done, Status::Deferred])),
+            sections(line_item(&[
+                Status::Done,
+                Status::Deferred,
+                Status::Cancelled,
+            ])),
         )
             .prop_map(|(repo, sections)| TodoDoc { repo, sections })
     }
@@ -255,12 +260,20 @@ pub mod strat {
         .prop_map(|sections| BacklogDoc { sections })
     }
 
-    /// A `DoneDoc` — every item (children included) `Done`.
+    /// A `DoneDoc` — every item (children included) terminal: one
+    /// of `Done`/`Cancelled` per tree, so the `status:cancelled`
+    /// token round-trips through emit/parse.
     pub fn done_doc() -> impl Strategy<Value = DoneDoc> {
-        sections(line_item(&[]).prop_map(|mut i| {
-            status_tree(&mut i, Status::Done);
-            i
-        }))
+        sections(
+            (
+                line_item(&[]),
+                prop::sample::select(vec![Status::Done, Status::Cancelled]),
+            )
+                .prop_map(|(mut i, status)| {
+                    status_tree(&mut i, status);
+                    i
+                }),
+        )
         .prop_map(|sections| DoneDoc { sections })
     }
 

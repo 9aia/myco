@@ -50,7 +50,7 @@ api:
 - name: Filter
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 337
+  line: 338
   module: myco-ops
 - name: HistoryEntry
   kind: type
@@ -75,7 +75,7 @@ api:
 - name: LockedStore
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 113
+  line: 114
   module: myco-ops
 - name: MAX_ENTRIES
   kind: const
@@ -100,7 +100,7 @@ api:
 - name: NewItem
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 439
+  line: 440
   module: myco-ops
 - name: Origin
   kind: type
@@ -140,7 +140,7 @@ api:
 - name: Target
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 127
+  line: 128
   module: myco-ops
 - name: UndoOutcome
   kind: type
@@ -165,27 +165,27 @@ api:
 - name: all_ids
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 151
+  line: 152
   module: myco-ops
 - name: alloc_id
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 148
+  line: 149
   module: myco-ops
 - name: append_handoff
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 205
+  line: 206
   module: myco-ops
 - name: archive_done
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 87
+  line: 88
   module: myco-ops
 - name: archive_item
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 187
+  line: 188
   module: myco-ops
 - name: as_str
   kind: function
@@ -265,7 +265,7 @@ provenance:
   - 55c8bec909487bbb5fb620a10558904347ea65e8
   - 9a3c04a646346851a0326d448e9d7836d1905644
   - 9e40ec197966b497677d61c378f6b9ad1e3d5e48
-  - 8e19c076f4412a9ffb2df900ac9e83021e04f166
+  - d06f0a1d2e377d9ece738261a02cdba0cd07d321
   - fefad98d22881711edea0ee44b6a3f553b3b1687
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
   - 0cda1cfae63fb408b2386ddf344413afb715cc02
@@ -273,6 +273,6 @@ provenance:
   - 13ebcffb627c04d4af7f1766ec043f867e63110e
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: 2fb48b7b8884e020cfd9ac11a13b0ee5ee0a76b5
-  generated_at: '1794490880'
+  commit_sha: df384cacc63cab25744b7939516f384bfac68406
+  generated_at: '1794519344'
   generator: kuda-template/0.1.4

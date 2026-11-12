@@ -229,7 +229,8 @@ fn fit_widths_dyn(mut out: Vec<usize>, budget: usize) -> Vec<usize> {
 }
 
 /// Column order — a `deferred` item is a backlog item wherever it
-/// lives, and `done` has no column (done leaves the ledger).
+/// lives, and the terminals (`done`/`cancelled`) have no column —
+/// they archive into DONE.md.
 pub const COLUMNS: [(&str, Option<Status>); 5] = [
     ("backlog", Some(Status::Deferred)),
     ("open", Some(Status::Open)),

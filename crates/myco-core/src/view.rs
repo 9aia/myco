@@ -864,7 +864,8 @@ mod tests {
                 "in-progress",
                 "blocked",
                 "done",
-                "deferred"
+                "deferred",
+                "cancelled"
             ]
         );
         assert_eq!(g[0].items.len(), 3); // open: T-1, T-2, I-1

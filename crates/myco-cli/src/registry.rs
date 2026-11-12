@@ -685,7 +685,7 @@ struct Group {
 const GROUPS: &[Group] = &[
     Group {
         name: "todo",
-        about: "TODO.md tasks — add / done / defer / list.",
+        about: "TODO.md tasks — add / done / cancel / defer / list.",
     },
     Group {
         name: "backlog",
@@ -693,7 +693,7 @@ const GROUPS: &[Group] = &[
     },
     Group {
         name: "done",
-        about: "DONE.md — the done-task archive `todo done` lands in.",
+        about: "DONE.md — the terminal-task archive (`todo done`/`todo cancel` land here).",
     },
     Group {
         name: "issue",
@@ -911,7 +911,7 @@ const FILTER: &[Param] = &[
     opt(
         "status",
         Val::Status,
-        "Statuses — open|claimed|in-progress|blocked|done|deferred (repeatable/comma-separated).",
+        "Statuses — open|claimed|in-progress|blocked|done|deferred|cancelled (repeatable/comma-separated).",
     )
     .multi()
     .delim()
@@ -1207,6 +1207,20 @@ pub static VERBS: &[Verb] = &[
         wire: Some(serve::w_todo_done),
     },
     Verb {
+        name: "todo.cancel",
+        about: "Mark cancelled — walks the state machine to `cancelled` (terminal, like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).",
+        params: &[TASK_ID, &[flag(
+            "yes",
+            "Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
+        )
+        .cli()]],
+        kind_lock: Some(myco_core::ItemKind::Task),
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::todo::h_cancel),
+        wire: Some(serve::w_todo_cancel),
+    },
+    Verb {
         name: "todo.defer",
         about: "Park a task — transition to `deferred`, move the line to BACKLOG.md. Defer on a parent moves the whole subtree (children park with it); on a child it detaches alone.",
         params: &[TASK_ID],
@@ -1269,7 +1283,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "done.list",
-        about: "List done tasks — the DONE.md archive `todo done`/`item set --status done` land in. Read-only; done is terminal.",
+        about: "List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; done and cancelled are terminal.",
         params: &[LIST],
         kind_lock: Some(myco_core::ItemKind::Task),
         mutates: false,

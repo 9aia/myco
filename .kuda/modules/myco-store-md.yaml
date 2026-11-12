@@ -35,7 +35,7 @@ api:
 - name: FILE
   kind: const
   file: crates/myco-store-md/src/done.rs
-  line: 17
+  line: 19
   module: myco-store-md
 - name: FILE
   kind: const
@@ -50,7 +50,7 @@ api:
 - name: FILE
   kind: const
   file: crates/myco-store-md/src/todo.rs
-  line: 18
+  line: 19
   module: myco-store-md
 - name: FRONTMATTER_PROBE_MAX
   kind: const
@@ -145,12 +145,12 @@ api:
 - name: SPEC
   kind: const
   file: crates/myco-store-md/src/done.rs
-  line: 18
+  line: 20
   module: myco-store-md
 - name: SPEC
   kind: const
   file: crates/myco-store-md/src/todo.rs
-  line: 19
+  line: 20
   module: myco-store-md
 - name: TODO
   kind: const
@@ -202,7 +202,7 @@ api:
   file: crates/myco-store-md/src/store.rs
   line: 621
   module: myco-store-md
-api_omitted: 270
+api_omitted: 272
 deps:
 - camino
 - markdown
@@ -263,7 +263,7 @@ provenance:
   hashes:
   - 25f507bd5a36d534979028b1f69ebc144b081884
   - f5f16f2f6789b3d568f7bb2f3ecab98c7116973b
-  - 5f9b9495f2861f0438e386ed3bc5863df483f37d
+  - 3f89d7ef1ba3e9fa03340410431e8a76e6d99097
   - 0f4252f1d31daea262ee8ded1c3944f9a2cf6d72
   - cff97a0d5e3a7b92aee95b3462b96bac4239bfef
   - 6180a59c25e2e2ac2c5674562795e5970588bfb7
@@ -273,7 +273,7 @@ provenance:
   - 0c92680d14f61194725ec9dac4d6476847479691
   - 319e13ac429e7e938d4f3bdafcde59f033c01ce2
   - 445f3fe811906a7abd23e0a7d4744f99db6b8b81
-  - 65fc26278c9f3019ee010602a6f17a8874707379
-  commit_sha: 6d99b20a8de6e018dbfe646fae16870fc93aefc0
-  generated_at: '1794440733'
+  - 98a0daf9075cc9285338117b300fa77ee74e96a5
+  commit_sha: df384cacc63cab25744b7939516f384bfac68406
+  generated_at: '1794519344'
   generator: kuda-template/0.1.4

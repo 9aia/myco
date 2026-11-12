@@ -14,7 +14,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "line": 3,
       "col": 1,
       "code": "done-item",
-      "msg": "1 done item(s) — done tasks are removed from TODO.md",
+      "msg": "1 terminal item(s) — done/cancelled tasks are removed from TODO.md",
       "fixable": true,
       "severity": "error"
     },

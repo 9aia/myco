@@ -20,8 +20,8 @@ modules:
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: 0ebe0232393e892580b0648ddc2e0312830bf3a7
-files_total: 274
+tree_digest: b18438b0deaa1558cd1cc77dd7c41684d086e452
+files_total: 275
 provenance:
   files:
   - Cargo.toml
@@ -55,6 +55,6 @@ provenance:
   - 82131627bab7f97614482ed91e11f85ebd8adbf5
   - a37048abfab3924287e580ee2e09f3ee8abd0dcc
   - 3bb61ce46463344ee41a3f06bc39d58040459339
-  commit_sha: 2fb48b7b8884e020cfd9ac11a13b0ee5ee0a76b5
-  generated_at: '1794490880'
+  commit_sha: df384cacc63cab25744b7939516f384bfac68406
+  generated_at: '1794519344'
   generator: kuda/0.1.0

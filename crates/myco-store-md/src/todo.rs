@@ -1,7 +1,8 @@
 //! `TODO.md` — `# TODO — <repo>` then `## <section>` headings with
 //! `- [ ] T-NNN …` task items. Checkbox is always `[ ]` (open-ish
-//! statuses); `done` items don't belong — they're removed by
-//! `myco todo done`. Items nest: a `- [ ]` list indented under an
+//! statuses); terminal items don't belong — `done`/`cancelled`
+//! are removed by `myco todo done`/`todo cancel`. Items nest: a
+//! `- [ ]` list indented under an
 //! item is its `children` (2 spaces per level, canonical).
 //!
 //! Emit is hand-written (canonical lines) because
@@ -144,6 +145,13 @@ fn parse_li(
                 "status:deferred — deferred tasks live in BACKLOG.md",
             ));
         }
+        Status::Cancelled => {
+            return Err(err(
+                src,
+                node,
+                "status:cancelled — cancelled tasks are archived in DONE.md",
+            ));
+        }
         _ => {}
     }
     if let Some(list) = nested {
@@ -231,6 +239,12 @@ fn check_subtree(item: &Item, depth: usize) -> Result<(), EmitError> {
             return Err(EmitError::new(
                 FILE,
                 format!("deferred item {} — park it in BACKLOG.md", item.id),
+            ));
+        }
+        Status::Cancelled => {
+            return Err(EmitError::new(
+                FILE,
+                format!("cancelled item {} — archive it in DONE.md", item.id),
             ));
         }
         _ => {}
@@ -323,6 +337,10 @@ mod tests {
                 "# TODO — x\n\n- [ ] T-001 t · status:deferred\n",
                 "deferred belongs in BACKLOG.md",
             ),
+            (
+                "# TODO — x\n\n- [ ] T-001 t · status:cancelled\n",
+                "cancelled belongs in DONE.md",
+            ),
             ("# TODO — x\n\n- [ ] T-001\n  continued\n", "multi-line"),
             ("# TODO — x\n\n1. [ ] T-001 o\n", "ordered list"),
             ("# TODO — x\n\n- [ ] T-001 a *b*\n", "rich line"),
@@ -357,6 +375,13 @@ mod tests {
             items: vec![Item::new(ItemId::new(ItemKind::Task, 1), "x").status(Status::Deferred)],
         });
         assert!(emit_todo(&doc).is_err(), "deferred item");
+
+        let mut doc = TodoDoc::new("myco");
+        doc.sections.push(Section {
+            name: Some("s".into()),
+            items: vec![Item::new(ItemId::new(ItemKind::Task, 1), "x").status(Status::Cancelled)],
+        });
+        assert!(emit_todo(&doc).is_err(), "cancelled item");
 
         assert!(emit_todo(&TodoDoc::new("")).is_err(), "empty repo");
         assert!(emit_todo(&TodoDoc::new(" x ")).is_err(), "untrimmed repo");
