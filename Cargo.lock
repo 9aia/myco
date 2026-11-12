@@ -1172,6 +1172,7 @@ dependencies = [
  "myco-store",
  "myco-store-md",
  "scarab-config",
+ "scarab-config-file",
  "scarab-config-toml",
  "serde",
  "serde_json",
@@ -2004,19 +2005,41 @@ dependencies = [
 [[package]]
 name = "scarab-config"
 version = "0.1.0"
-source = "git+ssh://git@github.com/9aia/scarab.git?rev=ae457aad3112140339cc02af631657f90b01fab5#ae457aad3112140339cc02af631657f90b01fab5"
+source = "git+ssh://git@github.com/9aia/scarab.git?rev=9364df88fad0ca46bd838467717a823893f47438#9364df88fad0ca46bd838467717a823893f47438"
 dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "scarab-config-file"
+version = "0.1.0"
+source = "git+ssh://git@github.com/9aia/scarab.git?rev=9364df88fad0ca46bd838467717a823893f47438#9364df88fad0ca46bd838467717a823893f47438"
+dependencies = [
+ "scarab-config",
+ "scarab-config-toml",
+ "scarab-config-yaml",
+ "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "scarab-config-toml"
 version = "0.1.0"
-source = "git+ssh://git@github.com/9aia/scarab.git?rev=ae457aad3112140339cc02af631657f90b01fab5#ae457aad3112140339cc02af631657f90b01fab5"
+source = "git+ssh://git@github.com/9aia/scarab.git?rev=9364df88fad0ca46bd838467717a823893f47438#9364df88fad0ca46bd838467717a823893f47438"
 dependencies = [
  "scarab-config",
  "serde",
  "toml 0.8.23",
+]
+
+[[package]]
+name = "scarab-config-yaml"
+version = "0.1.0"
+source = "git+ssh://git@github.com/9aia/scarab.git?rev=9364df88fad0ca46bd838467717a823893f47438#9364df88fad0ca46bd838467717a823893f47438"
+dependencies = [
+ "scarab-config",
+ "serde",
+ "serde_yaml_ng",
 ]
 
 [[package]]
@@ -2128,6 +2151,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c187e0a369471c550af028cba56d4f4fa2a489ad28151ae95a4d340a2a8b782"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "serde_yaml_ng"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
 ]
 
 [[package]]
@@ -2699,6 +2735,12 @@ name = "unicode-width"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca718471876992059f251e33aafc334346ada08042b7661dd1fe313a9bced557"
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "utf8parse"

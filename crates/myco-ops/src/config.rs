@@ -8,7 +8,9 @@
 
 use std::path::{Path, PathBuf};
 
-use scarab_config::ConfigFormat;
+use scarab_config::{ConfigFormat, Discovery};
+use scarab_config_file::FileSource;
+use scarab_config_toml::TomlFormat;
 
 /// The two config reads ops needs. `layered` runs the impl's
 /// layered search — `Some(path)` pins the repo layer, `None`
@@ -50,40 +52,54 @@ fn parse_file(path: &Path) -> Result<myco_core::Config, String> {
         .map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// The repo-layer probe — explicit arg → `$MYCO_CONFIG` →
+/// `./myco.toml`, TOML only (myco's documented surface claims no
+/// yaml). The *paths* are scarab's discovery (P-017); the
+/// missing-layer-is-`None` rule stays here because it's merge
+/// policy, not search policy.
+fn repo_source() -> FileSource<myco_core::Config> {
+    FileSource::with_formats(
+        Discovery::bare("myco")
+            .env_var("MYCO_CONFIG")
+            .dirs([PathBuf::from(".")]),
+        vec![Box::new(TomlFormat)],
+    )
+}
+
 /// The pinned repo-layer path: an explicit `Some(path)` (the
 /// caller already resolved `$MYCO_CONFIG` or `<root>/myco.toml`)
 /// or the env var itself. An explicit path that doesn't exist
 /// is an error naming it — not a silent skip. `None` explicit +
 /// no env → `./myco.toml` when present.
 fn repo_layer(explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
-    let explicit = explicit
-        .map(Path::to_path_buf)
-        .or_else(|| std::env::var("MYCO_CONFIG").ok().map(PathBuf::from));
-    match explicit {
-        Some(p) => {
-            if !p.exists() {
-                return Err(format!("config {} not found", p.display()));
-            }
-            Ok(Some(p))
-        }
-        None => {
-            let p = PathBuf::from("myco.toml");
-            Ok(p.exists().then_some(p))
-        }
+    let mut src = repo_source();
+    src.explicit = explicit.map(|p| p.display().to_string());
+    match src.locate_with(&|k| std::env::var(k).ok()) {
+        Ok(p) => Ok(Some(p)),
+        // discovery missed everywhere → no repo layer (the user
+        // layer may still supply config); a *named* path that
+        // misses stays an error.
+        Err(e) if e.contains("no myco.") => Ok(None),
+        Err(e) => Err(e),
     }
 }
 
 /// First existing path wins within the user layer — XDG dir
-/// preferred over ~/.config.
+/// preferred over ~/.config. Same scarab probe, dirs swapped.
 fn user_layer() -> Option<PathBuf> {
-    let mut candidates = Vec::new();
+    let mut dirs = Vec::new();
     if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        candidates.push(PathBuf::from(xdg).join("myco/myco.toml"));
+        dirs.push(PathBuf::from(xdg).join("myco"));
     }
     if let Ok(home) = std::env::var("HOME") {
-        candidates.push(PathBuf::from(home).join(".config/myco/myco.toml"));
+        dirs.push(PathBuf::from(home).join(".config/myco"));
     }
-    candidates.into_iter().find(|p| p.exists())
+    FileSource::<myco_core::Config>::with_formats(
+        Discovery::bare("myco").dirs(dirs),
+        vec![Box::new(TomlFormat)],
+    )
+    .locate_with(&|_| None)
+    .ok()
 }
 
 /// The two-layer merge — scalars keep first-match semantics (the

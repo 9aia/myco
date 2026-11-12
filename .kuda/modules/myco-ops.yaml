@@ -20,7 +20,7 @@ api:
 - name: ConfigLoader
   kind: type
   file: crates/myco-ops/src/config.rs
-  line: 23
+  line: 25
   module: myco-ops
 - name: DEFAULT_ACTOR
   kind: const
@@ -135,7 +135,7 @@ api:
 - name: TOML
   kind: const
   file: crates/myco-ops/src/config.rs
-  line: 162
+  line: 178
   module: myco-ops
 - name: Target
   kind: type
@@ -202,7 +202,7 @@ api:
   file: crates/myco-ops/src/ops.rs
   line: 288
   module: myco-ops
-api_omitted: 278
+api_omitted: 279
 deps:
 - camino
 - lasius-core
@@ -212,6 +212,7 @@ deps:
 - myco-index
 - myco-store
 - scarab-config
+- scarab-config-file
 - scarab-config-toml
 - serde
 - serde_json
@@ -231,6 +232,8 @@ deps:
 - lasius_vcs_git
 - camino
 - scarab_config
+- scarab_config_file
+- scarab_config_toml
 notes: ''
 verify:
 - crates/myco-ops/Cargo.toml
@@ -258,8 +261,8 @@ provenance:
   - crates/myco-ops/src/verb.rs
   - crates/myco-ops/src/view.rs
   hashes:
-  - 0e86d08e41a5fce70cb7cc17e958b5f205f628ec
-  - 8a6e88cf229368476b17e144a17096b4e942c37a
+  - f04d26f6d2af006fa9e178625f294409d364052b
+  - 55c8bec909487bbb5fb620a10558904347ea65e8
   - 9a3c04a646346851a0326d448e9d7836d1905644
   - 9e40ec197966b497677d61c378f6b9ad1e3d5e48
   - 8e19c076f4412a9ffb2df900ac9e83021e04f166
@@ -270,6 +273,6 @@ provenance:
   - 13ebcffb627c04d4af7f1766ec043f867e63110e
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: 6d99b20a8de6e018dbfe646fae16870fc93aefc0
-  generated_at: '1794440733'
+  commit_sha: 2fb48b7b8884e020cfd9ac11a13b0ee5ee0a76b5
+  generated_at: '1794490880'
   generator: kuda-template/0.1.4
