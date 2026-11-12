@@ -11,7 +11,7 @@ machine-readable JSON Schema; `myco check` enforces it.
 | `meta.toml`  | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
 | `TODO.md`    | open-line tasks (`T-`), `##` sections, nested children              |
 | `BACKLOG.md` | deferred items — same grammar, no checkbox                          |
-| `DONE.md`    | done archive — same grammar, status pinned `done`                   |
+| `DONE.md`    | terminal archive — same grammar, status `done` or `cancelled`     |
 | `index.md`   | free-form human index — verbatim, never rewritten                   |
 | `issues/`    | `issue-NNNN-<slug>.md` + `issues/archive/`                          |
 | `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/`                    |
@@ -41,14 +41,19 @@ each, filenames padded to four digits.
 
 - `BACKLOG.md` lines are the same shape minus `[ ]`, default
   status `deferred`; `TODO.md` defaults to `open`. `DONE.md` is
-  the done archive — same line grammar, status pinned `done`,
-  read by `myco done list` and still resolvable via
-  `myco item show`.
+  the terminal archive — same line grammar, status `done`
+  (the default, token dropped) or `cancelled` (token kept, so
+  the archive records *why* it left), read by `myco done list`
+  and still resolvable via `myco item show`.
 - `done` moves the line (subtree included) to `DONE.md` —
   completed work stays visible instead of vanishing;
-  `defer` moves it to `BACKLOG.md`; `promote` moves it back.
-- `done`/`defer` on a parent act on the whole subtree; on a
-  child, just that node.
+  `cancel` does the same but lands as `status:cancelled` —
+  "never doing this" is recorded honestly instead of polluting
+  the backlog or posing as done; `defer` moves it to
+  `BACKLOG.md`; `promote` moves it back. `cancel` also works
+  straight from `BACKLOG.md` — no promote needed.
+- `done`/`cancel`/`defer` on a parent act on the whole subtree;
+  on a child, just that node.
 - Token order is canonical (`status`, `pri`, `owner`, `created`,
   `#label`, `blocks`, `links`, `epic`, `ms`, `due`, `est`, `cycle`,
   `note`) so emit produces minimal diffs. `ms` is the milestone
@@ -104,17 +109,18 @@ still finds archived items.
 
 ## State machine
 
-Six statuses; `item set --status` and kind verbs walk it one
+Seven statuses; `item set --status` and kind verbs walk it one
 legal step at a time:
 
-| from          | can go to                            |
-| ------------- | ------------------------------------ |
-| `open`        | `claimed`, `in-progress`, `deferred` |
-| `claimed`     | `in-progress`, `open`, `deferred`    |
-| `in-progress` | `blocked`, `done`, `deferred`, `open` |
-| `blocked`     | `in-progress`, `open`, `deferred`    |
-| `deferred`    | `open`                               |
-| `done`        | — (terminal)                         |
+| from          | can go to                                            |
+| ------------- | ---------------------------------------------------- |
+| `open`        | `claimed`, `in-progress`, `deferred`, `cancelled`    |
+| `claimed`     | `in-progress`, `open`, `deferred`, `cancelled`       |
+| `in-progress` | `blocked`, `done`, `deferred`, `open`, `cancelled`   |
+| `blocked`     | `in-progress`, `open`, `deferred`, `cancelled`       |
+| `deferred`    | `open`, `cancelled`                                  |
+| `done`        | — (terminal)                                         |
+| `cancelled`   | — (terminal)                                         |
 
 Proposal words alias the machine: `draft` = `open`, `accepted` =
 `done`, `rejected` = `deferred` — the transition still walks the

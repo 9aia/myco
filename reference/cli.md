@@ -8,6 +8,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco todo`↴](#myco-todo)
 * [`myco todo add`↴](#myco-todo-add)
 * [`myco todo done`↴](#myco-todo-done)
+* [`myco todo cancel`↴](#myco-todo-cancel)
 * [`myco todo defer`↴](#myco-todo-defer)
 * [`myco todo list`↴](#myco-todo-list)
 * [`myco backlog`↴](#myco-backlog)
@@ -63,6 +64,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco report`↴](#myco-report)
 * [`myco handoff`↴](#myco-handoff)
 * [`myco interrupt`↴](#myco-interrupt)
+* [`myco reap`↴](#myco-reap)
 * [`myco resume`↴](#myco-resume)
 * [`myco ui`↴](#myco-ui)
 * [`myco serve`↴](#myco-serve)
@@ -76,9 +78,9 @@ myco — agent-first project management for a repo's `project/` worktree.
 
 ###### **Subcommands:**
 
-* `todo` — TODO.md tasks — add / done / defer / list.
+* `todo` — TODO.md tasks — add / done / cancel / defer / list.
 * `backlog` — BACKLOG.md parked items — add / promote / list.
-* `done` — DONE.md — the done-task archive `todo done` lands in.
+* `done` — DONE.md — the terminal-task archive (`todo done`/`todo cancel` land here).
 * `issue` — Tracked issues, one file each under `issues/`.
 * `proposal` — Design proposals under `proposals/` (`P-NNN`).
 * `plan` — Execution plans under `plans/` (`PL-NNN`).
@@ -95,13 +97,14 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `commit` — Stage + commit worktree changes (conventional message).
 * `undo` — Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the undone commit is journaled for `redo`. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`). `--list` shows the redoable stack without mutating.
 * `redo` — Redo the last undo — pops the undo journal and restores the commit `myco undo` moved away from (`git reset --hard <target>`). Repeatable while entries remain; the stack self-invalidates when the ledger moves (any commit/pull/manual git op since the undo). Refuses on a dirty worktree.
-* `sync` — Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves, refs stay bound to the remote). Mutating verbs refuse while behind (`ensure_synced`), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.
-* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
+* `sync` — Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves to a fresh id, inbound `blocks:`/`links:`/supersede refs rebind to it, and a `renumbered` handoff entry records the audit). Mutating verbs refuse while behind (`ensure_synced`; `sync.auto_fetch` config fetches first), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit.
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized.
 * `report` — Aging + velocity + blocked — how the ledger is trending.
 * `handoff` — Attach resumable state at session end — appends a dated entry to `handoffs/<ID>.md` (any item kind, live or archived; append-only).
 * `interrupt` — A session ended with work still claimed/in-progress/blocked — revert the item to `open` + `interrupted` handoff, one commit. Without an id, `--session <id>` is the teardown: every item claimed under that session reverts in one commit. Session-lifecycle hooks (sepia, CLI session-end) call this; myco never detects sessions itself.
+* `reap` — Bulk stale-claim reaper — every live `claimed`/`in-progress` item whose last activity (latest handoff entry, else `created`) is older than `--idle-days` reverts to `open` + an `interrupted` handoff, ONE commit for the whole sweep. `--session <id>` scopes to items whose claim tag names that session; `--dry-run` lists the sweep with zero writes. Scheduler-facing — peregrin campaigns call it periodically; the no-hook safety net behind `report`'s stale-claims finding.
 * `resume` — Minimal context block to restart work on an item — the item, `blocks:` dep titles, latest handoffs, open checklist. The single-item `status --prompt`. 1..n ids batch in one call.
 * `ui` — Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes through the same ops the verbs use; auto-reloads when the ledger changes on disk. `--view` with a `source = "index"` spec (org-*) opens the cross-repo index board: `repo:ID` rows, verbs write the owning repo.
 * `serve` — Sequential request/response verb surface on stdio — JSON-RPC 2.0, one line in / one line out. For embedding (peregrin spawns one per repo); stdin IS the wire, so no served method reads content from it.
@@ -118,7 +121,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 
 ## `myco todo`
 
-TODO.md tasks — add / done / defer / list.
+TODO.md tasks — add / done / cancel / defer / list.
 
 **Usage:** `myco todo <COMMAND>`
 
@@ -126,6 +129,7 @@ TODO.md tasks — add / done / defer / list.
 
 * `add` — Add a task — allocs a T-id, appends to a section of TODO.md.
 * `done` — Mark done — walks the state machine to `done`, removes the line, and archives the subtree into DONE.md. Done on a parent archives the whole subtree — children die with it. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
+* `cancel` — Mark cancelled — walks the state machine to `cancelled` (terminal, like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
 * `defer` — Park a task — transition to `deferred`, move the line to BACKLOG.md. Defer on a parent moves the whole subtree (children park with it); on a child it detaches alone.
 * `list` — List tasks.
 
@@ -163,6 +167,22 @@ Add a task — allocs a T-id, appends to a section of TODO.md.
 Mark done — walks the state machine to `done`, removes the line, and archives the subtree into DONE.md. Done on a parent archives the whole subtree — children die with it. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
 
 **Usage:** `myco todo done [OPTIONS] <id>`
+
+###### **Arguments:**
+
+* `<ID>` — Task id (`T-NNN`).
+
+###### **Options:**
+
+* `--yes` — Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
+
+
+
+## `myco todo cancel`
+
+Mark cancelled — walks the state machine to `cancelled` (terminal, like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
+
+**Usage:** `myco todo cancel [OPTIONS] <id>`
 
 ###### **Arguments:**
 
@@ -284,19 +304,19 @@ List backlog items.
 
 ## `myco done`
 
-DONE.md — the done-task archive `todo done` lands in.
+DONE.md — the terminal-task archive (`todo done`/`todo cancel` land here).
 
 **Usage:** `myco done <COMMAND>`
 
 ###### **Subcommands:**
 
-* `list` — List done tasks — the DONE.md archive `todo done`/`item set --status done` land in. Read-only; done is terminal.
+* `list` — List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; done and cancelled are terminal.
 
 
 
 ## `myco done list`
 
-List done tasks — the DONE.md archive `todo done`/`item set --status done` land in. Read-only; done is terminal.
+List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; done and cancelled are terminal.
 
 **Usage:** `myco done list [OPTIONS]`
 
@@ -650,7 +670,7 @@ Kind-agnostic item verbs — show / set / move.
 
 * `show` — Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/associated/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
 * `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` archives the subtree into DONE.md — terminal, so it confirms on a tty: `--yes`/`$MYCO_YES` skips).
-* `move` — Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
+* `move` — Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids — and the drop is recorded as plain text in both provenance handoffs), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or an index-universe repo name (`myco index list`). Two commits — one per worktree. `--dry-run` previews the plan (prospective dest id, dropped refs) with no writes; `--finish` completes a move that died after the destination copy + `moved to` pointer landed but before the source close committed — the pointer is the resume handle.
 
 
 
@@ -693,15 +713,16 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--est <EST>` [alias: `estimate`] — Estimate in points (0–1000) — `""` clears the estimate.
 * `--cycle <CYCLE>` — Cycle name (`[A-Za-z0-9_.-]+`) — `""` clears the cycle.
 * `--session <SESSION>` — Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state.
+* `--steal` — Take the item even when another actor owns the claim — records a `taken from` handoff entry.
 * `--yes` — Skip the `--status done` confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
 
 
 
 ## `myco item move`
 
-Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or a registered repo name (`myco index list`). Two commits — one per worktree.
+Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids — and the drop is recorded as plain text in both provenance handoffs), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or an index-universe repo name (`myco index list`). Two commits — one per worktree. `--dry-run` previews the plan (prospective dest id, dropped refs) with no writes; `--finish` completes a move that died after the destination copy + `moved to` pointer landed but before the source close committed — the pointer is the resume handle.
 
-**Usage:** `myco item move [OPTIONS] --to <to> <id>`
+**Usage:** `myco item move [OPTIONS] <id>`
 
 ###### **Arguments:**
 
@@ -709,9 +730,11 @@ Move an item to another repo's ledger — re-creates it in the destination's own
 
 ###### **Options:**
 
-* `--to <TO>` — Destination — a repo root, its `project/` worktree, or a registered repo name.
+* `--to <TO>` — Destination — a repo root, its `project/` worktree, or a registered repo name. Required unless `--finish`.
 * `--note <NOTE>` — Extra context appended to the source's `moved to` handoff note.
-* `--actor <ACTOR>` — Who moved it (default `cli`).
+* `--actor <ACTOR>` — Who moved it (default: resolved actor).
+* `--dry-run` — Validate + report the plan (prospective destination id, dropped refs) — no writes, no commits.
+* `--finish` — Complete a partial move — finds the `moved to` handoff pointer, verifies the destination copy exists, closes the source, commits both worktrees. No `--to`.
 * `--yes` — Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
 
 
@@ -787,7 +810,7 @@ The derived index: register repos, query/rebuild snapshots.
 
 ###### **Subcommands:**
 
-* `add` — Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger-less repos register as `ledger = "none"` with no snapshot; `--org` marks the org/global ledger.
+* `add` — Register a repo — `<path>` is a repo root (or its `project/` worktree). Needed outside a lasius workspace (clones under `lasius.toml`'s `repos_dir` join the index universe automatically); inside one it still records an explicit entry. Ledger-less repos register as `ledger = "none"` with no snapshot; `--org` marks the org/global ledger (equivalent to `[index] ledger = "org"]` in the repo's `myco.toml`).
 * `remove` — Unregister a repo and drop its snapshot.
 * `list` — List registered repos with snapshot freshness.
 * `rebuild` — Re-scan a registered repo (all of them without `<path>`).
@@ -796,7 +819,7 @@ The derived index: register repos, query/rebuild snapshots.
 
 ## `myco index add`
 
-Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger-less repos register as `ledger = "none"` with no snapshot; `--org` marks the org/global ledger.
+Register a repo — `<path>` is a repo root (or its `project/` worktree). Needed outside a lasius workspace (clones under `lasius.toml`'s `repos_dir` join the index universe automatically); inside one it still records an explicit entry. Ledger-less repos register as `ledger = "none"` with no snapshot; `--org` marks the org/global ledger (equivalent to `[index] ledger = "org"]` in the repo's `myco.toml`).
 
 **Usage:** `myco index add [OPTIONS] <path>`
 
@@ -806,7 +829,7 @@ Register a repo — `<path>` is a repo root (or its `project/` worktree). Ledger
 
 ###### **Options:**
 
-* `--org` — Designate this repo as the org/global ledger — the fallback target verbs in ledger-less registered repos resolve to (at most one; clears the mark elsewhere).
+* `--org` — Designate this repo as the org/global ledger — the fallback target verbs in ledger-less universe repos resolve to (at most one; clears the mark elsewhere). `[index] ledger = "org"]` in the repo's myco.toml is the durable equivalent.
 
 
 
@@ -941,7 +964,7 @@ Redo the last undo — pops the undo journal and restores the commit `myco undo`
 
 ## `myco sync`
 
-Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves, refs stay bound to the remote). Mutating verbs refuse while behind (`ensure_synced`), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.
+Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves to a fresh id, inbound `blocks:`/`links:`/supersede refs rebind to it, and a `renumbered` handoff entry records the audit). Mutating verbs refuse while behind (`ensure_synced`; `sync.auto_fetch` config fetches first), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.
 
 **Usage:** `myco sync [OPTIONS]`
 
@@ -953,7 +976,7 @@ Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or re
 
 ## `myco view`
 
-Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the registered repos' snapshots). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
 
 **Usage:** `myco view [OPTIONS] [name]`
 
@@ -967,7 +990,7 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--md` — Emit a markdown table (board/repos formats).
 * `--all` — Show every row — no cap.
 * `--kind <KIND>` — Item kinds — task|issue|proposal|adr|plan (repeatable/comma-separated).
-* `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred (repeatable/comma-separated).
+* `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred|cancelled (repeatable/comma-separated).
 * `--pri-min <PRI_MIN>` — Inclusive lower severity bound — low|med|high|crit.
 * `--pri-max <PRI_MAX>` — Inclusive upper severity bound.
 * `--label <LABEL>` — `#`-less label — item carries any of these (repeatable/comma-separated).
@@ -998,7 +1021,7 @@ The single highest-priority open item — "what should I work on" (a `view` eval
 ###### **Options:**
 
 * `--kind <KIND>` — Item kinds — task|issue|proposal|adr|plan (repeatable/comma-separated).
-* `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred (repeatable/comma-separated).
+* `--status <STATUS>` — Statuses — open|claimed|in-progress|blocked|done|deferred|cancelled (repeatable/comma-separated).
 * `--pri-min <PRI_MIN>` — Inclusive lower severity bound — low|med|high|crit.
 * `--pri-max <PRI_MAX>` — Inclusive upper severity bound.
 * `--label <LABEL>` — `#`-less label — item carries any of these (repeatable/comma-separated).
@@ -1013,7 +1036,8 @@ The single highest-priority open item — "what should I work on" (a `view` eval
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction. Default `pri,id`.
-* `--claim` — Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else `cli`); `--owner` names the claimer here and doesn't filter. Mutating: one commit.
+* `--claim` — Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else the resolved actor); `--owner` names the claimer here and doesn't filter. Mutating: one commit.
+* `--steal` — With `--claim`: take the item even when another actor owns the claim — records a `taken from` handoff entry.
 * `--session <SESSION>` — With `--claim`: tag the claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it).
 
 
@@ -1051,7 +1075,7 @@ Attach resumable state at session end — appends a dated entry to `handoffs/<ID
 ###### **Options:**
 
 * `--note <TEXT|->` — Handoff note — done/next/open. `-` reads stdin.
-* `--actor <ACTOR>` — Who wrote it (`devin`, `human:luis`, …; default `cli`).
+* `--actor <ACTOR>` — Who wrote it (`devin`, `human:luis`, …; default: the resolved actor).
 * `--session <SESSION>` — Session provenance — a sepia session id, `cli:<pid>`, any id string.
 
 
@@ -1069,8 +1093,23 @@ A session ended with work still claimed/in-progress/blocked — revert the item 
 ###### **Options:**
 
 * `--note <TEXT>` — Extra context appended to the `interrupted` note.
-* `--actor <ACTOR>` — Who interrupted it (default `cli`).
+* `--actor <ACTOR>` — Who interrupted it (default: the resolved actor).
 * `--session <SESSION>` — Session scope — a sepia session id, `cli:<pid>`, any id string. With `id`: interrupt only when the item's claim tag matches. Without `id`: teardown — interrupt every item claimed under it.
+
+
+
+## `myco reap`
+
+Bulk stale-claim reaper — every live `claimed`/`in-progress` item whose last activity (latest handoff entry, else `created`) is older than `--idle-days` reverts to `open` + an `interrupted` handoff, ONE commit for the whole sweep. `--session <id>` scopes to items whose claim tag names that session; `--dry-run` lists the sweep with zero writes. Scheduler-facing — peregrin campaigns call it periodically; the no-hook safety net behind `report`'s stale-claims finding.
+
+**Usage:** `myco reap [OPTIONS]`
+
+###### **Options:**
+
+* `--idle-days <N>` — Idle threshold in days — last activity older than this reaps. Default: the report's stale-claim threshold (3).
+* `--session <SESSION>` — Scope to items whose claim tag names this session (`interrupt --session`'s rule).
+* `--actor <ACTOR>` — Who reaped it (default: the resolved actor).
+* `--dry-run` — List what would be reaped — no writes, no commit.
 
 
 
