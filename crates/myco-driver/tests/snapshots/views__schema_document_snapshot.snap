@@ -174,7 +174,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "blocked"
             },
             {
-              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "description": "Finished — archive-bound; done tasks leave `TODO.md` for\n`DONE.md`, but `done → open|deferred` reopens them.",
               "type": "string",
               "const": "done"
             },
@@ -184,7 +184,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "deferred"
             },
             {
-              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "description": "Abandoned — archive-bound like `done`, but the work was\nnever done; archives into `DONE.md` with the status\npreserved. Reopens the same way (`→ open|deferred`).",
               "type": "string",
               "const": "cancelled"
             }
@@ -403,7 +403,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "blocked"
             },
             {
-              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "description": "Finished — archive-bound; done tasks leave `TODO.md` for\n`DONE.md`, but `done → open|deferred` reopens them.",
               "type": "string",
               "const": "done"
             },
@@ -413,7 +413,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "deferred"
             },
             {
-              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "description": "Abandoned — archive-bound like `done`, but the work was\nnever done; archives into `DONE.md` with the status\npreserved. Reopens the same way (`→ open|deferred`).",
               "type": "string",
               "const": "cancelled"
             }
@@ -658,7 +658,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "blocked"
             },
             {
-              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "description": "Finished — archive-bound; done tasks leave `TODO.md` for\n`DONE.md`, but `done → open|deferred` reopens them.",
               "type": "string",
               "const": "done"
             },
@@ -668,7 +668,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "deferred"
             },
             {
-              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "description": "Abandoned — archive-bound like `done`, but the work was\nnever done; archives into `DONE.md` with the status\npreserved. Reopens the same way (`→ open|deferred`).",
               "type": "string",
               "const": "cancelled"
             }
@@ -908,7 +908,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "blocked"
             },
             {
-              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "description": "Finished — archive-bound; done tasks leave `TODO.md` for\n`DONE.md`, but `done → open|deferred` reopens them.",
               "type": "string",
               "const": "done"
             },
@@ -918,7 +918,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "deferred"
             },
             {
-              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "description": "Abandoned — archive-bound like `done`, but the work was\nnever done; archives into `DONE.md` with the status\npreserved. Reopens the same way (`→ open|deferred`).",
               "type": "string",
               "const": "cancelled"
             }
@@ -954,7 +954,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "DoneDoc": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "title": "DoneDoc",
-      "description": "`DONE.md` — `# Done` plus optional `##` sections of `- T-NNN …`\nitems (no checkbox; items are `Done` or `Cancelled` — the\nterminal pair). The append-only archive `todo done`/`todo\ncancel`/`item set --status done|cancelled` land in — terminal\ntasks leave TODO.md but stay readable here (`myco done list`,\n`item show`); cancelled items keep their `status:` token so the\narchive distinguishes \"finished\" from \"never doing this\".",
+      "description": "`DONE.md` — `# Done` plus optional `##` sections of `- T-NNN …`\nitems (no checkbox; items are `Done` or `Cancelled` — the\narchive pair). The archive `todo done`/`todo\ncancel`/`item set --status done|cancelled` land in — archived\ntasks leave TODO.md but stay readable here (`myco done list`,\n`item show`); cancelled items keep their `status:` token so the\narchive distinguishes \"finished\" from \"never doing this\".\nReopenable: `done`/`cancelled → open|deferred` pulls an item\nback into the live docs ([`crate::DoneDoc::locate`] +\n[`crate::DoneDoc::take`] are the surgery).",
       "type": "object",
       "properties": {
         "sections": {
@@ -1158,7 +1158,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "blocked"
             },
             {
-              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "description": "Finished — archive-bound; done tasks leave `TODO.md` for\n`DONE.md`, but `done → open|deferred` reopens them.",
               "type": "string",
               "const": "done"
             },
@@ -1168,7 +1168,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "deferred"
             },
             {
-              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "description": "Abandoned — archive-bound like `done`, but the work was\nnever done; archives into `DONE.md` with the status\npreserved. Reopens the same way (`→ open|deferred`).",
               "type": "string",
               "const": "cancelled"
             }
@@ -1392,7 +1392,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "blocked"
             },
             {
-              "description": "Finished — terminal; done tasks leave `TODO.md`.",
+              "description": "Finished — archive-bound; done tasks leave `TODO.md` for\n`DONE.md`, but `done → open|deferred` reopens them.",
               "type": "string",
               "const": "done"
             },
@@ -1402,7 +1402,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
               "const": "deferred"
             },
             {
-              "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+              "description": "Abandoned — archive-bound like `done`, but the work was\nnever done; archives into `DONE.md` with the status\npreserved. Reopens the same way (`→ open|deferred`).",
               "type": "string",
               "const": "cancelled"
             }
@@ -1584,7 +1584,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
           "const": "blocked"
         },
         {
-          "description": "Finished — terminal; done tasks leave `TODO.md`.",
+          "description": "Finished — archive-bound; done tasks leave `TODO.md` for\n`DONE.md`, but `done → open|deferred` reopens them.",
           "type": "string",
           "const": "done"
         },
@@ -1594,7 +1594,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
           "const": "deferred"
         },
         {
-          "description": "Abandoned — terminal like `done`, but the work was never\ndone; archives into `DONE.md` with the status preserved.",
+          "description": "Abandoned — archive-bound like `done`, but the work was\nnever done; archives into `DONE.md` with the status\npreserved. Reopens the same way (`→ open|deferred`).",
           "type": "string",
           "const": "cancelled"
         }
@@ -1711,12 +1711,18 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "deferred",
       "cancelled"
     ],
-    "done": [],
+    "done": [
+      "open",
+      "deferred"
+    ],
     "deferred": [
       "open",
       "cancelled"
     ],
-    "cancelled": []
+    "cancelled": [
+      "open",
+      "deferred"
+    ]
   },
   "ids": {
     "shape": "<prefix>-<number>, zero-padded per kind",
@@ -1787,8 +1793,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "line": "- T-NNN <title>[ · <token>]…",
       "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
       "default_status": "done",
-      "statuses": "done|cancelled — the terminal pair; cancelled keeps its `status:` token",
-      "note": "append-only terminal-task archive — `todo done`/`todo cancel`/`item set --status done|cancelled` land here; done and cancelled are terminal"
+      "statuses": "done|cancelled — the archive pair; cancelled keeps its `status:` token",
+      "note": "append-only task archive — `todo done`/`todo cancel`/`item set --status done|cancelled` land here; `item set --status open|deferred` reopens, `done remove` deletes"
     },
     "index.md": {
       "format": "markdown",

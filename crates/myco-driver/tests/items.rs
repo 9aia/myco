@@ -313,9 +313,104 @@ fn todo_cancel_archives_as_cancelled() {
     );
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     assert!(read(&wt, "DONE.md").contains("T-004"));
-    // and cancelled is terminal — the archived item refuses mutation
+    // cancelled reopens like done — `--status open` pulls it back
+    // out of DONE.md into TODO.md (covered in depth by
+    // `done_reopen_roundtrip`)
     let out = run(d.path(), &["item", "set", "T-004", "--status", "open"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(read(&wt, "TODO.md").contains("T-004"));
+    assert!(!read(&wt, "DONE.md").contains("T-004"));
+}
+
+#[test]
+fn done_reopen_roundtrip() {
+    let (d, wt) = project();
+    // a parent + child archive together
+    run(d.path(), &["todo", "add", "parent task"]);
+    run(
+        d.path(),
+        &["todo", "add", "child task", "--parent", "T-001"],
+    );
+    let out = run(d.path(), &["todo", "done", "T-001", "--yes"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(read(&wt, "DONE.md").contains("T-001"));
+    assert!(read(&wt, "DONE.md").contains("T-002"));
+
+    // metadata-only mutation on an archived task is refused —
+    // reopen is a status step, nothing else
+    let out = run(d.path(), &["item", "set", "T-001", "--pri", "high"]);
     assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("DONE.md"), "{}", stderr(&out));
+
+    // reopen to open — the whole subtree comes back, nested
+    // under its parent again, and a `reopened` handoff lands
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "open", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["item"]["status"], "open");
+    assert_eq!(v["location"], "DONE.md → TODO.md");
+    let todo = read(&wt, "TODO.md");
+    assert!(todo.contains("T-001"), "{todo}");
+    assert!(todo.contains("T-002"), "{todo}");
+    assert!(!read(&wt, "DONE.md").contains("T-001"));
+    assert!(
+        read(&wt, "handoffs/T-001.md").contains("reopened from done"),
+        "audit handoff"
+    );
+
+    // re-archive, then reopen straight to deferred → BACKLOG.md
+    run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "in-progress"],
+    );
+    run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "done", "--yes"],
+    );
+    assert!(read(&wt, "DONE.md").contains("T-001"));
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "deferred", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(json(&out)["location"], "DONE.md → BACKLOG.md");
+    let backlog = read(&wt, "BACKLOG.md");
+    assert!(backlog.contains("T-001"), "{backlog}");
+    assert!(backlog.contains("T-002"), "{backlog}");
+    assert!(!read(&wt, "DONE.md").contains("T-001"));
+
+    // re-archive the subtree, then reopen just the nested child —
+    // it leaves DONE.md alone (landing top-level in TODO.md) while
+    // its parent stays archived
+    run(d.path(), &["backlog", "promote", "T-001"]);
+    run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "in-progress"],
+    );
+    run(
+        d.path(),
+        &["item", "set", "T-001", "--status", "done", "--yes"],
+    );
+    let done = read(&wt, "DONE.md");
+    assert!(done.contains("T-001"), "{done}");
+    assert!(done.contains("T-002"), "{done}");
+    let out = run(d.path(), &["item", "set", "T-002", "--status", "open"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let done = read(&wt, "DONE.md");
+    assert!(done.contains("T-001"), "{done}");
+    assert!(!done.contains("T-002"), "{done}");
+    assert!(read(&wt, "TODO.md").contains("T-002"));
+
+    // `done remove` deletes an archived subtree outright
+    let out = run(d.path(), &["done", "remove", "T-001", "--yes", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(!read(&wt, "DONE.md").contains("T-001"));
+    let out = run(d.path(), &["done", "remove", "T-001"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("no such archived task"));
 }
 
 #[test]
@@ -690,9 +785,15 @@ fn proposal_lifecycle() {
     assert_eq!(v["from"], "open");
     assert!(read(&wt, "proposals/proposal-0001-the-big-idea.md").contains("status = \"done\""));
 
-    // done is terminal — rejecting it now fails
+    // done reopens — `rejected` (= deferred) is a legal step out
+    // of the archive states now
     let out = run(d.path(), &["proposal", "status", "P-001", "rejected"]);
-    assert_eq!(code(&out), 2);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(read(&wt, "proposals/proposal-0001-the-big-idea.md").contains("status = \"deferred\""));
+    // …and `draft` (= open) walks done → open directly
+    run(d.path(), &["proposal", "status", "P-001", "accepted"]);
+    let out = run(d.path(), &["proposal", "status", "P-001", "draft"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
     // bogus word
     let out = run(d.path(), &["proposal", "status", "P-001", "lgtm"]);
     assert_eq!(code(&out), 2);

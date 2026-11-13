@@ -6,11 +6,15 @@
 //! in-progress → blocked | done | deferred | open | cancelled
 //! blocked     → in-progress | open | deferred | cancelled
 //! deferred    → open | cancelled
-//! done        → (terminal)
-//! cancelled   → (terminal)
+//! done        → open | deferred          (reopen — un-archives)
+//! cancelled   → open | deferred          (same)
 //! ```
 //!
-//! Invalid transitions are typed errors, never panics.
+//! `done`/`cancelled` are the *archive* states — the item leaves
+//! the live docs for `DONE.md` — but the archive isn't a one-way
+//! door: a premature `done` (or a cancelled item worth rescuing)
+//! reopens to `open` or re-parks to `deferred`. Invalid
+//! transitions are typed errors, never panics.
 
 use std::fmt;
 use std::str::FromStr;
@@ -29,12 +33,14 @@ pub enum Status {
     InProgress,
     /// Work started but stuck on a dependency.
     Blocked,
-    /// Finished — terminal; done tasks leave `TODO.md`.
+    /// Finished — archive-bound; done tasks leave `TODO.md` for
+    /// `DONE.md`, but `done → open|deferred` reopens them.
     Done,
     /// Parked — lives in `BACKLOG.md`.
     Deferred,
-    /// Abandoned — terminal like `done`, but the work was never
-    /// done; archives into `DONE.md` with the status preserved.
+    /// Abandoned — archive-bound like `done`, but the work was
+    /// never done; archives into `DONE.md` with the status
+    /// preserved. Reopens the same way (`→ open|deferred`).
     Cancelled,
 }
 
@@ -73,8 +79,10 @@ impl Status {
             InProgress => &[Blocked, Done, Deferred, Open, Cancelled],
             Blocked => &[InProgress, Open, Deferred, Cancelled],
             Deferred => &[Open, Cancelled],
-            Done => &[],
-            Cancelled => &[],
+            // the archive states reopen — `item set --status
+            // open|deferred` pulls the item back out of DONE.md
+            Done => &[Open, Deferred],
+            Cancelled => &[Open, Deferred],
         }
     }
 
@@ -151,8 +159,15 @@ mod tests {
             (Blocked, Open),
             (Blocked, Deferred),
             (Deferred, Open),
+            // the archive states reopen — done/cancelled aren't
+            // a one-way door (`item set --status open|deferred`)
+            (Done, Open),
+            (Done, Deferred),
+            (Cancelled, Open),
+            (Cancelled, Deferred),
             // every live status can be cancelled — "never doing
-            // this" is reachable from anywhere short of terminal
+            // this" is reachable from anywhere short of the
+            // archive states
             (Open, Cancelled),
             (Claimed, Cancelled),
             (InProgress, Cancelled),
@@ -169,17 +184,20 @@ mod tests {
         for s in Status::ALL {
             // identity is never legal
             assert!(!s.can_transition_to(s));
-            // done and cancelled are terminal
-            assert!(!Done.can_transition_to(s));
-            assert!(!Cancelled.can_transition_to(s));
-            // nothing reaches the terminals except their legal hops:
-            // done only from in-progress, cancelled from any live status
+            // the archive states reach only open/deferred —
+            // re-archiving or jumping straight into a work
+            // state stays illegal
+            for to in [Claimed, InProgress, Blocked, Done, Cancelled] {
+                if matches!(s, Done | Cancelled) {
+                    assert!(!s.can_transition_to(to), "{s} → {to}");
+                }
+            }
+            // nothing reaches `done` except from in-progress
             if s != InProgress {
                 assert!(!s.can_transition_to(Done), "{s} → done");
             }
-            if matches!(s, Done | Cancelled) {
-                // covered above — terminal sources reach nothing
-            } else {
+            // every live status can be cancelled
+            if !matches!(s, Done | Cancelled) {
                 assert!(s.can_transition_to(Cancelled), "{s} → cancelled");
             }
         }
@@ -195,9 +213,13 @@ mod tests {
             (Deferred, Claimed),
             (Deferred, Done),
             (Deferred, Blocked),
+            (Done, Claimed),
+            (Done, InProgress),
+            (Done, Blocked),
+            (Done, Done),
             (Done, Cancelled),
-            (Cancelled, Open),
             (Cancelled, Done),
+            (Cancelled, InProgress),
         ] {
             assert!(!from.can_transition_to(to), "{from} → {to}");
             assert_eq!(
@@ -213,9 +235,9 @@ mod tests {
             Open.transitions(),
             &[Claimed, InProgress, Deferred, Cancelled]
         );
-        assert_eq!(Done.transitions(), &[]);
-        assert_eq!(Cancelled.transitions(), &[]);
         assert_eq!(Deferred.transitions(), &[Open, Cancelled]);
+        assert_eq!(Done.transitions(), &[Open, Deferred]);
+        assert_eq!(Cancelled.transitions(), &[Open, Deferred]);
     }
 
     #[test]

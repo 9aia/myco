@@ -635,6 +635,15 @@ pub(crate) fn w_done_list(s: &Server, a: &crate::registry::Args) -> Result<Value
     Ok(items_json(&found))
 }
 
+/// `done.remove` — delete an archived task subtree from DONE.md.
+pub(crate) fn w_done_remove(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let (proj, store) = s.open()?;
+    let item = crate::done::remove_item(&store, id).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: remove {id}"), None)?;
+    Ok(json!({"item": item, "file": "DONE.md", "committed": committed}))
+}
+
 /// `issue.list`.
 pub(crate) fn w_issue_list(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     w_file_list(s, a, ItemKind::Issue)

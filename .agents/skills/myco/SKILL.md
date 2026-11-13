@@ -47,7 +47,9 @@ myco <verb> --help     # every verb, self-documenting
 | Park / re-activate a task | `myco todo defer T-NNN` / `myco backlog promote T-NNN` |
 | Claim / start / block / finish | `myco item set T-NNN --status claimed|in-progress|blocked|done|cancelled` (`--steal` takes an item owned by another actor) |
 | Done a task | `myco todo done T-NNN` (archives subtree → `DONE.md`) |
-| Never doing it | `myco todo cancel T-NNN` (terminal — archives subtree → `DONE.md` as `status:cancelled`; works on BACKLOG.md items too) |
+| Never doing it | `myco todo cancel T-NNN` (archives subtree → `DONE.md` as `status:cancelled`; works on BACKLOG.md items too) |
+| Reopen archived work | `myco item set T-NNN --status open` (or `deferred` → BACKLOG.md) — pulls the subtree out of `DONE.md`, writes a `reopened` handoff; confirms on a tty |
+| Delete archived junk | `myco done remove T-NNN` (drops the subtree from `DONE.md` for good — not for unfinished work, that's reopen) |
 | Archived tasks / filters | `myco done list` · every `list` verb takes `--status --owner --label --pri --epic --milestone --due --est --cycle --query --limit` |
 | Undo the last mutation | `myco undo` (resets the `project` tip one commit — refuses dirty/pushed tips) |
 | File / close an issue | `myco issue new "title"` / `myco issue resolve I-NNN` |

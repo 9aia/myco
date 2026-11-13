@@ -26,6 +26,11 @@ agent ──► myco <verb> ──► write md ──► commit on `project` bra
 - **continuity** — `myco handoff <id>` attaches resumable state at
   session end; `myco resume <id>` returns the minimal context to
   restart work
+- **reopenable archive** — `done`/`cancelled` aren't a one-way
+  door: `myco item set <id> --status open|deferred` pulls an item
+  (subtree included) back out of `DONE.md` with a `reopened`
+  handoff as the audit trail; `myco done remove <id>` deletes
+  archived junk outright
 - **numbered slugs, one registry** — `T-012`, `I-003`, `P-002`,
   `ADR-0004`, `PL-001`; state machine owned by `myco-core`, invalid
   states unrepresentable

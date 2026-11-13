@@ -202,7 +202,7 @@ api:
   file: project/issues/issue-0030-issue-0030-rust-toolchain-upgrade-2026.md
   line: 2
   module: project
-api_omitted: 78
+api_omitted: 79
 deps: []
 notes: ''
 verify:
@@ -235,6 +235,7 @@ provenance:
   - project/handoffs/P-002.md
   - project/handoffs/P-004.md
   - project/handoffs/P-006.md
+  - project/handoffs/P-012.md
   - project/handoffs/archive/T-004.md
   - project/handoffs/archive/T-009.md
   - project/handoffs/archive/T-010.md
@@ -309,6 +310,7 @@ provenance:
   - da7c3d1402e908fcbd1cfff6868b43da756afcd4
   - 136e9cf22326b43d1bc4a69672205b1f292afe5e
   - e5151b6ec1980efa30f9efd54578db1ad2c9b757
+  - 5005762bd0beb76a983416f0c1d6f7469c704581
   - 9444bdf0db516ffe61066c31013e83a4845ee73b
   - 05cbaca371a929fabe60e041fe7904bc48fc15c0
   - 903a8ce3b140d237f606cb11f8acc1c91d32fb66
@@ -365,6 +367,6 @@ provenance:
   - 4d753c2b19260d670c606e98311ec53cd2e0b084
   - 6d02a11ce0ebc6b069c507b48bd39ad0d68a7643
   - b30eaaf057f56e1c38125d69e6152245620510c6
-  commit_sha: 6d99b20a8de6e018dbfe646fae16870fc93aefc0
-  generated_at: '1794440733'
+  commit_sha: 80b9d0a34fa20788633e352c96beb4e92f1ae31b
+  generated_at: '1794611880'
   generator: kuda-template/0.1.4

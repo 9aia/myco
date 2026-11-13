@@ -202,7 +202,7 @@ api:
   file: refs/sturn/wal/devin-i032
   line: 1
   module: sturn-wal
-api_omitted: 242
+api_omitted: 261
 deps: []
 notes: ''
 verify:
@@ -215,7 +215,7 @@ verify:
 - refs/sturn/wal/devin-ledger-ux
 - refs/sturn/wal/devin-lib-driver
 - refs/sturn/wal/devin-npm-dist
-- refs/sturn/wal/devin-pl016
+- refs/sturn/wal/devin-pl014-e1
 provenance:
   files:
   - refs/sturn/wal/devin
@@ -227,6 +227,7 @@ provenance:
   - refs/sturn/wal/devin-ledger-ux
   - refs/sturn/wal/devin-lib-driver
   - refs/sturn/wal/devin-npm-dist
+  - refs/sturn/wal/devin-pl014-e1
   - refs/sturn/wal/devin-pl016
   - refs/sturn/wal/devin-pl016-vcs
   - refs/sturn/wal/devin-reap
@@ -241,7 +242,9 @@ provenance:
   - refs/sturn/wal/myco-links
   - refs/sturn/wal/myco-sync
   - refs/sturn/wal/p009
+  - refs/sturn/wal/sturn
   - refs/sturn/wal/subagent-driver
+  - refs/sturn/wal/sync-refs-rollout
   - refs/sturn/ws/devin-ledger-ux
   - refs/sturn/ws/devin-lib-driver
   - refs/sturn/ws/item-move
@@ -256,6 +259,7 @@ provenance:
   - a25badd268e24c1a3d7ba59930abbd9e2016918e
   - 7e8b2ae0b6d55b40ba24be5a1d5b9555b3170277
   - c2d80d97064be0335fe5d4663e7f640d17aaea84
+  - 3c61593c888bf0b9c0a13c75ed92969f581f2ac7
   - 656aadf2f66a1df4b49dfcaf3ef9af6bc4cc657d
   - 80381e1d8ae5d47bf906b786d7f3c0544b109169
   - 490ee13e0f905d81c8900e9e555f4a9f9344586a
@@ -266,15 +270,17 @@ provenance:
   - 7b042c3c15793d36c9af354ccb32c6e833981401
   - 5194e492e037b702fa21afa83ce2943cde2b7888
   - 0eb3ad56e21a92a086ae0c297fe9c3272c7219a5
-  - 2bf03ac4b5a8a71ab795734046184c08135e6d0a
+  - abba739ffe1eb7a110ffad997c0b50e4b4f263ec
   - 8f5382552f7c386fc1b4704b80f09b8243c0095c
   - 5c53d381768cc31d1c3c1e48ec2c38ac061a4c57
   - 674540f31b3c541b1544aaabc0f6bcb7fd97fc6a
+  - 25ba8531417c80ac4aa04d4c62f9d65583049172
   - 54d93ae1a82375a685b1034ec6001a65dd997ef7
+  - 599bc2987ffe65586806c5003e3b59e03dc28709
   - 102e0cabf31ab40c19f951713181cf9c047f607b
   - be47760863fcba0b65b50642186e0025d3af852d
   - 00c736d9efc103d1f2efb84c0d776df0b1c1f426
   - 88d65cf20e66d85851a7da4506773fee6be426ab
-  commit_sha: 2fb48b7b8884e020cfd9ac11a13b0ee5ee0a76b5
-  generated_at: '1794490880'
+  commit_sha: 80b9d0a34fa20788633e352c96beb4e92f1ae31b
+  generated_at: '1794611880'
   generator: kuda-template/0.1.4

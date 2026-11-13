@@ -20,7 +20,7 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-core/src/status.rs
-  line: 43
+  line: 49
   module: myco-core
 - name: ALL
   kind: const
@@ -60,7 +60,7 @@ api:
 - name: DoneDoc
   kind: type
   file: crates/myco-core/src/doc.rs
-  line: 92
+  line: 95
   module: myco-core
 - name: Edge
   kind: type
@@ -100,7 +100,7 @@ api:
 - name: Err
   kind: type
   file: crates/myco-core/src/status.rs
-  line: 113
+  line: 121
   module: myco-core
 - name: Err
   kind: type
@@ -160,7 +160,7 @@ api:
 - name: InvalidTransition
   kind: type
   file: crates/myco-core/src/status.rs
-  line: 100
+  line: 108
   module: myco-core
 - name: Issue
   kind: const
@@ -180,7 +180,7 @@ api:
 - name: ItemFile
   kind: type
   file: crates/myco-core/src/doc.rs
-  line: 111
+  line: 114
   module: myco-core
 - name: ItemId
   kind: type
@@ -202,7 +202,7 @@ api:
   file: crates/myco-core/src/kind.rs
   line: 45
   module: myco-core
-api_omitted: 389
+api_omitted: 393
 deps:
 - schemars
 - serde
@@ -259,19 +259,19 @@ provenance:
   - f75323e2b82195a4149a5fb91548e75ba386acbf
   - 604b979a927c5d66c866f7f0b061a5285483be02
   - 06e989397088667febfffba9ce2aa5e36a6d671b
-  - b3002daf43031e8f8486ee8b33e67dbda29ce1ff
+  - f989824a6aaf844a1aecee9950dce96297773bc1
   - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
   - ec34134e87bdf0b1515595800aa3a81ac74449dc
   - a1461918ab4b25d64c18a88bee7e27ac5ba89b61
   - 5d220a111b00de9ca0d5d5cb9693a22644528fbc
-  - 35994c7e790eedc768987fd5c6b3e3d9b44338f3
+  - a63fdfd98e436098f76f799a702eeb39497af966
   - 0306aed7b584deb660a0702076f94533eb188713
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - f01971e1bcca257a19dcdaac97e6cc1c2448483c
   - e62184d264d30354071a59cf2b664a41e01e0334
-  - d32a01bfebe532259cd950e2126bccf6fe720714
+  - 9e9ad17d8413f2def42d65bac0bf70aa9c32a8bb
   - 72e92f7c24d5596a99997c10286efcfc7e0061ba
-  - 4cc27aecf26206465afb4fb0142882e4d8f87aae
-  commit_sha: df384cacc63cab25744b7939516f384bfac68406
-  generated_at: '1794519344'
+  - 447a08a9cf3c0fba2e03487808027953e397d915
+  commit_sha: 80b9d0a34fa20788633e352c96beb4e92f1ae31b
+  generated_at: '1794611880'
   generator: kuda-template/0.1.4

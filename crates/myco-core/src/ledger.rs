@@ -1,9 +1,10 @@
 //! The ledger — TODO.md + BACKLOG.md held together: task items
 //! move between the two docs on status changes (`deferred` parks,
-//! `done` deletes). Pure doc manipulation — loading/saving through
-//! a `Store` lives in `myco-ops`.
+//! `done`/`cancelled` archive into DONE.md — see [`DoneDoc`]'s
+//! locate/take for the way back). Pure doc manipulation —
+//! loading/saving through a `Store` lives in `myco-ops`.
 
-use crate::{BacklogDoc, Item, ItemId, Section, TodoDoc};
+use crate::{BacklogDoc, DoneDoc, Item, ItemId, Section, TodoDoc};
 
 /// TODO.md + BACKLOG.md as one in-memory ledger.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -98,20 +99,7 @@ impl Ledger {
         } else {
             &mut self.todo.sections
         };
-        let (last_idx, parents) = loc.path.split_last()?;
-        let section = sections.get_mut(loc.section)?;
-        let mut level = &mut section.items;
-        for &idx in parents {
-            level = &mut level.get_mut(idx)?.children;
-        }
-        if *last_idx >= level.len() {
-            return None;
-        }
-        let item = level.remove(*last_idx);
-        if loc.path.len() == 1 && section.name.is_none() && section.items.is_empty() {
-            sections.remove(loc.section);
-        }
-        Some(item)
+        take_from(sections, loc.section, &loc.path)
     }
 
     /// Swap the item at `loc` with a sibling — `delta` -1 moves up,
@@ -159,6 +147,45 @@ impl Ledger {
     pub fn put_backlog(&mut self, item: Item, section: Option<&str>) {
         push_item(&mut self.backlog.sections, item, section);
     }
+}
+
+impl DoneDoc {
+    /// Locate an item anywhere in the archive — `(section, path)`
+    /// indexes into [`DoneDoc::sections`] with the same trail
+    /// [`Ledger::locate`] produces (`[2,0]` = first child of the
+    /// third top-level item).
+    pub fn locate(&self, id: ItemId) -> Option<(usize, Vec<usize>)> {
+        find_pos(&self.sections, id)
+    }
+
+    /// Remove the node at `(section, path)` — the whole subtree
+    /// goes with it (reopen restores children with their parent;
+    /// `done remove` deletes them). Same emptied-section rule as
+    /// [`Ledger::take`]: an unsectioned run can't emit empty, a
+    /// named `##` heading is user structure and stays. `None` on
+    /// a stale position — nothing is removed.
+    pub fn take(&mut self, section: usize, path: &[usize]) -> Option<Item> {
+        take_from(&mut self.sections, section, path)
+    }
+}
+
+/// Shared removal behind [`Ledger::take`] and [`DoneDoc::take`] —
+/// `path` is the index trail `find_pos` recorded.
+fn take_from(sections: &mut Vec<Section>, section: usize, path: &[usize]) -> Option<Item> {
+    let (last_idx, parents) = path.split_last()?;
+    let section_ref = sections.get_mut(section)?;
+    let mut level = &mut section_ref.items;
+    for &idx in parents {
+        level = &mut level.get_mut(idx)?.children;
+    }
+    if *last_idx >= level.len() {
+        return None;
+    }
+    let item = level.remove(*last_idx);
+    if path.len() == 1 && section_ref.name.is_none() && section_ref.items.is_empty() {
+        sections.remove(section);
+    }
+    Some(item)
 }
 
 fn find_pos(sections: &[Section], id: ItemId) -> Option<(usize, Vec<usize>)> {
@@ -330,6 +357,43 @@ mod tests {
         // nested children reorder among themselves
         let mut loc = ledger.locate(tid(4)).unwrap();
         assert!(!ledger.move_within(&mut loc, -1));
+    }
+
+    #[test]
+    fn done_doc_locate_and_take() {
+        use crate::{DoneDoc, Status};
+        let mut doc = DoneDoc::default();
+        doc.sections.push(Section {
+            name: None,
+            items: vec![
+                t(1).status(Status::Done).child(t(2).status(Status::Done)),
+                t(3).status(Status::Cancelled),
+            ],
+        });
+        doc.sections.push(Section::named("2026-11"));
+        doc.sections[1].items.push(t(4).status(Status::Done));
+        // locate finds nested children and later sections
+        assert_eq!(doc.locate(tid(2)), Some((0, vec![0, 0])), "nested child");
+        assert_eq!(doc.locate(tid(4)), Some((1, vec![0])));
+        assert!(doc.locate(tid(9)).is_none());
+        // take removes just the node — a nested child leaves its
+        // parent archived
+        let gone = doc.take(0, &[0, 0]).unwrap();
+        assert_eq!(gone.id, tid(2));
+        assert_eq!(doc.sections[0].items[0].children.len(), 0);
+        // take on a top-level item drops an emptied unsectioned
+        // section but keeps a named one
+        let gone = doc.take(0, &[1]).unwrap();
+        assert_eq!(gone.id, tid(3));
+        assert_eq!(doc.sections.len(), 2); // t(1) still holds the run
+        let gone = doc.take(0, &[0]).unwrap();
+        assert_eq!(gone.id, tid(1));
+        assert_eq!(doc.sections.len(), 1); // unsectioned dropped
+        assert_eq!(doc.sections[0].name.as_deref(), Some("2026-11"));
+        // stale positions are None, not panics
+        assert!(doc.take(9, &[0]).is_none());
+        assert!(doc.take(0, &[4]).is_none());
+        assert!(doc.take(0, &[]).is_none());
     }
 
     #[test]

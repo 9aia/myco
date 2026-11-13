@@ -106,8 +106,8 @@ pub fn document() -> serde_json::Value {
                 "line": "- T-NNN <title>[ · <token>]…",
                 "children": "a `-` list indented under an item nests as its sub-items (canonical: 2 spaces/level)",
                 "default_status": "done",
-                "statuses": "done|cancelled — the terminal pair; cancelled keeps its `status:` token",
-                "note": "append-only terminal-task archive — `todo done`/`todo cancel`/`item set --status done|cancelled` land here; done and cancelled are terminal",
+                "statuses": "done|cancelled — the archive pair; cancelled keeps its `status:` token",
+                "note": "append-only task archive — `todo done`/`todo cancel`/`item set --status done|cancelled` land here; `item set --status open|deferred` reopens, `done remove` deletes",
             },
             "index.md": {"format": "markdown", "verbatim": true},
             "kinds": {
@@ -186,8 +186,8 @@ mod tests {
             d["transitions"]["in-progress"],
             json!(["blocked", "done", "deferred", "open", "cancelled"])
         );
-        assert_eq!(d["transitions"]["done"], json!([]));
-        assert_eq!(d["transitions"]["cancelled"], json!([]));
+        assert_eq!(d["transitions"]["done"], json!(["open", "deferred"]));
+        assert_eq!(d["transitions"]["cancelled"], json!(["open", "deferred"]));
         assert_eq!(
             d["statuses"],
             json!([

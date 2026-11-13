@@ -693,7 +693,7 @@ const GROUPS: &[Group] = &[
     },
     Group {
         name: "done",
-        about: "DONE.md — the terminal-task archive (`todo done`/`todo cancel` land here).",
+        about: "DONE.md — the archived-task archive (`todo done`/`todo cancel` land here; `item set --status open|deferred` reopens, `done remove` deletes).",
     },
     Group {
         name: "issue",
@@ -1208,7 +1208,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "todo.cancel",
-        about: "Mark cancelled — walks the state machine to `cancelled` (terminal, like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).",
+        about: "Mark cancelled — walks the state machine to `cancelled` (archived like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).",
         params: &[TASK_ID, &[flag(
             "yes",
             "Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
@@ -1283,13 +1283,27 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "done.list",
-        about: "List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; done and cancelled are terminal.",
+        about: "List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; `item set --status open|deferred` reopens one back into the live docs.",
         params: &[LIST],
         kind_lock: Some(myco_core::ItemKind::Task),
         mutates: false,
         hidden: false,
         cli: Some(crate::done::h_list),
         wire: Some(serve::w_done_list),
+    },
+    Verb {
+        name: "done.remove",
+        about: "Delete an archived task subtree from DONE.md outright — the ledger forgets it (scaffold junk, mistakes). Reopen unfinished work with `item set --status open` instead. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).",
+        params: &[TASK_ID, &[flag(
+            "yes",
+            "Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
+        )
+        .cli()]],
+        kind_lock: Some(myco_core::ItemKind::Task),
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::done::h_remove),
+        wire: Some(serve::w_done_remove),
     },
     Verb {
         name: "issue.new",
@@ -1461,7 +1475,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "item.set",
-        about: "Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` archives the subtree into DONE.md — terminal, so it confirms on a tty: `--yes`/`$MYCO_YES` skips).",
+        about: "Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).",
         params: &[&[
             pos("id", Val::Id, "Any item id."),
             opt("status", Val::Status, "New status — one legal step from the current one."),
@@ -1497,7 +1511,7 @@ pub static VERBS: &[Verb] = &[
             ),
             flag(
                 "yes",
-                "Skip the `--status done` confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).",
+                "Skip the archive/reopen confirmation prompts (also `$MYCO_YES`; non-interactive runs never prompt).",
             )
             .cli(),
         ]],

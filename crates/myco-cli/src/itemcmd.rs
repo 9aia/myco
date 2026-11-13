@@ -286,9 +286,15 @@ pub(crate) fn set_item(
     if flags.status == Some(Status::Claimed) && flags.owner.is_none() {
         flags.owner = Some(me.clone());
     }
-    // snapshot for takeover detection — decidable up front: the
-    // post-mutation owner is `flags.owner` whenever one is set
-    let prior_owner = items::find_item(store, id)?.and_then(|(i, _, _)| i.owner);
+    // snapshot for takeover/reopen detection — decidable up
+    // front: the post-mutation owner is `flags.owner` whenever
+    // one is set, the post-mutation status is `flags.status`
+    let prior = items::find_item(store, id)?;
+    let prior_owner = prior.as_ref().and_then(|(i, _, _)| i.owner.clone());
+    let reopened_from = prior
+        .as_ref()
+        .map(|(i, _, _)| i.status)
+        .filter(|s| matches!(s, Status::Done | Status::Cancelled));
     let taken_from = if flags.steal && flags.owner.is_some() {
         prior_owner.filter(|p| flags.owner.as_ref() != Some(p))
     } else {
@@ -330,6 +336,22 @@ pub(crate) fn set_item(
         store
             .append_handoff(id, &entry)
             .map_err(|e| e.to_string())?;
+    }
+    // the reopen audit entry — leaving DONE.md is rare enough to
+    // record who/when, same commit as the mutation. Skipped when
+    // the mutation removed the item entirely (a re-`done`).
+    if let (Some(from), Some(item)) = (&reopened_from, &outcome.item) {
+        if !matches!(item.status, Status::Done | Status::Cancelled) {
+            let entry = myco_core::HandoffEntry {
+                date: items::today(),
+                actor: me.clone(),
+                session: None,
+                note: format!("reopened from {from}"),
+            };
+            store
+                .append_handoff(id, &entry)
+                .map_err(|e| e.to_string())?;
+        }
     }
     Ok(SetOutcome {
         taken_from,
@@ -407,16 +429,35 @@ pub fn h_set(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     if flags.is_noop() && session.is_none() {
         return Err("item set: nothing to change — pass at least one flag".into());
     }
-    // the terminals are one-way — the `item set` worth confirming
+    // the archive states are one-way *into* DONE.md — the
+    // `item set` worth confirming
     if let Some(to @ (Status::Done | Status::Cancelled)) = flags.status {
         if crate::confirm::needed(a.flag("yes"))
-            && !crate::confirm::ask(&format!("set {id} → {to}? {to} is terminal."))
+            && !crate::confirm::ask(&format!("set {id} → {to}? {to} archives it."))
         {
             eprintln!("myco: cancelled");
             return Ok(1);
         }
     }
     let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    // …and just as rare on the way out: reopening needs the
+    // item's current status, so this check waits for the open
+    if let Some(to) = flags.status {
+        if !matches!(to, Status::Done | Status::Cancelled) {
+            if let Some((item, _, _)) = items::find_item(&store, id)? {
+                if matches!(item.status, Status::Done | Status::Cancelled)
+                    && crate::confirm::needed(a.flag("yes"))
+                    && !crate::confirm::ask(&format!(
+                        "reopen {id} — {} → {to}? it leaves DONE.md.",
+                        item.status
+                    ))
+                {
+                    eprintln!("myco: cancelled");
+                    return Ok(1);
+                }
+            }
+        }
+    }
     // `--owner` doubles as the actor here (the resolution chain's
     // first rung) — the guard and the commit trailer agree
     let me = ops::resolve_actor(Some(&proj.worktree), flags.owner.as_ref());
@@ -731,6 +772,50 @@ pub(crate) fn mutate_item(
             items::save_done(store, &doc)?;
         }
         Ok((item, "tasks".to_string()))
+    } else if id.kind() == ItemKind::Task {
+        // not in TODO/BACKLOG — DONE.md is the only other place a
+        // task lives. Reopen is the only mutation the archive
+        // takes: a status step out (`done`/`cancelled →
+        // open|deferred`) pulls the node — subtree included —
+        // back into the live docs; anything else stays refused.
+        let Some(to) = flags.status else {
+            return Err(format!(
+                "{id} is archived in DONE.md — `--status open` reopens it"
+            ));
+        };
+        if matches!(to, Status::Done | Status::Cancelled) {
+            return Err(format!(
+                "{id} is already archived in DONE.md — nothing to set"
+            ));
+        }
+        let mut done = items::load_done(store)?;
+        let Some((section, path)) = done.locate(id) else {
+            return Err(format!("{id}: no such task"));
+        };
+        let Some(mut item) = done.take(section, &path) else {
+            return Err(format!("{id}: stale DONE.md location"));
+        };
+        // metadata flags apply too — apply_set validates the
+        // archive → live status step through the machine
+        apply_set(&mut item, flags)?;
+        // the subtree comes back live with its parent — archived
+        // children can't stay terminal under a live node
+        let to = item.status;
+        items::walk_descendants_to(&mut item, to)?;
+        let file = match to {
+            Status::Deferred => {
+                ledger.put_backlog(item.clone(), None);
+                "BACKLOG.md"
+            }
+            _ => {
+                ledger.put_todo(item.clone(), None);
+                "TODO.md"
+            }
+        };
+        let location = format!("DONE.md → {file}");
+        items::save_ledger(store, &ledger)?;
+        items::save_done(store, &done)?;
+        Ok((Some(item), location))
     } else {
         let mut file = items::item_for_edit(store, id)?;
         ownership_guard(&file.meta, flags, me)?;

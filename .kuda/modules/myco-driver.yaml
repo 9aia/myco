@@ -35,7 +35,7 @@ api:
 - name: Found
   kind: type
   file: crates/myco-driver/src/views.rs
-  line: 1096
+  line: 1101
   module: myco-driver
 - name: HandoffRow
   kind: type
@@ -130,7 +130,7 @@ api:
 - name: adr_new_and_supersede
   kind: function
   file: crates/myco-driver/tests/items.rs
-  line: 723
+  line: 824
   module: myco-driver
 - name: alias_appends_extra_args_via_cli_and_batch
   kind: function
@@ -175,7 +175,7 @@ api:
 - name: backlog_add_and_list
   kind: function
   file: crates/myco-driver/tests/items.rs
-  line: 322
+  line: 417
   module: myco-driver
 - name: bad_config_verb_warns_and_is_skipped
   kind: function
@@ -190,7 +190,7 @@ api:
 - name: body_payload
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 1256
+  line: 1261
   module: myco-driver
 - name: bool_param
   kind: function
@@ -202,7 +202,7 @@ api:
   file: crates/myco-driver/src/views.rs
   line: 44
   module: myco-driver
-api_omitted: 356
+api_omitted: 357
 deps:
 - camino
 - myco
@@ -260,19 +260,19 @@ provenance:
   - crates/myco-driver/tests/shim.rs
   - crates/myco-driver/tests/views.rs
   hashes:
-  - 9ad4b4c63792287a2b160cc38aaee42c7634660d
+  - 99fd2f7bccef87d357f518df4bef3a4b1aded0ac
   - edd2329937f8894872790228623178588e4058d5
   - c1d03d91fd4c3e07ce3760c06cc80396dbccce25
   - 3e78998da6c64d9a79c443d6d8cd4c0ee4a8dc5e
   - 70f88ad7103cc88539c46a8f2542392ec91f9b13
-  - 150236f88d58a160033f1ca8665bb92eaeee7904
+  - b3c10d3df74cd37b1264a4f95b0090ce887ef054
   - a984eca8eea928be5520ffbb488388139c046536
   - bcf687da55f4d327b1667d16099ac7104b0abdb8
   - 5554ccd3e5349944e3869bacb43010390f9fb2f0
   - d051414a4ba12230efdff515fc00e13bfbfe18ae
   - ae05ae717980ab1abe774f5d76666f1db10f4f86
   - 8f451e070235fbfa0d5b5469152ee85bac0dff9f
-  - 5b473bfccf866b0dc46acb5d08230702301e0d0a
+  - 5c4b0e48bf994fdd10568f9cdb719f63c5799592
   - 342f2866ca4709df327f4542c88bb7505769dccd
   - b76ec5f31761fe21c4c26f90b2b5305d05d090ee
   - f22ec5cfb5fb7166ae7cbfc7fcc454eaf7cf0857
@@ -280,6 +280,6 @@ provenance:
   - 2a40dc06bdbccd62b0f3c6d4b29e9e75712b5331
   - 7709e3b39bd7e361982e898600a0eb3c27bf67e5
   - 92ac629d644dd0871e71bf1706e3055eaddf8bfd
-  commit_sha: 051a179b94a60fbae3da975d633f4fbe3ea52827
-  generated_at: '1794538200'
+  commit_sha: 80b9d0a34fa20788633e352c96beb4e92f1ae31b
+  generated_at: '1794611880'
   generator: kuda-template/0.1.4

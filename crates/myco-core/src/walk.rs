@@ -134,13 +134,26 @@ mod tests {
             status_path(id, Status::Deferred, Status::Done).unwrap(),
             vec![Status::Open, Status::InProgress, Status::Done]
         );
-        // no path out of terminal states
-        assert!(status_path(id, Status::Done, Status::Open).is_err());
+        // the archive states reopen directly — done/cancelled →
+        // open|deferred is a single hop
+        assert_eq!(
+            status_path(id, Status::Done, Status::Open).unwrap(),
+            vec![Status::Open]
+        );
+        assert_eq!(
+            status_path(id, Status::Cancelled, Status::Deferred).unwrap(),
+            vec![Status::Deferred]
+        );
+        // …but a work state still takes the long way around
+        assert_eq!(
+            status_path(id, Status::Done, Status::InProgress).unwrap(),
+            vec![Status::Open, Status::InProgress]
+        );
         // same → error
         assert!(status_path(id, Status::Open, Status::Open).is_err());
         // error message lists valid targets
-        let e = status_path(id, Status::Done, Status::Open).unwrap_err();
-        assert!(e.contains("none (terminal)"), "{e}");
+        let e = status_path(id, Status::Done, Status::Done).unwrap_err();
+        assert!(e.contains("already done"), "{e}");
     }
 
     #[test]
@@ -157,23 +170,23 @@ mod tests {
     }
 
     #[test]
-    fn walk_descendants_is_all_or_nothing() {
-        // an unreachable target mid-subtree must not leave the
-        // earlier siblings transitioned
+    fn walk_descendants_reopens_archived_nodes() {
+        // the archive states aren't terminal — a subtree walk
+        // brings done/cancelled descendants back live too (the
+        // DONE.md reopen path relies on this)
         let mut parent = t(1, Status::Open)
-            .child(t(2, Status::Open))
-            .child(t(3, Status::Done));
-        assert!(walk_descendants_to(&mut parent, Status::Deferred).is_err());
-        assert_eq!(parent.children[0].status, Status::Open);
-        assert_eq!(parent.children[1].status, Status::Done);
-        // same at depth: a done grandchild blocks the walk before
-        // the sibling subtree moves
-        let mut parent = t(1, Status::Open)
-            .child(t(2, Status::Open))
-            .child(t(3, Status::Open).child(t(4, Status::Done)));
-        assert!(walk_descendants_to(&mut parent, Status::Deferred).is_err());
+            .child(t(2, Status::Done))
+            .child(t(3, Status::Cancelled));
+        walk_descendants_to(&mut parent, Status::Open).unwrap();
         assert_eq!(parent.children[0].status, Status::Open);
         assert_eq!(parent.children[1].status, Status::Open);
-        assert_eq!(parent.children[1].children[0].status, Status::Done);
+        // …and re-parks the whole subtree when the target is deferred
+        let mut parent = t(1, Status::Done)
+            .child(t(2, Status::Done))
+            .child(t(3, Status::Cancelled));
+        walk_descendants_to(&mut parent, Status::Deferred).unwrap();
+        for c in &parent.children {
+            assert_eq!(c.status, Status::Deferred);
+        }
     }
 }
