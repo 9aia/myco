@@ -17,6 +17,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco backlog list`↴](#myco-backlog-list)
 * [`myco done`↴](#myco-done)
 * [`myco done list`↴](#myco-done-list)
+* [`myco done remove`↴](#myco-done-remove)
 * [`myco issue`↴](#myco-issue)
 * [`myco issue new`↴](#myco-issue-new)
 * [`myco issue list`↴](#myco-issue-list)
@@ -38,6 +39,7 @@ This document contains the help content for the `myco` command-line program.
 * [`myco item show`↴](#myco-item-show)
 * [`myco item set`↴](#myco-item-set)
 * [`myco item move`↴](#myco-item-move)
+* [`myco item reorder`↴](#myco-item-reorder)
 * [`myco absorb`↴](#myco-absorb)
 * [`myco absorb comments`↴](#myco-absorb-comments)
 * [`myco absorb jira`↴](#myco-absorb-jira)
@@ -80,7 +82,7 @@ myco — agent-first project management for a repo's `project/` worktree.
 
 * `todo` — TODO.md tasks — add / done / cancel / defer / list.
 * `backlog` — BACKLOG.md parked items — add / promote / list.
-* `done` — DONE.md — the terminal-task archive (`todo done`/`todo cancel` land here).
+* `done` — DONE.md — the archived-task archive (`todo done`/`todo cancel` land here; `item set --status open|deferred` reopens, `done remove` deletes).
 * `issue` — Tracked issues, one file each under `issues/`.
 * `proposal` — Design proposals under `proposals/` (`P-NNN`).
 * `plan` — Execution plans under `plans/` (`PL-NNN`).
@@ -129,7 +131,7 @@ TODO.md tasks — add / done / cancel / defer / list.
 
 * `add` — Add a task — allocs a T-id, appends to a section of TODO.md.
 * `done` — Mark done — walks the state machine to `done`, removes the line, and archives the subtree into DONE.md. Done on a parent archives the whole subtree — children die with it. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
-* `cancel` — Mark cancelled — walks the state machine to `cancelled` (terminal, like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
+* `cancel` — Mark cancelled — walks the state machine to `cancelled` (archived like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
 * `defer` — Park a task — transition to `deferred`, move the line to BACKLOG.md. Defer on a parent moves the whole subtree (children park with it); on a child it detaches alone.
 * `list` — List tasks.
 
@@ -180,7 +182,7 @@ Mark done — walks the state machine to `done`, removes the line, and archives 
 
 ## `myco todo cancel`
 
-Mark cancelled — walks the state machine to `cancelled` (terminal, like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
+Mark cancelled — walks the state machine to `cancelled` (archived like done but the work never happened), removes the line, and archives the subtree into DONE.md with `status:cancelled` preserved. Works on BACKLOG.md items too — no promote needed. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
 
 **Usage:** `myco todo cancel [OPTIONS] <id>`
 
@@ -304,19 +306,20 @@ List backlog items.
 
 ## `myco done`
 
-DONE.md — the terminal-task archive (`todo done`/`todo cancel` land here).
+DONE.md — the archived-task archive (`todo done`/`todo cancel` land here; `item set --status open|deferred` reopens, `done remove` deletes).
 
 **Usage:** `myco done <COMMAND>`
 
 ###### **Subcommands:**
 
-* `list` — List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; done and cancelled are terminal.
+* `list` — List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; `item set --status open|deferred` reopens one back into the live docs.
+* `remove` — Delete an archived task subtree from DONE.md outright — the ledger forgets it (scaffold junk, mistakes). Reopen unfinished work with `item set --status open` instead. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
 
 
 
 ## `myco done list`
 
-List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; done and cancelled are terminal.
+List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set --status done|cancelled` land in. Read-only; `item set --status open|deferred` reopens one back into the live docs.
 
 **Usage:** `myco done list [OPTIONS]`
 
@@ -333,6 +336,22 @@ List archived tasks — the DONE.md archive `todo done`/`todo cancel`/`item set 
 * `--cycle <CYCLE>` — Keep only items in this cycle.
 * `--query <QUERY>` — Keep only items whose id, title, or a label contains this text (case-insensitive).
 * `--limit <N>` — Keep only the first N items after filtering.
+
+
+
+## `myco done remove`
+
+Delete an archived task subtree from DONE.md outright — the ledger forgets it (scaffold junk, mistakes). Reopen unfinished work with `item set --status open` instead. Confirms on a tty (`--yes`/`$MYCO_YES` skips; scripts never prompt).
+
+**Usage:** `myco done remove [OPTIONS] <id>`
+
+###### **Arguments:**
+
+* `<ID>` — Task id (`T-NNN`).
+
+###### **Options:**
+
+* `--yes` — Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
 
 
 
@@ -669,8 +688,9 @@ Kind-agnostic item verbs — show / set / move.
 ###### **Subcommands:**
 
 * `show` — Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/associated/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
-* `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` archives the subtree into DONE.md — terminal, so it confirms on a tty: `--yes`/`$MYCO_YES` skips).
+* `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).
 * `move` — Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids — and the drop is recorded as plain text in both provenance handoffs), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or an index-universe repo name (`myco index list`). Two commits — one per worktree. `--dry-run` previews the plan (prospective dest id, dropped refs) with no writes; `--finish` completes a move that died after the destination copy + `moved to` pointer landed but before the source close committed — the pointer is the resume handle.
+* `reorder` — Sibling reorder inside TODO.md/BACKLOG.md — the TUI's `Alt+↑/↓` as a verb: `--delta -1` swaps with the previous sibling, `+1` with the next (larger deltas walk that many steps, stopping at the list edge). `Ledger::move_within` semantics exactly — a move never crosses a `##` section boundary, and a nested child swaps among its own siblings only. One commit per call (`chore: reorder <id>`); tasks only — file-backed items have no siblings.
 
 
 
@@ -688,7 +708,7 @@ Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by
 
 ## `myco item set`
 
-Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done` archives the subtree into DONE.md — terminal, so it confirms on a tty: `--yes`/`$MYCO_YES` skips).
+Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).
 
 **Usage:** `myco item set [OPTIONS] <id>`
 
@@ -714,7 +734,7 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--cycle <CYCLE>` — Cycle name (`[A-Za-z0-9_.-]+`) — `""` clears the cycle.
 * `--session <SESSION>` — Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state.
 * `--steal` — Take the item even when another actor owns the claim — records a `taken from` handoff entry.
-* `--yes` — Skip the `--status done` confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
+* `--yes` — Skip the archive/reopen confirmation prompts (also `$MYCO_YES`; non-interactive runs never prompt).
 
 
 
@@ -736,6 +756,22 @@ Move an item to another repo's ledger — re-creates it in the destination's own
 * `--dry-run` — Validate + report the plan (prospective destination id, dropped refs) — no writes, no commits.
 * `--finish` — Complete a partial move — finds the `moved to` handoff pointer, verifies the destination copy exists, closes the source, commits both worktrees. No `--to`.
 * `--yes` — Skip the confirmation prompt (also `$MYCO_YES`; non-interactive runs never prompt).
+
+
+
+## `myco item reorder`
+
+Sibling reorder inside TODO.md/BACKLOG.md — the TUI's `Alt+↑/↓` as a verb: `--delta -1` swaps with the previous sibling, `+1` with the next (larger deltas walk that many steps, stopping at the list edge). `Ledger::move_within` semantics exactly — a move never crosses a `##` section boundary, and a nested child swaps among its own siblings only. One commit per call (`chore: reorder <id>`); tasks only — file-backed items have no siblings.
+
+**Usage:** `myco item reorder --delta <N> <id>`
+
+###### **Arguments:**
+
+* `<ID>` — Task id (`T-NNN`) — a live TODO.md/BACKLOG.md line, children included.
+
+###### **Options:**
+
+* `--delta <N>` — Sibling steps — `-1` up, `+1` down; larger values walk that far, stopping at the edge.
 
 
 

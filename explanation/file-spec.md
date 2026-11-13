@@ -11,7 +11,7 @@ machine-readable JSON Schema; `myco check` enforces it.
 | `meta.toml`  | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
 | `TODO.md`    | open-line tasks (`T-`), `##` sections, nested children              |
 | `BACKLOG.md` | deferred items — same grammar, no checkbox                          |
-| `DONE.md`    | terminal archive — same grammar, status `done` or `cancelled`     |
+| `DONE.md`    | task archive — same grammar, status `done` or `cancelled`          |
 | `index.md`   | free-form human index — verbatim, never rewritten                   |
 | `issues/`    | `issue-NNNN-<slug>.md` + `issues/archive/`                          |
 | `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/`                    |
@@ -41,10 +41,14 @@ each, filenames padded to four digits.
 
 - `BACKLOG.md` lines are the same shape minus `[ ]`, default
   status `deferred`; `TODO.md` defaults to `open`. `DONE.md` is
-  the terminal archive — same line grammar, status `done`
+  the task archive — same line grammar, status `done`
   (the default, token dropped) or `cancelled` (token kept, so
   the archive records *why* it left), read by `myco done list`
-  and still resolvable via `myco item show`.
+  and still resolvable via `myco item show`. The archive isn't
+  a one-way door: `item set --status open|deferred` reopens an
+  item (subtree included — it lands top-level in `TODO.md` or
+  `BACKLOG.md`) with a `reopened` handoff as the audit trail,
+  and `myco done remove` deletes an archived subtree outright.
 - `done` moves the line (subtree included) to `DONE.md` —
   completed work stays visible instead of vanishing;
   `cancel` does the same but lands as `status:cancelled` —
@@ -119,8 +123,8 @@ legal step at a time:
 | `in-progress` | `blocked`, `done`, `deferred`, `open`, `cancelled`   |
 | `blocked`     | `in-progress`, `open`, `deferred`, `cancelled`       |
 | `deferred`    | `open`, `cancelled`                                  |
-| `done`        | — (terminal)                                         |
-| `cancelled`   | — (terminal)                                         |
+| `done`        | `open`, `deferred` (reopen — leaves `DONE.md`)       |
+| `cancelled`   | `open`, `deferred` (same)                            |
 
 Proposal words alias the machine: `draft` = `open`, `accepted` =
 `done`, `rejected` = `deferred` — the transition still walks the
