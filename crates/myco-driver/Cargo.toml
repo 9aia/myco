@@ -35,22 +35,21 @@ serde_json.workspace = true
 # `cargo xtask install` work without a sibling ../pavo checkout
 # (path deps break workspace resolution on a fresh clone).
 # `version` is the crates.io fallback once pavo-protocol publishes.
-# `rev` pins pavo's feat/interaction-protocol head (the `invoke`
-# op + Action/ParamSchema types) pending that branch's merge —
-# bump to the merge commit once it lands on main.
-pavo-protocol = { git = "https://github.com/9aia/pavo", rev = "0637c03652591d93e54ed7ed38d6f4ba8fa8a61f", version = "0.1.0" }
+# `rev` tracks pavo main — bumped to the interaction-protocol merge
+# commit f42f177 (invoke op + Action/ParamSchema types, P-032/ADR-0006).
+pavo-protocol = { git = "https://github.com/9aia/pavo", rev = "f42f17735321fd4e7afab7a2c1c3b8b24c145876", version = "0.1.0" }
 # Driver-authoring kit — the ndjson `serve` loop plus the
 # manifest/ViewSpec/QueryBinding/ViewNode builders this crate used to
 # hand-roll. Same git source as pavo-protocol (they resolve to one
 # rev); `version` is the crates.io fallback once it publishes.
-pavo-driver-kit = { git = "https://github.com/9aia/pavo", rev = "0637c03652591d93e54ed7ed38d6f4ba8fa8a61f", version = "0.1.0" }
+pavo-driver-kit = { git = "https://github.com/9aia/pavo", rev = "f42f17735321fd4e7afab7a2c1c3b8b24c145876", version = "0.1.0" }
 
 [dev-dependencies]
 # Conformance gate — `cargo test` runs pavo's wire-contract suite
 # against this crate's own `tamias-driver-myco serve` binary.
 # Git dep to match pavo-protocol above (path deps break
 # `cargo install --git` / fresh-clone resolution).
-pavo-testkit = { git = "https://github.com/9aia/pavo", rev = "0637c03652591d93e54ed7ed38d6f4ba8fa8a61f" }
+pavo-testkit = { git = "https://github.com/9aia/pavo", rev = "f42f17735321fd4e7afab7a2c1c3b8b24c145876" }
 # Engine e2e suite — the retired `myco` bin's integration tests
 # moved here and spawn `tamias-driver-myco run <argv>` (the same
 # passthrough `cli.*` wire queries and the bins[] shim use).
