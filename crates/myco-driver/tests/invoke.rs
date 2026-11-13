@@ -153,6 +153,9 @@ fn manifest_declares_actions_menus_and_schemas() {
         "backlog.promote",
         "item.set",
         "item.move",
+        "item.reorder",
+        "undo",
+        "redo",
         "handoff",
         "next",
     ] {
@@ -162,8 +165,11 @@ fn manifest_declares_actions_menus_and_schemas() {
     // terminal/destructive → type-target.
     assert_eq!(by_id("todo.add")["danger"], json!("none"));
     assert_eq!(by_id("next")["danger"], json!("none"));
+    assert_eq!(by_id("item.reorder")["danger"], json!("none"));
     assert_eq!(by_id("todo.done")["danger"], json!("confirm"));
     assert_eq!(by_id("item.set")["danger"], json!("confirm"));
+    assert_eq!(by_id("undo")["danger"], json!("confirm"));
+    assert_eq!(by_id("redo")["danger"], json!("confirm"));
     assert_eq!(by_id("todo.cancel")["danger"], json!("type-target"));
     // Param schemas on the declared actions.
     let add = by_id("todo.add");
@@ -186,10 +192,22 @@ fn manifest_declares_actions_menus_and_schemas() {
     let done = by_id("todo.done");
     assert_eq!(done["params"][0]["kind"], json!("ref"));
     assert_eq!(done["params"][0]["ref_query"], json!("items"));
+    // item.reorder — ref id + integer delta, both required.
+    let re = by_id("item.reorder");
+    let re_params = re["params"].as_array().unwrap();
+    let delta = re_params
+        .iter()
+        .find(|p| p["name"] == json!("delta"))
+        .unwrap();
+    assert_eq!(delta["kind"], json!("integer"));
+    assert_eq!(delta["required"], json!(true));
     // contributes.menus — palette entries pointing at actions/views.
     let menus = m["contributes"]["menus"].as_array().unwrap();
     assert!(!menus.is_empty());
     assert!(menus.iter().any(|e| e["action"] == json!("todo.add")));
+    assert!(menus.iter().any(|e| e["action"] == json!("item.reorder")));
+    assert!(menus.iter().any(|e| e["action"] == json!("undo")));
+    assert!(menus.iter().any(|e| e["action"] == json!("redo")));
     assert!(menus.iter().any(|e| e["route"] == json!("/myco/board")));
 }
 
@@ -285,4 +303,54 @@ fn submit_dispatches_verb_named_forms() {
         "values": {},
     }));
     assert_eq!(r["ok"], json!(false));
+}
+
+#[test]
+fn invoke_reorder_and_undo_redo() {
+    let d = repo();
+    init(d.path());
+    let mut s = Serve::spawn(d.path());
+    let todo_md = || std::fs::read_to_string(d.path().join("project/TODO.md")).unwrap();
+    let pos = |id: &str| todo_md().find(id).unwrap();
+
+    for title in ["one", "two", "three"] {
+        let r = s.invoke("todo.add", None, json!({"title": title}));
+        assert_eq!(r["result"]["data"]["code"], json!(0), "{r}");
+    }
+    assert!(pos("T-001") < pos("T-002") && pos("T-002") < pos("T-003"));
+
+    // item.reorder — delta -2 walks T-003 to the top, one commit.
+    // Missing `delta` → ActionResult.errors before any spawn.
+    let r = s.invoke("item.reorder", Some(json!("T-003")), json!({}));
+    assert_eq!(r["ok"], json!(true));
+    assert_eq!(r["result"]["errors"]["delta"], json!("required"));
+
+    let r = s.invoke(
+        "item.reorder",
+        Some(json!({"id": "T-003"})),
+        json!({"delta": -2}),
+    );
+    assert_eq!(r["ok"], json!(true), "{r}");
+    assert_eq!(r["result"]["data"]["code"], json!(0), "{r}");
+    assert_eq!(r["result"]["data"]["op"], json!("item.reorder"));
+    assert!(pos("T-003") < pos("T-001") && pos("T-001") < pos("T-002"));
+
+    // undo rewinds the reorder commit; redo restores it. The verbs
+    // refuse on a published tip — temp repos have no origin, so
+    // the journal path is exercised end to end.
+    let r = s.invoke("undo", None, json!({}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    assert_eq!(r["result"]["data"]["code"], json!(0), "{r}");
+    assert!(pos("T-001") < pos("T-002") && pos("T-002") < pos("T-003"));
+
+    let r = s.invoke("redo", None, json!({}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    assert_eq!(r["result"]["data"]["code"], json!(0), "{r}");
+    assert!(pos("T-003") < pos("T-001") && pos("T-001") < pos("T-002"));
+
+    // `undo --list` is the read-only arm — reports the redoable
+    // stack without mutating.
+    let r = s.invoke("undo", None, json!({"list": true}));
+    assert_eq!(r["result"]["data"]["code"], json!(0), "{r}");
+    assert!(pos("T-003") < pos("T-001"));
 }

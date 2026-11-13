@@ -110,6 +110,9 @@ fn param_schema(p: &registry::Param) -> ParamSchema {
                     b.text()
                 } else if p.name == "due" {
                     b.kind(ParamKind::Date)
+                } else if p.name == "delta" {
+                    // `item reorder --delta` — signed sibling steps.
+                    b.kind(ParamKind::Integer)
                 } else {
                     b
                 }

@@ -1493,3 +1493,98 @@ fn undo_rewinds_the_last_verb() {
     }
     assert!(last.contains("root commit"), "{last}");
 }
+
+#[test]
+fn item_reorder_swaps_siblings() {
+    let (d, wt) = project();
+    run(d.path(), &["todo", "add", "one"]);
+    run(d.path(), &["todo", "add", "two"]);
+    run(d.path(), &["todo", "add", "three"]);
+    let todo = read(&wt, "TODO.md");
+    let pos = |t: &str| todo.find(t).unwrap();
+    assert!(pos("T-001") < pos("T-002") && pos("T-002") < pos("T-003"));
+
+    // delta -2 walks T-003 to the top — one commit, TUI parity
+    // (`Alt+↑` twice).
+    let out = run(
+        d.path(),
+        &["item", "reorder", "T-003", "--delta", "-2", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["file"], "TODO.md");
+    assert_eq!(v["moved"], -2);
+    assert_eq!(v["committed"], true);
+    assert_eq!(
+        git(&wt, &["log", "-1", "--format=%s"]),
+        "chore: reorder T-003"
+    );
+    let todo = read(&wt, "TODO.md");
+    let pos = |t: &str| todo.find(t).unwrap();
+    assert!(
+        pos("T-003") < pos("T-001") && pos("T-001") < pos("T-002"),
+        "{todo}"
+    );
+
+    // the top edge refuses — no commit, no write
+    let out = run(d.path(), &["item", "reorder", "T-003", "--delta", "-1"]);
+    assert_eq!(code(&out), 2);
+    assert!(
+        stderr(&out).contains("already at the top"),
+        "{}",
+        stderr(&out)
+    );
+    // delta 0 and a file-backed id are usage/lookup errors
+    let out = run(d.path(), &["item", "reorder", "T-001", "--delta", "0"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("nonzero"), "{}", stderr(&out));
+    run(d.path(), &["issue", "new", "filed", "--body", "b"]);
+    let out = run(d.path(), &["item", "reorder", "I-001", "--delta", "1"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("takes T-NNN"), "{}", stderr(&out));
+
+    // nested children swap among their own siblings only
+    run(d.path(), &["todo", "add", "parent"]);
+    run(d.path(), &["todo", "add", "kid-a", "--parent", "T-004"]);
+    run(d.path(), &["todo", "add", "kid-b", "--parent", "T-004"]);
+    let out = run(
+        d.path(),
+        &["item", "reorder", "T-006", "--delta", "-1", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let todo = read(&wt, "TODO.md");
+    let (a, b) = (todo.find("T-005").unwrap(), todo.find("T-006").unwrap());
+    assert!(b < a, "{todo}");
+    // …and a child can't climb out of its parent — delta -9
+    // stops inside the sibling list (T-006 is now first child)
+    let out = run(d.path(), &["item", "reorder", "T-006", "--delta", "-9"]);
+    assert_eq!(code(&out), 2);
+    assert!(
+        stderr(&out).contains("already at the top"),
+        "{}",
+        stderr(&out)
+    );
+
+    // sections bound the move — an item alone in `## Later`
+    // can't reach the unsectioned run above it
+    run(d.path(), &["todo", "add", "parked", "--section", "Later"]);
+    let out = run(d.path(), &["item", "reorder", "T-007", "--delta", "-5"]);
+    assert_eq!(code(&out), 2);
+    assert!(
+        stderr(&out).contains("already at the top"),
+        "{}",
+        stderr(&out)
+    );
+
+    // BACKLOG.md reorders the same way
+    run(d.path(), &["backlog", "add", "b1"]);
+    run(d.path(), &["backlog", "add", "b2"]);
+    let out = run(
+        d.path(),
+        &["item", "reorder", "T-009", "--delta", "-1", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(json(&out)["file"], "BACKLOG.md");
+    let backlog = read(&wt, "BACKLOG.md");
+    assert!(backlog.find("T-009").unwrap() < backlog.find("T-008").unwrap());
+}
