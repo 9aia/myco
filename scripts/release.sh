@@ -6,37 +6,18 @@
 # Operator-run on main — `tarsi-serve release` is dry-run by
 # default; --yes is the explicit opt-in.
 #
-# Preserved repo step: the tamias pack manifest + install-example
-# version refs are synced to the new version *before* the release
-# commit lands, so the tagged tree carries consistent versions. The
-# pack publish itself stays manual (`tamias publish libraries/myco`).
+# Pack-ref sync (`[release.sync_refs]` in tarsi.toml) rewrites the
+# tamias pack manifest + install-example version refs (README +
+# the myco skill) inside the release commit, so the tagged tree
+# carries consistent versions. The pack publish itself stays
+# manual (`tamias publish libraries/myco`).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 # worktree-local env (gitignored) — kept for parity with the other
 # org release scripts; nothing here needs secrets today.
 [ -f ./.env ] && { set -a; source ./.env; set +a; }
 
-ws_version() { grep -m1 '^version = "' Cargo.toml | cut -d'"' -f2; }
-
-# Learn the version tarsi will bump to (all releasing units share one
-# workspace version — empty output means "don't sync").
-new="$(tarsi-serve plan --dir . | python3 -c '
-import json,sys
-d=json.load(sys.stdin)
-if not d.get("ok"): sys.exit(0)
-units=[u for u in d["result"]["plan"]["units"] if u.get("releases")]
-vs={u["new_version"] for u in units}
-print(vs.pop() if len(vs)==1 else "")
-')"
-old="$(ws_version)"
-if [ -n "$new" ] && [ "$new" != "$old" ]; then
-    sed -i "s/^version: \"${old}\"/version: \"${new}\"/" libraries/myco/tamias.yaml
-    sed -i "s|myco@${old}|myco@${new}|g" README.md .agents/skills/myco/SKILL.md
-    git add libraries/myco/tamias.yaml README.md .agents/skills/myco/SKILL.md
-    git commit -qm "chore(release): sync myco@${new} version refs ahead of tarsi bump"
-fi
-
 tarsi-serve release --dir . --yes
 
-echo "released: myco ${new:-$old} (tag myco-v${new:-$old}, per-unit tags for the rest)"
-echo "next: tamias publish libraries/myco  # ship 9aia:myco@${new:-$old} to the org registry"
+echo "released: see tags myco-*-v<ver>"
+echo "next: tamias publish libraries/myco  # ship 9aia:myco@<ver> to the org registry"
