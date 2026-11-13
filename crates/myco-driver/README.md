@@ -91,7 +91,7 @@ Contributes: navbar → `/myco/board`, dashboard + statusbar →
 | `/` live filter (title/id/labels) | `myco:items --param kind=… --param status=…` (query-side filters; no free-text filter yet) |
 | `h`/`l`/`1`/`2`/`3` board tabs | pavo routes — each view is a page |
 | `?` help, mouse, `$EDITOR`, `R` reload | n/a — host chrome concerns |
-| mutations (`Space` done, `a` add, `dd`, `D` defer, `p` promote, `Alt+↑/↓` reorder, `:` commands) | **not ported** — writes stay on `myco` verbs / `myco serve`; a driver is a read surface |
+| mutations (`Space` done, `a` add, `dd`, `D` defer, `p` promote, `Alt+↑/↓` reorder, `:` commands) | **ported via `invoke`** — action ids are verb names dispatched through the engine path; `submit` adapts verb-named forms. See Mutations below |
 | `--view org-*` index boards (cross-repo redb universe) | **not ported** — needs the index; candidate follow-up view |
 
 ## Queries
@@ -100,3 +100,24 @@ Contributes: navbar → `/myco/board`, dashboard + statusbar →
 views use: `summary`, `ledger`, `items`, `issues`, `proposals`,
 `adrs`, `plans`, `item`, `related`, `children`, `body`, `graph`,
 `handoffs`.
+
+## Mutations
+
+Writes ride the pavo interaction protocol (ADR-0006): the `invoke`
+wire op dispatches an action id — which is a `myco` verb name —
+through the same engine path as `cli.<verb>` queries, so commits,
+actor trailers, and the state machine behave identically. `submit`
+remains as a thin adapter for verb-named forms.
+
+Actions are declared at three levels (`views.rs`):
+
+- **global** — `todo.add`, `backlog.add`, `todo.done`, `item.set`,
+  `handoff`, `next`, `undo`, `redo`, … (manifest `actions[]` +
+  keybindings like `a`/`dd`)
+- **row** — per-item actions on board/tree rows (`item.set --status`,
+  claim/release, labels)
+- **item node** — actions on the `myco:item` view itself
+
+Mutating actions carry `confirm` danger gates; hosts render them as
+buttons, palette entries, or keybindings on all three surfaces
+(CLI/TUI/web).
