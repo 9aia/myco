@@ -1,7 +1,7 @@
 +++
 id = "P-012"
 title = "PM parity: scheduling fields, cycles, roadmap + stats"
-status = "done"
+status = "open"
 created = "2026-11-09"
 priority = "med"
 +++
