@@ -28,7 +28,10 @@
 //!   `{"op":"query","query":…,"params":{…}}` →
 //!   `{"ok":true,"result":…}` / `{"ok":false,"error":…}`.
 //!   `query:"ops"` answers the ops manifest; `query:"cli.<verb>"`
-//!   runs the engine op.
+//!   runs the engine op. `{"op":"invoke","action":…}` dispatches
+//!   an action id (a verb name) through the same path →
+//!   `ActionResult`; `{"op":"submit"}` is a thin verb-named
+//!   adapter (the driver declares no form nodes).
 //!
 //! Optional surface: feature `mcp` embeds pavo-driver-kit's
 //! surface layer — `mcp` serves the ops manifest as MCP tools on
@@ -102,12 +105,26 @@ fn dispatch(req: &Request) -> Response {
         Request::Render { kind, .. } => Response::err(format!(
             "tamias-driver-myco claims no renderers (kind '{kind}')"
         )),
-        // The protocol grew `submit`/`jobs`/`notifications` ops after
-        // this driver was written; the view side is read-only with
-        // no feeds, so they answer `ok:false` like any unsupported
-        // op. Mutations go through `cli.<verb>`, never `submit`.
-        Request::Submit { .. } | Request::Jobs | Request::Notifications => {
-            Response::err("tamias-driver-myco implements no submit/jobs/notifications ops")
+        // `invoke` dispatches action ids — which ARE verb names
+        // (`todo.done`, `item.set`, …, `cli.`-prefix tolerated) —
+        // through the same `cli.<verb>` argv/exec path, returning
+        // an ActionResult. `submit` is a thin adapter: with no form
+        // nodes declared, only a `form`/view naming a verb
+        // dispatches (values → verb params).
+        Request::Invoke {
+            action,
+            target,
+            params,
+            ..
+        } => match ops::invoke(action, target.as_ref(), params) {
+            Ok(r) => Response::ok_typed(&r),
+            Err(e) => Response::err(e),
+        },
+        Request::Submit { view, form, values } => ops::submit(view, form.as_deref(), values),
+        // The protocol's job/notification feeds — this driver has
+        // none, so they answer `ok:false` like any unsupported op.
+        Request::Jobs | Request::Notifications => {
+            Response::err("tamias-driver-myco implements no jobs/notifications ops")
         }
     }
 }

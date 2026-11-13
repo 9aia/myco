@@ -21,13 +21,16 @@
 //! | status bar / `myco status`      | `myco:status` kv       |
 //! | `/` filter                      | `myco:items --param kind=/status=` (query-side) |
 //! | `--view org-*` index boards     | NOT PORTED — needs the redb index; follow-up |
-//! | mutations (`space`, `a`, `dd`…) | NOT PORTED — writes stay on `myco` verbs/`myco serve` |
+//! | mutations (`space`, `a`, `dd`…) | `invoke` op → action ids ARE verb names → `cli.<verb>` engine path |
 
 use std::collections::BTreeMap;
 
 use myco_core::{Item, ItemId};
 use pavo_driver_kit as kit;
-use pavo_protocol::{DriverManifest, GraphNode, NodeBase, TreeItem, ViewNode, ViewSpec};
+use pavo_protocol::{
+    Action, DriverManifest, GraphNode, MenuEntry, NodeBase, ParamKind, ParamSchema, TreeItem,
+    ViewNode, ViewSpec,
+};
 use serde_json::{json, Map, Value};
 
 use crate::data::Snapshot;
@@ -94,6 +97,340 @@ fn spec(
         view = view.query(kit::binding(q, "query"));
     }
     view.build()
+}
+
+// ---------------------------------------------------------------- actions
+//
+// Interaction actions — the pavo `invoke` layer. Action ids ARE
+// engine verb names: `invoke` dispatches them through
+// `ops::invoke` → the `cli.<verb>` argv/exec path, so every
+// mutation keeps the engine's own semantics (per-verb commit,
+// actor trailers, worktree lock).
+//
+// Danger mapping: ordinary mutations get `confirm`; terminal or
+// destructive verbs get `type-target` (the host makes the user
+// type the item id); read-ish verbs get `none`.
+
+/// The shared `id` param — a ref picker over the `items` view's
+/// query binding.
+fn id_param() -> ParamSchema {
+    kit::param("id")
+        .reference("items")
+        .required()
+        .label("Item")
+        .doc("Any item id — `T-NNN`, `I-NNN`, `P-NNN`, `ADR-NNNN`, `PL-NNN`.")
+        .build()
+}
+
+/// `title` — required text, shared by the `add` actions.
+fn title_param() -> ParamSchema {
+    kit::param("title").text().required().label("Title").build()
+}
+
+/// `pri` — enum over the priority tokens.
+fn pri_param() -> ParamSchema {
+    kit::param("pri")
+        .enumeration(crate::ops::pri_options())
+        .label("Priority")
+        .build()
+}
+
+/// `status` — enum over the full state machine.
+fn status_param() -> ParamSchema {
+    kit::param("status")
+        .enumeration(crate::ops::status_options())
+        .label("Status")
+        .build()
+}
+
+/// Manifest-global actions — the curated high-value mutations,
+/// offered on every view. Ids are verb names; `cli.`-prefixed
+/// spellings resolve too (ops::action_verb).
+fn global_actions() -> Vec<Action> {
+    vec![
+        kit::action("todo.add", "Add item")
+            .icon("plus")
+            .key("a")
+            .param(title_param())
+            .param(pri_param())
+            .param(
+                kit::param("label")
+                    .kind(ParamKind::StringList)
+                    .label("Labels")
+                    .doc("#labels, without the `#`.").build(),
+            )
+            .param(kit::param("section").label("Section").build())
+            .param(kit::param("owner").label("Owner").build())
+            .description("Add a task to TODO.md — allocs a T-id.")
+            .build(),
+        kit::action("backlog.add", "Park item")
+            .param(title_param())
+            .param(pri_param())
+            .param(kit::param("section").label("Section").build())
+            .description("Add a deferred item straight into BACKLOG.md.")
+            .build(),
+        kit::action("todo.done", "Mark done")
+            .confirm()
+            .key("dd")
+            .param(id_param())
+            .description(
+                "Walk to `done` — the line leaves the ledger, the subtree archives into DONE.md.",
+            )
+            .build(),
+        kit::action("todo.cancel", "Cancel item")
+            .type_target()
+            .param(id_param())
+            .description(
+                "Walk to `cancelled` (terminal, like done but the work never happened) — archives into DONE.md.",
+            )
+            .build(),
+        kit::action("todo.defer", "Defer item")
+            .confirm()
+            .param(id_param())
+            .description("Park a task — `deferred`, the line moves to BACKLOG.md.")
+            .build(),
+        kit::action("backlog.promote", "Promote item")
+            .confirm()
+            .param(id_param())
+            .description("Re-activate a parked item — `deferred → open`, back to TODO.md.")
+            .build(),
+        kit::action("item.set", "Update item")
+            .confirm()
+            .param(id_param())
+            .param(status_param())
+            .param(pri_param())
+            .param(kit::param("owner").label("Owner").build())
+            .description(
+                "Mutate an item in place — `--status` goes through the state machine; the rest are field edits.",
+            )
+            .build(),
+        kit::action("item.move", "Move item")
+            .confirm()
+            .param(id_param())
+            .param(
+                kit::param("to")
+                    .required()
+                    .label("Destination")
+                    .doc("A repo root, its `project/` worktree, or a registered repo name.").build(),
+            )
+            .param(kit::param("note").text().label("Note").build())
+            .description(
+                "Move an item to another repo's ledger — provenance handoffs on both sides, two commits.",
+            )
+            .build(),
+        kit::action("handoff", "Write handoff")
+            .confirm()
+            .param(id_param())
+            .param(
+                kit::param("note")
+                    .text()
+                    .label("Note")
+                    .doc("Done/next/open context — `-` reads stdin on the CLI.").build(),
+            )
+            .description("Append a resumable-state entry to `handoffs/<ID>.md`.")
+            .build(),
+        kit::action("next", "Next up")
+            .key("n")
+            .description("The single highest-priority open item — \"what should I work on\".")
+            .build(),
+    ]
+}
+
+/// Actions scoped to one board-row [`TreeItem`] — the item's id
+/// travels as the invoke `target`, so no params are declared (the
+/// verbs take only `id`). Same ids/dangers as the manifest set.
+fn row_actions() -> Vec<Action> {
+    vec![
+        kit::action("todo.done", "Mark done")
+            .confirm()
+            .target("item")
+            .build(),
+        kit::action("todo.defer", "Defer")
+            .confirm()
+            .target("item")
+            .build(),
+        kit::action("todo.cancel", "Cancel")
+            .type_target()
+            .target("item")
+            .build(),
+    ]
+}
+
+/// Actions scoped to the `item` view's detail node — `target`
+/// carries the item id (any kind), params merge over it per
+/// `ops::invoke`'s rule. `item.set` is the kind-agnostic mutation
+/// (`todo.done` only reaches tasks).
+fn item_node_actions() -> Vec<Action> {
+    vec![
+        kit::action("item.set", "Update item")
+            .confirm()
+            .target("item")
+            .param(status_param())
+            .param(pri_param())
+            .param(kit::param("owner").label("Owner").build())
+            .build(),
+        kit::action("item.move", "Move item")
+            .confirm()
+            .target("item")
+            .param(
+                kit::param("to")
+                    .required()
+                    .label("Destination")
+                    .doc("A repo root, its `project/` worktree, or a registered repo name.")
+                    .build(),
+            )
+            .param(kit::param("note").text().label("Note").build())
+            .build(),
+        kit::action("handoff", "Write handoff")
+            .confirm()
+            .target("item")
+            .param(
+                kit::param("note")
+                    .text()
+                    .label("Note")
+                    .doc("Done/next/open context.")
+                    .build(),
+            )
+            .build(),
+    ]
+}
+
+/// A `kv` node carrying actions — the `item` view's detail pane.
+fn kv_actions(title: &str, query: &str, actions: Vec<Action>) -> ViewNode {
+    kit::kv(
+        kit::base()
+            .title(title)
+            .query(query)
+            .actions(actions)
+            .build(),
+        Vec::new(),
+    )
+}
+
+/// `contributes.menus[]` — the command palette / quick-launch
+/// list. `action` entries resolve against `actions[]` like the
+/// `invoke` op; `route` entries navigate to a view.
+fn menu_entries() -> Vec<MenuEntry> {
+    let mut out = Vec::new();
+    let mut add = |id: &str,
+                   title: &str,
+                   action: Option<&str>,
+                   route: Option<&str>,
+                   section: &str,
+                   priority: i32,
+                   keywords: &[&str]| {
+        let mut e = kit::menu(id, title).section(section).priority(priority);
+        if let Some(a) = action {
+            e = e.action(a);
+        }
+        if let Some(r) = route {
+            e = e.route(r);
+        }
+        out.push(
+            e.keywords(keywords.iter().map(|s| (*s).to_string()).collect())
+                .build(),
+        );
+    };
+    add(
+        "new-item",
+        "New item",
+        Some("todo.add"),
+        None,
+        "Items",
+        10,
+        &["create", "task", "todo"],
+    );
+    add(
+        "mark-done",
+        "Mark done",
+        Some("todo.done"),
+        None,
+        "Items",
+        20,
+        &["done", "complete", "finish"],
+    );
+    add(
+        "cancel-item",
+        "Cancel item",
+        Some("todo.cancel"),
+        None,
+        "Items",
+        30,
+        &["cancel", "abandon"],
+    );
+    add(
+        "defer-item",
+        "Defer item",
+        Some("todo.defer"),
+        None,
+        "Items",
+        40,
+        &["defer", "park", "backlog"],
+    );
+    add(
+        "promote-item",
+        "Promote item",
+        Some("backlog.promote"),
+        None,
+        "Items",
+        50,
+        &["promote", "reactivate"],
+    );
+    add(
+        "update-item",
+        "Update item",
+        Some("item.set"),
+        None,
+        "Items",
+        60,
+        &["edit", "set", "status", "priority"],
+    );
+    add(
+        "next-up",
+        "Next up",
+        Some("next"),
+        None,
+        "Ledger",
+        10,
+        &["what", "focus", "now"],
+    );
+    add(
+        "write-handoff",
+        "Write handoff",
+        Some("handoff"),
+        None,
+        "Ledger",
+        20,
+        &["handoff", "resume", "session"],
+    );
+    add(
+        "board-view",
+        "Board",
+        None,
+        Some("/myco/board"),
+        "Views",
+        10,
+        &["kanban", "todo"],
+    );
+    add(
+        "items-view",
+        "Items",
+        None,
+        Some("/myco/items"),
+        "Views",
+        20,
+        &["table", "list", "filter"],
+    );
+    add(
+        "status-view",
+        "Status",
+        None,
+        Some("/myco/status"),
+        "Views",
+        30,
+        &["digest", "summary"],
+    );
+    out
 }
 
 // ---------------------------------------------------------------- manifest
@@ -172,11 +509,16 @@ pub fn specs() -> Vec<ViewSpec> {
             "Item",
             "/myco/item",
             "One item's detail — metadata, related edges, children, body. Requires --param id=T-001 (any kind prefix).",
-            &["item", "related", "children", "body"],
+            &[
+                "item",
+                "related",
+                "children",
+                "body",
+            ],
             col(
                 "Item",
                 vec![
-                    kv("Item", "item"),
+                    kv_actions("Item", "item", item_node_actions()),
                     table(
                         "Related",
                         "related",
@@ -263,6 +605,12 @@ pub fn manifest() -> DriverManifest {
         .navbar(navbar)
         .dashboard(dashboard)
         .statusbar(statusbar);
+    for a in global_actions() {
+        m = m.action(a);
+    }
+    for e in menu_entries() {
+        m = m.menu(e);
+    }
     for v in specs() {
         m = m.view(v);
     }
@@ -521,6 +869,7 @@ fn ledger_tree(snap: &Snapshot) -> Value {
         icon: None,
         children: Vec::new(),
         props: Default::default(),
+        actions: Vec::new(),
     };
     let mut docs = Vec::new();
     if let Some(ledger) = &snap.ledger {
@@ -543,6 +892,7 @@ fn ledger_tree(snap: &Snapshot) -> Value {
                         icon: None,
                         children: section_items,
                         props: Default::default(),
+                        actions: Vec::new(),
                     }),
                     None => doc.children.extend(section_items),
                 }
@@ -579,6 +929,7 @@ fn item_tree(snap: &Snapshot, i: &Item) -> TreeItem {
         detail: Some(detail),
         icon: None,
         children: i.children.iter().map(|c| item_tree(snap, c)).collect(),
+        actions: row_actions(),
         props: {
             let mut p = Map::new();
             p.insert("status".into(), json!(i.status.token()));
@@ -963,7 +1314,7 @@ fn item_root(params: &Map<String, Value>, snap: &Snapshot, manifest_root: &ViewN
     col(
         "Item",
         vec![
-            kv("Item", "item"),
+            kv_actions("Item", "item", item_node_actions()),
             table(
                 "Related",
                 "related",
