@@ -664,6 +664,11 @@ pub fn specs() -> Vec<ViewSpec> {
             table(title, id, FILE_COLS),
         ));
     }
+    // Row → detail navigation (P-033): Enter/click on a board tree
+    // item interpolates `{item.id}` into the item view's route.
+    if let Some(board) = views.iter_mut().find(|v| v.id == "board") {
+        board.item_route = Some("/myco/item?id={item.id}".to_string());
+    }
     views
 }
 
