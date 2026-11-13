@@ -1,8 +1,9 @@
-//! `myco item show|set` — the kind-agnostic item verbs: locate an
-//! item anywhere in the ledger; mutate metadata, with `--status`
-//! going through the transition machine only.
+//! `myco item show|set|reorder|move` — the item verbs: locate an
+//! item anywhere in the ledger; mutate metadata (with `--status`
+//! going through the transition machine only); sibling-reorder
+//! ledger tasks; move items across repo ledgers.
 
-use myco_core::{is_valid_label, Actor, EdgeKind, Item, ItemId, Priority, Status};
+use myco_core::{is_valid_label, Actor, EdgeKind, Item, ItemId, ItemKind, Priority, Status};
 use myco_store::Store;
 use serde_json::json;
 
@@ -334,6 +335,68 @@ pub(crate) fn set_item(
         taken_from,
         ..outcome
     })
+}
+
+/// The `item reorder` mutation — sibling swaps inside the item's
+/// ledger doc via [`myco_core::Ledger::move_within`] (the TUI's
+/// `Alt+↑/↓` machinery, `myco-tui`'s `reorder`): `delta` counts
+/// steps of ±1 — `-1` toward the top of the sibling list, `+1`
+/// toward the bottom — stopping at the edge; a move never crosses
+/// a `##` section boundary, and a nested child swaps among its own
+/// siblings only. Writes but does NOT commit; the caller owns the
+/// commit message. Returns the item, the doc it lives in, and the
+/// steps actually taken (a `delta` past the edge moves less).
+pub(crate) fn reorder_item(
+    store: &impl Store,
+    id: ItemId,
+    delta: isize,
+) -> Result<(Item, &'static str, isize), String> {
+    if delta == 0 {
+        return Err("item reorder: `delta` must be nonzero (-1 up, +1 down)".into());
+    }
+    items::require_kind(id, ItemKind::Task, "item reorder")?;
+    let mut ledger = items::load_ledger(store)?;
+    let Some(mut loc) = ledger.locate(id) else {
+        return Err(format!("{id}: no such task in TODO.md/BACKLOG.md"));
+    };
+    let step = delta.signum();
+    let mut moved = 0isize;
+    while moved.abs() < delta.abs() && ledger.move_within(&mut loc, step) {
+        moved += step;
+    }
+    if moved == 0 {
+        return Err(format!(
+            "{id}: already at the {} — nothing to reorder",
+            if delta < 0 { "top" } else { "bottom" }
+        ));
+    }
+    let file = if loc.backlog { "BACKLOG.md" } else { "TODO.md" };
+    let item = ledger
+        .item(&loc)
+        .cloned()
+        .ok_or_else(|| format!("{id}: stale task location"))?;
+    items::save_ledger(store, &ledger)?;
+    Ok((item, file, moved))
+}
+
+/// The `item reorder` verb.
+pub fn h_reorder(ctx: &Ctx, a: &Args) -> Result<i32, String> {
+    let id = a.req::<ItemId>("id")?;
+    let delta = a.req::<isize>("delta")?;
+    let (proj, store) = items::open(ctx.dir.as_deref(), ctx.root.as_deref())?;
+    let (item, file, moved) = reorder_item(&store, id, delta)?;
+    let committed = items::commit(
+        &proj.worktree,
+        &format!("chore: reorder {id}"),
+        None,
+        ctx.no_commit,
+    )?;
+    items::report(
+        json!({"item": item, "file": file, "delta": delta, "moved": moved}),
+        committed,
+        ctx.json,
+        &format!("reordered {id} {moved:+} → {file}"),
+    )
 }
 
 /// The `item set` verb.

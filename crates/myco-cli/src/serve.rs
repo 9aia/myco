@@ -821,6 +821,20 @@ pub(crate) fn w_item_move(s: &Server, a: &crate::registry::Args) -> Result<Value
     Ok(movecmd::moved_json(&m))
 }
 
+/// `item.reorder` — `{id, delta}`; sibling swaps inside the
+/// item's ledger doc (the TUI's `Alt+↑/↓` — `Ledger::move_within`).
+pub(crate) fn w_item_reorder(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;
+    let delta = a.req::<isize>("delta").map_err(Fail::BadParams)?;
+    let (proj, store) = s.open()?;
+    let (item, file, moved) = itemcmd::reorder_item(&store, id, delta).map_err(Fail::Verb)?;
+    let committed = s.commit(&proj.worktree, &format!("chore: reorder {id}"), None)?;
+    Ok(json!({
+        "item": item, "file": file, "delta": delta, "moved": moved,
+        "committed": committed,
+    }))
+}
+
 /// `handoff` — `note "-"` reads stdin, and stdin IS the wire.
 pub(crate) fn w_handoff(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let id = a.req::<ItemId>("id").map_err(Fail::BadParams)?;

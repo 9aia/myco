@@ -218,6 +218,20 @@ fn global_actions() -> Vec<Action> {
                 "Move an item to another repo's ledger — provenance handoffs on both sides, two commits.",
             )
             .build(),
+        kit::action("item.reorder", "Reorder item")
+            .param(id_param())
+            .param(
+                kit::param("delta")
+                    .kind(ParamKind::Integer)
+                    .required()
+                    .label("Delta")
+                    .doc("-1 swaps up one sibling, +1 down (the TUI's Alt+↑/↓); larger values walk that many steps, stopping at the section edge. Tasks only.")
+                    .build(),
+            )
+            .description(
+                "Sibling reorder inside TODO.md/BACKLOG.md — `Ledger::move_within`, one commit.",
+            )
+            .build(),
         kit::action("handoff", "Write handoff")
             .confirm()
             .param(id_param())
@@ -233,12 +247,42 @@ fn global_actions() -> Vec<Action> {
             .key("n")
             .description("The single highest-priority open item — \"what should I work on\".")
             .build(),
+        kit::action("undo", "Undo")
+            .confirm()
+            .key("u")
+            .param(
+                kit::param("force")
+                    .kind(ParamKind::Bool)
+                    .label("Force")
+                    .doc("Undo even when the tip commit is already published on the remote.")
+                    .build(),
+            )
+            .param(
+                kit::param("list")
+                    .kind(ParamKind::Bool)
+                    .label("List")
+                    .doc("List the redoable commits (newest first) instead of undoing — read-only.")
+                    .build(),
+            )
+            .description(
+                "Undo the last ledger commit — resets the `project` branch tip one back; the undone commit is journaled for `redo`. Refuses on a dirty worktree, at the root commit, and on a published tip (unless `force`).",
+            )
+            .build(),
+        kit::action("redo", "Redo")
+            .confirm()
+            .key("U")
+            .description(
+                "Redo the last undo — restores the commit `undo` moved away from. The stack self-invalidates when the ledger moves since the undo.",
+            )
+            .build(),
     ]
 }
 
 /// Actions scoped to one board-row [`TreeItem`] — the item's id
-/// travels as the invoke `target`, so no params are declared (the
-/// verbs take only `id`). Same ids/dangers as the manifest set.
+/// travels as the invoke `target`, so only `item.reorder` declares
+/// a param (`delta`; the rest take just `id`). Same ids/dangers as
+/// the manifest set. Board rows are ledger tasks only, so reorder
+/// is always meaningful here.
 fn row_actions() -> Vec<Action> {
     vec![
         kit::action("todo.done", "Mark done")
@@ -252,6 +296,17 @@ fn row_actions() -> Vec<Action> {
         kit::action("todo.cancel", "Cancel")
             .type_target()
             .target("item")
+            .build(),
+        kit::action("item.reorder", "Reorder")
+            .target("item")
+            .param(
+                kit::param("delta")
+                    .kind(ParamKind::Integer)
+                    .required()
+                    .label("Delta")
+                    .doc("-1 up one sibling, +1 down.")
+                    .build(),
+            )
             .build(),
     ]
 }
@@ -386,6 +441,15 @@ fn menu_entries() -> Vec<MenuEntry> {
         &["edit", "set", "status", "priority"],
     );
     add(
+        "reorder-item",
+        "Reorder item",
+        Some("item.reorder"),
+        None,
+        "Items",
+        70,
+        &["reorder", "move", "priority", "sibling"],
+    );
+    add(
         "next-up",
         "Next up",
         Some("next"),
@@ -402,6 +466,24 @@ fn menu_entries() -> Vec<MenuEntry> {
         "Ledger",
         20,
         &["handoff", "resume", "session"],
+    );
+    add(
+        "undo",
+        "Undo",
+        Some("undo"),
+        None,
+        "Ledger",
+        30,
+        &["undo", "rewind", "reset"],
+    );
+    add(
+        "redo",
+        "Redo",
+        Some("redo"),
+        None,
+        "Ledger",
+        40,
+        &["redo", "restore"],
     );
     add(
         "board-view",

@@ -1544,6 +1544,26 @@ pub static VERBS: &[Verb] = &[
         wire: Some(serve::w_item_move),
     },
     Verb {
+        name: "item.reorder",
+        about: "Sibling reorder inside TODO.md/BACKLOG.md — the TUI's `Alt+↑/↓` as a verb: `--delta -1` swaps with the previous sibling, `+1` with the next (larger deltas walk that many steps, stopping at the list edge). `Ledger::move_within` semantics exactly — a move never crosses a `##` section boundary, and a nested child swaps among its own siblings only. One commit per call (`chore: reorder <id>`); tasks only — file-backed items have no siblings.",
+        params: &[&[
+            pos("id", Val::Id, "Task id (`T-NNN`) — a live TODO.md/BACKLOG.md line, children included."),
+            opt(
+                "delta",
+                Val::Str,
+                "Sibling steps — `-1` up, `+1` down; larger values walk that far, stopping at the edge.",
+            )
+            .req()
+            .hyphen()
+            .vname("N"),
+        ]],
+        kind_lock: Some(myco_core::ItemKind::Task),
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::itemcmd::h_reorder),
+        wire: Some(serve::w_item_reorder),
+    },
+    Verb {
         name: "view",
         about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = \"repos\"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).",
         params: &[&[

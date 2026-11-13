@@ -4,6 +4,11 @@ purpose: tamias-driver-myco — pavo view driver over a repo's project/ ledger (
 api:
 - name: BIN
   kind: const
+  file: crates/myco-driver/tests/invoke.rs
+  line: 15
+  module: myco-driver
+- name: BIN
+  kind: const
   file: crates/myco-driver/tests/shim.rs
   line: 20
   module: myco-driver
@@ -20,17 +25,17 @@ api:
 - name: FILE_COLS
   kind: const
   file: crates/myco-driver/src/views.rs
-  line: 123
+  line: 542
   module: myco-driver
 - name: FILE_VIEWS
   kind: const
   file: crates/myco-driver/src/views.rs
-  line: 103
+  line: 522
   module: myco-driver
 - name: Found
   kind: type
   file: crates/myco-driver/src/views.rs
-  line: 663
+  line: 1096
   module: myco-driver
 - name: HandoffRow
   kind: type
@@ -40,12 +45,17 @@ api:
 - name: ITEM_COLS
   kind: const
   file: crates/myco-driver/src/views.rs
-  line: 110
+  line: 529
   module: myco-driver
 - name: SURFACES
   kind: const
   file: crates/myco-driver/src/ops.rs
-  line: 30
+  line: 34
+  module: myco-driver
+- name: Serve
+  kind: type
+  file: crates/myco-driver/tests/invoke.rs
+  line: 63
   module: myco-driver
 - name: Serve
   kind: type
@@ -107,6 +117,11 @@ api:
   file: crates/myco-driver/tests/edges.rs
   line: 594
   module: myco-driver
+- name: action_verb
+  kind: function
+  file: crates/myco-driver/src/ops.rs
+  line: 343
+  module: myco-driver
 - name: adr_files
   kind: function
   file: crates/myco-driver/tests/id_repair.rs
@@ -125,17 +140,17 @@ api:
 - name: argv
   kind: function
   file: crates/myco-driver/src/ops.rs
-  line: 124
+  line: 208
   module: myco-driver
 - name: argv_maps_params_to_myco_flags
   kind: function
   file: crates/myco-driver/src/ops.rs
-  line: 252
+  line: 505
   module: myco-driver
 - name: argv_skips_wire_only_and_absent_params
   kind: function
   file: crates/myco-driver/src/ops.rs
-  line: 270
+  line: 523
   module: myco-driver
 - name: auto_fetch_gates_mutations_and_config_opts_out
   kind: function
@@ -175,34 +190,19 @@ api:
 - name: body_payload
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 823
+  line: 1256
   module: myco-driver
 - name: bool_param
   kind: function
   file: crates/myco-driver/src/ops.rs
-  line: 97
+  line: 181
   module: myco-driver
 - name: bound
   kind: function
   file: crates/myco-driver/src/views.rs
-  line: 41
+  line: 44
   module: myco-driver
-- name: capabilities_json
-  kind: function
-  file: crates/myco-driver/src/main.rs
-  line: 57
-  module: myco-driver
-- name: check_conflict_claim_not_fixed
-  kind: function
-  file: crates/myco-driver/tests/id_repair.rs
-  line: 364
-  module: myco-driver
-- name: check_fix_collision_skips_loser
-  kind: function
-  file: crates/myco-driver/tests/id_repair.rs
-  line: 252
-  module: myco-driver
-api_omitted: 318
+api_omitted: 356
 deps:
 - camino
 - myco
@@ -221,10 +221,10 @@ deps:
 - time
 - serde_json
 - myco-core
+- pavo_protocol
 - myco-ops
 - myco-store
 - myco-store-md
-- pavo_protocol
 notes: ''
 verify:
 - crates/myco-driver/Cargo.toml
@@ -250,6 +250,7 @@ provenance:
   - crates/myco-driver/tests/continuity.rs
   - crates/myco-driver/tests/edges.rs
   - crates/myco-driver/tests/id_repair.rs
+  - crates/myco-driver/tests/invoke.rs
   - crates/myco-driver/tests/items.rs
   - crates/myco-driver/tests/lifecycle.rs
   - crates/myco-driver/tests/multi_id.rs
@@ -259,18 +260,19 @@ provenance:
   - crates/myco-driver/tests/shim.rs
   - crates/myco-driver/tests/views.rs
   hashes:
-  - c3f2b9ab7b34ed2556e29c4a50058d225b2e33d1
+  - 9ad4b4c63792287a2b160cc38aaee42c7634660d
   - edd2329937f8894872790228623178588e4058d5
-  - 3372ffc3b052071813b8133dc09d79d496db3925
-  - d6c7303e4ae870d79025b49919ef785a9e9782ab
+  - c1d03d91fd4c3e07ce3760c06cc80396dbccce25
+  - 3e78998da6c64d9a79c443d6d8cd4c0ee4a8dc5e
   - 70f88ad7103cc88539c46a8f2542392ec91f9b13
-  - 62557dcc43c2e25a0c3af911492e4d63ed4e81c9
+  - 150236f88d58a160033f1ca8665bb92eaeee7904
   - a984eca8eea928be5520ffbb488388139c046536
   - bcf687da55f4d327b1667d16099ac7104b0abdb8
   - 5554ccd3e5349944e3869bacb43010390f9fb2f0
   - d051414a4ba12230efdff515fc00e13bfbfe18ae
   - ae05ae717980ab1abe774f5d76666f1db10f4f86
-  - 27ceed8035dbe65ce4b36f866d534c76e4c36575
+  - 8f451e070235fbfa0d5b5469152ee85bac0dff9f
+  - 5b473bfccf866b0dc46acb5d08230702301e0d0a
   - 342f2866ca4709df327f4542c88bb7505769dccd
   - b76ec5f31761fe21c4c26f90b2b5305d05d090ee
   - f22ec5cfb5fb7166ae7cbfc7fcc454eaf7cf0857
@@ -278,6 +280,6 @@ provenance:
   - 2a40dc06bdbccd62b0f3c6d4b29e9e75712b5331
   - 7709e3b39bd7e361982e898600a0eb3c27bf67e5
   - 92ac629d644dd0871e71bf1706e3055eaddf8bfd
-  commit_sha: df384cacc63cab25744b7939516f384bfac68406
-  generated_at: '1794519344'
+  commit_sha: 051a179b94a60fbae3da975d633f4fbe3ea52827
+  generated_at: '1794538200'
   generator: kuda-template/0.1.4
