@@ -1034,6 +1034,52 @@ fn auto_fetch_gates_mutations_and_config_opts_out() {
     assert_eq!(code(&out), 2, "{out:?}");
 }
 
+/// `sync.auto_push` (default off): a committed mutation publishes
+/// the `project` branch to `origin` once the repo opts in. A
+/// failed push warns on stderr but never fails the verb — the
+/// commit already landed locally.
+#[test]
+fn auto_push_publishes_mutations_and_warns_on_failure() {
+    let a = repo();
+    let bare = tempfile::tempdir().unwrap();
+    git(bare.path(), &["init", "-q", "--bare"]);
+    git(
+        a.path(),
+        &["remote", "add", "origin", bare.path().to_str().unwrap()],
+    );
+    let branch = git(a.path(), &["branch", "--show-current"]);
+    git(
+        bare.path(),
+        &["symbolic-ref", "HEAD", &format!("refs/heads/{branch}")],
+    );
+    assert_eq!(code(&run(a.path(), &["init"])), 0);
+    git(a.path(), &["push", "-q", "origin", &branch, "project"]);
+    let wt = a.path().join("project");
+    let ahead = || git(&wt, &["rev-list", "--count", "origin/project..HEAD"]);
+
+    // default off — the mutation commits locally, origin stays put
+    assert_eq!(code(&run(&wt, &["todo", "add", "local only"])), 0);
+    assert_eq!(ahead(), "1");
+
+    // opt in — the next mutation publishes itself
+    let cfg = a.path().join("myco.toml");
+    std::fs::write(&cfg, "[sync]\nauto_push = true\n").unwrap();
+    let env = [("MYCO_CONFIG", cfg.to_str().unwrap())];
+    let out = run_env(&wt, &["todo", "add", "published"], &env);
+    assert_eq!(code(&out), 0, "{out:?}");
+    assert_eq!(ahead(), "0", "auto_push must publish the mutation commit");
+
+    // push failure is a warning, not a verb failure — break origin
+    // and mutate again: the commit lands, stderr warns, exit 0
+    git(
+        a.path(),
+        &["remote", "set-url", "origin", "/nonexistent/bare"],
+    );
+    let out = run_env(&wt, &["todo", "add", "offline"], &env);
+    assert_eq!(code(&out), 0, "{out:?}");
+    assert!(stderr(&out).contains("auto-push"), "{out:?}");
+}
+
 // ---------- migrate ----------
 
 #[test]

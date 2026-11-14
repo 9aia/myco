@@ -83,6 +83,12 @@ Before the behind-check, mutating verbs run a best-effort
 *under*-report divergence; the fetch is never fatal when it
 fails).
 
+`[sync] auto_push = true` opts *in* to publishing: every
+committed mutation (and a successful `myco sync`) pushes the
+`project` branch to `origin`. Default off — publishing stays
+deliberate. A failed push warns on stderr but never fails the
+verb; `myco check`'s unpushed-commits finding is the backstop.
+
 A rebase conflict stops mid-flight: resolve + `git rebase
 --continue` + `myco sync` again, or `myco sync --abort` to bail.
 

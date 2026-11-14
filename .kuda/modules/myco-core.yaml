@@ -50,12 +50,12 @@ api:
 - name: BurnupPoint
   kind: type
   file: crates/myco-core/src/analytics.rs
-  line: 242
+  line: 236
   module: myco-core
 - name: BurnupSeries
   kind: type
   file: crates/myco-core/src/analytics.rs
-  line: 254
+  line: 248
   module: myco-core
 - name: Config
   kind: type
@@ -259,7 +259,7 @@ provenance:
   hashes:
   - f75323e2b82195a4149a5fb91548e75ba386acbf
   - 604b979a927c5d66c866f7f0b061a5285483be02
-  - 58b411bfd6d0bde66ba315a61eb5dccff6b29c9e
+  - d9746cada670d0f8f36bf4f902d371dbe5f1f7d2
   - 06e989397088667febfffba9ce2aa5e36a6d671b
   - f989824a6aaf844a1aecee9950dce96297773bc1
   - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
@@ -267,13 +267,13 @@ provenance:
   - 14452383ddb707db1d6f9486d55e4db11f5d4f87
   - 5d220a111b00de9ca0d5d5cb9693a22644528fbc
   - a63fdfd98e436098f76f799a702eeb39497af966
-  - a080e66d580850abbf3fb5a29a913ed279077a72
+  - f14e1604af335f2168510dd70f8408c7a3ff1ca7
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - f01971e1bcca257a19dcdaac97e6cc1c2448483c
   - e62184d264d30354071a59cf2b664a41e01e0334
   - 9e9ad17d8413f2def42d65bac0bf70aa9c32a8bb
   - a53bdf65c4d481d3f4e5f63299ab5f3644f13055
   - a3ea58eb9e976b999624a1ee349b13ffa14a77b8
-  commit_sha: 734d881b4bacc58e3309eeda34bae7fb7552a619
-  generated_at: '1794615586'
+  commit_sha: 288c3318bc2cd2753b3b07b0c747712ddb39cd2c
+  generated_at: '1794620913'
   generator: kuda-template/0.1.4

@@ -284,7 +284,9 @@ pub fn ensure_synced(dir: &Path, auto_fetch: bool) -> Result<(), String> {
 /// ([`commit_msg`]; `actor` is the verb's actor, `None` →
 /// [`resolve_actor`] over `dir` — `$MYCO_ACTOR` → `human:<git
 /// user.name>` → `cli`). No commit when disabled or when the
-/// tree is clean. Returns whether a commit was made.
+/// tree is clean. A landed commit on the `project` branch then
+/// gets the best-effort [`maybe_push`] publish (`sync.auto_push`,
+/// default off). Returns whether a commit was made.
 pub fn autocommit(
     dir: &Path,
     msg: &str,
@@ -304,7 +306,32 @@ pub fn autocommit(
     };
     crate::vcs::commit_all(dir, &commit_msg(msg, Some(actor)))
         .map_err(|e| format!("git commit failed in {}: {e}", dir.display()))?;
+    if let Some(w) = maybe_push(dir) {
+        eprintln!("myco: warning: {w}");
+    }
     Ok(true)
+}
+
+/// Best-effort publish of the ledger branch after a commit —
+/// `[sync] auto_push` (default off). Only fires on the `project`
+/// branch: a `--dir` ledger parked on another branch (or a plain
+/// dir with no checkout) stays local — auto-push must never
+/// publish a branch the ledger doesn't own. The config read is
+/// the shared TOML loader every front-end binds; missing/broken
+/// config means `false`. Returns the warning on push failure —
+/// never an error: the commit already landed, pushing is
+/// advisory (mirrors `auto_fetch`, which never blocks either).
+pub fn maybe_push(dir: &Path) -> Option<String> {
+    if crate::vcs::worktree_branch(dir).as_deref() != Some(crate::discover::BRANCH) {
+        return None;
+    }
+    let root = crate::vcs::main_worktree(dir).unwrap_or_else(|| dir.to_path_buf());
+    if !crate::config::sync_auto_push_for(&root, crate::config::TOML) {
+        return None;
+    }
+    crate::vcs::push_branch(dir, "origin", None)
+        .err()
+        .map(|e| format!("auto-push of {} failed: {e}", crate::discover::BRANCH))
 }
 
 /// Commit only `paths` inside `dir` — used for repo-root edits
@@ -1003,5 +1030,146 @@ mod tests {
         git(d.path(), &["add", "-A"]);
         git(d.path(), &["commit", "-qm", "chore: new"]);
         assert!(redo_last(d.path()).unwrap_err().contains("nothing to redo"));
+    }
+
+    /// A repo with a bare `origin`, the orphan `project` branch
+    /// checked out at `<root>/project`, and `myco.toml` contents
+    /// written at the root (uncommitted — config reads the
+    /// worktree, not git).
+    fn ledger_repo(myco_toml: Option<&str>) -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        let bare = tempfile::tempdir().unwrap();
+        git(bare.path(), &["init", "-q", "--bare"]);
+        git(
+            d.path(),
+            &["remote", "add", "origin", bare.path().to_str().unwrap()],
+        );
+        crate::vcs::create_orphan_branch(d.path(), "project", "init").unwrap();
+        git(d.path(), &["worktree", "add", "project", "project"]);
+        if let Some(t) = myco_toml {
+            std::fs::write(d.path().join("myco.toml"), t).unwrap();
+        }
+        let wt = d.path().join("project");
+        (d, bare, wt)
+    }
+
+    fn bare_has(bare: &Path, branch: &str) -> bool {
+        Command::new("git")
+            .arg("-C")
+            .arg(bare)
+            .args(["rev-parse", "--verify", &format!("refs/heads/{branch}")])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    }
+
+    #[test]
+    fn autocommit_auto_push_publishes_the_ledger_branch() {
+        let (_d, bare, wt) = ledger_repo(Some("[sync]\nauto_push = true\n"));
+        let home = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.path().to_string_lossy().as_ref())),
+            ],
+            || {
+                assert!(!bare_has(bare.path(), "project"));
+                std::fs::write(wt.join("TODO.md"), "# TODO\n").unwrap();
+                assert!(autocommit(&wt, "chore: first", None, true).unwrap());
+                assert!(bare_has(bare.path(), "project"));
+                // the published tip IS the commit autocommit made
+                let remote = String::from_utf8(
+                    Command::new("git")
+                        .arg("-C")
+                        .arg(bare.path())
+                        .args(["rev-parse", "refs/heads/project"])
+                        .output()
+                        .unwrap()
+                        .stdout,
+                )
+                .unwrap();
+                assert_eq!(remote.trim(), head(&wt));
+            },
+        );
+    }
+
+    #[test]
+    fn autocommit_auto_push_defaults_off() {
+        // no myco.toml → opt-in stays off: the commit lands
+        // locally, the remote never sees the branch
+        let (_d, bare, wt) = ledger_repo(None);
+        let home = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.path().to_string_lossy().as_ref())),
+            ],
+            || {
+                std::fs::write(wt.join("TODO.md"), "# TODO\n").unwrap();
+                assert!(autocommit(&wt, "chore: first", None, true).unwrap());
+                assert!(!bare_has(bare.path(), "project"));
+            },
+        );
+    }
+
+    #[test]
+    fn autocommit_auto_push_never_publishes_other_branches() {
+        // auto_push on, but the ledger sits on `main` (a --dir
+        // edge) — the gate is the `project` branch, not "whatever
+        // is checked out"
+        let d = repo(1);
+        let bare = tempfile::tempdir().unwrap();
+        git(bare.path(), &["init", "-q", "--bare"]);
+        git(
+            d.path(),
+            &["remote", "add", "origin", bare.path().to_str().unwrap()],
+        );
+        std::fs::write(d.path().join("myco.toml"), "[sync]\nauto_push = true\n").unwrap();
+        let home = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.path().to_string_lossy().as_ref())),
+            ],
+            || {
+                std::fs::write(d.path().join("f9.txt"), "x").unwrap();
+                assert!(autocommit(d.path(), "chore: x", None, true).unwrap());
+                assert!(!bare_has(bare.path(), "main"));
+            },
+        );
+    }
+
+    #[test]
+    fn autocommit_auto_push_failure_still_commits() {
+        // auto_push on but no `origin` at all — the push fails,
+        // the mutation must not (the commit already landed)
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        crate::vcs::create_orphan_branch(d.path(), "project", "init").unwrap();
+        git(d.path(), &["worktree", "add", "project", "project"]);
+        let wt = d.path().join("project");
+        std::fs::write(d.path().join("myco.toml"), "[sync]\nauto_push = true\n").unwrap();
+        let home = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.path().to_string_lossy().as_ref())),
+            ],
+            || {
+                std::fs::write(wt.join("TODO.md"), "# TODO\n").unwrap();
+                assert!(autocommit(&wt, "chore: first", None, true).unwrap());
+                assert!(maybe_push(&wt).is_some(), "push with no origin warns");
+            },
+        );
     }
 }

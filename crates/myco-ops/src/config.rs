@@ -217,6 +217,22 @@ pub fn sync_auto_fetch_for(root: &Path, cfg: ConfigLoader) -> bool {
         .unwrap_or(true)
 }
 
+/// `sync.auto_push` for the repo rooted at `root` — same path
+/// policy as [`sync_auto_fetch_for`]. Missing/broken config →
+/// `false` (the documented default — publishing stays opt-in);
+/// the push itself is best-effort either way, so a config read
+/// failure can't strand a mutation.
+pub fn sync_auto_push_for(root: &Path, cfg: ConfigLoader) -> bool {
+    let path = std::env::var("MYCO_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    cfg.load(Some(&path))
+        .ok()
+        .and_then(|c| c.sync)
+        .map(|s| s.auto_push)
+        .unwrap_or(false)
+}
+
 /// The validated `[[cycles]]` table for the repo rooted at
 /// `root` — same path policy as [`kinds_for`]. Missing config →
 /// empty (zero-config repos declare no cycles); a *broken*
@@ -548,5 +564,26 @@ mod tests {
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
             assert!(cycles_for(dir.path(), test_loader()).is_err());
         });
+    }
+
+    #[test]
+    fn sync_auto_push_defaults_off_and_reads_opt_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.path().to_string_lossy().as_ref())),
+            ],
+            || {
+                // no myco.toml → the documented default: off
+                assert!(!sync_auto_push_for(dir.path(), test_loader()));
+                std::fs::write(dir.path().join("myco.toml"), "[sync]\nauto_push = true\n").unwrap();
+                assert!(sync_auto_push_for(dir.path(), test_loader()));
+                // auto_fetch is untouched — its default stays on
+                assert!(sync_auto_fetch_for(dir.path(), test_loader()));
+            },
+        );
     }
 }

@@ -216,6 +216,14 @@ pub fn fetch_branch(repo: &Path, remote: &str, branch: &str) -> io::Result<()> {
     vcs().fetch(repo, remote, &[branch])
 }
 
+/// `git push -u <remote> <branch|HEAD>` — publish `repo`'s
+/// checked-out branch (`None` = HEAD). `Err` carries git's
+/// stderr; callers treat push as advisory — the commit it
+/// follows already landed locally.
+pub fn push_branch(repo: &Path, remote: &str, branch: Option<&str>) -> io::Result<()> {
+    vcs().push_branch(repo, remote, branch)
+}
+
 /// True when `rev` resolves to an object (`cat-file -e`).
 pub fn has_commit(repo: &Path, rev: &str) -> bool {
     vcs().has_commit(repo, rev)

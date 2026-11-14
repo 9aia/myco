@@ -279,6 +279,14 @@ pub struct SyncConfig {
     /// Default `true`.
     #[serde(default = "default_auto_fetch")]
     pub auto_fetch: bool,
+    /// `git push origin <branch>` after every committed mutation —
+    /// opt-in (default `false`): publishing stays deliberate until
+    /// the repo asks for it. A failed push never fails the
+    /// mutation — the commit already landed locally; the warning
+    /// rides stderr and `myco check` keeps reporting unpushed
+    /// commits.
+    #[serde(default)]
+    pub auto_push: bool,
 }
 
 fn default_auto_fetch() -> bool {

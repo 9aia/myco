@@ -202,7 +202,7 @@ api:
   file: project/issues/issue-0030-issue-0030-rust-toolchain-upgrade-2026.md
   line: 2
   module: project
-api_omitted: 44
+api_omitted: 45
 deps: []
 notes: ''
 verify:
@@ -293,10 +293,10 @@ provenance:
   - project/proposals/proposal-0013-typed-item-links-clickable-tui-related-ids.md
   - project/proposals/proposal-0014-ledger-convergence-remote-adoption-sync-dup-id-renumbering.md
   hashes:
-  - 9065e6f6e33503b5f7a4a773acd637396048731c
-  - 5788ea2bd5bf0715f4cce3c014dc234f7fd07a3d
+  - 87af2447db331b9c74a60d8a2c81f9cdf3efd004
+  - 24dca68cc1fb0c4119260df502490ac209e3f3a7
   - df0ebe074d2ac166504a6b14391be3adebcda4d8
-  - 8ef61e9e836da66f8845955567b4b6f9ffc35040
+  - ad9648d5cb1b81e7da242e01aa63ab9d57507a49
   - d0f4ee292c12e5b88c8228e1de78b83bcc6eaa65
   - 8ee2b578c23f86be23573ebb29fa91ca8ad5cd53
   - f9deccb752376dfd2277072da18c40886f7ae381
@@ -367,6 +367,6 @@ provenance:
   - a74a88c5003c18cb061db8625ea9e55aa0e4772b
   - 6d02a11ce0ebc6b069c507b48bd39ad0d68a7643
   - b30eaaf057f56e1c38125d69e6152245620510c6
-  commit_sha: 734d881b4bacc58e3309eeda34bae7fb7552a619
-  generated_at: '1794615586'
+  commit_sha: 288c3318bc2cd2753b3b07b0c747712ddb39cd2c
+  generated_at: '1794620913'
   generator: kuda-template/0.1.4
