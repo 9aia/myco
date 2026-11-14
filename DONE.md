@@ -8,3 +8,4 @@
 - T-082 P-012 ph2: \[\[cycles]] config + check warnings + group-by-cycle · created:2026-11-09 · blocks:T-083
 - T-083 P-012 ph3: timeline + stats + burnup view emits (tty+JSON, index parity) · created:2026-11-09
 - T-084 P-012 ph4: done: archive stamp (write-once) + item show · created:2026-11-09 · blocks:T-083
+- T-087 sync.auto\_push: push ledger branch to origin after mutation commits (opt-in config, off by default) · owner:human:Luis-Emidio · created:2026-11-14 · done:2026-11-14
