@@ -35,7 +35,7 @@ each, filenames padded to four digits.
 
 ## <section>
 
-- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · due:2026-12-01 · est:3 · cycle:sprint-12 · note:<text>
+- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · due:2026-12-01 · est:3 · cycle:sprint-12 · done:2026-12-19 · note:<text>
   - [ ] T-013 a sub-task — children are the same grammar, indented 2 spaces/level
 ```
 
@@ -49,6 +49,13 @@ each, filenames padded to four digits.
   item (subtree included — it lands top-level in `TODO.md` or
   `BACKLOG.md`) with a `reopened` handoff as the audit trail,
   and `myco done remove` deletes an archived subtree outright.
+  Items stamped `status:done` also carry a write-once `done:`
+  archive stamp — the local date the item reached `done`, written
+  by the archive path (`todo done`, `issue resolve`, file-kind
+  moves, …) and never rewritten on re-save. `cancelled` items
+  stay unstamped. Reopening clears the stamp; a later re-archive
+  stamps the new date. Pre-stamp archives simply have no `done:` —
+  `myco view burnup` counts them only if another signal dates them.
 - `done` moves the line (subtree included) to `DONE.md` —
   completed work stays visible instead of vanishing;
   `cancel` does the same but lands as `status:cancelled` —
@@ -60,13 +67,14 @@ each, filenames padded to four digits.
   on a child, just that node.
 - Token order is canonical (`status`, `pri`, `owner`, `created`,
   `#label`, `blocks`, `links`, `epic`, `ms`, `due`, `est`, `cycle`,
-  `note`) so emit produces minimal diffs. `ms` is the milestone
+  `done`, `note`) so emit produces minimal diffs. `ms` is the milestone
   token — kept short. `links:` declares kind-agnostic associations
   — the plan, proposal, or ADR an item belongs to (`myco item set
   --links` / `--unlink`). `due` is a `YYYY-MM-DD` date, `est` a
   point estimate (0–1000, `--est`/`--estimate`), `cycle` an
-  iteration name — the scheduling trio (`due`/`estimate`/`cycle`
-  in file frontmatter).
+  iteration name, `done` the archive stamp (above) — the
+  scheduling trio (`due`/`estimate`/`cycle` in file frontmatter,
+  `done` alongside them once archived).
 - Patterns: actors `[A-Za-z0-9._:-]+`, labels `[A-Za-z0-9_-]+`,
   epic/ms/cycle names `[A-Za-z0-9_.-]+`, priority
   `low|med|high|crit`.
@@ -90,6 +98,7 @@ milestone = "1.0"
 due = "2026-12-01"
 estimate = 3
 cycle = "sprint-12"
+done = "2026-12-19"
 +++
 
 # Title
@@ -100,7 +109,8 @@ sections per kind.
 
 Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
 `priority`, `labels`, `blocks`, `links`, `note`, `superseded_by`,
-`supersedes`, `epic`, `milestone`, `due`, `estimate`, `cycle`.
+`supersedes`, `epic`, `milestone`, `due`, `estimate`, `cycle`,
+`done`.
 `priority` spells the `pri:`
 token (`low|med|high|crit`) — the serde full names `medium` /
 `critical` still read but re-emit as tokens on any write. `due`

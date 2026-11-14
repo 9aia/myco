@@ -3,8 +3,9 @@
 A view is a declarative spec — `filter`, `group_by`, `sort`,
 `limit`, `format` — evaluated by one engine. Names come from two
 places: built-in presets (`board`, `open`, `epic`, `milestone`,
-`next`, `org-board`, `org-status`) and `[views.<name>]` tables in
-`myco.toml` ([spec fields](../reference/config.md)).
+`next`, `roadmap`, `stats`, `burnup`, `org-board`, `org-status`)
+and `[views.<name>]` tables in `myco.toml`
+([spec fields](../reference/config.md)).
 
 ## Define one
 
@@ -39,6 +40,61 @@ the index-sourced org presets (see
 [org views](org-views.md)).
 The filter flags scope any view — `myco view board --epic v2` is
 one epic's lanes.
+
+## Analytics emits — roadmap, stats, burnup
+
+Three formats ride the same `filter → group → sort` pipeline but
+render aggregates instead of rows:
+
+- `format = "timeline"` (the `roadmap` preset) — epic → milestone
+  → cycle lanes with `due:` dates positioning items.
+- `format = "stats"` (the `stats` preset) — count tallies per
+  dimension (status, priority, owner, epic, milestone, cycle,
+  labels).
+- `format = "burnup"` (the `burnup` preset) — cumulative done-over-
+  time vs total scope, one series per declared cycle plus an
+  uncycled series. It reads the write-once `done:` archive stamp
+  ([file spec](../explanation/file-spec.md)); pre-stamp archives
+  stay valid but don't invent a completion date.
+
+```toml
+[views.velocity]
+format = "stats"
+filter = { status = ["done"] }
+
+[views.next-cycle]
+format = "burnup"
+filter = { cycle = "sprint-13" }
+```
+
+All three emit structured JSON under `--json` (`{lanes}` /
+`{stats}` / `{series}`) — the shape pavo consumes — and a terse
+ASCII render on a TTY. Repo and index sources produce the same
+payload.
+
+## Iteration windows — `[[cycles]]`
+
+Cycles are *scheduling config*, not ledger memory: `myco.toml`
+declares named windows and item lines just carry `cycle:<name>`.
+
+```toml
+[[cycles]]
+name = "sprint-13"
+start = "2026-03-02"
+end = "2026-03-15"        # last day, inclusive
+```
+
+- `end` must be after `start`; names must be unique and match
+  `[A-Za-z0-9_.-]+` — invalid tables are a hard config error.
+- Repo `[[cycles]]` entries shadow user-config entries by name
+  (same layering as `[[kinds]]`). Rollover is manual: declare the
+  next window when you start it.
+- An item may carry any `cycle:` name — undeclared names are
+  legal data. `myco check` warns (`unknown-cycle`) when a live
+  item references a name no layer declares.
+- `group_by = "cycle"` buckets views by cycle (uncycled items
+  land in `ungrouped`), and the analytics emits read the table
+  for burnup series and timeline lanes.
 
 A config view shadowing a built-in name redefines `myco view <name>`
 itself:

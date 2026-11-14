@@ -13,6 +13,7 @@
 | `kinds` | `Vec<KindSpec>` | optional | `[[kinds]]` — user item kinds layered over the prelude (P-008). A prelude name *shadows* that spec (prefix stays locked); new names extend the table. Merged like verbs: the repo layer wins a name collision — a repo's kind vocabulary is shared surface. |
 | `sync` | `SyncConfig` | optional | `[sync]` — ledger-branch sync policy. `None` = defaults. Repo layer wins the table like the scalars. |
 | `index` | `IndexConfig` | optional | `[index]` — org-index designation (`ledger = "org"\|"none"`). The index universe reads the repo-layer `myco.toml` directly, so a user-layer table can't leak a global designation into every repo. |
+| `cycles` | `Vec<CycleConfig>` | optional | `[[cycles]]` — named iteration windows (sprints, releases, quarters). Scheduling is config, not ledger memory: item lines just carry `cycle:&lt;name&gt;` and `check` warns when a name isn't declared here (P-012). Rollover is manual — nothing auto-advances; declare the next window when you start it. Merged like `kinds`: repo entries shadow user entries by name. |
 
 ## Constraints
 
