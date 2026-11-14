@@ -286,7 +286,7 @@ pub fn ensure_synced(dir: &Path, auto_fetch: bool) -> Result<(), String> {
 /// user.name>` → `cli`). No commit when disabled or when the
 /// tree is clean. A landed commit on the `project` branch then
 /// gets the best-effort [`maybe_push`] publish (`sync.auto_push`,
-/// default off). Returns whether a commit was made.
+/// default on). Returns whether a commit was made.
 pub fn autocommit(
     dir: &Path,
     msg: &str,
@@ -313,20 +313,27 @@ pub fn autocommit(
 }
 
 /// Best-effort publish of the ledger branch after a commit —
-/// `[sync] auto_push` (default off). Only fires on the `project`
-/// branch: a `--dir` ledger parked on another branch (or a plain
-/// dir with no checkout) stays local — auto-push must never
-/// publish a branch the ledger doesn't own. The config read is
-/// the shared TOML loader every front-end binds; missing/broken
-/// config means `false`. Returns the warning on push failure —
-/// never an error: the commit already landed, pushing is
-/// advisory (mirrors `auto_fetch`, which never blocks either).
+/// `[sync] auto_push` (default on; `false` opts out). Only fires
+/// on the `project` branch: a `--dir` ledger parked on another
+/// branch (or a plain dir with no checkout) stays local —
+/// auto-push must never publish a branch the ledger doesn't own.
+/// The config read is the shared TOML loader every front-end
+/// binds; missing/broken config means `true`. A repo with no
+/// `origin` remote skips silently — local-only ledgers don't earn
+/// a warning per mutation. Returns the warning on push failure —
+/// never an error: the commit already landed, pushing is advisory
+/// (mirrors `auto_fetch`, which never blocks either).
 pub fn maybe_push(dir: &Path) -> Option<String> {
     if crate::vcs::worktree_branch(dir).as_deref() != Some(crate::discover::BRANCH) {
         return None;
     }
     let root = crate::vcs::main_worktree(dir).unwrap_or_else(|| dir.to_path_buf());
     if !crate::config::sync_auto_push_for(&root, crate::config::TOML) {
+        return None;
+    }
+    // no `origin` at all → nothing to publish to; skip silently
+    // rather than warning on every mutation of a local-only repo
+    if crate::vcs::git_out(dir, &["remote", "get-url", "origin"]).is_err() {
         return None;
     }
     crate::vcs::push_branch(dir, "origin", None)
@@ -1069,7 +1076,8 @@ mod tests {
 
     #[test]
     fn autocommit_auto_push_publishes_the_ledger_branch() {
-        let (_d, bare, wt) = ledger_repo(Some("[sync]\nauto_push = true\n"));
+        // no myco.toml → the default (on) publishes the commit
+        let (_d, bare, wt) = ledger_repo(None);
         let home = tempfile::tempdir().unwrap();
         temp_env::with_vars(
             [
@@ -1099,10 +1107,10 @@ mod tests {
     }
 
     #[test]
-    fn autocommit_auto_push_defaults_off() {
-        // no myco.toml → opt-in stays off: the commit lands
-        // locally, the remote never sees the branch
-        let (_d, bare, wt) = ledger_repo(None);
+    fn autocommit_auto_push_opts_out() {
+        // `auto_push = false` → the commit lands locally, the
+        // remote never sees the branch
+        let (_d, bare, wt) = ledger_repo(Some("[sync]\nauto_push = false\n"));
         let home = tempfile::tempdir().unwrap();
         temp_env::with_vars(
             [
@@ -1120,7 +1128,7 @@ mod tests {
 
     #[test]
     fn autocommit_auto_push_never_publishes_other_branches() {
-        // auto_push on, but the ledger sits on `main` (a --dir
+        // auto_push on (explicit), but the ledger sits on `main` (a --dir
         // edge) — the gate is the `project` branch, not "whatever
         // is checked out"
         let d = repo(1);
@@ -1147,9 +1155,9 @@ mod tests {
     }
 
     #[test]
-    fn autocommit_auto_push_failure_still_commits() {
-        // auto_push on but no `origin` at all — the push fails,
-        // the mutation must not (the commit already landed)
+    fn maybe_push_skips_a_repo_without_origin() {
+        // default-on but no `origin` remote → silent skip, not a
+        // warning on every mutation of a local-only repo
         let d = tempfile::tempdir().unwrap();
         git(d.path(), &["init", "-q"]);
         git(d.path(), &["config", "user.email", "t@t"]);
@@ -1157,7 +1165,29 @@ mod tests {
         crate::vcs::create_orphan_branch(d.path(), "project", "init").unwrap();
         git(d.path(), &["worktree", "add", "project", "project"]);
         let wt = d.path().join("project");
-        std::fs::write(d.path().join("myco.toml"), "[sync]\nauto_push = true\n").unwrap();
+        let home = tempfile::tempdir().unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.path().to_string_lossy().as_ref())),
+            ],
+            || assert!(maybe_push(&wt).is_none()),
+        );
+    }
+
+    #[test]
+    fn autocommit_auto_push_failure_still_commits() {
+        // auto_push on (the default) but `origin` points nowhere —
+        // the push fails, the mutation must not (the commit landed)
+        let d = tempfile::tempdir().unwrap();
+        git(d.path(), &["init", "-q"]);
+        git(d.path(), &["config", "user.email", "t@t"]);
+        git(d.path(), &["config", "user.name", "t"]);
+        git(d.path(), &["remote", "add", "origin", "/nonexistent/bare"]);
+        crate::vcs::create_orphan_branch(d.path(), "project", "init").unwrap();
+        git(d.path(), &["worktree", "add", "project", "project"]);
+        let wt = d.path().join("project");
         let home = tempfile::tempdir().unwrap();
         temp_env::with_vars(
             [

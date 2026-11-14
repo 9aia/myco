@@ -280,16 +280,21 @@ pub struct SyncConfig {
     #[serde(default = "default_auto_fetch")]
     pub auto_fetch: bool,
     /// `git push origin <branch>` after every committed mutation —
-    /// opt-in (default `false`): publishing stays deliberate until
-    /// the repo asks for it. A failed push never fails the
-    /// mutation — the commit already landed locally; the warning
-    /// rides stderr and `myco check` keeps reporting unpushed
-    /// commits.
-    #[serde(default)]
+    /// default `true`: the ledger branch publishes itself so clones
+    /// stay convergent. `false` opts out (offline-first repos,
+    /// deliberate-publish workflows). A failed push never fails
+    /// the mutation — the commit already landed locally; the
+    /// warning rides stderr and `myco check` keeps reporting
+    /// unpushed commits.
+    #[serde(default = "default_auto_push")]
     pub auto_push: bool,
 }
 
 fn default_auto_fetch() -> bool {
+    true
+}
+
+fn default_auto_push() -> bool {
     true
 }
 

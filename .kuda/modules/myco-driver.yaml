@@ -160,12 +160,12 @@ api:
 - name: auto_fetch_gates_mutations_and_config_opts_out
   kind: function
   file: crates/myco-driver/tests/edges.rs
-  line: 964
+  line: 982
   module: myco-driver
-- name: auto_push_publishes_mutations_and_warns_on_failure
+- name: auto_push_publishes_mutations_and_opts_out
   kind: function
   file: crates/myco-driver/tests/edges.rs
-  line: 1042
+  line: 1060
   module: myco-driver
 - name: backdate_created
   kind: function
@@ -269,7 +269,7 @@ provenance:
   - a984eca8eea928be5520ffbb488388139c046536
   - bcf687da55f4d327b1667d16099ac7104b0abdb8
   - 5554ccd3e5349944e3869bacb43010390f9fb2f0
-  - 52845ea15c2f205d65d579e840ddd44f0bc0bd82
+  - f18baec7d8ac80f5128da3c3208044d247f8d337
   - ae05ae717980ab1abe774f5d76666f1db10f4f86
   - 8f451e070235fbfa0d5b5469152ee85bac0dff9f
   - 5c4b0e48bf994fdd10568f9cdb719f63c5799592
@@ -280,6 +280,6 @@ provenance:
   - 2a40dc06bdbccd62b0f3c6d4b29e9e75712b5331
   - 7709e3b39bd7e361982e898600a0eb3c27bf67e5
   - 766c8a5458aa3dbf936989869b9e94d929bbb225
-  commit_sha: 288c3318bc2cd2753b3b07b0c747712ddb39cd2c
-  generated_at: '1794620913'
+  commit_sha: 51d638975dbccc126fc043d659130774b78426a1
+  generated_at: '1794621604'
   generator: kuda-template/0.1.4

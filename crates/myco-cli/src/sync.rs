@@ -14,12 +14,13 @@
 //! reported — resolve them (`git add` + `git rebase --continue`)
 //! and run `myco sync` again, or `myco sync --abort` to bail.
 //!
-//! With `[sync] auto_push` enabled, a successful sync also pushes
-//! the reconciled tip — publishing the rebased local commits is
-//! the natural completion of "reconcile with the remote" (the
-//! mutation tail pushes any heal commit on its own; this covers
-//! the commit-free paths). Best-effort like every push: a failure
-//! warns, never fails the sync.
+//! With `[sync] auto_push` enabled (the default; `false` opts
+//! out), a successful sync also pushes the reconciled tip —
+//! publishing the rebased local commits is the natural completion
+//! of "reconcile with the remote" (the mutation tail pushes any
+//! heal commit on its own; this covers the commit-free paths).
+//! Best-effort like every push: a failure warns, never fails the
+//! sync.
 
 use serde_json::json;
 
@@ -151,10 +152,10 @@ pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, S
     // in human mode even under `--json`: its findings go to stderr,
     // keeping stdout a single sync payload.
     let check_code = crate::check::run_on(&proj, true, false, no_commit)?;
-    // `sync.auto_push` publishes what the rebase/heal just landed —
-    // the mutation tail already pushed any commit it made, so this
-    // covers the commit-free paths (pure ff/rebase). Best-effort:
-    // a warning, never a sync failure.
+    // `sync.auto_push` (default on) publishes what the rebase/heal
+    // just landed — the mutation tail already pushed any commit it
+    // made, so this covers the commit-free paths (pure ff/rebase).
+    // Best-effort: a warning, never a sync failure.
     if let Some(w) = ops::maybe_push(&wt) {
         eprintln!("myco: warning: {w}");
     }

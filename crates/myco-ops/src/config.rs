@@ -219,7 +219,7 @@ pub fn sync_auto_fetch_for(root: &Path, cfg: ConfigLoader) -> bool {
 
 /// `sync.auto_push` for the repo rooted at `root` — same path
 /// policy as [`sync_auto_fetch_for`]. Missing/broken config →
-/// `false` (the documented default — publishing stays opt-in);
+/// `true` (the documented default — the ledger publishes itself);
 /// the push itself is best-effort either way, so a config read
 /// failure can't strand a mutation.
 pub fn sync_auto_push_for(root: &Path, cfg: ConfigLoader) -> bool {
@@ -230,7 +230,7 @@ pub fn sync_auto_push_for(root: &Path, cfg: ConfigLoader) -> bool {
         .ok()
         .and_then(|c| c.sync)
         .map(|s| s.auto_push)
-        .unwrap_or(false)
+        .unwrap_or(true)
 }
 
 /// The validated `[[cycles]]` table for the repo rooted at
@@ -567,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_auto_push_defaults_off_and_reads_opt_in() {
+    fn sync_auto_push_defaults_on_and_opts_out() {
         let dir = tempfile::tempdir().unwrap();
         let home = tempfile::tempdir().unwrap();
         temp_env::with_vars(
@@ -577,10 +577,11 @@ mod tests {
                 ("HOME", Some(home.path().to_string_lossy().as_ref())),
             ],
             || {
-                // no myco.toml → the documented default: off
-                assert!(!sync_auto_push_for(dir.path(), test_loader()));
-                std::fs::write(dir.path().join("myco.toml"), "[sync]\nauto_push = true\n").unwrap();
+                // no myco.toml → the documented default: on
                 assert!(sync_auto_push_for(dir.path(), test_loader()));
+                std::fs::write(dir.path().join("myco.toml"), "[sync]\nauto_push = false\n")
+                    .unwrap();
+                assert!(!sync_auto_push_for(dir.path(), test_loader()));
                 // auto_fetch is untouched — its default stays on
                 assert!(sync_auto_fetch_for(dir.path(), test_loader()));
             },

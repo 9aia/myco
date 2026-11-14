@@ -802,9 +802,16 @@ fn check_warns_on_unpushed_ledger_commits() {
     git(d.path(), &["push", "-q", "origin", "HEAD"]);
     let out = run(d.path(), &["init", "--json"]);
     assert_eq!(code(&out), 0, "init: {}", stderr(&out));
-    // publish the fresh branch, then commit one more time locally
+    // publish the fresh branch, then commit one more time locally —
+    // opted out of auto_push so the commit stays unpushed
     git(d.path(), &["push", "-q", "origin", "project"]);
-    assert_eq!(code(&run(d.path(), &["todo", "add", "local only"])), 0);
+    let cfg = d.path().join("myco.toml");
+    std::fs::write(&cfg, "[sync]\nauto_push = false\n").unwrap();
+    let env = [("MYCO_CONFIG", cfg.to_str().unwrap())];
+    assert_eq!(
+        code(&run_env(d.path(), &["todo", "add", "local only"], &env)),
+        0
+    );
     let out = run(d.path(), &["check", "--json"]);
     assert_eq!(code(&out), 0, "{out:?}");
     let v = json(&out);
@@ -905,12 +912,23 @@ fn sync_adopts_ff_and_renumbers() {
     // honest — mutations only land on the published tip), then
     // A publishes the same id. Filenames differ and the counter
     // bump is identical, so the rebase is clean and the dup-id
-    // healer runs
-    assert_eq!(code(&run(&wt, &["proposal", "new", "beta prop"])), 0);
+    // healer runs. B opts out of `auto_push` — the diverging
+    // commits must stay local until `sync` reconciles them.
+    let bcfg = b.join("myco.toml");
+    std::fs::write(&bcfg, "[sync]\nauto_push = false\n").unwrap();
+    let benv = [("MYCO_CONFIG", bcfg.to_str().unwrap())];
+    assert_eq!(
+        code(&run_env(&wt, &["proposal", "new", "beta prop"], &benv)),
+        0
+    );
     // an inbound ref to the *local* P-001 — after the heal it must
     // rebind to the fresh id, not stay ambiguous on the remote one
     assert_eq!(
-        code(&run(&wt, &["todo", "add", "gate", "--blocks", "P-001"])),
+        code(&run_env(
+            &wt,
+            &["todo", "add", "gate", "--blocks", "P-001"],
+            &benv
+        )),
         0
     );
     assert_eq!(
@@ -1034,12 +1052,12 @@ fn auto_fetch_gates_mutations_and_config_opts_out() {
     assert_eq!(code(&out), 2, "{out:?}");
 }
 
-/// `sync.auto_push` (default off): a committed mutation publishes
-/// the `project` branch to `origin` once the repo opts in. A
-/// failed push warns on stderr but never fails the verb — the
-/// commit already landed locally.
+/// `sync.auto_push` (default on): a committed mutation publishes
+/// the `project` branch to `origin` unless the repo opts out with
+/// `auto_push = false`. A failed push warns on stderr but never
+/// fails the verb — the commit already landed locally.
 #[test]
-fn auto_push_publishes_mutations_and_warns_on_failure() {
+fn auto_push_publishes_mutations_and_opts_out() {
     let a = repo();
     let bare = tempfile::tempdir().unwrap();
     git(bare.path(), &["init", "-q", "--bare"]);
@@ -1057,25 +1075,26 @@ fn auto_push_publishes_mutations_and_warns_on_failure() {
     let wt = a.path().join("project");
     let ahead = || git(&wt, &["rev-list", "--count", "origin/project..HEAD"]);
 
-    // default off — the mutation commits locally, origin stays put
-    assert_eq!(code(&run(&wt, &["todo", "add", "local only"])), 0);
-    assert_eq!(ahead(), "1");
-
-    // opt in — the next mutation publishes itself
-    let cfg = a.path().join("myco.toml");
-    std::fs::write(&cfg, "[sync]\nauto_push = true\n").unwrap();
-    let env = [("MYCO_CONFIG", cfg.to_str().unwrap())];
-    let out = run_env(&wt, &["todo", "add", "published"], &env);
-    assert_eq!(code(&out), 0, "{out:?}");
+    // default on — the mutation publishes itself
+    assert_eq!(code(&run(&wt, &["todo", "add", "published"])), 0);
     assert_eq!(ahead(), "0", "auto_push must publish the mutation commit");
 
+    // opt out — `auto_push = false` keeps the commit local
+    let cfg = a.path().join("myco.toml");
+    std::fs::write(&cfg, "[sync]\nauto_push = false\n").unwrap();
+    let env = [("MYCO_CONFIG", cfg.to_str().unwrap())];
+    let out = run_env(&wt, &["todo", "add", "local only"], &env);
+    assert_eq!(code(&out), 0, "{out:?}");
+    assert_eq!(ahead(), "1");
+
     // push failure is a warning, not a verb failure — break origin
-    // and mutate again: the commit lands, stderr warns, exit 0
+    // and mutate again (default on): the commit lands, stderr
+    // warns, exit 0
     git(
         a.path(),
         &["remote", "set-url", "origin", "/nonexistent/bare"],
     );
-    let out = run_env(&wt, &["todo", "add", "offline"], &env);
+    let out = run(&wt, &["todo", "add", "offline"]);
     assert_eq!(code(&out), 0, "{out:?}");
     assert!(stderr(&out).contains("auto-push"), "{out:?}");
 }

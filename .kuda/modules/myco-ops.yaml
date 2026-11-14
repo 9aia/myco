@@ -30,7 +30,7 @@ api:
 - name: DEFAULT_PAGER
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 582
+  line: 591
   module: myco-ops
 - name: DIR
   kind: const
@@ -85,7 +85,7 @@ api:
 - name: MULTI_COMMIT_SUBJECTS
   kind: const
   file: crates/myco-ops/src/ops.rs
-  line: 399
+  line: 408
   module: myco-ops
 - name: NamedVerb
   kind: type
@@ -145,7 +145,7 @@ api:
 - name: UndoOutcome
   kind: type
   file: crates/myco-ops/src/ops.rs
-  line: 382
+  line: 391
   module: myco-ops
 - name: UniverseRepo
   kind: type
@@ -200,9 +200,9 @@ api:
 - name: autocommit
   kind: function
   file: crates/myco-ops/src/ops.rs
-  line: 288
+  line: 290
   module: myco-ops
-api_omitted: 295
+api_omitted: 296
 deps:
 - camino
 - lasius-core
@@ -262,17 +262,17 @@ provenance:
   - crates/myco-ops/src/view.rs
   hashes:
   - f04d26f6d2af006fa9e178625f294409d364052b
-  - fc0db2c121ece6475339afdd63002f7b4254a866
+  - e32f251cb93ae05392d80d91ee2fb486762ee60e
   - 9a3c04a646346851a0326d448e9d7836d1905644
   - 9e40ec197966b497677d61c378f6b9ad1e3d5e48
   - 563d0055e8337d58d46e129f60e710e94e54cc60
   - fefad98d22881711edea0ee44b6a3f553b3b1687
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
-  - 5286187cafade022b19153e754575ade4c2e78aa
+  - 7c389371ad557f15cfee6ca285d6562c320adb2e
   - a838d1a24cdaa1f6cf4109a4b8ec336c24dd9a25
   - 94cc23badbad179d268c099782160e9ef92e3d9b
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
   - 077298b45c3704728b98b4958ab8b36d02e25d8b
-  commit_sha: 288c3318bc2cd2753b3b07b0c747712ddb39cd2c
-  generated_at: '1794620913'
+  commit_sha: 51d638975dbccc126fc043d659130774b78426a1
+  generated_at: '1794621604'
   generator: kuda-template/0.1.4
