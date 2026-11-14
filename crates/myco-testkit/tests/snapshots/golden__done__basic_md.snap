@@ -1,0 +1,12 @@
+---
+source: crates/myco-testkit/tests/golden.rs
+expression: out
+---
+# Done
+
+## February
+
+- T-012 Shipped the index · pri:high · created:2026-02-01 · #core · epic:v2 · ms:1.0 · due:2026-02-10 · est:3 · cycle:sprint-11 · done:2026-02-09
+- T-013 Abandoned spike · status:cancelled · created:2026-02-02 · cycle:sprint-11 · note:spike went nowhere
+- T-014 Pre-stamp archive · created:2025-12-01
+  - T-015 Nested cleanup · owner:devin · done:2026-01-15

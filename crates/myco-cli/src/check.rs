@@ -77,6 +77,7 @@ pub struct Finding {
     /// `missing-file`, `unexpected-file`, `emit-drift`,
     /// `orphan-handoff`, `id-title-mismatch`, `unreadable-file`,
     /// `config`, `view-invalid`, `verb-invalid`, `kind-invalid`,
+    /// `cycles-invalid`, `unknown-cycle`,
     /// `agents-md`, `worktree-detached`, `worktree-branch`,
     /// `worktree-unpushed`.
     pub code: &'static str,
@@ -2080,7 +2081,11 @@ fn worktree_findings(worktree: &Path) -> Vec<Finding> {
 /// without running a fix pass. Served by `myco serve` (the
 /// verdict rides in `ok`; there's no exit code on the wire).
 pub fn check_json(proj: &Project) -> Result<serde_json::Value, String> {
-    let mut analysis = analyze_with(&proj.worktree, &repo_kinds(&proj.root));
+    let kinds = repo_kinds(&proj.root);
+    let mut analysis = analyze_with(&proj.worktree, &kinds);
+    analysis
+        .findings
+        .extend(cycle_findings(&proj.root, &proj.worktree, &kinds));
     analysis.findings.extend(worktree_findings(&proj.worktree));
     let agents_md = crate::agentmd::block_state(&proj.root);
     if let Some(f) = agents_md_finding(agents_md) {
@@ -2183,6 +2188,73 @@ fn kind_findings(root: &std::path::Path) -> Vec<Finding> {
     }
 }
 
+/// `[[cycles]]` lint — two findings: an invalid table is an
+/// error like `kinds-invalid` (config is code); a live item
+/// naming a cycle the table doesn't declare is a *warning* —
+/// free-form names stay legal, config just can't see them
+/// (P-012). Repo layer only, like the other config findings.
+fn cycle_findings(
+    root: &std::path::Path,
+    wt: &std::path::Path,
+    kinds: &myco_core::KindTable,
+) -> Vec<Finding> {
+    let path = std::env::var("MYCO_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    if !path.exists() {
+        return Vec::new();
+    }
+    let cfg = match ops::CONFIG.load(Some(&path)) {
+        Err(_) => return Vec::new(), // reported by the config finding
+        Ok(c) => c,
+    };
+    let cycles = match cfg.validated_cycles() {
+        Err(e) => {
+            return vec![Finding::at("myco.toml", "cycles-invalid", e, false)];
+        }
+        Ok(c) => c,
+    };
+    if cycles.is_empty() {
+        return Vec::new();
+    }
+    // live items only — DONE.md/archive cycles are history, not
+    // scheduling intent
+    let Ok(store) = ops::store_at(wt, kinds) else {
+        return Vec::new();
+    };
+    let Ok(scan) = crate::digest::scan(&store) else {
+        return Vec::new(); // parse findings already cover a broken ledger
+    };
+    let known: std::collections::BTreeSet<&str> = cycles.iter().map(|c| c.name.as_str()).collect();
+    // one warning per undeclared name, ids listed — the repair
+    // is either declaring the cycle or re-cycling the items
+    let mut unknown: std::collections::BTreeMap<&str, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for i in scan.live() {
+        if let Some(c) = &i.cycle {
+            if !known.contains(c.as_str()) {
+                unknown
+                    .entry(c.as_str())
+                    .or_default()
+                    .push(i.id.to_string());
+            }
+        }
+    }
+    unknown
+        .into_iter()
+        .map(|(name, ids)| {
+            Finding::warn(
+                "myco.toml",
+                "unknown-cycle",
+                format!(
+                    "cycle {name:?} isn't declared in [[cycles]] — used by {}",
+                    ids.join(", ")
+                ),
+            )
+        })
+        .collect()
+}
+
 /// The `check` verb. Exit 1 on errors, 0 when clean (or
 /// warnings-only).
 pub fn h(ctx: &crate::registry::Ctx, a: &crate::registry::Args) -> Result<i32, String> {
@@ -2233,6 +2305,9 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
     analysis.findings.extend(view_findings(&proj.root));
     analysis.findings.extend(verb_findings(&proj.root));
     analysis.findings.extend(kind_findings(&proj.root));
+    analysis
+        .findings
+        .extend(cycle_findings(&proj.root, wt, &kinds));
     // root-side: the managed AGENTS.md block lives on the checked-
     // out branch, not in the worktree — validated/repaired against
     // proj.root separately.
@@ -2875,6 +2950,61 @@ mod tests {
         assert_eq!(run_on(&proj, true, false, true).unwrap(), 0);
         // and json output agrees
         assert_eq!(run_on(&proj, false, true, true).unwrap(), 0);
+    }
+
+    #[test]
+    fn cycle_findings_warn_unknown_and_error_invalid() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().to_path_buf();
+        let wt = root.join("project");
+        std::fs::create_dir_all(&wt).unwrap();
+        // a ledger with one cycled live item + one declared one
+        let meta = ProjectMeta::new("x");
+        write(&wt, "meta.toml", &myco_store_md::emit_meta(&meta).unwrap());
+        write(
+            &wt,
+            "TODO.md",
+            "# TODO — x\n\n- [ ] T-001 Known cycle · cycle:sprint-12\n- [ ] T-002 Mystery · cycle:sprint-9\n- [ ] T-003 Also mystery · cycle:sprint-9\n",
+        );
+        write(
+            &wt,
+            "BACKLOG.md",
+            &myco_store_md::emit_backlog(&myco_core::BacklogDoc::default()).unwrap(),
+        );
+        write(&wt, "index.md", "# x\n");
+        write(&wt, "handoffs/.gitkeep", "");
+        write(
+            &root,
+            "myco.toml",
+            "[[cycles]]\nname = \"sprint-12\"\nstart = \"2026-01-05\"\nend = \"2026-01-18\"\n",
+        );
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("HOME", Some(root.join("nohome").to_string_lossy().as_ref())),
+                ("XDG_CONFIG_HOME", None::<&str>),
+            ],
+            || {
+                let kinds = repo_kinds(&root);
+                let f = cycle_findings(&root, &wt, &kinds);
+                // one warning per undeclared name, both items listed
+                assert_eq!(f.len(), 1, "{f:?}");
+                assert_eq!(f[0].code, "unknown-cycle");
+                assert_eq!(f[0].severity, Severity::Warn);
+                assert!(f[0].msg.contains("sprint-9"), "{}", f[0].msg);
+                assert!(f[0].msg.contains("T-002") && f[0].msg.contains("T-003"));
+                // a broken table is an error finding, not a warning
+                write(
+                    &root,
+                    "myco.toml",
+                    "[[cycles]]\nname = \"bad\"\nstart = \"2026-02-01\"\nend = \"2026-01-01\"\n",
+                );
+                let f = cycle_findings(&root, &wt, &kinds);
+                assert_eq!(f.len(), 1, "{f:?}");
+                assert_eq!(f[0].code, "cycles-invalid");
+                assert_eq!(f[0].severity, Severity::Error);
+            },
+        );
     }
 
     #[test]

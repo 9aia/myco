@@ -658,3 +658,146 @@ fn view_repos_format_rows_counts_and_error() {
     assert_eq!(rows[0]["name"], "alpha");
     assert_eq!(rows[0]["counts"]["total"], 4);
 }
+
+#[test]
+fn analytics_emits_and_done_stamp() {
+    let d = seeded();
+    // a declared cycle table — MYCO_CONFIG pins the repo file so
+    // `[[cycles]]` loads (the shared baseline points nowhere)
+    std::fs::write(
+        d.path().join("myco.toml"),
+        "[[cycles]]\nname = \"sprint-9\"\nstart = \"2020-01-06\"\nend = \"2020-01-19\"\n",
+    )
+    .unwrap();
+    let cfg = d.path().join("myco.toml");
+    let cfg_s = cfg.to_string_lossy().to_string();
+    let pinned = [("MYCO_CONFIG", cfg_s.as_str())];
+    ok(
+        d.path(),
+        &[
+            "todo",
+            "add",
+            "sprint work",
+            "--cycle",
+            "sprint-9",
+            "--due",
+            "2020-01-10",
+            "--est",
+            "5",
+        ],
+    );
+    ok(d.path(), &["item", "set", "T-002", "--cycle", "sprint-9"]);
+    ok(
+        d.path(),
+        &["todo", "add", "wild item", "--cycle", "mystery"],
+    );
+
+    // archive a task — DONE.md gains a write-once done: stamp
+    ok(d.path(), &["todo", "done", "T-001"]);
+    let done_md = std::fs::read_to_string(d.path().join("project/DONE.md")).unwrap();
+    assert!(done_md.contains("done:"), "{done_md}");
+    // item show surfaces the stamp
+    let v = json(&run_env(
+        d.path(),
+        &["item", "show", "T-001", "--json"],
+        None,
+        &pinned,
+    ));
+    assert!(v["item"]["done"].is_string(), "{v}");
+
+    // stats — counts by dimension over the whole ledger
+    let v = json(&run_env(
+        d.path(),
+        &["view", "stats", "--json"],
+        None,
+        &pinned,
+    ));
+    assert_eq!(v["format"], "stats", "{v}");
+    let cycle = v["stats"]["cycle"].as_array().unwrap();
+    let s9 = cycle.iter().find(|t| t["name"] == "sprint-9").unwrap();
+    assert_eq!(s9["count"], 2, "{cycle:?}");
+    let myst = cycle.iter().find(|t| t["name"] == "mystery").unwrap();
+    assert_eq!(myst["count"], 1);
+    // status counts include the archived done item
+    let status = v["stats"]["status"].as_array().unwrap();
+    assert!(
+        status
+            .iter()
+            .any(|t| t["name"] == "done" && t["count"] == 1),
+        "{status:?}"
+    );
+
+    // roadmap (the timeline emit's preset) — epic → milestone →
+    // cycle lanes; sprint-9 lane holds the two cycled items
+    let v = json(&run_env(
+        d.path(),
+        &["view", "roadmap", "--json"],
+        None,
+        &pinned,
+    ));
+    let lanes = v["lanes"].as_array().unwrap();
+    let lane = lanes
+        .iter()
+        .find(|l| l["kind"] == "cycle" && l["name"] == "sprint-9")
+        .unwrap_or_else(|| panic!("no sprint-9 lane: {lanes:?}"));
+    assert_eq!(lane["items"].as_array().unwrap().len(), 2, "{lane}");
+
+    // group_by cycle through the ordinary group render
+    let v = json(&run_env(
+        d.path(),
+        &["view", "--group-by", "cycle", "--json"],
+        None,
+        &pinned,
+    ));
+    let labels: Vec<&str> = v["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|g| g["label"].as_str())
+        .collect();
+    assert!(labels.contains(&"sprint-9"), "{labels:?}");
+    assert!(labels.contains(&"mystery"), "{labels:?}");
+
+    // burnup — the archived item's stamp moves the curve; the
+    // declared (past) cycle still gets its own series
+    let v = json(&run_env(
+        d.path(),
+        &["view", "burnup", "--json"],
+        None,
+        &pinned,
+    ));
+    assert!(v["window"]["start"].is_string(), "{v}");
+    let series = v["series"].as_array().unwrap();
+    let uncycled = series.iter().find(|s| s["cycle"].is_null()).unwrap();
+    let pts = uncycled["points"].as_array().unwrap();
+    let last = pts.last().unwrap();
+    assert_eq!(last["done"], 1, "{last}"); // T-001's stamp
+    assert!(
+        series.iter().any(|s| s["cycle"] == "sprint-9"),
+        "{series:?}"
+    );
+    // tty renders stay ASCII
+    let out = run_env(d.path(), &["view", "stats"], None, &pinned);
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("status:"), "{s}");
+    assert!(s.contains('#'), "{s}");
+
+    // check — the undeclared `mystery` cycle warns, never errors
+    let out = run_env(d.path(), &["check", "--json"], None, &pinned);
+    let v = json(&out);
+    assert_eq!(v["ok"], true, "{v}");
+    assert!(v["warnings"].as_u64().unwrap() >= 1, "{v}");
+    let findings: Vec<&str> = v["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|f| f["code"].as_str())
+        .collect();
+    assert!(findings.contains(&"unknown-cycle"), "{findings:?}");
+
+    // reopen clears the stamp — the item returns to TODO.md bare
+    ok(d.path(), &["item", "set", "T-001", "--status", "open"]);
+    let todo_md = std::fs::read_to_string(d.path().join("project/TODO.md")).unwrap();
+    let line = todo_md.lines().find(|l| l.contains("T-001")).unwrap();
+    assert!(!line.contains("done:"), "{line}");
+}

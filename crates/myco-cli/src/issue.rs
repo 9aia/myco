@@ -52,6 +52,7 @@ pub fn h_resolve(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     items::require_kind(id, ItemKind::Issue, "issue resolve")?;
     let mut file = items::item_for_edit(&store, id)?;
     items::walk_to(&mut file.meta, Status::Done)?;
+    items::stamp_done(&mut file.meta);
     if let Some(res) = a.opt("resolution") {
         templates::append_to_section(&mut file.body, "## Resolution", res);
         file.body = myco_core::canonical_body(&file.body).to_string();

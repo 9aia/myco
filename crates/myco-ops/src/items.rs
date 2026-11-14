@@ -51,12 +51,36 @@ pub fn save_done(store: &impl Store, doc: &myco_core::DoneDoc) -> Result<(), Str
     store.save_done(doc).map_err(|e| e.to_string())
 }
 
+/// `done:` archive stamp — write-once: set when the item sits at
+/// `Done` with no stamp; a stamp already present is never
+/// rewritten (undo/redo restores, re-archives). Callers run it
+/// after status mutations that can land on `Done`; the reopen
+/// direction clears the field instead (see `walk_to` /
+/// `item set`'s apply path).
+pub fn stamp_done(item: &mut Item) {
+    if item.status == Status::Done && item.done.is_none() {
+        item.done = Some(today());
+    }
+}
+
+/// Stamp every `Done` node in `item`'s subtree — the archive
+/// funnel stamps the whole subtree at once (children die with
+/// their parent), write-once per node.
+fn stamp_subtree_done(item: &mut Item) {
+    let mut stack = vec![item];
+    while let Some(i) = stack.pop() {
+        stamp_done(i);
+        stack.extend(i.children.iter_mut());
+    }
+}
+
 /// Append `item` (subtree included — every node must already be
 /// terminal, `Done` or `Cancelled`; emit rejects anything else)
 /// to the done doc's flat unsectioned list. Duplicate ids — the
 /// item's whole
 /// subtree — are refused: an id lives in exactly one place.
-pub fn done_push(doc: &mut myco_core::DoneDoc, item: Item) -> Result<(), String> {
+pub fn done_push(doc: &mut myco_core::DoneDoc, mut item: Item) -> Result<(), String> {
+    stamp_subtree_done(&mut item);
     let live: std::collections::BTreeSet<_> = doc
         .items()
         .flat_map(|i| i.subtree())
@@ -716,6 +740,38 @@ mod tests {
         let id2 = s2.alloc_id(ItemKind::Task).unwrap();
         assert_ne!(id1, id2);
         racing.join().unwrap();
+    }
+
+    #[test]
+    fn done_push_stamps_done_write_once() {
+        use myco_core::{date, DoneDoc, Item, ItemId, Status};
+        let mut doc = DoneDoc::default();
+        let items_of = |d: &DoneDoc| d.items().cloned().collect::<Vec<_>>();
+        // a done item gets today's stamp
+        let mut item = Item::new(ItemId::new(ItemKind::Task, 1), "x");
+        item.status = Status::Done;
+        done_push(&mut doc, item).unwrap();
+        let stamped = items_of(&doc)[0].done.expect("done: stamp");
+        assert_eq!(stamped, today());
+        // an item carrying an older stamp keeps it — write-once
+        let mut old = Item::new(ItemId::new(ItemKind::Task, 2), "y");
+        old.status = Status::Done;
+        old.done = Some(date::parse("2020-01-01").unwrap());
+        done_push(&mut doc, old).unwrap();
+        assert_eq!(
+            items_of(&doc)[1].done,
+            Some(date::parse("2020-01-01").unwrap())
+        );
+        // cancelled records why it left — never a done: stamp
+        let mut dead = Item::new(ItemId::new(ItemKind::Task, 3), "z");
+        dead.status = Status::Cancelled;
+        done_push(&mut doc, dead).unwrap();
+        assert!(items_of(&doc)[2].done.is_none());
+        // and the stamps survive the emit round-trip
+        let src = myco_store_md::emit_done(&doc).unwrap();
+        assert!(src.contains("done:"), "{src}");
+        let back = myco_store_md::parse_done(&src).unwrap();
+        assert_eq!(items_of(&back)[0].done, Some(stamped));
     }
 
     #[test]

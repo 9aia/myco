@@ -172,6 +172,10 @@ pub enum GroupAxis {
     /// Source-repo buckets, alphabetical — the index-universe
     /// axis; untagged (repo-sourced) items land in `ungrouped`.
     Repo,
+    /// Cycle buckets (`cycle:<name>`), alphabetical — declared
+    /// windows live in `myco.toml [[cycles]]`; undeclared names
+    /// still group (free-form names are legal).
+    Cycle,
 }
 
 /// The renderer a view selects.
@@ -188,6 +192,18 @@ pub enum ViewFormat {
     /// a row per registered repo (snapshot counts + error), a
     /// `repo` source a single row for this repo.
     Repos,
+    /// Roadmap/timeline emit (P-012) — epic → milestone → cycle
+    /// lanes with items placed by `due:`; not a group render.
+    Timeline,
+    /// Count-by-dimension emit — status/priority/owner/epic/
+    /// milestone/cycle/label tallies; ASCII bars on tty, JSON on
+    /// `--json`.
+    Stats,
+    /// Cumulative done-over-time vs total scope, per cycle when
+    /// `[[cycles]]` declares them — driven by `done:` stamps;
+    /// unstamped archive predates the field and counts toward
+    /// scope only.
+    Burnup,
 }
 
 /// Sortable fields for [`SortKey`].
@@ -422,6 +438,7 @@ impl GroupAxis {
             GroupAxis::Epic => named_or_ungrouped(item.epic.as_deref()),
             GroupAxis::Milestone => named_or_ungrouped(item.milestone.as_deref()),
             GroupAxis::Repo => named_or_ungrouped(scoped.repo),
+            GroupAxis::Cycle => named_or_ungrouped(item.cycle.as_deref()),
         }
     }
 }
@@ -435,12 +452,12 @@ fn named_or_ungrouped(v: Option<&str>) -> (GroupKey, String) {
 
 /// Failure to parse a [`GroupAxis`] name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("invalid group axis {0:?} — expected status|priority|kind|owner|epic|milestone|repo")]
+#[error("invalid group axis {0:?} — expected status|priority|kind|owner|epic|milestone|repo|cycle")]
 pub struct ParseGroupAxisError(pub String);
 
 impl GroupAxis {
     /// All axes, for help/error text.
-    pub const ALL: [GroupAxis; 7] = [
+    pub const ALL: [GroupAxis; 8] = [
         GroupAxis::Status,
         GroupAxis::Priority,
         GroupAxis::Kind,
@@ -448,6 +465,7 @@ impl GroupAxis {
         GroupAxis::Epic,
         GroupAxis::Milestone,
         GroupAxis::Repo,
+        GroupAxis::Cycle,
     ];
 
     /// The config/flag name.
@@ -460,6 +478,7 @@ impl GroupAxis {
             GroupAxis::Epic => "epic",
             GroupAxis::Milestone => "milestone",
             GroupAxis::Repo => "repo",
+            GroupAxis::Cycle => "cycle",
         }
     }
 }
@@ -477,7 +496,7 @@ impl FromStr for GroupAxis {
 
 /// Failure to parse a [`ViewFormat`] name.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("invalid format {0:?} — expected list|board|repos")]
+#[error("invalid format {0:?} — expected list|board|repos|timeline|stats|burnup")]
 pub struct ParseViewFormatError(pub String);
 
 impl ViewFormat {
@@ -487,6 +506,9 @@ impl ViewFormat {
             ViewFormat::List => "list",
             ViewFormat::Board => "board",
             ViewFormat::Repos => "repos",
+            ViewFormat::Timeline => "timeline",
+            ViewFormat::Stats => "stats",
+            ViewFormat::Burnup => "burnup",
         }
     }
 }
@@ -499,6 +521,9 @@ impl FromStr for ViewFormat {
             "list" => Ok(ViewFormat::List),
             "board" => Ok(ViewFormat::Board),
             "repos" => Ok(ViewFormat::Repos),
+            "timeline" => Ok(ViewFormat::Timeline),
+            "stats" => Ok(ViewFormat::Stats),
+            "burnup" => Ok(ViewFormat::Burnup),
             _ => Err(ParseViewFormatError(s.to_string())),
         }
     }
@@ -589,11 +614,16 @@ impl ViewSpec {
 
     /// `group_by`, or `status` when the format needs an axis
     /// (board is columnar — it must group by *something*).
-    /// `repos` emits repo rows, not item groups — no axis.
+    /// `repos` emits repo rows; `timeline`/`stats`/`burnup` are
+    /// analytics emits — none of them group.
     pub fn effective_group_by(&self) -> Option<GroupAxis> {
         self.group_by.or(match self.format {
             ViewFormat::Board => Some(GroupAxis::Status),
-            ViewFormat::List | ViewFormat::Repos => None,
+            ViewFormat::List
+            | ViewFormat::Repos
+            | ViewFormat::Timeline
+            | ViewFormat::Stats
+            | ViewFormat::Burnup => None,
         })
     }
 
@@ -727,9 +757,11 @@ where
                     .enumerate()
                     .map(|(i, spec)| (GroupKey::Finite(i), (spec.name.clone(), vec![])))
                     .collect(),
-                GroupAxis::Owner | GroupAxis::Epic | GroupAxis::Milestone | GroupAxis::Repo => {
-                    BTreeMap::new()
-                }
+                GroupAxis::Owner
+                | GroupAxis::Epic
+                | GroupAxis::Milestone
+                | GroupAxis::Repo
+                | GroupAxis::Cycle => BTreeMap::new(),
             };
             for item in filtered {
                 let (key, label) = axis.key_label(&item, kinds);
@@ -998,7 +1030,7 @@ format = "repos""#,
         assert_eq!("repos".parse::<ViewFormat>().unwrap(), ViewFormat::Repos);
         assert_eq!(
             "wat".parse::<ViewFormat>().unwrap_err().to_string(),
-            "invalid format \"wat\" — expected list|board|repos"
+            "invalid format \"wat\" — expected list|board|repos|timeline|stats|burnup"
         );
         // serde round-trips through the lowercase name
         assert!(toml::to_string(&spec).unwrap().contains("repos"));

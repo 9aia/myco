@@ -90,6 +90,19 @@ pub struct Item {
     /// concern, not a parse one (free-form names are legal).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cycle: Option<String>,
+    /// `done:` — the archive stamp: the local date the item
+    /// reached `done`, written once at archive time and never
+    /// rewritten (reopening clears it — a re-archive stamps the
+    /// new completion). `None` on live items and on anything
+    /// finished before the stamp existed; burnup counts stamped
+    /// items only (P-012).
+    #[serde(
+        default,
+        with = "crate::date::opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    pub done: Option<time::Date>,
     /// Nested sub-items — the `  - [ ]` lines indented under this
     /// one in TODO.md/BACKLOG.md. Children are full items: same
     /// metadata, same state machine. Depth is arbitrary (one
@@ -144,6 +157,7 @@ impl Item {
             due: None,
             estimate: None,
             cycle: None,
+            done: None,
             children: Vec::new(),
         }
     }
@@ -253,6 +267,12 @@ impl Item {
         self
     }
 
+    /// Builder-style `done` setter (the archive stamp).
+    pub fn done(mut self, d: time::Date) -> Self {
+        self.done = Some(d);
+        self
+    }
+
     /// Append a nested child (subtask) — line-grammar items only;
     /// file-backed kinds never carry children.
     pub fn child(mut self, child: Item) -> Self {
@@ -284,6 +304,9 @@ impl Item {
         }
         if let Some(c) = &self.cycle {
             s += &format!(" cycle:{c}");
+        }
+        if let Some(d) = self.done {
+            s += &format!(" done:{}", crate::date::render(d));
         }
         if !self.title.is_empty() {
             s += &format!(" {}", self.title);

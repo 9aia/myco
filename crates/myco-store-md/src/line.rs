@@ -5,7 +5,8 @@
 //! <id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>]
 //!     [· created:<date>] [· #<label>]… [· blocks:<id>[,<id>]…]
 //!     [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>]
-//!     [· due:<date>] [· est:<n>] [· cycle:<name>] [· note:<text>]
+//!     [· due:<date>] [· est:<n>] [· cycle:<name>] [· done:<date>]
+//!     [· note:<text>]
 //! ```
 //!
 //! Metadata tokens come after the title, `·`-separated, in the
@@ -105,6 +106,7 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
     let mut due = None;
     let mut estimate = None;
     let mut cycle = None;
+    let mut done = None;
     let mut note = None;
     let mut item = Item::new(id, title);
 
@@ -227,6 +229,12 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
                 }
                 cycle = Some(value.to_string());
             }
+            "done" => {
+                if done.is_some() {
+                    return Err(bad("duplicate done: token"));
+                }
+                done = Some(date::parse(value).map_err(|e| format!("bad done: date — {e}"))?);
+            }
             "note" => {
                 if note.is_some() {
                     return Err(bad("duplicate note: token"));
@@ -235,7 +243,7 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
             }
             other => {
                 return Err(bad(format!(
-                    "unknown metadata key {other:?} — expected status|pri|owner|created|blocks|links|epic|ms|due|est|cycle|note or #label"
+                    "unknown metadata key {other:?} — expected status|pri|owner|created|blocks|links|epic|ms|due|est|cycle|done|note or #label"
                 )));
             }
         }
@@ -256,6 +264,7 @@ pub(crate) fn parse_text(text: &str, spec: &LineSpec) -> Result<Item, String> {
     item.due = due;
     item.estimate = estimate;
     item.cycle = cycle;
+    item.done = done;
     item.note = note;
     Ok(item)
 }
@@ -362,6 +371,9 @@ pub(crate) fn text(item: &Item, spec: &LineSpec) -> Result<String, EmitError> {
     if let Some(c) = &item.cycle {
         tokens.push(format!("cycle:{c}"));
     }
+    if let Some(d) = item.done {
+        tokens.push(format!("done:{}", date::render(d)));
+    }
     if let Some(note) = &item.note {
         tokens.push(format!("note:{note}"));
     }
@@ -422,6 +434,9 @@ mod tests {
         for line in [
             "T-006 x · due:2026-12-01 · est:3 · cycle:sprint-12",
             "T-007 x · est:0 · cycle:s-1",
+            // the `done:` archive stamp sits between cycle and note
+            "T-008 x · cycle:s-1 · done:2026-02-09",
+            "T-009 x · done:2026-02-09 · note:archived early",
         ] {
             let i = item(line);
             let s = text(&i, &TODO).unwrap();
@@ -501,6 +516,10 @@ mod tests {
             ("T-001 t · cycle:", "empty cycle"),
             ("T-001 t · cycle:has space", "bad cycle name"),
             ("T-001 t · cycle:a · cycle:b", "dup cycle"),
+            ("T-001 t · done:", "empty done"),
+            ("T-001 t · done:tomorrow", "bad done date"),
+            ("T-001 t · done:2026-13-40", "bad done date"),
+            ("T-001 t · done:2026-01-01 · done:2026-01-02", "dup done"),
             ("T-001 t · note:", "empty note"),
             ("T-001 t · note:a · note:b", "dup note"),
             ("T-001 t · #", "empty label"),

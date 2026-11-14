@@ -53,6 +53,7 @@ pub fn h_supersede(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let mut old = items::item_for_edit(&store, id)?;
     let mut new = items::item_for_edit(&store, by)?;
     items::walk_to(&mut old.meta, Status::Done)?;
+    items::stamp_done(&mut old.meta);
     old.meta.superseded_by = Some(by);
     new.meta.supersedes = Some(id);
     store.save_item(&old).map_err(|e| e.to_string())?;

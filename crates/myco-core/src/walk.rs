@@ -59,9 +59,15 @@ pub fn targets(from: Status) -> String {
 }
 
 /// Walk `item` along [`status_path`] to `to`, validating each hop.
+/// The `done:` archive stamp tracks completion: leaving `Done`
+/// clears it (a re-archive stamps the new date); reaching `Done`
+/// leaves stamping to the caller — the walk is pure, no clock.
 pub fn walk_to(item: &mut Item, to: Status) -> Result<(), String> {
     for step in status_path(item.id, item.status, to)? {
         item.status = item.status.transition_to(step).map_err(|e| e.to_string())?;
+    }
+    if item.status != Status::Done {
+        item.done = None;
     }
     Ok(())
 }

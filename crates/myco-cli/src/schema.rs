@@ -122,7 +122,7 @@ pub fn document() -> serde_json::Value {
                     "id", "title", "status", "created", "owner", "priority",
                     "labels", "blocks", "links", "note", "superseded_by",
                     "supersedes", "epic", "milestone", "due", "estimate",
-                    "cycle",
+                    "cycle", "done",
                 ],
             },
             "handoffs": {
@@ -146,10 +146,10 @@ pub fn document() -> serde_json::Value {
             "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] \
                       [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] \
                       [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] \
-                      [· due:<YYYY-MM-DD>] [· est:<n>] [· cycle:<name>] [· note:<text>]",
-            "token_order": ["status", "pri", "owner", "created", "#label", "blocks", "links", "epic", "ms", "due", "est", "cycle", "note"],
+                      [· due:<YYYY-MM-DD>] [· est:<n>] [· cycle:<name>] [· done:<YYYY-MM-DD>] [· note:<text>]",
+            "token_order": ["status", "pri", "owner", "created", "#label", "blocks", "links", "epic", "ms", "due", "est", "cycle", "done", "note"],
             "separator": "·",
-            "defaults": {"status": "doc default (open|deferred|done)", "pri": "med", "note": "cancelled is never a doc default — it archives in DONE.md with its token"},
+            "defaults": {"status": "doc default (open|deferred|done)", "pri": "med", "note": "cancelled is never a doc default — it archives in DONE.md with its token", "done": "write-once archive stamp — set when an item reaches done, cleared on reopen; cancelled never stamps"},
             "label_pattern": "[A-Za-z0-9_-]+",
             "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms/cycle names — `ms` is the milestone token)",
             "estimate_bound": "0–1000 points (relative size, not hours)",
@@ -214,7 +214,7 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("epic")));
-        for key in ["due", "estimate", "cycle"] {
+        for key in ["due", "estimate", "cycle", "done"] {
             assert!(
                 d["files"]["item_file"]["frontmatter_keys"]
                     .as_array()
@@ -232,6 +232,7 @@ mod tests {
                 json!("due"),
                 json!("est"),
                 json!("cycle"),
+                json!("done"),
                 json!("note")
             ]));
         assert!(d["line_grammar"]["shape"].as_str().unwrap().contains('·'));

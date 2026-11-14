@@ -10,7 +10,7 @@ api:
 - name: backlog_doc
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 255
+  line: 286
   module: myco-testkit
 - name: backlog_emit
   kind: function
@@ -20,7 +20,7 @@ api:
 - name: backlog_invalid
   kind: function
   file: crates/myco-testkit/tests/invalid.rs
-  line: 19
+  line: 21
   module: myco-testkit
 - name: collect
   kind: function
@@ -35,7 +35,17 @@ api:
 - name: done_doc
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 266
+  line: 297
+  module: myco-testkit
+- name: done_emit
+  kind: function
+  file: crates/myco-testkit/tests/golden.rs
+  line: 85
+  module: myco-testkit
+- name: done_invalid
+  kind: function
+  file: crates/myco-testkit/tests/invalid.rs
+  line: 52
   module: myco-testkit
 - name: file_kind
   kind: function
@@ -55,7 +65,7 @@ api:
 - name: fixtures_exist
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 380
+  line: 418
   module: myco-testkit
 - name: fixtures_under
   kind: function
@@ -70,17 +80,17 @@ api:
 - name: handoff_entry
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 308
+  line: 339
   module: myco-testkit
 - name: handoffs_emit
   kind: function
   file: crates/myco-testkit/tests/golden.rs
-  line: 85
+  line: 100
   module: myco-testkit
 - name: handoffs_invalid
   kind: function
   file: crates/myco-testkit/tests/invalid.rs
-  line: 40
+  line: 42
   module: myco-testkit
 - name: item_emit
   kind: function
@@ -90,7 +100,7 @@ api:
 - name: item_file
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 325
+  line: 356
   module: myco-testkit
 - name: item_id
   kind: function
@@ -100,7 +110,7 @@ api:
 - name: item_invalid
   kind: function
   file: crates/myco-testkit/tests/invalid.rs
-  line: 29
+  line: 31
   module: myco-testkit
 - name: item_kind
   kind: function
@@ -115,12 +125,12 @@ api:
 - name: leaf_item
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 145
+  line: 158
   module: myco-testkit
 - name: line_item
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 186
+  line: 217
   module: myco-testkit
 - name: line_note
   kind: function
@@ -135,7 +145,7 @@ api:
 - name: meta_invalid
   kind: function
   file: crates/myco-testkit/tests/invalid.rs
-  line: 50
+  line: 61
   module: myco-testkit
 - name: myco-testkit
   kind: module
@@ -150,7 +160,12 @@ api:
 - name: project_meta
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 281
+  line: 312
+  module: myco-testkit
+- name: sched_fields
+  kind: function
+  file: crates/myco-testkit/src/lib.rs
+  line: 147
   module: myco-testkit
 - name: section_name
   kind: function
@@ -160,12 +175,12 @@ api:
 - name: sections
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 206
+  line: 237
   module: myco-testkit
 - name: session
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 302
+  line: 333
   module: myco-testkit
 - name: snap_name
   kind: function
@@ -180,29 +195,14 @@ api:
 - name: status_tree
   kind: function
   file: crates/myco-testkit/src/lib.rs
-  line: 199
+  line: 230
   module: myco-testkit
 - name: strat
   kind: module
   file: crates/myco-testkit/src/lib.rs
   line: 58
   module: myco-testkit
-- name: tests
-  kind: module
-  file: crates/myco-testkit/src/lib.rs
-  line: 376
-  module: myco-testkit
-- name: title
-  kind: function
-  file: crates/myco-testkit/src/lib.rs
-  line: 120
-  module: myco-testkit
-- name: todo_doc
-  kind: function
-  file: crates/myco-testkit/src/lib.rs
-  line: 242
-  module: myco-testkit
-api_omitted: 2
+api_omitted: 5
 deps:
 - myco-core
 - myco-store
@@ -230,10 +230,10 @@ provenance:
   - crates/myco-testkit/tests/roundtrip.rs
   hashes:
   - df0b6d5c2130f3266885cbf75cf653df9869ea2c
-  - 0555f7cfc3e41fb2e69db0c404fbf3d5c6b65899
-  - 133e73e3ea23e7e14db384409507f1fb6c051caa
-  - 77e5524b8d718ad6be29c918e5a76630ae2c1d18
+  - dadd897ba685fbc5776a941e6dbb57fab14718c2
+  - 3e2e97af1a86693fdd0a2905b2debb386b6b0e78
+  - f6bb30e06c1442b2e7bb1492ece33602faed8a23
   - 73a0338011456bb4f14655e18c811934553dcbd9
-  commit_sha: df384cacc63cab25744b7939516f384bfac68406
-  generated_at: '1794519344'
+  commit_sha: 734d881b4bacc58e3309eeda34bae7fb7552a619
+  generated_at: '1794615586'
   generator: kuda-template/0.1.4

@@ -64,6 +64,7 @@ pub fn h_status(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let mut file = items::item_for_edit(&store, id)?;
     let from = file.meta.status;
     items::walk_to(&mut file.meta, to)?;
+    items::stamp_done(&mut file.meta);
     let item = file.meta.clone();
     store.save_item(&file).map_err(|e| e.to_string())?;
     let committed = items::commit(

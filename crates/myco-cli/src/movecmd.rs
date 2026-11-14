@@ -215,6 +215,7 @@ fn close_source(store: &impl Store, worktree: &Path, id: ItemId) -> Result<(), S
     let mut file = items::item_for_edit(store, id)?;
     if file.meta.status != Status::Done {
         items::walk_to(&mut file.meta, Status::Done)?;
+        items::stamp_done(&mut file.meta);
         store.save_item(&file).map_err(|e| e.to_string())?;
     }
     Ok(())

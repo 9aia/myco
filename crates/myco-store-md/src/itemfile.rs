@@ -8,7 +8,7 @@
 //! `NNNN` = id number padded to 4 digits. TOML frontmatter in
 //! `+++` fences (id, title, status, created, owner, priority,
 //! labels, blocks, links, note, superseded_by, supersedes, epic,
-//! milestone, due, estimate, cycle — extendable: unknown keys are
+//! milestone, due, estimate, cycle, done — extendable: unknown keys are
 //! ignored on read for forward-compat); body = free-form markdown
 //! (verbatim; kind templates are `myco-template`'s job).
 
@@ -250,6 +250,8 @@ struct FrontmatterIn {
     due: Option<String>,
     estimate: Option<u32>,
     cycle: Option<String>,
+    #[serde(default, deserialize_with = "de_opt_created")]
+    done: Option<String>,
 }
 
 /// `priority` reads like the line grammar — `low|med|high|crit`,
@@ -316,6 +318,8 @@ struct FrontmatterOut<'a> {
     estimate: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cycle: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    done: Option<String>,
 }
 
 /// Parse an item file's source. `spec` declares the kind the
@@ -469,6 +473,10 @@ pub fn parse_item_file(src: &str, spec: &KindSpec, path: &str) -> Result<ItemFil
         item.estimate = Some(e);
     }
     item.cycle = fm.cycle;
+    item.done = fm
+        .done
+        .map(|d| date::parse(&d).map_err(|e| fm_err(format!("bad done date — {e}"))))
+        .transpose()?;
     if item.blocks.contains(&id)
         || item.links.contains(&id)
         || item.supersedes == Some(id)
@@ -526,6 +534,7 @@ pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {
         due: file.meta.due.map(date::render),
         estimate: file.meta.estimate,
         cycle: file.meta.cycle.as_deref(),
+        done: file.meta.done.map(date::render),
     };
     let toml = toml::to_string(&fm).map_err(|e| EmitError::new("item file", e.to_string()))?;
     if file.body != myco_core::canonical_body(&file.body) {

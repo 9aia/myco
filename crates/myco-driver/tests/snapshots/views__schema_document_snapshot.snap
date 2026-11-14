@@ -1,6 +1,5 @@
 ---
 source: crates/myco-driver/tests/views.rs
-assertion_line: 140
 expression: "serde_json::to_string_pretty(&v).unwrap()"
 ---
 {
@@ -128,6 +127,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
         },
         "cycle": {
           "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "done": {
+          "description": "`done:` — the archive stamp: the local date the item\nreached `done`, written once at archive time and never\nrewritten (reopening clears it — a re-archive stamps the\nnew completion). `None` on live items and on anything\nfinished before the stamp existed; burnup counts stamped\nitems only (P-012).",
           "type": [
             "string",
             "null"
@@ -357,6 +363,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
             },
             "cycle": {
               "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "done": {
+              "description": "`done:` — the archive stamp: the local date the item\nreached `done`, written once at archive time and never\nrewritten (reopening clears it — a re-archive stamps the\nnew completion). `None` on live items and on anything\nfinished before the stamp existed; burnup counts stamped\nitems only (P-012).",
               "type": [
                 "string",
                 "null"
@@ -617,6 +630,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "done": {
+              "description": "`done:` — the archive stamp: the local date the item\nreached `done`, written once at archive time and never\nrewritten (reopening clears it — a re-archive stamps the\nnew completion). `None` on live items and on anything\nfinished before the stamp existed; burnup counts stamped\nitems only (P-012).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "children": {
               "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
               "type": "array",
@@ -862,6 +882,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
             },
             "cycle": {
               "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "done": {
+              "description": "`done:` — the archive stamp: the local date the item\nreached `done`, written once at archive time and never\nrewritten (reopening clears it — a re-archive stamps the\nnew completion). `None` on live items and on anything\nfinished before the stamp existed; burnup counts stamped\nitems only (P-012).",
               "type": [
                 "string",
                 "null"
@@ -1117,6 +1144,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
                 "null"
               ]
             },
+            "done": {
+              "description": "`done:` — the archive stamp: the local date the item\nreached `done`, written once at archive time and never\nrewritten (reopening clears it — a re-archive stamps the\nnew completion). `None` on live items and on anything\nfinished before the stamp existed; burnup counts stamped\nitems only (P-012).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "children": {
               "description": "Nested sub-items — the `  - [ ]` lines indented under this\none in TODO.md/BACKLOG.md. Children are full items: same\nmetadata, same state machine. Depth is arbitrary (one\nlevel is the recommended shape); `done`/`defer` act on the\nwhole subtree. Empty for file-backed kinds — children only\nexist in the line grammar.",
               "type": "array",
@@ -1346,6 +1380,13 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
             },
             "cycle": {
               "description": "`cycle:` — the iteration/sprint this item is scheduled in.\nA group name like `epic:`/`ms:` — existence is a `check`\nconcern, not a parse one (free-form names are legal).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "done": {
+              "description": "`done:` — the archive stamp: the local date the item\nreached `done`, written once at archive time and never\nrewritten (reopening clears it — a re-archive stamps the\nnew completion). `None` on live items and on anything\nfinished before the stamp existed; burnup counts stamped\nitems only (P-012).",
               "type": [
                 "string",
                 "null"
@@ -1841,7 +1882,8 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
         "milestone",
         "due",
         "estimate",
-        "cycle"
+        "cycle",
+        "done"
       ]
     },
     "handoffs": {
@@ -1864,7 +1906,7 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
     "timing": "one atomic commit per mutating verb, only when the worktree changed"
   },
   "line_grammar": {
-    "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] [· due:<YYYY-MM-DD>] [· est:<n>] [· cycle:<name>] [· note:<text>]",
+    "shape": "<id> <title> [· status:<s>] [· pri:<p>] [· owner:<a>] [· created:<YYYY-MM-DD>] [· #<label>]… [· blocks:<id>[,<id>]…] [· links:<id>[,<id>]…] [· epic:<name>] [· ms:<name>] [· due:<YYYY-MM-DD>] [· est:<n>] [· cycle:<name>] [· done:<YYYY-MM-DD>] [· note:<text>]",
     "token_order": [
       "status",
       "pri",
@@ -1878,13 +1920,15 @@ expression: "serde_json::to_string_pretty(&v).unwrap()"
       "due",
       "est",
       "cycle",
+      "done",
       "note"
     ],
     "separator": "·",
     "defaults": {
       "status": "doc default (open|deferred|done)",
       "pri": "med",
-      "note": "cancelled is never a doc default — it archives in DONE.md with its token"
+      "note": "cancelled is never a doc default — it archives in DONE.md with its token",
+      "done": "write-once archive stamp — set when an item reaches done, cleared on reopen; cancelled never stamps"
     },
     "label_pattern": "[A-Za-z0-9_-]+",
     "group_pattern": "[A-Za-z0-9_.-]+ (epic/ms/cycle names — `ms` is the milestone token)",

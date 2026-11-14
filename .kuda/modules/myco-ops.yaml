@@ -50,7 +50,7 @@ api:
 - name: Filter
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 338
+  line: 362
   module: myco-ops
 - name: HistoryEntry
   kind: type
@@ -75,7 +75,7 @@ api:
 - name: LockedStore
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 114
+  line: 138
   module: myco-ops
 - name: MAX_ENTRIES
   kind: const
@@ -100,7 +100,7 @@ api:
 - name: NewItem
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 440
+  line: 464
   module: myco-ops
 - name: Origin
   kind: type
@@ -135,12 +135,12 @@ api:
 - name: TOML
   kind: const
   file: crates/myco-ops/src/config.rs
-  line: 178
+  line: 190
   module: myco-ops
 - name: Target
   kind: type
   file: crates/myco-ops/src/items.rs
-  line: 128
+  line: 152
   module: myco-ops
 - name: UndoOutcome
   kind: type
@@ -165,27 +165,27 @@ api:
 - name: all_ids
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 152
+  line: 176
   module: myco-ops
 - name: alloc_id
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 149
+  line: 173
   module: myco-ops
 - name: append_handoff
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 206
+  line: 230
   module: myco-ops
 - name: archive_done
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 88
+  line: 112
   module: myco-ops
 - name: archive_item
   kind: function
   file: crates/myco-ops/src/items.rs
-  line: 188
+  line: 212
   module: myco-ops
 - name: as_str
   kind: function
@@ -202,7 +202,7 @@ api:
   file: crates/myco-ops/src/ops.rs
   line: 288
   module: myco-ops
-api_omitted: 279
+api_omitted: 285
 deps:
 - camino
 - lasius-core
@@ -262,17 +262,17 @@ provenance:
   - crates/myco-ops/src/view.rs
   hashes:
   - f04d26f6d2af006fa9e178625f294409d364052b
-  - 55c8bec909487bbb5fb620a10558904347ea65e8
+  - 684ed7f14a3a287651ad942a849813936ac862f8
   - 9a3c04a646346851a0326d448e9d7836d1905644
   - 9e40ec197966b497677d61c378f6b9ad1e3d5e48
-  - d06f0a1d2e377d9ece738261a02cdba0cd07d321
+  - 563d0055e8337d58d46e129f60e710e94e54cc60
   - fefad98d22881711edea0ee44b6a3f553b3b1687
   - 45d4e6471851884504c5ee7eaa3b8c64de3a7f29
   - 0cda1cfae63fb408b2386ddf344413afb715cc02
   - a838d1a24cdaa1f6cf4109a4b8ec336c24dd9a25
   - 13ebcffb627c04d4af7f1766ec043f867e63110e
   - 30ce2db96e0797a9723f192ef5b99a422d495a91
-  - 92105713ae43a8dfe8e75802f77b64f8c76e303b
-  commit_sha: df384cacc63cab25744b7939516f384bfac68406
-  generated_at: '1794519344'
+  - e1ed330cb3b5c64c5a4048abfa20070f011e7c3a
+  commit_sha: 734d881b4bacc58e3309eeda34bae7fb7552a619
+  generated_at: '1794615586'
   generator: kuda-template/0.1.4

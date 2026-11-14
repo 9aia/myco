@@ -148,6 +148,18 @@ fn merge(
     for cfg in [&user_cfg, &repo_cfg].into_iter().flatten() {
         merged.kinds.extend(cfg.kinds.clone());
     }
+    // cycles: merged like kinds — user entries first, repo
+    // shadows them by name at validation (P-012). Names stay
+    // unique across the merge so `[[cycles]]` can't double-book
+    // a window.
+    for cfg in [&user_cfg, &repo_cfg].into_iter().flatten() {
+        for c in &cfg.cycles {
+            match merged.cycles.iter_mut().find(|e| e.name == c.name) {
+                Some(e) => *e = c.clone(),
+                None => merged.cycles.push(c.clone()),
+            }
+        }
+    }
     merged
 }
 
@@ -203,6 +215,30 @@ pub fn sync_auto_fetch_for(root: &Path, cfg: ConfigLoader) -> bool {
         .and_then(|c| c.sync)
         .map(|s| s.auto_fetch)
         .unwrap_or(true)
+}
+
+/// The validated `[[cycles]]` table for the repo rooted at
+/// `root` — same path policy as [`kinds_for`]. Missing config →
+/// empty (zero-config repos declare no cycles); a *broken*
+/// table is an error — config errors are hard, unlike the
+/// `check` warnings an undeclared `cycle:` token earns.
+pub fn cycles_for(root: &Path, cfg: ConfigLoader) -> Result<Vec<myco_core::CycleConfig>, String> {
+    let path = std::env::var("MYCO_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| root.join("myco.toml"));
+    match cfg.load(Some(&path)) {
+        Ok(c) => c.validated_cycles(),
+        // an absent config file → no cycles; a *present* file
+        // that fails to load/validate is a hard error (config is
+        // code, not data)
+        Err(e) => {
+            if path.exists() {
+                Err(e)
+            } else {
+                Ok(Vec::new())
+            }
+        }
+    }
 }
 
 /// The kind table for the repo rooted at `root` — the repo-layer
@@ -438,6 +474,79 @@ mod tests {
         // probe also misses → None, not an error
         temp_env::with_var("MYCO_CONFIG", Some("/nonexistent/myco.toml"), || {
             assert_eq!(default_view_for(dir.path(), test_loader()), None);
+        });
+    }
+
+    #[test]
+    fn cycles_merge_repo_shadows_user_by_name() {
+        let base = std::env::temp_dir().join(format!("myco-cfg-cycles-{}", std::process::id()));
+        let repo_dir = base.join("repo");
+        let home = base.join("home");
+        std::fs::create_dir_all(&repo_dir).unwrap();
+        std::fs::create_dir_all(home.join(".config/myco")).unwrap();
+        std::fs::write(
+            repo_dir.join("myco.toml"),
+            "[[cycles]]\nname = \"sprint-12\"\nstart = \"2026-01-05\"\nend = \"2026-01-18\"\n\n[[cycles]]\nname = \"shared\"\nstart = \"2026-02-01\"\nend = \"2026-02-14\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            home.join(".config/myco/myco.toml"),
+            "[[cycles]]\nname = \"user-only\"\nstart = \"2026-03-01\"\nend = \"2026-03-14\"\n\n[[cycles]]\nname = \"shared\"\nstart = \"2020-01-01\"\nend = \"2020-01-14\"\n",
+        )
+        .unwrap();
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                ("HOME", Some(home.to_string_lossy().as_ref())),
+            ],
+            || {
+                let cwd = std::env::current_dir().unwrap();
+                std::env::set_current_dir(&repo_dir).unwrap();
+                let cfg = layered(None).unwrap();
+                std::env::set_current_dir(cwd).unwrap();
+                let cycles = cfg.validated_cycles().unwrap();
+                // user entries first, repo shadows `shared` in
+                // place, repo-only appends
+                let names: Vec<&str> = cycles.iter().map(|c| c.name.as_str()).collect();
+                assert_eq!(names, ["user-only", "shared", "sprint-12"]);
+                let shared = cycles.iter().find(|c| c.name == "shared").unwrap();
+                assert_eq!(
+                    myco_core::date::render(shared.start),
+                    "2026-02-01", // repo's window won
+                    "{shared:?}"
+                );
+            },
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn cycles_for_validates_and_tolerates_absence() {
+        let dir = tempfile::tempdir().unwrap();
+        // no config anywhere reachable → empty table, not error
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", None::<&str>),
+                ("XDG_CONFIG_HOME", None::<&str>),
+                (
+                    "HOME",
+                    Some(dir.path().join("nohome").to_string_lossy().as_ref()),
+                ),
+            ],
+            || {
+                let empty = tempfile::tempdir().unwrap();
+                assert_eq!(cycles_for(empty.path(), test_loader()).unwrap(), Vec::new());
+            },
+        );
+        // a broken table is a hard error
+        std::fs::write(
+            dir.path().join("myco.toml"),
+            "[[cycles]]\nname = \"bad name!\"\nstart = \"2026-01-01\"\nend = \"2026-01-02\"\n",
+        )
+        .unwrap();
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            assert!(cycles_for(dir.path(), test_loader()).is_err());
         });
     }
 }

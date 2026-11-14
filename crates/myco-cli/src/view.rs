@@ -406,9 +406,11 @@ pub(crate) fn render_groups(
     match spec.format {
         ViewFormat::Board => render_board(spec, groups, interrupted, md, all),
         // `repos` never reaches here — `run`/`w_view` route it to
-        // `emit_repos` before eval; the list fallback keeps this
-        // total if a caller ever skips that branch
+        // `emit_repos` before eval; the analytics formats route to
+        // `crate::analytics` the same way. The fallback keeps this
+        // total if a caller ever skips those branches.
         ViewFormat::List | ViewFormat::Repos => render_list(groups, interrupted),
+        ViewFormat::Timeline | ViewFormat::Stats | ViewFormat::Burnup => String::new(),
     }
 }
 
@@ -712,6 +714,32 @@ fn run(
             )
         }
     };
+    // The analytics emits (timeline/stats/burnup) replace the
+    // group render — same filter, different projection. `cycles`
+    // come from this repo's config for both sources (the index
+    // universe has no config of its own).
+    if crate::analytics::is_emit(&spec) {
+        let cycles = myco_ops::config::cycles_for(&cfg_root, ops::CONFIG)?;
+        let emit_items = crate::analytics::emit_items(&spec, scan.as_ref(), &views, &kinds);
+        if json_out {
+            ops::print_json(&crate::analytics::emit_json(
+                name.as_deref(),
+                &spec,
+                &emit_items,
+                &cycles,
+                &warnings,
+            ));
+        } else {
+            let rendered = crate::analytics::render(&spec, &emit_items, &cycles);
+            if emit_items.is_empty() {
+                println!("{empty_name}: empty view — no items match");
+            } else {
+                ops::print_paged(&rendered);
+            }
+        }
+        return Ok(0);
+    }
+
     // top-level items only — children ride with their parent
     // (they can't match a filter on their own)
     let groups = match spec.source {

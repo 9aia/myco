@@ -76,9 +76,9 @@ pub enum Val {
     Kind,
     /// A view source (`repo|index`).
     Source,
-    /// A group axis (`status|priority|kind|owner|epic|milestone|repo`).
+    /// A group axis (`status|priority|kind|owner|epic|milestone|repo|cycle`).
     Axis,
-    /// A view format (`list|board|repos`).
+    /// A view format (`list|board|repos|timeline|stats|burnup`).
     Format,
     /// A wire-only `ViewSpec` patch object.
     Spec,
@@ -968,7 +968,7 @@ const SPEC_FIELDS: &[Param] = &[
     opt(
         "group_by",
         Val::Axis,
-        "Group axis — status|priority|kind|owner|epic|milestone|repo.",
+        "Group axis — status|priority|kind|owner|epic|milestone|repo|cycle.",
     )
     .cli(),
     opt("sort", Val::Sort, "Sort keys — `pri,id,-created`; `-` flips a key's default direction.")
@@ -976,7 +976,12 @@ const SPEC_FIELDS: &[Param] = &[
         .delim()
         .cli(),
     opt("limit", Val::Count, "Keep the first N items after sorting.").vname("N").cli(),
-    opt("format", Val::Format, "Renderer — list|board|repos.").cli(),
+    opt(
+        "format",
+        Val::Format,
+        "Renderer — list|board|repos|timeline|stats|burnup.",
+    )
+    .cli(),
 ];
 
 /// `spec` — the wire-only `ViewSpec` patch (`view`/`next`).
@@ -1579,7 +1584,7 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "view",
-        about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = \"repos\"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).",
+        about: "Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next|roadmap|stats|burnup`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = \"repos\"` emits one row per repo; `format = \"timeline\"|\"stats\"|\"burnup\"` are the analytics emits (roadmap lanes, count tallies, done-over-time — `done:` archive stamps drive burnup); bare `myco view` lists views (or renders `default_view` when config names one).",
         params: &[&[
             pos("name", Val::Str, "View name — builtin preset or config view.").optional(),
             flag("list", "List defined views and exit.").cli(),

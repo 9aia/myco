@@ -31,6 +31,13 @@ agent ──► myco <verb> ──► write md ──► commit on `project` bra
   (subtree included) back out of `DONE.md` with a `reopened`
   handoff as the audit trail; `myco done remove <id>` deletes
   archived junk outright
+- **PM-parity scheduling** — `due`/`est`/`cycle` fields on every
+  item, `[[cycles]]` iteration windows declared in `myco.toml`
+  (config, not ledger memory), a write-once `done:` archive stamp,
+  and three analytics view emits — `roadmap` (timeline lanes),
+  `stats` (count tallies), `burnup` (done-over-time per cycle) —
+  all over the same `filter → group → sort` pipeline, repo and
+  index sources alike
 - **numbered slugs, one registry** — `T-012`, `I-003`, `P-002`,
   `ADR-0004`, `PL-001`; state machine owned by `myco-core`, invalid
   states unrepresentable

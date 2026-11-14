@@ -202,7 +202,7 @@ api:
   file: project/issues/issue-0030-issue-0030-rust-toolchain-upgrade-2026.md
   line: 2
   module: project
-api_omitted: 79
+api_omitted: 44
 deps: []
 notes: ''
 verify:
@@ -294,9 +294,9 @@ provenance:
   - project/proposals/proposal-0014-ledger-convergence-remote-adoption-sync-dup-id-renumbering.md
   hashes:
   - 9065e6f6e33503b5f7a4a773acd637396048731c
-  - ff8c8167a3e7dd6182641214a7d5f22711bd86bc
+  - 5788ea2bd5bf0715f4cce3c014dc234f7fd07a3d
   - df0ebe074d2ac166504a6b14391be3adebcda4d8
-  - 2a1f4d92599282d0f2ca1d063ec63f4ddb4ab476
+  - 8ef61e9e836da66f8845955567b4b6f9ffc35040
   - d0f4ee292c12e5b88c8228e1de78b83bcc6eaa65
   - 8ee2b578c23f86be23573ebb29fa91ca8ad5cd53
   - f9deccb752376dfd2277072da18c40886f7ae381
@@ -310,7 +310,7 @@ provenance:
   - da7c3d1402e908fcbd1cfff6868b43da756afcd4
   - 136e9cf22326b43d1bc4a69672205b1f292afe5e
   - e5151b6ec1980efa30f9efd54578db1ad2c9b757
-  - 5005762bd0beb76a983416f0c1d6f7469c704581
+  - e4dab79bd757923d87e2fa4694eeec8fbb489360
   - 9444bdf0db516ffe61066c31013e83a4845ee73b
   - 05cbaca371a929fabe60e041fe7904bc48fc15c0
   - 903a8ce3b140d237f606cb11f8acc1c91d32fb66
@@ -364,9 +364,9 @@ provenance:
   - 8c02448b8d157da86783b779f66915e880b6fa5b
   - 38de01aec8c526c25e3291b65424b57e9860fad2
   - 276e5fa49f333a97aba698cf2dcb14988c79213b
-  - 4d753c2b19260d670c606e98311ec53cd2e0b084
+  - a74a88c5003c18cb061db8625ea9e55aa0e4772b
   - 6d02a11ce0ebc6b069c507b48bd39ad0d68a7643
   - b30eaaf057f56e1c38125d69e6152245620510c6
-  commit_sha: 80b9d0a34fa20788633e352c96beb4e92f1ae31b
-  generated_at: '1794611880'
+  commit_sha: 734d881b4bacc58e3309eeda34bae7fb7552a619
+  generated_at: '1794615586'
   generator: kuda-template/0.1.4

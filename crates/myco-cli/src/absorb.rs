@@ -171,6 +171,7 @@ fn import_issues(
             ImportStatus::Done => Status::Done,
         };
         meta.owner = row.owner.clone();
+        items::stamp_done(&mut meta);
         meta.labels = row.labels.iter().cloned().collect();
         meta.epic = row.epic.clone();
         meta.milestone = row.milestone.clone();

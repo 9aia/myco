@@ -28,6 +28,7 @@ use std::path::PathBuf;
 pub mod absorb;
 pub mod adr;
 pub mod agentmd;
+pub mod analytics;
 pub mod backlog;
 pub mod batch;
 pub mod board;

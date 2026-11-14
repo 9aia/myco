@@ -182,23 +182,84 @@ fn emit(
     spec.validate()?;
     let mut warnings: Vec<String> = Vec::new();
     // the universe owners — `groups` borrows item refs
-    let (interrupted, scan, views, kinds) = match spec.source {
+    let (interrupted, scan, views, kinds, cfg_root) = match spec.source {
         ViewSource::Repo => {
-            let (_proj, store) = items::open_read(dir, root)?;
+            let (proj, store) = items::open_read(dir, root)?;
             let s = digest::scan(&store)?;
             (
                 continuity::interrupted_set(&store, s.live())?,
                 Some(s),
                 Vec::new(),
                 myco_store::Store::kinds(&store).clone(),
+                proj.root.clone(),
             )
         }
         ViewSource::Index => {
             let (v, repo_warnings) = view::index_universe()?;
             warnings.extend(repo_warnings);
-            (BTreeSet::new(), None, v, myco_core::KindTable::prelude())
+            (
+                BTreeSet::new(),
+                None,
+                v,
+                myco_core::KindTable::prelude(),
+                // the index universe has no config of its own —
+                // `[[cycles]]` resolves against the invoking repo
+                root.or(dir)
+                    .map(std::path::Path::to_path_buf)
+                    .unwrap_or_else(|| PathBuf::from(".")),
+            )
         }
     };
+    // the analytics emits — same filtered universe, emit-shaped
+    // payloads (P-012)
+    if crate::analytics::is_emit(spec) {
+        let cycles = myco_ops::config::cycles_for(&cfg_root, crate::ops::CONFIG)?;
+        let emit_items = crate::analytics::emit_items(spec, scan.as_ref(), &views, &kinds);
+        return match emit {
+            EmitMode::Table => {
+                let rendered = crate::analytics::render(spec, &emit_items, &cycles);
+                let human = if emit_items.is_empty() {
+                    format!("{name}: empty view — no items match")
+                } else {
+                    rendered.clone()
+                };
+                Ok((
+                    json!({"view": name, "emit": "table", "table": rendered, "warnings": warnings}),
+                    human,
+                ))
+            }
+            EmitMode::Json => {
+                let mut payload =
+                    crate::analytics::emit_json(Some(name), spec, &emit_items, &cycles, &warnings);
+                payload["emit"] = json!("json");
+                let human = serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".into());
+                Ok((payload, human))
+            }
+            EmitMode::Ids => {
+                let ids: Vec<String> = emit_items.iter().map(|i| i.item.id.to_string()).collect();
+                let human = if ids.is_empty() {
+                    format!("{name}: no items match")
+                } else {
+                    ids.join("\n")
+                };
+                Ok((
+                    json!({"view": name, "ids": ids, "warnings": warnings}),
+                    human,
+                ))
+            }
+            EmitMode::First => {
+                let item = emit_items.first().map(|i| i.item);
+                let human = match item {
+                    Some(i) => items::compact(i),
+                    None => format!("{name}: nothing matches"),
+                };
+                Ok((
+                    json!({"view": name, "item": item, "warnings": warnings}),
+                    human,
+                ))
+            }
+        };
+    }
     let groups = match spec.source {
         ViewSource::Repo => eval(
             scan.iter()

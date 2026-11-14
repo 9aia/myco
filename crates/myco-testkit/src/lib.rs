@@ -141,6 +141,19 @@ pub mod strat {
         "[a-z0-9 .:/_-]{1,40}".prop_map(|s| s.trim().to_string())
     }
 
+    /// The scheduling fields as one strategy — `(due, est, cycle,
+    /// done)` — keeping the item tuples under proptest's arity
+    /// cap.
+    fn sched_fields(
+    ) -> impl Strategy<Value = (Option<Date>, Option<u32>, Option<String>, Option<Date>)> {
+        (
+            prop::option::of(date()),
+            prop::option::of(0u32..=myco_core::MAX_ESTIMATE),
+            prop::option::of(group_name()),
+            prop::option::of(date()),
+        )
+    }
+
     /// A leaf line item — full metadata, no children.
     fn leaf_item(forbid: &'static [Status]) -> impl Strategy<Value = Item> {
         (
@@ -159,10 +172,24 @@ pub mod strat {
             prop::option::of(date()),
             prop::option::of(group_name()),
             prop::option::of(group_name()),
+            sched_fields(),
             prop::option::of(line_note()),
         )
             .prop_map(
-                |(id, title, status, priority, owner, labels, blocks, created, epic, ms, note)| {
+                |(
+                    id,
+                    title,
+                    status,
+                    priority,
+                    owner,
+                    labels,
+                    blocks,
+                    created,
+                    epic,
+                    ms,
+                    (due, est, cycle, done),
+                    note,
+                )| {
                     let mut item = Item::new(id, title).status(status).priority(priority);
                     item.owner = owner;
                     item.labels = labels;
@@ -172,6 +199,10 @@ pub mod strat {
                     item.created = created;
                     item.epic = epic;
                     item.milestone = ms;
+                    item.due = due;
+                    item.estimate = est;
+                    item.cycle = cycle;
+                    item.done = done;
                     item.note = note.filter(|n| !n.is_empty());
                     item
                 },
@@ -333,8 +364,11 @@ pub mod strat {
             prop::collection::btree_set(item_id(ItemKind::Task), 0..2),
             prop::option::of(date()),
             prop::option::of(line_note()).prop_map(|o| o.filter(|n| !n.is_empty())),
-            prop::option::of(group_name()),
-            prop::option::of(group_name()),
+            (
+                prop::option::of(group_name()),
+                prop::option::of(group_name()),
+            ),
+            sched_fields(),
             prop::collection::vec("(#+ |[a-z0-9 .-]+|- \\[[ x]\\] )[a-z0-9 .-]{0,30}", 0..6),
         )
             .prop_map(
@@ -348,8 +382,8 @@ pub mod strat {
                     blocks,
                     created,
                     note,
-                    epic,
-                    ms,
+                    (epic, ms),
+                    (due, est, cycle, done),
                     lines,
                 )| {
                     let mut item = Item::new(id, title).status(status).priority(priority);
@@ -362,6 +396,10 @@ pub mod strat {
                     item.note = note;
                     item.epic = epic;
                     item.milestone = ms;
+                    item.due = due;
+                    item.estimate = est;
+                    item.cycle = cycle;
+                    item.done = done;
                     let mut file = ItemFile::new(item);
                     // canonical body: no leading blank lines, no
                     // trailing whitespace — emit rejects less

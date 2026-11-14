@@ -202,7 +202,7 @@ api:
   file: refs/sturn/wal/devin-i032
   line: 1
   module: sturn-wal
-api_omitted: 261
+api_omitted: 270
 deps: []
 notes: ''
 verify:
@@ -242,6 +242,7 @@ provenance:
   - refs/sturn/wal/myco-links
   - refs/sturn/wal/myco-sync
   - refs/sturn/wal/p009
+  - refs/sturn/wal/p012-ph2-4
   - refs/sturn/wal/sturn
   - refs/sturn/wal/subagent-driver
   - refs/sturn/wal/sync-refs-rollout
@@ -274,6 +275,7 @@ provenance:
   - 8f5382552f7c386fc1b4704b80f09b8243c0095c
   - 5c53d381768cc31d1c3c1e48ec2c38ac061a4c57
   - 674540f31b3c541b1544aaabc0f6bcb7fd97fc6a
+  - 6f59a520a0f2a5f216a303f04bf4ea2aebf57226
   - 25ba8531417c80ac4aa04d4c62f9d65583049172
   - 54d93ae1a82375a685b1034ec6001a65dd997ef7
   - 599bc2987ffe65586806c5003e3b59e03dc28709
@@ -281,6 +283,6 @@ provenance:
   - be47760863fcba0b65b50642186e0025d3af852d
   - 00c736d9efc103d1f2efb84c0d776df0b1c1f426
   - 88d65cf20e66d85851a7da4506773fee6be426ab
-  commit_sha: 80b9d0a34fa20788633e352c96beb4e92f1ae31b
-  generated_at: '1794611880'
+  commit_sha: 734d881b4bacc58e3309eeda34bae7fb7552a619
+  generated_at: '1794615586'
   generator: kuda-template/0.1.4

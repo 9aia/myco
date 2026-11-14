@@ -25,7 +25,7 @@ api:
 - name: ALL
   kind: const
   file: crates/myco-core/src/view.rs
-  line: 443
+  line: 460
   module: myco-core
 - name: Actor
   kind: type
@@ -40,22 +40,37 @@ api:
 - name: AliasVerb
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 116
+  line: 117
   module: myco-core
 - name: BacklogDoc
   kind: type
   file: crates/myco-core/src/doc.rs
   line: 68
   module: myco-core
+- name: BurnupPoint
+  kind: type
+  file: crates/myco-core/src/analytics.rs
+  line: 242
+  module: myco-core
+- name: BurnupSeries
+  kind: type
+  file: crates/myco-core/src/analytics.rs
+  line: 254
+  module: myco-core
 - name: Config
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 195
+  line: 196
   module: myco-core
 - name: ConfigVerb
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 104
+  line: 105
+  module: myco-core
+- name: CycleConfig
+  kind: type
+  file: crates/myco-core/src/lib.rs
+  line: 246
   module: myco-core
 - name: DoneDoc
   kind: type
@@ -75,7 +90,7 @@ api:
 - name: EmitMode
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 141
+  line: 142
   module: myco-core
 - name: Err
   kind: type
@@ -110,17 +125,17 @@ api:
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 234
+  line: 250
   module: myco-core
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 468
+  line: 487
   module: myco-core
 - name: Err
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 495
+  line: 517
   module: myco-core
 - name: Error
   kind: type
@@ -135,7 +150,7 @@ api:
 - name: Flat
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 360
+  line: 376
   module: myco-core
 - name: GroupAxis
   kind: type
@@ -145,7 +160,7 @@ api:
 - name: GroupKey
   kind: type
   file: crates/myco-core/src/view.rs
-  line: 510
+  line: 535
   module: myco-core
 - name: HandoffEntry
   kind: type
@@ -155,7 +170,7 @@ api:
 - name: IndexConfig
   kind: type
   file: crates/myco-core/src/lib.rs
-  line: 183
+  line: 184
   module: myco-core
 - name: InvalidTransition
   kind: type
@@ -175,7 +190,7 @@ api:
 - name: Item
   kind: type
   file: crates/myco-core/src/item.rs
-  line: 115
+  line: 128
   module: myco-core
 - name: ItemFile
   kind: type
@@ -187,22 +202,7 @@ api:
   file: crates/myco-core/src/id.rs
   line: 257
   module: myco-core
-- name: ItemKind
-  kind: type
-  file: crates/myco-core/src/id.rs
-  line: 71
-  module: myco-core
-- name: ItemMeta
-  kind: type
-  file: crates/myco-core/src/item.rs
-  line: 106
-  module: myco-core
-- name: KindSpec
-  kind: type
-  file: crates/myco-core/src/kind.rs
-  line: 45
-  module: myco-core
-api_omitted: 393
+api_omitted: 423
 deps:
 - schemars
 - serde
@@ -230,17 +230,18 @@ verify:
 - crates/myco-core/Cargo.toml
 - crates/myco-core/src/lib.rs
 - crates/myco-core/src/actor.rs
+- crates/myco-core/src/analytics.rs
 - crates/myco-core/src/date.rs
 - crates/myco-core/src/doc.rs
 - crates/myco-core/src/handoff.rs
 - crates/myco-core/src/id.rs
 - crates/myco-core/src/item.rs
 - crates/myco-core/src/kind.rs
-- crates/myco-core/src/ledger.rs
 provenance:
   files:
   - crates/myco-core/Cargo.toml
   - crates/myco-core/src/actor.rs
+  - crates/myco-core/src/analytics.rs
   - crates/myco-core/src/date.rs
   - crates/myco-core/src/doc.rs
   - crates/myco-core/src/handoff.rs
@@ -258,20 +259,21 @@ provenance:
   hashes:
   - f75323e2b82195a4149a5fb91548e75ba386acbf
   - 604b979a927c5d66c866f7f0b061a5285483be02
+  - 58b411bfd6d0bde66ba315a61eb5dccff6b29c9e
   - 06e989397088667febfffba9ce2aa5e36a6d671b
   - f989824a6aaf844a1aecee9950dce96297773bc1
   - 8ce1f3ee1a5d479874a19803d880527e35f63ae5
   - ec34134e87bdf0b1515595800aa3a81ac74449dc
-  - a1461918ab4b25d64c18a88bee7e27ac5ba89b61
+  - 14452383ddb707db1d6f9486d55e4db11f5d4f87
   - 5d220a111b00de9ca0d5d5cb9693a22644528fbc
   - a63fdfd98e436098f76f799a702eeb39497af966
-  - 0306aed7b584deb660a0702076f94533eb188713
+  - a080e66d580850abbf3fb5a29a913ed279077a72
   - 54a8b05efa1866906b99de528dd87651c6ee25ed
   - f01971e1bcca257a19dcdaac97e6cc1c2448483c
   - e62184d264d30354071a59cf2b664a41e01e0334
   - 9e9ad17d8413f2def42d65bac0bf70aa9c32a8bb
-  - 72e92f7c24d5596a99997c10286efcfc7e0061ba
-  - 447a08a9cf3c0fba2e03487808027953e397d915
-  commit_sha: 80b9d0a34fa20788633e352c96beb4e92f1ae31b
-  generated_at: '1794611880'
+  - a53bdf65c4d481d3f4e5f63299ab5f3644f13055
+  - a3ea58eb9e976b999624a1ee349b13ffa14a77b8
+  commit_sha: 734d881b4bacc58e3309eeda34bae7fb7552a619
+  generated_at: '1794615586'
   generator: kuda-template/0.1.4

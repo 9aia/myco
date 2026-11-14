@@ -2,7 +2,9 @@
 //! locations — the `myco check` contract.
 #![allow(clippy::unwrap_used)]
 
-use myco_store_md::{parse_backlog, parse_handoff_file, parse_item_file, parse_meta, parse_todo};
+use myco_store_md::{
+    parse_backlog, parse_done, parse_handoff_file, parse_item_file, parse_meta, parse_todo,
+};
 use myco_testkit::{fixture, fixtures_under};
 
 #[test]
@@ -42,6 +44,15 @@ fn handoffs_invalid() {
         let src = fixture(&f);
         let err = parse_handoff_file(&src, &f).unwrap_err();
         assert!(err.line() >= 1 && err.column() >= 1, "{f}: no span");
+        insta::assert_snapshot!(f.replace('/', "__").replace('.', "_"), err.to_string());
+    }
+}
+
+#[test]
+fn done_invalid() {
+    for f in fixtures_under("done/invalid") {
+        let src = fixture(&f);
+        let err = parse_done(&src).unwrap_err();
         insta::assert_snapshot!(f.replace('/', "__").replace('.', "_"), err.to_string());
     }
 }

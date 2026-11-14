@@ -225,6 +225,15 @@ fn apply_set(item: &mut Item, flags: &SetFlags) -> Result<(), String> {
             item.estimate = Some(n);
         }
     }
+    // the `done:` archive stamp tracks completion — reaching
+    // `Done` stamps (write-once), leaving it clears (reopen).
+    // `Cancelled` never stamps: it records *why* the work left,
+    // not when it finished.
+    if item.status == Status::Done {
+        items::stamp_done(item);
+    } else {
+        item.done = None;
+    }
     Ok(())
 }
 

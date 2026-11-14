@@ -1050,6 +1050,24 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
                     (std::collections::BTreeSet::new(), None, v)
                 }
             };
+            // the analytics emits (timeline/stats/burnup) — same
+            // filtered universe, emit-specific JSON (P-012)
+            if crate::analytics::is_emit(&spec) {
+                let kinds = match spec.source {
+                    ViewSource::Repo => myco_store::Store::kinds(&store).clone(),
+                    ViewSource::Index => myco_core::KindTable::prelude(),
+                };
+                let cycles = myco_ops::config::cycles_for(&proj.root, crate::ops::CONFIG)
+                    .map_err(Fail::Verb)?;
+                let emit_items = crate::analytics::emit_items(&spec, scan.as_ref(), &views, &kinds);
+                return Ok(crate::analytics::emit_json(
+                    name,
+                    &spec,
+                    &emit_items,
+                    &cycles,
+                    &warnings,
+                ));
+            }
             // top-level items only — children ride with their parent
             let groups = match spec.source {
                 ViewSource::Repo => eval(
@@ -1516,6 +1534,9 @@ mod tests {
                     "epic",
                     "milestone",
                     "next",
+                    "roadmap",
+                    "stats",
+                    "burnup",
                     "org-board",
                     "org-status"
                 ]

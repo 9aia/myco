@@ -7,6 +7,7 @@
 //! agnostic — `myco-store-md` owns the markdown grammar.
 
 pub mod actor;
+pub mod analytics;
 pub mod date;
 pub mod doc;
 pub mod handoff;
@@ -225,6 +226,45 @@ pub struct Config {
     /// directly, so a user-layer table can't leak a global
     /// designation into every repo.
     pub index: Option<IndexConfig>,
+    /// `[[cycles]]` — named iteration windows (sprints, releases,
+    /// quarters). Scheduling is config, not ledger memory: item
+    /// lines just carry `cycle:<name>` and `check` warns when a
+    /// name isn't declared here (P-012). Rollover is manual —
+    /// nothing auto-advances; declare the next window when you
+    /// start it. Merged like `kinds`: repo entries shadow user
+    /// entries by name.
+    #[serde(default)]
+    pub cycles: Vec<CycleConfig>,
+}
+
+/// A `[[cycles]]` entry — one named window between two calendar
+/// dates. Dates are `YYYY-MM-DD` — no times, no timezones; the
+/// iteration boundary is a day. `end` is the last day of the
+/// window (inclusive).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CycleConfig {
+    /// The cycle's name — the value `cycle:<name>` tokens carry.
+    /// Same charset as the other group names
+    /// (`[A-Za-z0-9_.-]`, non-empty) so it round-trips through
+    /// the line grammar.
+    pub name: String,
+    /// First day of the window.
+    #[serde(with = "crate::date::req")]
+    pub start: time::Date,
+    /// Last day of the window (inclusive) — must be after
+    /// `start`.
+    #[serde(with = "crate::date::req")]
+    pub end: time::Date,
+}
+
+/// The cycle-name charset — identical to the line grammar's
+/// group-name rule so any declared name parses back cleanly.
+fn valid_cycle_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
 }
 
 /// The `[sync]` config table — how `myco sync` and the mutating
@@ -252,12 +292,81 @@ impl Config {
     pub fn kind_table(&self) -> Result<KindTable, String> {
         KindTable::new(self.kinds.clone())
     }
+
+    /// The validated `[[cycles]]` table — unique names, the
+    /// group-name charset, `end > start`. Config errors are
+    /// hard (config is code, not data), unlike the `check`
+    /// warnings an undeclared `cycle:` token earns.
+    pub fn validated_cycles(&self) -> Result<Vec<CycleConfig>, String> {
+        let mut out = Vec::with_capacity(self.cycles.len());
+        for c in &self.cycles {
+            if !valid_cycle_name(&c.name) {
+                return Err(format!(
+                    "cycle {:?}: name must match [A-Za-z0-9_.-]+",
+                    c.name
+                ));
+            }
+            if c.end <= c.start {
+                return Err(format!(
+                    "cycle {:?}: end {} must be after start {}",
+                    c.name,
+                    crate::date::render(c.end),
+                    crate::date::render(c.start)
+                ));
+            }
+            if out.iter().any(|e: &CycleConfig| e.name == c.name) {
+                return Err(format!("cycle {:?}: duplicate name", c.name));
+            }
+            out.push(c.clone());
+        }
+        Ok(out)
+    }
+
+    /// The cycle covering `d`, if any — the window
+    /// `[start, end]` inclusive on both ends.
+    pub fn cycle_on(&self, d: time::Date) -> Option<&CycleConfig> {
+        self.cycles.iter().find(|c| c.start <= d && d <= c.end)
+    }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cycles_validate_names_windows_and_duplicates() {
+        let d = |s: &str| date::parse(s).unwrap();
+        let cfg = |name: &str, s: &str, e: &str| CycleConfig {
+            name: name.into(),
+            start: d(s),
+            end: d(e),
+        };
+        let mut c = Config::default();
+        assert_eq!(c.validated_cycles().unwrap(), Vec::new());
+        c.cycles = vec![cfg("sprint-12", "2026-01-05", "2026-01-18")];
+        assert_eq!(c.validated_cycles().unwrap().len(), 1);
+        // bad charset, inverted window, duplicate name — all hard errors
+        for bad in [
+            vec![cfg("bad name!", "2026-01-05", "2026-01-18")],
+            vec![cfg("s", "2026-01-18", "2026-01-05")],
+            vec![cfg("s", "2026-01-05", "2026-01-05")],
+            vec![
+                cfg("s", "2026-01-05", "2026-01-18"),
+                cfg("s", "2026-02-01", "2026-02-14"),
+            ],
+        ] {
+            c.cycles = bad;
+            assert!(c.validated_cycles().is_err(), "{:?}", c.cycles);
+        }
+        // cycle_on finds the covering window
+        c.cycles = vec![cfg("s", "2026-01-05", "2026-01-18")];
+        assert_eq!(
+            c.cycle_on(d("2026-01-10")).map(|x| x.name.as_str()),
+            Some("s")
+        );
+        assert!(c.cycle_on(d("2026-01-19")).is_none());
+    }
 
     #[test]
     fn rev_validation() {

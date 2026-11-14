@@ -99,6 +99,25 @@ pub fn builtins() -> Vec<NamedView> {
             },
             origin: Origin::Builtin,
         },
+        // the analytics emits as named presets (P-012) — same
+        // shapes as `format = "timeline"|"stats"|"burnup"`; stats
+        // and burnup stay permissive because the emits read the
+        // archive on purpose
+        NamedView {
+            name: "roadmap".into(),
+            spec: spec(live.clone(), None, ViewFormat::Timeline),
+            origin: Origin::Builtin,
+        },
+        NamedView {
+            name: "stats".into(),
+            spec: spec(ViewFilter::default(), None, ViewFormat::Stats),
+            origin: Origin::Builtin,
+        },
+        NamedView {
+            name: "burnup".into(),
+            spec: spec(ViewFilter::default(), None, ViewFormat::Burnup),
+            origin: Origin::Builtin,
+        },
         NamedView {
             name: "org-board".into(),
             // the index-sourced kanban — `myco org board`'s heir:
@@ -281,6 +300,9 @@ mod tests {
                 "epic",
                 "milestone",
                 "next",
+                "roadmap",
+                "stats",
+                "burnup",
                 "org-board",
                 "org-status"
             ]
