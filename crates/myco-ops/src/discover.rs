@@ -154,6 +154,9 @@ pub fn discover(
 /// own, the org entry's worktree answers instead. `None` (or an
 /// unreadable index) keeps discovery exactly as strict as before
 /// — unregistered repos still fail.
+///
+/// The org entry is scoped to the anchor's own lasius workspace
+/// when it designates one — see [`org_fallback`].
 pub fn discover_with(
     dir: Option<&Path>,
     root: Option<&Path>,
@@ -289,17 +292,22 @@ fn discover_in_index(
 ///    `worktree`s the cwd walk can't see;
 /// 2. the `ledger = "org"` entry's worktree — the org/global
 ///    ledger ledger-less members resolve to (`myco.toml`
-///    `[index] ledger` or a legacy `repos.toml` mark).
+///    `[index] ledger` or a legacy `repos.toml` mark). Inside a
+///    lasius workspace the org entry must be one of *its* clones:
+///    the merged universe also carries every `repos.toml`
+///    registration, so an unscoped first-`org` pick would file
+///    this repo's mutations into a foreign org's ledger (a
+///    registry `org` mark, or another workspace's org clone seen
+///    here as a registry extra). Only outside lasius — or in a
+///    workspace with no org-marked member — does the merged
+///    first-`org` answer stand, keeping the registry-only org
+///    pattern working.
 ///
 /// `None` when the repo isn't in the universe, has no qualifying
 /// ledger anywhere, or no org ledger is designated/valid — the
 /// caller then reports the ordinary "no project" error.
 fn org_fallback(repo: &Path, index: &dyn myco_index::Index, cfg: ConfigLoader) -> Option<Project> {
-    let repos = crate::universe::repos(repo, index, cfg)
-        .ok()?
-        .into_iter()
-        .map(|u| u.entry)
-        .collect::<Vec<_>>();
+    let repos = crate::universe::repos(repo, index, cfg).ok()?;
     // registry keys are canonical repo roots — match the arg and
     // its main worktree (cwd may sit in a linked worktree whose
     // toplevel isn't the registered root)
@@ -313,27 +321,38 @@ fn org_fallback(repo: &Path, index: &dyn myco_index::Index, cfg: ConfigLoader) -
     let entry = keys.iter().find_map(|k| {
         repos
             .iter()
-            .find(|r| canon(Path::new(r.path.as_str())) == *k)
+            .find(|r| canon(Path::new(r.entry.path.as_str())) == *k)
     })?;
-    if let Some(wt) = entry.worktree_path() {
+    if let Some(wt) = entry.entry.worktree_path() {
         let wt = wt.as_std_path();
         if qualifies(wt) {
             return Some(Project {
-                root: entry.path.as_std_path().to_path_buf(),
+                root: entry.entry.path.as_std_path().to_path_buf(),
                 worktree: canon(wt),
             });
         }
     }
+    // `universe::repos` only emits `RepoSource::Lasius` for
+    // clones of the anchor's own workspace — no workspace-root
+    // bookkeeping needed to scope the org pick
     let org = repos
         .iter()
-        .find(|r| r.ledger == myco_index::LedgerMode::Org)?;
-    let wt = org.worktree_path()?;
+        .find(|u| {
+            u.source == crate::universe::RepoSource::Lasius
+                && u.entry.ledger == myco_index::LedgerMode::Org
+        })
+        .or_else(|| {
+            repos
+                .iter()
+                .find(|u| u.entry.ledger == myco_index::LedgerMode::Org)
+        })?;
+    let wt = org.entry.worktree_path()?;
     let wt = wt.as_std_path();
     if !qualifies(wt) {
         return None;
     }
     Some(Project {
-        root: org.path.as_std_path().to_path_buf(),
+        root: org.entry.path.as_std_path().to_path_buf(),
         worktree: canon(wt),
     })
 }
@@ -840,6 +859,100 @@ mod tests {
             assert!(
                 discover_in_index(member.path(), None, None, test_loader(), Some(&index)).is_err()
             );
+        });
+    }
+
+    // --- org fallback across lasius workspaces -----------------------------
+
+    /// `<dir>/<name>` as a lasius workspace root — `lasius.toml`
+    /// plus the `repos/` clone dir.
+    fn lasius_ws(dir: &Path, name: &str) -> PathBuf {
+        let ws = dir.join(name);
+        std::fs::create_dir_all(ws.join("repos")).unwrap();
+        std::fs::write(ws.join("lasius.toml"), "org = \"o\"\n").unwrap();
+        ws
+    }
+
+    /// A clone-shaped repo at `<dir>/<name>` — `git init`, and
+    /// with `project` a qualifying `project/` worktree.
+    fn clone(dir: &Path, name: &str, project: bool) -> PathBuf {
+        let r = dir.join(name);
+        std::fs::create_dir_all(&r).unwrap();
+        git(&r, &["init", "-q"]);
+        git(&r, &["config", "user.email", "t@t"]);
+        git(&r, &["config", "user.name", "t"]);
+        if project {
+            crate::vcs::create_orphan_branch(&r, "project", "init").unwrap();
+            git(&r, &["worktree", "add", "project", "project"]);
+            std::fs::write(r.join("project/TODO.md"), "# TODO — x\n").unwrap();
+        }
+        r
+    }
+
+    /// The cross-org bug: two lasius workspaces, each with an
+    /// org-marked repo. Workspace A's org repo is *also* a
+    /// `repos.toml` registration (the real-world shape — every
+    /// registry entry lands in every workspace's merged
+    /// universe), and its path sorts first. A ledger-less member
+    /// of workspace B must resolve B's org ledger, never A's.
+    #[test]
+    fn org_fallback_scopes_org_to_own_lasius_workspace() {
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            let tmp = tempfile::tempdir().unwrap();
+            let ws_a = lasius_ws(tmp.path(), "ws-a");
+            let ws_b = lasius_ws(tmp.path(), "ws-b");
+            let org_a = clone(&ws_a.join("repos"), "org-a", true);
+            let org_b = clone(&ws_b.join("repos"), "org-b", true);
+            std::fs::write(org_b.join("myco.toml"), "[index]\nledger = \"org\"\n").unwrap();
+            let member = clone(&ws_b.join("repos"), "member", false);
+
+            let idx_dir = tempfile::tempdir().unwrap();
+            let index = RedbIndex::open_at(
+                camino::Utf8PathBuf::from_path_buf(idx_dir.path().join("idx")).unwrap(),
+            )
+            .unwrap();
+            // A's org mark lives in the *registry* — from B's
+            // universe it is a foreign extra, not a workspace clone
+            index
+                .register(&RepoEntry::new(canon_path(&org_a), "org-a").with_ledger(LedgerMode::Org))
+                .unwrap();
+
+            let p = discover_in_index(member.as_path(), None, None, test_loader(), Some(&index))
+                .unwrap();
+            assert_eq!(
+                p.worktree,
+                org_b.join("project").canonicalize().unwrap(),
+                "resolved the foreign workspace's org ledger"
+            );
+            assert_eq!(p.root, org_b.canonicalize().unwrap());
+        });
+    }
+
+    /// Same shape, but workspace B marks no org member — the
+    /// merged first-`org` answer stands (registry-only org
+    /// pattern preserved).
+    #[test]
+    fn org_fallback_workspace_without_org_uses_registry_org() {
+        temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
+            let tmp = tempfile::tempdir().unwrap();
+            let ws_a = lasius_ws(tmp.path(), "ws-a");
+            let ws_b = lasius_ws(tmp.path(), "ws-b");
+            let org_a = clone(&ws_a.join("repos"), "org-a", true);
+            let member = clone(&ws_b.join("repos"), "member", false);
+
+            let idx_dir = tempfile::tempdir().unwrap();
+            let index = RedbIndex::open_at(
+                camino::Utf8PathBuf::from_path_buf(idx_dir.path().join("idx")).unwrap(),
+            )
+            .unwrap();
+            index
+                .register(&RepoEntry::new(canon_path(&org_a), "org-a").with_ledger(LedgerMode::Org))
+                .unwrap();
+
+            let p = discover_in_index(member.as_path(), None, None, test_loader(), Some(&index))
+                .unwrap();
+            assert_eq!(p.worktree, org_a.join("project").canonicalize().unwrap());
+            assert_eq!(p.root, org_a.canonicalize().unwrap());
         });
     }
 }
