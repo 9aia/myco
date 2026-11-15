@@ -58,18 +58,70 @@ code branch, and writes a managed *Agent awareness* block into
 `AGENTS.md`. It is idempotent — run it again and a healthy
 worktree is verified, a damaged one repaired.
 
-## First items
+## Your first item — a full lifecycle
+
+Add a task; myco allocates `T-001` (the `t` counter in `meta.toml`)
+and appends one line to `project/TODO.md`:
 
 ```sh
-myco todo add "ship the thing" --pri high --label release
-myco item set T-001 --status in-progress
-myco status            # ledger digest
-myco todo done T-001   # the line moves to DONE.md — still browsable
+myco todo add "write the tutorial" --pri high --label docs
+# → added T-001 open pri:high #docs write the tutorial
 ```
 
+```markdown
+- [ ] T-001 write the tutorial · pri:high · created:2026-10-29 · #docs
+```
+
+Everything after the title is `·`-separated tokens — `status:`,
+`pri:`, `owner:`, `created:`, `#label`, `blocks:`, `links:`, `epic:`,
+`ms:`, `due:`, `est:`, `cycle:`, `note:` (see
+[the file spec](/explanation/file-spec) for the full grammar). Nest a
+sub-task under it — children are `- [ ]` lines indented two spaces
+under the parent, full items with the same state machine, and
+`done`/`defer` on a parent act on the whole subtree:
+
+```sh
+myco todo add "review it" --parent T-001
+```
+
+Move it through the state machine:
+
+```sh
+myco item set T-001 --status in-progress --owner devin
+myco view board
+myco status            # ledger digest
+```
+
+Statuses are `open → claimed → in-progress → done`, with `blocked`
+and `deferred` off the main path — see
+[the file spec](/explanation/file-spec#state-machine) for the legal
+transitions. `item set` walks the machine one step at a time; an
+illegal jump errors and tells you the valid targets. Park something
+instead of finishing it:
+
+```sh
+myco todo defer T-002        # → deferred; the line moves to BACKLOG.md
+myco backlog promote T-002   # → open; back to TODO.md
+```
+
+Leave a handoff, then finish:
+
+```sh
+myco handoff T-001 --note "Done: draft. Next: screenshots." --actor devin
+myco resume T-001       # minimal restart context
+myco todo done T-001    # the line moves to DONE.md — still browsable
+myco check              # validate files, state machine, index drift
+```
+
+`handoff` appends a dated entry to `handoffs/T-001.md`; `resume`
+prints the item, its `blocks:` deps, latest handoffs, and open
+checklist. Done tasks move to `DONE.md` — the done archive keeps
+completed work browsable (`myco done list`, `myco item show`) instead
+of vanishing; the `project` branch history is still the record.
+
 Every mutating verb is one atomic commit on the `project` branch —
-the branch history is the audit trail. `--no-commit` (or the
-`MYCO_NO_COMMIT` env var) opts out.
+the branch history is the audit trail (`git -C project log --oneline` shows them all). `--no-commit` (or the `MYCO_NO_COMMIT`
+env var) opts out.
 
 ## The interactive board
 
@@ -146,9 +198,9 @@ repairs what it safely can.
 
 ## Where next
 
-* [Your first item](/tutorials/first-item.md) — a guided walk
-  through a full task lifecycle.
-* [Set up myco on a repository](/how-to/init-repo.md) — discovery,
+* [Run the daily agent loop](/how-to/agent-loop) — how an agent
+  drives these verbs.
+* [Set up myco on a repository](/how-to/init-repo) — discovery,
   overrides, non-standard layouts.
 * [The worktree model](/explanation/worktree-model.md) — what is
   actually on disk and why.

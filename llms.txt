@@ -8,7 +8,7 @@ Agent-first project management — markdown ledger canonical, git the audit trai
 
 ### Tutorials
 
-- [Your first item](/myco/tutorials/first-item.md)
+- [Getting started](/myco/tutorials/getting-started.md)
 
 ### How-to
 
@@ -42,5 +42,4 @@ Agent-first project management — markdown ledger canonical, git the audit trai
 
 ### Other
 
-- [Getting started](/myco/tutorials/getting-started.md)
 - [Untitled](/myco/public/api/static.files/SourceSerif4-LICENSE-a2cfd9d5.md)
