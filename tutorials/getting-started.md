@@ -143,10 +143,10 @@ repairs what it safely can.
 
 ## Where next
 
-- [Your first item](tutorials/first-item.md) — a guided walk
+- [Your first item](/tutorials/first-item.md) — a guided walk
   through a full task lifecycle.
-- [Set up myco on a repository](how-to/init-repo.md) — discovery,
+- [Set up myco on a repository](/how-to/init-repo.md) — discovery,
   overrides, non-standard layouts.
-- [The worktree model](explanation/worktree-model.md) — what is
+- [The worktree model](/explanation/worktree-model.md) — what is
   actually on disk and why.
-- [CLI reference](reference/cli.md) — the full verb surface.
+- [CLI reference](/reference/cli.md) — the full verb surface.

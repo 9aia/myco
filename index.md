@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: Getting Started
-      link: /getting-started
+      link: /tutorials/getting-started
     - theme: alt
       text: Tutorial
       link: /tutorials/first-item
@@ -33,3 +33,12 @@ features:
     link: /how-to/handoff
     linkText: handoffs
 ---
+
+## Where to go next
+
+| You want to… | Go to |
+| --- | --- |
+| Install myco and track your first item | [Tutorial](/tutorials/getting-started) |
+| Do a task (init a repo, handoffs, org views) | [How-to](/how-to/init-repo) |
+| Understand the design (worktree model, ledger spec) | [Explanation](/explanation/worktree-model) |
+| Look up a verb, config field, or file format | [Reference](/reference/cli) |

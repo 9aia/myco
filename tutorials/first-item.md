@@ -5,7 +5,7 @@ create a task, move it through the state machine, and close it —
 seeing the markdown change under you each step.
 
 You'll need `myco` installed (see
-[getting started](../getting-started.md)) and a git repo to play
+[getting started](../tutorials/getting-started.md)) and a git repo to play
 in:
 
 ```sh

@@ -12,7 +12,7 @@ export default defineConfig({
   ignoreDeadLinks: [/\/api\//],
   themeConfig: {
     nav: [
-      { text: "Getting Started", link: "/getting-started" },
+      { text: "Getting Started", link: "/tutorials/getting-started" },
       { text: "Tutorial", link: "/tutorials/first-item" },
       { text: "How-to", link: "/how-to/init-repo" },
       { text: "Explanation", link: "/explanation/worktree-model" },
@@ -60,6 +60,7 @@ export default defineConfig({
           { text: "The worktree model", link: "/explanation/worktree-model" },
           { text: "The ledger file spec", link: "/explanation/file-spec" },
           { text: "Architecture", link: "/explanation/architecture" },
+          { text: "Boundaries", link: "/explanation/boundaries" },
           { text: "Concepts", link: "/explanation/concepts" },
           { text: "Decisions", link: "/explanation/decisions" },
           { text: "Flow: a task's life", link: "/explanation/flow" },
