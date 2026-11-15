@@ -6,6 +6,9 @@
 # coverage = the line-coverage floor in scripts/coverage-floor.
 set -euo pipefail
 
+export RUSTC_WRAPPER="${RUSTC_WRAPPER:-sccache}"
+export SCCACHE_CONF="${SCCACHE_CONF:-file://$HOME/.cache/sccache}"
+
 # Script location, resolved — the gate runs from a detached worktree,
 # so $PWD is the tree but the floor file travels with the script.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
