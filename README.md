@@ -1,12 +1,12 @@
 # myco
 
-*Records engine for agent work — views + mutations; project management is the shipped prelude.*
+*Records engine for agent work — views + mutations; project management
+is the shipped prelude.*
 
-A mycorrhizal network for your agents: tasks, signals, handoffs.
-Agent-first PM — a single `myco` CLI owns every deterministic write
-to a repo's `project/` worktree; the skill teaches agents the verbs,
-not file formats. Markdown is canonical and human-editable; history
-on the `project` branch is the audit trail.
+Agent-first PM in Rust. A single `myco` CLI owns every deterministic
+write to a repo's `project/` worktree; the skill teaches agents the
+verbs, not file formats. Markdown is canonical and human-editable;
+history on the `project` branch is the audit trail.
 
 ```
 agent ──► myco <verb> ──► write md ──► commit on `project` branch
@@ -14,87 +14,34 @@ agent ──► myco <verb> ──► write md ──► commit on `project` bra
               └──► --json everywhere + manifest/schema self-discovery
 ```
 
-## Features
+## Quickstart
 
-- **work memory, not a tracker product** — the ledger of intent:
-  todos, backlog, issues, proposals, plans, ADRs, handoffs
-- **hybrid store** — markdown in `project/` is canonical; a redb
-  index is a disposable derived cache powering board/report/org views
-- **agent-first wire** — `--json` on every verb plus `myco manifest`
-  and `myco schema` for self-discovery; `myco status --prompt` is a
-  token-sized digest
-- **continuity** — `myco handoff <id>` attaches resumable state at
-  session end; `myco resume <id>` returns the minimal context to
-  restart work
-- **reopenable archive** — `done`/`cancelled` aren't a one-way
-  door: `myco item set <id> --status open|deferred` pulls an item
-  (subtree included) back out of `DONE.md` with a `reopened`
-  handoff as the audit trail; `myco done remove <id>` deletes
-  archived junk outright
-- **PM-parity scheduling** — `due`/`est`/`cycle` fields on every
-  item, `[[cycles]]` iteration windows declared in `myco.toml`
-  (config, not ledger memory), a write-once `done:` archive stamp,
-  and three analytics view emits — `roadmap` (timeline lanes),
-  `stats` (count tallies), `burnup` (done-over-time per cycle) —
-  all over the same `filter → group → sort` pipeline, repo and
-  index sources alike
-- **numbered slugs, one registry** — `T-012`, `I-003`, `P-002`,
-  `ADR-0004`, `PL-001`; state machine owned by `myco-core`, invalid
-  states unrepresentable
-- **auto-commit per verb** — agents never touch git; every mutation
-  is one atomic commit on the `project` branch (`--no-commit` opt-out)
-- **ports-and-adapters crates** — `myco-core` (pure domain) +
-  `myco-shell` infra, `myco-store-md`,
-  `myco-index-redb`, `myco-testkit`, `myco-ops` (config loading
-  via `scarab-config`, index universe via `lasius-core`, git via
-  the shared `lasius-vcs` port),
-  `myco-driver`
-  (`tamias-driver-myco`, the pavo view driver — views plus the
-  engine ops surface; `myco-tui` remains the interactive
-  `myco ui` TUI); `myco-template` is planned
+```sh
+myco init                     # scaffold project/ worktree in a repo
+myco todo add "ship the thing"
+myco status --prompt          # token-sized board digest
+myco resume T-012             # pick work back up
+myco handoff T-012            # attach resumable state at session end
+```
+
+The `myco` command ships as a tamias `bins[]` shim —
+`tamias install 9aia:myco@<version>`, or `cargo xtask pack && tamias
+install --allow-drivers ./libraries/myco` from a checkout. See
+[Install](https://9aia.com/myco/getting-started) for details.
 
 ## Position in the stack
 
-myco = **work memory**. Neighbors: **sturn** (ephemeral
-coordination), **kuda** (code memory), **peregrin** (orchestration),
-**bupha**/**ci-gate** (CI gate — bupha is the CI repo; the org gate
-is mid-migration back from the peregrin `ci-gate` campaign),
-**mycena** (TODO/FIXME surfacing),
-**sepia** (session lifecycle → handoff/resume).
-
-## Status
-
-Working — the full verb surface is implemented (`myco manifest`
-lists it), including `myco ui` (interactive board TUI, default
-cargo feature), `myco serve` (JSON-RPC 2.0 over stdio, ADR-0001)
-with its one-shot `myco batch`, and `tamias-driver-myco` (the
-pavo view driver — read-only visual surface). `myco-template` is
-the one crate still planned.
-
-`myco check` validates the ledger **and the worktree it lives in**:
-two severities (ADR-0002) — `error` fails the gate, `warning` is
-reported and costs nothing — and the git-side invariants the audit
-trail depends on (ADR-0003): a detached `project/` worktree is an
-error `--fix` repairs, because every commit there is unreachable.
-
-## Install
-
-The `myco` command ships as a tamias `bins[]` shim (T-006): a
-generated script → `tamias bin exec` → `tamias-driver-myco cli` →
-the engine lib — full argv parity with the retired `myco` binary,
-including `myco serve` (JSON-RPC stdio) and `myco ui`.
-
-```sh
-tamias install 9aia:myco@0.2.0   # org registry (needs TAMIAS_REGISTRY_TOKEN)
-npm install -g 9aia/myco         # launcher → finds the tamias shim on PATH; bootstraps tamias + the pack on first run
-cargo xtask pack && tamias install --allow-drivers ./libraries/myco   # from a checkout
-cargo xtask install        # driver binary → ~/.cargo/bin (dev convenience)
-```
+myco = **work memory** — the ledger of intent (todos, issues,
+proposals, plans, ADRs, handoffs). Neighbors own theirs: **sturn**
+(ephemeral coordination), **kuda** (code memory), **peregrin**
+(orchestration), **bupha**/**ci-gate** (CI gate), **mycena**
+(TODO/FIXME surfacing), **sepia** (session lifecycle →
+handoff/resume).
 
 ## Docs
 
-Docs site lands on the `docs` branch (VitePress + Diátaxis →
-GitHub Pages). Repo docs:
-[AGENTS](AGENTS.md) · [CONTRIBUTING](CONTRIBUTING.md) ·
-[SECURITY](SECURITY.md) · [LICENSE](LICENSE) (MIT) ·
-[project](project/index.md) — TODO, backlog, ADRs, proposals
+- [Docs site](https://9aia.com/myco) — tutorials, how-tos, reference,
+  architecture (VitePress + Diátaxis, `docs/` worktree)
+- [AGENTS.md](AGENTS.md) — crate map, commands, rules, boundary
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md)
+- [LICENSE](LICENSE) (MIT) · [project ledger](project/index.md)
