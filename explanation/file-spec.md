@@ -14,7 +14,7 @@ machine-readable JSON Schema; `myco check` enforces it.
 | `meta.toml`  | `name` + `[next]` per-kind id counters (`t`, `i`, `p`, `adr`, `pl`) |
 | `TODO.md`    | open-line tasks (`T-`), `##` sections, nested children              |
 | `BACKLOG.md` | deferred items — same grammar, no checkbox                          |
-| `DONE.md`    | done archive — same grammar, status pinned `done`                   |
+| `DONE.md`    | task archive — same grammar, status `done` or `cancelled`          |
 | `index.md`   | free-form human index — verbatim, never rewritten                   |
 | `issues/`    | `issue-NNNN-<slug>.md` + `issues/archive/`                          |
 | `proposals/` | `proposal-NNNN-<slug>.md` + `proposals/archive/`                    |
@@ -38,28 +38,45 @@ each, filenames padded to four digits.
 
 ## <section>
 
-- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · due:2026-12-01 · est:3 · cycle:sprint-12 · note:<text>
+- [ ] T-012 <title> · status:in-progress · pri:high · owner:devin · created:2026-10-29 · #label · blocks:I-001 · links:PL-001,P-013 · epic:v2 · ms:1.0 · due:2026-12-01 · est:3 · cycle:sprint-12 · done:2026-12-19 · note:<text>
   - [ ] T-013 a sub-task — children are the same grammar, indented 2 spaces/level
 ```
 
 * `BACKLOG.md` lines are the same shape minus `[ ]`, default
   status `deferred`; `TODO.md` defaults to `open`. `DONE.md` is
-  the done archive — same line grammar, status pinned `done`,
-  read by `myco done list` and still resolvable via
-  `myco item show`.
+  the task archive — same line grammar, status `done`
+  (the default, token dropped) or `cancelled` (token kept, so
+  the archive records *why* it left), read by `myco done list`
+  and still resolvable via `myco item show`. The archive isn't
+  a one-way door: `item set --status open|deferred` reopens an
+  item (subtree included — it lands top-level in `TODO.md` or
+  `BACKLOG.md`) with a `reopened` handoff as the audit trail,
+  and `myco done remove` deletes an archived subtree outright.
+  Items stamped `status:done` also carry a write-once `done:`
+  archive stamp — the local date the item reached `done`, written
+  by the archive path (`todo done`, `issue resolve`, file-kind
+  moves, …) and never rewritten on re-save. `cancelled` items
+  stay unstamped. Reopening clears the stamp; a later re-archive
+  stamps the new date. Pre-stamp archives simply have no `done:` —
+  `myco view burnup` counts them only if another signal dates them.
 * `done` moves the line (subtree included) to `DONE.md` —
   completed work stays visible instead of vanishing;
-  `defer` moves it to `BACKLOG.md`; `promote` moves it back.
-* `done`/`defer` on a parent act on the whole subtree; on a
-  child, just that node.
+  `cancel` does the same but lands as `status:cancelled` —
+  "never doing this" is recorded honestly instead of polluting
+  the backlog or posing as done; `defer` moves it to
+  `BACKLOG.md`; `promote` moves it back. `cancel` also works
+  straight from `BACKLOG.md` — no promote needed.
+* `done`/`cancel`/`defer` on a parent act on the whole subtree;
+  on a child, just that node.
 * Token order is canonical (`status`, `pri`, `owner`, `created`,
   `#label`, `blocks`, `links`, `epic`, `ms`, `due`, `est`, `cycle`,
-  `note`) so emit produces minimal diffs. `ms` is the milestone
+  `done`, `note`) so emit produces minimal diffs. `ms` is the milestone
   token — kept short. `links:` declares kind-agnostic associations
   — the plan, proposal, or ADR an item belongs to (`myco item set --links` / `--unlink`). `due` is a `YYYY-MM-DD` date, `est` a
   point estimate (0–1000, `--est`/`--estimate`), `cycle` an
-  iteration name — the scheduling trio (`due`/`estimate`/`cycle`
-  in file frontmatter).
+  iteration name, `done` the archive stamp (above) — the
+  scheduling trio (`due`/`estimate`/`cycle` in file frontmatter,
+  `done` alongside them once archived).
 * Patterns: actors `[A-Za-z0-9._:-]+`, labels `[A-Za-z0-9_-]+`,
   epic/ms/cycle names `[A-Za-z0-9_.-]+`, priority
   `low|med|high|crit`.
@@ -83,6 +100,7 @@ milestone = "1.0"
 due = "2026-12-01"
 estimate = 3
 cycle = "sprint-12"
+done = "2026-12-19"
 +++
 
 # Title
@@ -93,7 +111,8 @@ sections per kind.
 
 Frontmatter keys: `id`, `title`, `status`, `created`, `owner`,
 `priority`, `labels`, `blocks`, `links`, `note`, `superseded_by`,
-`supersedes`, `epic`, `milestone`, `due`, `estimate`, `cycle`.
+`supersedes`, `epic`, `milestone`, `due`, `estimate`, `cycle`,
+`done`.
 `priority` spells the `pri:`
 token (`low|med|high|crit`) — the serde full names `medium` /
 `critical` still read but re-emit as tokens on any write. `due`
@@ -106,17 +125,18 @@ still finds archived items.
 
 ## State machine
 
-Six statuses; `item set --status` and kind verbs walk it one
+Seven statuses; `item set --status` and kind verbs walk it one
 legal step at a time:
 
-| from          | can go to                            |
-| ------------- | ------------------------------------ |
-| `open`        | `claimed`, `in-progress`, `deferred` |
-| `claimed`     | `in-progress`, `open`, `deferred`    |
-| `in-progress` | `blocked`, `done`, `deferred`, `open` |
-| `blocked`     | `in-progress`, `open`, `deferred`    |
-| `deferred`    | `open`                               |
-| `done`        | — (terminal)                         |
+| from          | can go to                                            |
+| ------------- | ---------------------------------------------------- |
+| `open`        | `claimed`, `in-progress`, `deferred`, `cancelled`    |
+| `claimed`     | `in-progress`, `open`, `deferred`, `cancelled`       |
+| `in-progress` | `blocked`, `done`, `deferred`, `open`, `cancelled`   |
+| `blocked`     | `in-progress`, `open`, `deferred`, `cancelled`       |
+| `deferred`    | `open`, `cancelled`                                  |
+| `done`        | `open`, `deferred` (reopen — leaves `DONE.md`)       |
+| `cancelled`   | `open`, `deferred` (same)                            |
 
 Proposal words alias the machine: `draft` = `open`, `accepted` =
 `done`, `rejected` = `deferred` — the transition still walks the
