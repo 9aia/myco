@@ -51,3 +51,6 @@ text = """
 
 [api]
 target_dir = "target/docs-api"
+
+[check]
+profile = "engine"
