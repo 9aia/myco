@@ -49,9 +49,9 @@ agent ──► myco <verb> ──► write md ──► commit on `project` bra
   via `scarab-config`, index universe via `lasius-core`, git via
   the shared `lasius-vcs` port),
   `myco-driver`
-  (`tamias-driver-myco`, the pavo view driver — the interactive
-  surface; `myco-tui` was retired for it); `myco-template` is
-  planned
+  (`tamias-driver-myco`, the pavo view driver — views plus the
+  engine ops surface; `myco-tui` remains the interactive
+  `myco ui` TUI); `myco-template` is planned
 
 ## Position in the stack
 
