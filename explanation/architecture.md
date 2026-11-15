@@ -91,6 +91,25 @@ different and worse product. Mutations stay code as well: the
 prelude configures *what* exists, never *how* writes behave
 (ADR-0004, one registry).
 
+## Where it sits
+
+Myco is an **engine** in the 9aia stack — it owns one domain
+(work memory) and ships its behavior as tamias-distributed content:
+
+```
+tamias (distribution)  →  engines  →  orchestration  →  surfaces
+                          myco ◄───     peregrin           pavo,
+                          cuora,        campaigns,         myco ui,
+                          kuda,         bupha CI           myco serve
+                          mimus…
+```
+
+Everything above consumes the ledger *through* myco: peregrin
+campaigns embed it via `myco serve`, sepia sessions drive
+`handoff`/`resume`, agents get the shimmed `myco` command via the
+`libraries/myco` tamias pack. myco itself never orchestrates —
+daemons, arbitration, and multi-actor views belong to peregrin.
+
 ## Boundary — work memory only
 
 myco owns the ledger of intent (tasks, issues, proposals, plans,
