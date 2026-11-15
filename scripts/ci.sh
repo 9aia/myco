@@ -49,3 +49,8 @@ if [ "$COVERAGE_FLOOR" != "0" ]; then
 else
   echo "coverage: floor unset (scripts/coverage-floor) — skipping" >&2
 fi
+
+# Docs contract — cypera check + docs/ drift gate. Materializes a
+# detached docs-branch worktree when the run tree lacks one (bupha
+# gate runs), so it is hermetic in CI.
+bash scripts/docs-check.sh
