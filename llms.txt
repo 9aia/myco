@@ -34,6 +34,9 @@ Agent-first project management — markdown ledger canonical, git the audit trai
 - [The worktree model](/myco/explanation/worktree-model.md)
 - [The ledger file spec](/myco/explanation/file-spec.md)
 - [Architecture](/myco/explanation/architecture.md)
+- [Concepts](/myco/explanation/concepts.md)
+- [Decisions](/myco/explanation/decisions.md)
+- [Flow: a task's life in the ledger](/myco/explanation/flow.md)
 - [Release model](/myco/explanation/release-model.md)
 
 ### Other

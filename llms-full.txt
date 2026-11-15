@@ -3002,6 +3002,25 @@ different and worse product. Mutations stay code as well: the
 prelude configures *what* exists, never *how* writes behave
 (ADR-0004, one registry).
 
+## Where it sits
+
+Myco is an **engine** in the 9aia stack — it owns one domain
+(work memory) and ships its behavior as tamias-distributed content:
+
+```
+tamias (distribution)  →  engines  →  orchestration  →  surfaces
+                          myco ◄───     peregrin           pavo,
+                          cuora,        campaigns,         myco ui,
+                          kuda,         bupha CI           myco serve
+                          mimus…
+```
+
+Everything above consumes the ledger *through* myco: peregrin
+campaigns embed it via `myco serve`, sepia sessions drive
+`handoff`/`resume`, agents get the shimmed `myco` command via the
+`libraries/myco` tamias pack. myco itself never orchestrates —
+daemons, arbitration, and multi-actor views belong to peregrin.
+
 ## Boundary — work memory only
 
 myco owns the ledger of intent (tasks, issues, proposals, plans,
@@ -3020,6 +3039,258 @@ ADRs, handoffs). Neighbors own their own memory:
 
 Anything needing a daemon, a multi-machine view, or arbitration
 between actors belongs to peregrin, not here.
+
+---
+
+---
+url: /myco/explanation/concepts.md
+---
+# Concepts
+
+The vocabulary of the myco ledger — each term defined once.
+
+## The ledger
+
+* **Ledger** — the `project/` worktree: the canonical record of intent
+  for one repo. Markdown files on an orphan `project` branch; git
+  history is the audit trail.
+* **Item** — one unit of work or thought, with a prefixed id
+  (`T-001` task, `I-001` issue, `P-001` proposal, `PL-001` plan,
+  `ADR-0001` decision). Tasks are lines in `TODO.md`/`BACKLOG.md`/
+  `DONE.md`; the file-backed kinds get one markdown file each.
+* **Kind** — the item type (`task`, `issue`, `proposal`, `adr`, `plan`,
+  plus `[[kinds]]` customs). Each kind has a prefix, a storage shape
+  (`doc` lines or `dir` files), and its own state vocabulary.
+* **State machine** — the seven statuses (`open`, `claimed`,
+  `in-progress`, `blocked`, `deferred`, `done`, `cancelled`) and the
+  legal transitions between them. Verbs walk it one step at a time.
+* **Handoff** — an append-only dated note on an item
+  (`handoffs/<ID>.md`) recording done/next/open at session end.
+  `resume` reads the latest entries back as restart context.
+* **View** — a declarative read spec (`filter → group_by → sort →
+  limit → format`) named in `[views]` config or built in (`board`,
+  `open`, `epic`, `burnup`, …). Views are the *only* read surface —
+  there are no per-view verbs.
+* **Verb** — a mutation or read the engine owns (`todo add`,
+  `item set`, `handoff`, `view`, …). Every mutating verb is one
+  atomic commit on `project`.
+
+## Engine and prelude
+
+* **Engine** — the code-owned half: file spec, state machine, id
+  registry, commit-per-mutation, view evaluation. Must never be data.
+* **Prelude** — the seeded config half: the five builtin `[[kinds]]`,
+  the builtin views, the `[verbs]` aliases `myco init` writes into
+  `myco.toml`. PM is the shipped prelude, not the product boundary.
+* **Index** — the derived, disposable cache (redb + `repos.toml`
+  under `~/.local/share/myco`) powering `status`/`view`/`org` reads.
+  Markdown stays canonical; the index can be deleted and rebuilt.
+* **Universe** — the set of repos an index-sourced view spans: lasius
+  workspace clones ∪ `repos.toml` registrations.
+* **Ledger state** — per universe repo: `local` (own `project/`),
+  `none` (ledger-less — verbs resolve to the org ledger), or `org`
+  (the one repo every `none` member points at).
+
+## Surfaces
+
+* **`myco` command** — a tamias `bins[]` shim: generated script →
+  `tamias bin exec` → `tamias-driver-myco cli` → the engine lib.
+  There is no cargo-installed `myco` binary.
+* **`tamias-driver-myco`** — the driver binary: pavo view driver +
+  engine ops surface (`ops` manifest, `cli.<verb>` queries, `cli`
+  shim passthrough). Writes always ride the engine's verbs.
+* **`myco ui`** — the ratatui board TUI, a front-end over `myco-ops`.
+* **`myco serve` / `myco batch`** — the embedding surfaces: ndjson
+  JSON-RPC over stdio for daemons, and one-shot batched requests for
+  scripts and agent fan-out reads.
+
+---
+
+---
+url: /myco/explanation/decisions.md
+---
+# Decisions
+
+ADR-lite: the calls that shaped myco, the alternatives rejected, and
+the consequences we live with. Deeper versions live in the ledger's
+own `adrs/` — this page is the map, not the archive.
+
+## Markdown is canonical; the index is disposable
+
+**Decision:** `project/` files are the source of truth; the redb
+index is a derived cache that `status`/`view`/`org` read through and
+`index rebuild` regenerates.
+
+**Alternatives:** a database as the store; git as the only read path
+(no index at all).
+
+**Consequence:** the ledger is human-editable, diffable, and survives
+index corruption — at the cost that every read pays a snapshot sync
+and `check` must reconcile drift between the two.
+
+## An orphan branch + worktree, not files on `main`
+
+**Decision:** the ledger lives on a `project` orphan branch mounted
+as a `project/` worktree; code branches gitignore it.
+
+**Alternatives:** ledger files committed on `main`; a separate repo
+per ledger; a `.myco/` dir inside the code tree.
+
+**Consequence:** ledger commits never pollute code history and PRs,
+and both trees stay checked out at once — but it requires git
+worktree machinery, and a detached HEAD silently breaks the audit
+trail (enforced by `check` + mutating-verb refusal, ADR-0003).
+
+## One registry of verbs; the prelude is config
+
+**Decision:** mutations are code in one verb registry; what exists —
+kinds, views, verb aliases — is layered config (`myco.toml`).
+
+**Alternatives:** per-kind verbs hard-coded; a schema DSL over
+arbitrary item fields; user-defined mutation logic.
+
+**Consequence:** `myco init`'s seeded prelude makes PM the default
+program of a general records engine (P-009), and custom kinds ride
+the generic surface for free — but mutations can never be redefined
+by config, which is the point (ADR-0004).
+
+## Commit-per-mutation on `project`
+
+**Decision:** every mutating verb lands as one atomic conventional
+commit; `--no-commit`/`MYCO_NO_COMMIT` batches for scripted flows.
+
+**Alternatives:** write files, commit on demand; a WAL outside git.
+
+**Consequence:** `git -C project log` *is* the audit trail — no
+separate store to keep honest — at the price of one commit per verb
+(noise is accepted; the branch is orphaned precisely so it doesn't
+matter).
+
+## No cargo binary; the command is a tamias shim
+
+**Decision:** `myco-cli` is lib-only; the `myco` command ships as a
+tamias pack whose `bins[]` shim dispatches `cli` → the engine.
+
+**Alternatives:** a `[[bin]]` in `myco-cli`; crates.io releases.
+
+**Consequence:** install/update lifecycle is tamias's problem
+(`tamias install 9aia:myco@<ver>`), and the engine is drivable
+in-process by `myco-driver` — but there is no `cargo install myco`,
+and org policy keeps the crates off crates.io.
+
+## Git through `lasius-vcs`, not a git library
+
+**Decision:** all git access goes through the shared `lasius-vcs`
+port (git CLI impl) inside `myco-ops::vcs`.
+
+**Alternatives:** git2/gix bindings; shelling out ad hoc per call.
+
+**Consequence:** one git implementation org-wide, no binding
+dependency or version drift — at the cost of depending on a `git`
+binary on PATH and parsing CLI behavior.
+
+---
+
+---
+url: /myco/explanation/flow.md
+---
+# Flow: a task's life in the ledger
+
+One end-to-end narrative — what actually happens on disk and in git
+when a piece of work goes from "someone said so" to "done". Every hop
+is a verb; nothing hand-edits `project/`.
+
+## 1. Capture
+
+A human says "we should ship the thing." The agent offers to record
+it; on a yes:
+
+```sh
+myco todo add "ship the thing" --pri high --label release
+# → added T-001 open pri:high #release ship the thing
+```
+
+Under the hood: `meta.toml`'s `[next] t` counter allocates `T-001`,
+one line lands in `project/TODO.md`, and the whole thing commits as
+`chore: add T-001` on the orphan `project` branch. Your code branch
+never sees it.
+
+## 2. Orient
+
+Next session, anyone — human or agent — asks "what's on the board?":
+
+```sh
+myco status --prompt
+```
+
+The index (redb snapshot, rebuilt lazily if stale) answers without
+re-parsing markdown: counts by kind, what's claimed, what's open —
+sized for a context window. `myco view board` gives the five-lane
+kanban; `myco ui` gives the interactive version.
+
+## 3. Claim and work
+
+```sh
+myco item set T-001 --status claimed --owner devin
+myco item set T-001 --status in-progress
+```
+
+Each is one legal state-machine step and one commit. `owner:devin`
+is a namespaced actor string — several agents can share one ledger
+without stepping on each other. Deps are data too: `--blocks I-003`
+records that this task blocks an issue; `resume` surfaces them.
+
+## 4. Hand off
+
+The session ends mid-work:
+
+```sh
+myco handoff T-001 --actor devin --session cli:abc123 \
+  --note "Done: draft. Next: screenshots. Open: hero copy."
+```
+
+An append-only `##` entry lands in `handoffs/T-001.md`, one commit.
+Nothing is lost; nothing is rewritten.
+
+## 5. Resume
+
+A week later, a fresh session:
+
+```sh
+myco resume T-001
+```
+
+Prints the item, its `blocks:` titles, the latest handoff entries,
+and the open `- [ ]` checklist — the minimal restart context. If the
+session had *died* rather than ended, `myco interrupt --session
+cli:abc123` would have walked claimed items back to `open` with an
+`interrupted` marker instead.
+
+## 6. Done
+
+```sh
+myco todo done T-001
+myco check
+```
+
+The line (subtree included) moves from `TODO.md` to `DONE.md` with a
+write-once `done:` stamp — completed work stays browsable via
+`myco done list` instead of vanishing. `check` validates file spec,
+state machine, and index drift; every step above was already a commit
+on `project`, so `git -C project log` replays the item's whole life.
+
+## The shape underneath
+
+```
+intent ──► markdown (canonical) ──► index (derived) ──► views (reads)
+                │                        ▲
+                └── verbs ──► commit-per-mutation on `project` branch
+```
+
+Capture is a write; orient/resume are reads over the disposable
+index; the audit trail is git itself. See
+[architecture](architecture.md) for the crates and
+[the file spec](file-spec.md) for the grammar each step produces.
 
 ---
 

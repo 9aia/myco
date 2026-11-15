@@ -7,7 +7,7 @@ local commits onto <code>origin/&lt;branch&gt;</code> when diverged, then repair
 what a merge can break — <code>meta.toml</code> counters reconcile via
 <code>check --fix</code>, and duplicate ids (two writers minting the same
 <code>T-NNN</code>) are renumbered remote-wins by
-[<code>crate::check::renumber_duplicates</code>].</p>
+<code>crate::check::renumber_duplicates</code>.</p>
 <p>A rebase conflict stops mid-flight with the conflicted files
 reported — resolve them (<code>git add</code> + <code>git rebase --continue</code>)
 and run <code>myco sync</code> again, or <code>myco sync --abort</code> to bail.</p>

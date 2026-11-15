@@ -42,14 +42,14 @@ with the terminal-only rule. Fails on non-terminal items and
 the same line-grammar limits as the other ledger docs.</dd><dt><a class="fn" href="fn.emit_entry.html" title="fn myco_store_md::emit_entry">emit_<wbr>entry</a></dt><dd>One <code>## &lt;date&gt; · &lt;actor&gt;[ · session:&lt;id&gt;]</code> block + note —
 <code>append_handoff</code> writes this verbatim. The note may not contain
 a <code>##</code> heading (it would read back as the next entry).</dd><dt><a class="fn" href="fn.emit_handoff_file.html" title="fn myco_store_md::emit_handoff_file">emit_<wbr>handoff_<wbr>file</a></dt><dd>Canonical <code>handoffs/&lt;ID&gt;.md</code> — header + entries in file order.</dd><dt><a class="fn" href="fn.emit_item_file.html" title="fn myco_store_md::emit_item_file">emit_<wbr>item_<wbr>file</a></dt><dd>Canonical item file — <code>+++\n&lt;toml&gt;+++\n\n&lt;body&gt;\n</code>. The model
-is validated first ([<code>line::check_item</code>] — the same validity
+is validated first (<code>line::check_item</code> — the same validity
 source as the line grammar) so emit can’t write a file parse
 would reject; children are an error, never silently dropped.</dd><dt><a class="fn" href="fn.emit_meta.html" title="fn myco_store_md::emit_meta">emit_<wbr>meta</a></dt><dd>Canonical <code>meta.toml</code>.</dd><dt><a class="fn" href="fn.emit_todo.html" title="fn myco_store_md::emit_todo">emit_<wbr>todo</a></dt><dd>Canonical <code>TODO.md</code> — deterministic output. Fails on models the
 grammar can’t express (<code>done</code> items, <code>·</code> in titles, unsectioned
 sections after index 0, …).</dd><dt><a class="fn" href="fn.frontmatter_id.html" title="fn myco_store_md::frontmatter_id">frontmatter_<wbr>id</a></dt><dd><code>id = "…"</code> pulled out of a <em>closed</em> <code>+++</code> frontmatter block —
 the cheap probe for when the strict parse isn’t needed (or
 already failed). <code>None</code> for files with no <code>+++</code> fence, no
-closing fence within [<code>FRONTMATTER_PROBE_MAX</code>] lines, or no
+closing fence within <code>FRONTMATTER_PROBE_MAX</code> lines, or no
 parseable <code>id</code> line — including frontmatter-less files that
 merely <em>borrow</em> an id number via their filename. The close
 requirement is what keeps a body’s <code>id = "…"</code> (a code block,
@@ -81,7 +81,7 @@ simple subset — top-level <code>key: scalar</code>, <code>key: [a, b]</code> i
 lists, <code>#</code> comments, blank lines — and returns the source with
 a <code>+++</code> fence, still <em>unvalidated</em>: callers re-parse. <code>None</code>
 when the file doesn’t open with a closed <code>---</code> block, the block
-exceeds [<code>REPAIR_MAX</code>] lines, or a frontmatter line isn’t
+exceeds <code>REPAIR_MAX</code> lines, or a frontmatter line isn’t
 <code>key: value</code> at column 0 (nested maps, <code>- </code> list items — shapes
 this doesn’t claim to understand).</dd><dt><a class="fn" href="fn.write_atomic.html" title="fn myco_store_md::write_atomic">write_<wbr>atomic</a></dt><dd>Write <code>contents</code> to <code>path</code> atomically: same-dir tmp file +
 <code>rename(2)</code>; fsync before the rename. Parent dirs are created.</dd></dl></section></div></main></body></html>

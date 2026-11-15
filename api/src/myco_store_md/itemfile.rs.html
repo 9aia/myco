@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a><span class="doccomment">/// `id = "…"` pulled out of a *closed* `+++` frontmatter block —
 <a href=#86 id=86 data-nosnippet>86</a>/// the cheap probe for when the strict parse isn't needed (or
 <a href=#87 id=87 data-nosnippet>87</a>/// already failed). `None` for files with no `+++` fence, no
-<a href=#88 id=88 data-nosnippet>88</a>/// closing fence within [`FRONTMATTER_PROBE_MAX`] lines, or no
+<a href=#88 id=88 data-nosnippet>88</a>/// closing fence within `FRONTMATTER_PROBE_MAX` lines, or no
 <a href=#89 id=89 data-nosnippet>89</a>/// parseable `id` line — including frontmatter-less files that
 <a href=#90 id=90 data-nosnippet>90</a>/// merely *borrow* an id number via their filename. The close
 <a href=#91 id=91 data-nosnippet>91</a>/// requirement is what keeps a body's `id = "…"` (a code block,
@@ -157,7 +157,7 @@
 <a href=#157 id=157 data-nosnippet>157</a>/// lists, `#` comments, blank lines — and returns the source with
 <a href=#158 id=158 data-nosnippet>158</a>/// a `+++` fence, still *unvalidated*: callers re-parse. `None`
 <a href=#159 id=159 data-nosnippet>159</a>/// when the file doesn't open with a closed `---` block, the block
-<a href=#160 id=160 data-nosnippet>160</a>/// exceeds [`REPAIR_MAX`] lines, or a frontmatter line isn't
+<a href=#160 id=160 data-nosnippet>160</a>/// exceeds `REPAIR_MAX` lines, or a frontmatter line isn't
 <a href=#161 id=161 data-nosnippet>161</a>/// `key: value` at column 0 (nested maps, `- ` list items — shapes
 <a href=#162 id=162 data-nosnippet>162</a>/// this doesn't claim to understand).
 <a href=#163 id=163 data-nosnippet>163</a></span><span class="kw">pub fn </span>repair_frontmatter(src: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
@@ -502,7 +502,7 @@
 <a href=#502 id=502 data-nosnippet>502</a>}
 <a href=#503 id=503 data-nosnippet>503</a>
 <a href=#504 id=504 data-nosnippet>504</a><span class="doccomment">/// Canonical item file — `+++\n&lt;toml&gt;+++\n\n&lt;body&gt;\n`. The model
-<a href=#505 id=505 data-nosnippet>505</a>/// is validated first ([`line::check_item`] — the same validity
+<a href=#505 id=505 data-nosnippet>505</a>/// is validated first (`line::check_item` — the same validity
 <a href=#506 id=506 data-nosnippet>506</a>/// source as the line grammar) so emit can't write a file parse
 <a href=#507 id=507 data-nosnippet>507</a>/// would reject; children are an error, never silently dropped.
 <a href=#508 id=508 data-nosnippet>508</a></span><span class="kw">pub fn </span>emit_item_file(file: <span class="kw-2">&amp;</span>ItemFile) -&gt; <span class="prelude-ty">Result</span>&lt;String, EmitError&gt; {

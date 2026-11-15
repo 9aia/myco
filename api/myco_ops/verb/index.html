@@ -11,8 +11,8 @@ wins — a config verb can never hide the stable surface.</p>
 facts <code>[verbs]</code> resolution needs for collision and
 alias-target checks.</dd><dt><a class="struct" href="struct.NamedVerb.html" title="struct myco_ops::verb::NamedVerb">Named<wbr>Verb</a></dt><dd>A resolved config-declared verb — shadowed/invalid entries are
 dropped from the effective set and reported as warnings.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.is_valid_verb_name.html" title="fn myco_ops::verb::is_valid_verb_name">is_<wbr>valid_<wbr>verb_<wbr>name</a></dt><dd>Verb names are top-level CLI words — <code>[A-Za-z0-9_-]+</code>, never
-flag-shaped.</dd><dt><a class="fn" href="fn.named_verbs.html" title="fn myco_ops::verb::named_verbs">named_<wbr>verbs</a></dt><dd>[<code>merged_verbs</code>] with strict config handling — <code>myco serve</code>,
-<code>myco check</code>.</dd><dt><a class="fn" href="fn.named_verbs_lenient.html" title="fn myco_ops::verb::named_verbs_lenient">named_<wbr>verbs_<wbr>lenient</a></dt><dd>[<code>merged_verbs</code>] tolerant of a <em>missing</em> config — the verb
+flag-shaped.</dd><dt><a class="fn" href="fn.named_verbs.html" title="fn myco_ops::verb::named_verbs">named_<wbr>verbs</a></dt><dd><code>merged_verbs</code> with strict config handling — <code>myco serve</code>,
+<code>myco check</code>.</dd><dt><a class="fn" href="fn.named_verbs_lenient.html" title="fn myco_ops::verb::named_verbs_lenient">named_<wbr>verbs_<wbr>lenient</a></dt><dd><code>merged_verbs</code> tolerant of a <em>missing</em> config — the verb
 dispatch path: <code>$MYCO_CONFIG</code> naming a missing file degrades
 to no config verbs; an unparseable config still errors.</dd><dt><a class="fn" href="fn.raw_verb.html" title="fn myco_ops::verb::raw_verb">raw_<wbr>verb</a></dt><dd>One <em>raw</em> <code>[verbs]</code> entry by name — lenient, no validation.
 For the “is this builtin shadowed” check the effective set

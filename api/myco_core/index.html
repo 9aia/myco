@@ -9,7 +9,7 @@ agnostic — <code>myco-store-md</code> owns the markdown grammar.</p>
 <code>human:</code>/<code>agent:</code>-style prefix is allowed but not required.</dd><dt><a class="mod" href="analytics/index.html" title="mod myco_core::analytics">analytics</a></dt><dd>Analytics emits — roadmap/timeline, stats, and burnup over the
 filtered view universe (P-012). Pure domain: callers hand in
 filter-applied <a href="view/struct.Scoped.html" title="struct myco_core::view::Scoped"><code>Scoped</code></a> items (the same universe <code>eval</code>
-consumes); [<code>myco-cli</code>] renders the results. The design
+consumes); <code>myco-cli</code> renders the results. The design
 principle holds — <strong>fields are data, scheduling is config,
 views are emits</strong>: these functions only read <code>Item</code> fields and
 <code>[[cycles]]</code> config, never ledger state.</dd><dt><a class="mod" href="date/index.html" title="mod myco_core::date">date</a></dt><dd><code>time::Date</code> helpers — myco serializes dates as <code>YYYY-MM-DD</code>
