@@ -12,6 +12,7 @@ export default defineConfig({
   ignoreDeadLinks: [/\/api\//],
   themeConfig: {
     nav: [
+      { text: "9aia", link: "https://9aia.com", target: "_blank" },
       { text: "Getting Started", link: "/tutorials/getting-started" },
       { text: "How-to", link: "/how-to/init-repo" },
       { text: "Explanation", link: "/explanation/worktree-model" },
@@ -23,7 +24,6 @@ export default defineConfig({
           { text: "llms-full.txt", link: "https://9aia.com/myco/llms-full.txt", target: "_blank" },
         ],
       },
-      { text: "9aia", link: "https://9aia.com" },
     ],
     sidebar: [
       {
