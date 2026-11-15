@@ -8,7 +8,7 @@
 //! what a merge can break — `meta.toml` counters reconcile via
 //! `check --fix`, and duplicate ids (two writers minting the same
 //! `T-NNN`) are renumbered remote-wins by
-//! [`crate::check::renumber_duplicates`].
+//! `crate::check::renumber_duplicates`.
 //!
 //! A rebase conflict stops mid-flight with the conflicted files
 //! reported — resolve them (`git add` + `git rebase --continue`)

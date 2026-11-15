@@ -9,7 +9,7 @@
 //! moves one raw line in and out (stdio first; a unix socket can
 //! slot in untouched), and [`WireProtocol`] frames requests and
 //! responses (JSON-RPC 2.0 first — the default, not the spec).
-//! [`Server::dispatch`] is the verb surface itself and knows
+//! `Server::dispatch` is the verb surface itself and knows
 //! neither. stdin IS the wire — no served method reads content
 //! from it. `myco batch` drives the identical surface one-shot
 //! through [`Server::handle_line`] — NDJSON in, NDJSON out.
@@ -318,7 +318,7 @@ impl SpecPatch {
 
 // ---------------------------------------------------------------- dispatch
 
-/// Dispatch failure — [`Server::respond`] maps these to wire
+/// Dispatch failure — `Server::respond` maps these to wire
 /// codes; dispatch itself knows no wire.
 #[derive(Debug)]
 pub enum Fail {

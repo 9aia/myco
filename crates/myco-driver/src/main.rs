@@ -3,7 +3,7 @@
 //!
 //! Verbs (the tamias driver contract):
 //!
-//! - `manifest` — print the [`DriverManifest`] JSON (discovery
+//! - `manifest` — print the [`DriverManifest`](pavo_protocol::DriverManifest) JSON (discovery
 //!   probe; never touches project state).
 //! - `capabilities` — `{"capabilities": ["pavo"], "verbs": […]}`.
 //! - `ops` — the engine ops manifest: every `myco` CLI verb as a
@@ -204,7 +204,7 @@ fn main() {
     std::process::exit(code);
 }
 
-/// `cli` verb argv (after the `cli` token) → engine argv (argv[0]
+/// `cli` verb argv (after the `cli` token) → engine argv (argv\[0\]
 /// included). `tamias bin exec` prepends the standard driver flags
 /// — exactly `--dir <entry> --name <pkg>` — which the engine
 /// doesn't know; consume that one leading pair (`--flag v` and

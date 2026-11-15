@@ -85,7 +85,7 @@ const FRONTMATTER_PROBE_MAX: usize = 128;
 /// `id = "…"` pulled out of a *closed* `+++` frontmatter block —
 /// the cheap probe for when the strict parse isn't needed (or
 /// already failed). `None` for files with no `+++` fence, no
-/// closing fence within [`FRONTMATTER_PROBE_MAX`] lines, or no
+/// closing fence within `FRONTMATTER_PROBE_MAX` lines, or no
 /// parseable `id` line — including frontmatter-less files that
 /// merely *borrow* an id number via their filename. The close
 /// requirement is what keeps a body's `id = "…"` (a code block,
@@ -157,7 +157,7 @@ fn is_bare_key(key: &str) -> bool {
 /// lists, `#` comments, blank lines — and returns the source with
 /// a `+++` fence, still *unvalidated*: callers re-parse. `None`
 /// when the file doesn't open with a closed `---` block, the block
-/// exceeds [`REPAIR_MAX`] lines, or a frontmatter line isn't
+/// exceeds `REPAIR_MAX` lines, or a frontmatter line isn't
 /// `key: value` at column 0 (nested maps, `- ` list items — shapes
 /// this doesn't claim to understand).
 pub fn repair_frontmatter(src: &str) -> Option<String> {
@@ -502,7 +502,7 @@ pub fn parse_item_file(src: &str, spec: &KindSpec, path: &str) -> Result<ItemFil
 }
 
 /// Canonical item file — `+++\n<toml>+++\n\n<body>\n`. The model
-/// is validated first ([`line::check_item`] — the same validity
+/// is validated first (`line::check_item` — the same validity
 /// source as the line grammar) so emit can't write a file parse
 /// would reject; children are an error, never silently dropped.
 pub fn emit_item_file(file: &ItemFile) -> Result<String, EmitError> {

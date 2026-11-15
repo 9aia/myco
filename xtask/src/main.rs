@@ -10,7 +10,7 @@
 //!   bins[] shim — `cargo xtask pack` + `tamias install
 //!   ./libraries/myco`)
 //! - `pack`     — stage libraries/myco driver payload
-//!   (release tamias-driver-myco → drivers/bin/<triple>/)
+//!   (release tamias-driver-myco → drivers/bin/&lt;triple&gt;/)
 //! - `site`     — build the docs site (docs/ worktree, VitePress)
 
 use std::process::{Command, ExitStatus};

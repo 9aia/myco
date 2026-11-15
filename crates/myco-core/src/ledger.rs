@@ -143,7 +143,7 @@ impl Ledger {
         push_item(&mut self.todo.sections, item, section);
     }
 
-    /// Append to BACKLOG.md — same placement rule as [`put_todo`].
+    /// Append to BACKLOG.md — same placement rule as [`Self::put_todo`].
     pub fn put_backlog(&mut self, item: Item, section: Option<&str>) {
         push_item(&mut self.backlog.sections, item, section);
     }

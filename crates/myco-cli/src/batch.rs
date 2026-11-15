@@ -1,7 +1,7 @@
 //! `myco batch` — the one-shot `serve` (P-004): NDJSON verb
 //! requests in (stdin or `--file`), one JSON-RPC 2.0 response
 //! line out per request, each dispatched through the same
-//! [`serve::Server`] surface `myco serve` exposes — the whole
+//! [`crate::serve::Server`] surface `myco serve` exposes — the whole
 //! verb set without holding a pipe open.
 //!
 //! Per-line errors are reported in-band and never abort the

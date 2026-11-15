@@ -199,7 +199,7 @@ fn merged_views(
     Ok((out, warnings))
 }
 
-/// [`merged_views`] with strict config handling — `myco check`,
+/// `merged_views` with strict config handling — `myco check`,
 /// `myco serve`.
 pub fn named_views(
     root: &Path,
@@ -208,7 +208,7 @@ pub fn named_views(
     merged_views(root, true, cfg)
 }
 
-/// [`merged_views`] tolerant of a *missing* config — the `myco
+/// `merged_views` tolerant of a *missing* config — the `myco
 /// view` read: `$MYCO_CONFIG` naming a missing file degrades to
 /// the presets; an unparseable or invalid config still errors.
 pub fn named_views_lenient(

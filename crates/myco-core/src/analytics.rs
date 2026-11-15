@@ -1,7 +1,7 @@
 //! Analytics emits — roadmap/timeline, stats, and burnup over the
 //! filtered view universe (P-012). Pure domain: callers hand in
 //! filter-applied [`Scoped`] items (the same universe `eval`
-//! consumes); [`myco-cli`] renders the results. The design
+//! consumes); `myco-cli` renders the results. The design
 //! principle holds — **fields are data, scheduling is config,
 //! views are emits**: these functions only read `Item` fields and
 //! `[[cycles]]` config, never ledger state.

@@ -125,7 +125,7 @@ fn merged_verbs(
     Ok((out, warnings))
 }
 
-/// [`merged_verbs`] with strict config handling — `myco serve`,
+/// `merged_verbs` with strict config handling — `myco serve`,
 /// `myco check`.
 pub fn named_verbs(
     root: &Path,
@@ -135,7 +135,7 @@ pub fn named_verbs(
     merged_verbs(root, true, cfg, builtins)
 }
 
-/// [`merged_verbs`] tolerant of a *missing* config — the verb
+/// `merged_verbs` tolerant of a *missing* config — the verb
 /// dispatch path: `$MYCO_CONFIG` naming a missing file degrades
 /// to no config verbs; an unparseable config still errors.
 pub fn named_verbs_lenient(

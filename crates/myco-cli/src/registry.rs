@@ -2,7 +2,7 @@
 //! all three front-ends: the clap command tree ([`command`],
 //! builder mode, no derive), `manifest().verbs`/`implemented`
 //! ([`manifest_verbs`]), and serve/batch dispatch
-//! ([`crate::serve::Server::dispatch`]). A verb can't exist on one
+//! (`crate::serve::Server::dispatch`). A verb can't exist on one
 //! surface and not the others: `cli`/`wire` handlers share one
 //! `params` schema — the wire schema and the CLI surface are one
 //! declaration decoded into the same [`Args`] bag.

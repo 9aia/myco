@@ -20,7 +20,7 @@
 //! to plain-task text with a warning instead of failing the run —
 //! a `status:deferred` in TODO.md folds into the title, a
 //! self-block drops, a textless `##` merges into the section
-//! before it ([`demote`]).
+//! before it (`demote`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;

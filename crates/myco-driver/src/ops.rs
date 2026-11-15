@@ -201,7 +201,7 @@ fn values(v: &Value) -> Vec<String> {
     }
 }
 
-/// `cli.<verb>` params → myco argv (no argv[0] — `run` prepends
+/// `cli.<verb>` params → myco argv (no argv\[0\] — `run` prepends
 /// it). Globals go first; the dotted verb name splits into the
 /// group path (`todo.add` → `todo add`). Declared params map by
 /// kind — positionals land last, in schema order.
@@ -307,7 +307,7 @@ fn exec(v: &Verb, params: &Map<String, Value>) -> Result<(Vec<String>, Output), 
     }
 }
 
-/// [`run_op`] with the verb already resolved — the `cli.<verb>`
+/// `run_op` with the verb already resolved — the `cli.<verb>`
 /// wire-query path lands here too.
 pub fn run_verb(v: &Verb, params: &Map<String, Value>) -> Response {
     let (args, o) = match exec(v, params) {

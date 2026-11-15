@@ -1,7 +1,7 @@
 //! `myco next` — the single highest-priority open item:
 //! "what should I work on" (I-020, falls out of P-006). It's a
 //! view eval with `limit = 1` — the filter flags are `view`'s
-//! [`FilterFlags`] merged over an open tasks+issues default.
+//! `FilterPatch` merged over an open tasks+issues default.
 //! `--claim` is the only new surface: it mutates the emitted
 //! item to `claimed` + an owner in one per-verb commit.
 
