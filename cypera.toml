@@ -48,3 +48,6 @@ text = """
   `~/.config/myco/myco.toml`. The file is optional — no
   `myco.toml` anywhere just means defaults.
 """
+
+[api]
+target_dir = "target/docs-api"
