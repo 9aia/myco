@@ -172,6 +172,16 @@ api:
   file: refs/sturn/wal/devin-ci-bupha
   line: 1
   module: sturn-wal
+- name: luis:claim@devin-cypera-cutover#5f6542d8
+  kind: record
+  file: refs/sturn/wal/devin-cypera-cutover
+  line: 2
+  module: sturn-wal
+- name: luis:claim@devin-cypera-cutover#8c28d3cb
+  kind: record
+  file: refs/sturn/wal/devin-cypera-cutover
+  line: 1
+  module: sturn-wal
 - name: luis:claim@devin-driver-conformance#6a0737b9
   kind: record
   file: refs/sturn/wal/devin-driver-conformance
@@ -192,35 +202,26 @@ api:
   file: refs/sturn/wal/devin-i032
   line: 5
   module: sturn-wal
-- name: luis:claim@devin-i032#ce1f8ff8
-  kind: record
-  file: refs/sturn/wal/devin-i032
-  line: 3
-  module: sturn-wal
-- name: luis:claim@devin-i032#eaf8bd0e
-  kind: record
-  file: refs/sturn/wal/devin-i032
-  line: 1
-  module: sturn-wal
-api_omitted: 272
+api_omitted: 278
 deps: []
 notes: ''
 verify:
 - refs/sturn/wal/devin
 - refs/sturn/wal/devin-bump
 - refs/sturn/wal/devin-ci-bupha
+- refs/sturn/wal/devin-cypera-cutover
 - refs/sturn/wal/devin-driver-conformance
 - refs/sturn/wal/devin-i032
 - refs/sturn/wal/devin-install-fix
 - refs/sturn/wal/devin-ledger-ux
 - refs/sturn/wal/devin-lib-driver
 - refs/sturn/wal/devin-npm-dist
-- refs/sturn/wal/devin-pl014-e1
 provenance:
   files:
   - refs/sturn/wal/devin
   - refs/sturn/wal/devin-bump
   - refs/sturn/wal/devin-ci-bupha
+  - refs/sturn/wal/devin-cypera-cutover
   - refs/sturn/wal/devin-driver-conformance
   - refs/sturn/wal/devin-i032
   - refs/sturn/wal/devin-install-fix
@@ -234,6 +235,7 @@ provenance:
   - refs/sturn/wal/devin-t006
   - refs/sturn/wal/devin-tui-restore
   - refs/sturn/wal/devin-win-shim
+  - refs/sturn/wal/docs-fix
   - refs/sturn/wal/docs-sweep
   - refs/sturn/wal/fix-fleet
   - refs/sturn/wal/item-move
@@ -255,6 +257,7 @@ provenance:
   - b3e89958ed5e2d92120cb7e9bad94cda4e73c6bc
   - bb3804266ada0145c4b8402beb010cf4ea56ccd0
   - 300275ee76b9532f241faaebe30b137f68a26d53
+  - 5f6542d8a25086e08154eb13639d9260507360c9
   - a6151c36663c304340c7bf2b24b9bb4397ed6ed4
   - b959feaa7d7549b2e68ce93fe2ecc2af4e686300
   - 752024b2ecee6aa81cf5e76b18ac04892fb7231a
@@ -268,11 +271,12 @@ provenance:
   - 4abfe2cce0fb608c299ea4df3c8675cde091d45b
   - 4db6d34b86f0a90453a3b26e428ef14d5a372f17
   - fe5c77ef43ee7fa416d4938ed4828230e2d6ae53
+  - cb9aaf82891dcc1714a18d0def3881a8cd5dba78
   - c82b38cfe324923d8af3f05a78d0e0b75ea867f0
   - 7b042c3c15793d36c9af354ccb32c6e833981401
   - 5194e492e037b702fa21afa83ce2943cde2b7888
   - 0eb3ad56e21a92a086ae0c297fe9c3272c7219a5
-  - abba739ffe1eb7a110ffad997c0b50e4b4f263ec
+  - 3c6ff06f8a361abe8b3088fe48814d68cc0124fc
   - 789f9d2fcb6e368bed869dfc7a483670661f3023
   - 8f5382552f7c386fc1b4704b80f09b8243c0095c
   - 5c53d381768cc31d1c3c1e48ec2c38ac061a4c57
@@ -285,6 +289,6 @@ provenance:
   - be47760863fcba0b65b50642186e0025d3af852d
   - 00c736d9efc103d1f2efb84c0d776df0b1c1f426
   - 88d65cf20e66d85851a7da4506773fee6be426ab
-  commit_sha: 288c3318bc2cd2753b3b07b0c747712ddb39cd2c
-  generated_at: '1794620913'
+  commit_sha: 27e41237ac2991b34b4e18bf67da7c19233920ef
+  generated_at: '1794759784'
   generator: kuda-template/0.1.4

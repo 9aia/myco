@@ -58,4 +58,4 @@ operator runs `tamias publish libraries/myco` to ship
 Follow Diátaxis: `docs/tutorials/` (learn) · `docs/how-to/` (tasks) ·
 `docs/reference/` (lookup) · `docs/explanation/` (why). API reference
 is generated from doc comments — keep `lib.rs` module docs accurate;
-`docs/gen-*.py` renders cli/config/crate-map from source.
+`cypera gen` (driven by `cypera.toml`) renders cli/config/crate-map from source.

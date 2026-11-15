@@ -113,8 +113,8 @@ verify:
 - docs/explanation/worktree-model.md
 - docs/gen-api-index.py
 - docs/gen-api.py
-- docs/gen-config-docs.py
-- docs/gen-crate-map.py
+- docs/getting-started.md
+- docs/how-to/agent-loop.md
 provenance:
   files:
   - docs/README.md
@@ -124,8 +124,6 @@ provenance:
   - docs/explanation/worktree-model.md
   - docs/gen-api-index.py
   - docs/gen-api.py
-  - docs/gen-config-docs.py
-  - docs/gen-crate-map.py
   - docs/getting-started.md
   - docs/how-to/agent-loop.md
   - docs/how-to/custom-kinds.md
@@ -147,15 +145,13 @@ provenance:
   - docs/vite.config.ts
   hashes:
   - 9cee25793655247427dcddffc3ee55468eb58f17
-  - c11257703d800e0a41d28a758694ea31755904b0
+  - f631963db6b9501c34915e0bad34e9f3aa334450
   - 1ba20e639a66cff4a0d4ff618b49acaa9b7dd99f
   - e9e5c3f0c3cd957457fb7cea680d2b7bdf10c5e9
   - 7292a355bd32c42b55880e0b3c5e82cbf8605315
   - 33012524fba6dafdf3bb0dae2578ba070c12a7ce
   - b60402245d41ce02fc1f2e687f09547e80f1dcf0
-  - a4f5b02f86f07fba4789d155a1e35f27a4fd59d2
-  - 19c77ae111d66b1a754a69bb37bf4d89f832a37c
-  - f2cf06c3770c0266d4d0b83b828b4d07d1f6b08b
+  - f339b8f13c6af89c9e54abbb67158d3e9b49d999
   - 81fdf6727e8545068e9d2187ea4a8e9c13f72cc8
   - f3a5d3e072bc43bd6835863782c7be6c99ca1d8a
   - a6fce71e9c8a6908f924424a37af11963f82d1a5
@@ -166,14 +162,14 @@ provenance:
   - 33ca9597f104a11b83cd2394aa8758422b370d69
   - 017611844be8a94e799e4dea508ce78fffee46dc
   - 3e8c357c268c199694a760fd4b23fd94ab1fb3c5
-  - 0ded149bb23144edb4c17246b6200460fb509c0b
+  - 49b60555bb6bef994ee027f6a33b976d9873f809
   - 175fa4f47aecdc02e902d243a1c29914eb2ee258
   - b670b9811cb8577ed4278023fbd3034d4653714c
-  - f1f418511d4256bc1dd597f2768539ba7bc0178f
-  - 3a422418d9cecd9e43783775722ee6c7c22e0b9e
-  - 2a0d440ab9bcd436a9e28eda46f331640527b6bd
+  - 29f8f83c5aefbd0eae50adc889c9602c1543416d
+  - 2abf774f4b34ad4bbecd04831c97718d52534ae6
+  - c5e9186bca271a5406715c415169158266514e94
   - 4a86a5ec092837324807f92202dc49372a7ae587
   - 469a0c695c609805c8771b4301839917207b7efb
-  commit_sha: 734d881b4bacc58e3309eeda34bae7fb7552a619
-  generated_at: '1794615586'
+  commit_sha: 27e41237ac2991b34b4e18bf67da7c19233920ef
+  generated_at: '1794759784'
   generator: kuda-template/0.1.4

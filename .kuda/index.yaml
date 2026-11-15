@@ -1,6 +1,6 @@
 name: myco
 root: /home/luis/GitHub/9aia/workspace/repos/myco
-purpose: '*Records engine for agent work — views + mutations; project management is the shipped prelude.*'
+purpose: '*Records engine for agent work — views + mutations; project management'
 modules:
 - docs
 - myco
@@ -20,7 +20,7 @@ modules:
 commands:
 - cargo check
 - cargo test --workspace
-tree_digest: 3ff4d8881c0c18566e4c9065f58f3cbbbb3aaebe
+tree_digest: b57a81416e54f981a2a34a453e0ef7f363394c32
 files_total: 283
 provenance:
   files:
@@ -41,7 +41,7 @@ provenance:
   - xtask/Cargo.toml
   hashes:
   - 1a57e390901ffbb571e6b3900c69e7b66e564fa3
-  - ddc6bb72bdf61be304ffca30649a7df7594bb52c
+  - b357a8791663a85d9922349df706025d9737b1ff
   - a5498d82314b2ef3be63a0a6a27bdf74d24dd7cd
   - f75323e2b82195a4149a5fb91548e75ba386acbf
   - 99fd2f7bccef87d357f518df4bef3a4b1aded0ac
@@ -55,6 +55,6 @@ provenance:
   - 82131627bab7f97614482ed91e11f85ebd8adbf5
   - a37048abfab3924287e580ee2e09f3ee8abd0dcc
   - 3bb61ce46463344ee41a3f06bc39d58040459339
-  commit_sha: 51d638975dbccc126fc043d659130774b78426a1
-  generated_at: '1794621604'
+  commit_sha: 27e41237ac2991b34b4e18bf67da7c19233920ef
+  generated_at: '1794759784'
   generator: kuda/0.1.0

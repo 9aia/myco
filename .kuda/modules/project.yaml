@@ -294,9 +294,9 @@ provenance:
   - project/proposals/proposal-0014-ledger-convergence-remote-adoption-sync-dup-id-renumbering.md
   hashes:
   - 87af2447db331b9c74a60d8a2c81f9cdf3efd004
-  - 24dca68cc1fb0c4119260df502490ac209e3f3a7
+  - 5cc72421487d16bf3d2ef1cd149d475bfc90aeb0
   - df0ebe074d2ac166504a6b14391be3adebcda4d8
-  - ad9648d5cb1b81e7da242e01aa63ab9d57507a49
+  - 5dbeb91ebcd7259827eeb0c508d96bcecb8db091
   - d0f4ee292c12e5b88c8228e1de78b83bcc6eaa65
   - 8ee2b578c23f86be23573ebb29fa91ca8ad5cd53
   - f9deccb752376dfd2277072da18c40886f7ae381
@@ -367,6 +367,6 @@ provenance:
   - a74a88c5003c18cb061db8625ea9e55aa0e4772b
   - 6d02a11ce0ebc6b069c507b48bd39ad0d68a7643
   - b30eaaf057f56e1c38125d69e6152245620510c6
-  commit_sha: 288c3318bc2cd2753b3b07b0c747712ddb39cd2c
-  generated_at: '1794620913'
+  commit_sha: 27e41237ac2991b34b4e18bf67da7c19233920ef
+  generated_at: '1794759784'
   generator: kuda-template/0.1.4

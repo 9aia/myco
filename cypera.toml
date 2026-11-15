@@ -1,0 +1,50 @@
+# cypera — org docs/reference generator contract (see ../cypera).
+# Discovered upward from the repo root; `bun run docs:gen` inside
+# docs/ drives `cypera gen crate-map|cli|config` with no flags.
+
+[crate_map]
+order = ["domain", "port", "ops", "adapter", "binary"]
+
+[crate_map.layers]
+"myco" = "binary"
+"myco-core" = "domain"
+"myco-store" = "port"
+"myco-index" = "port"
+"myco-ops" = "ops"
+
+[[crate_map.splices]]
+target = "docs/explanation/architecture.md"
+marker = "<!-- crate-map -->"
+
+[crate_map.crate_api]
+site = "myco"
+out = "docs/reference/crate-api.md"
+
+[cli]
+package = "myco-driver"
+bin = "tamias-driver-myco"
+prefix = ["run"]
+out = "docs/reference/cli.md"
+
+[config]
+title = "Config — `myco.toml`"
+out = "docs/reference/config.md"
+types = { "String" = "string", "PathBuf" = "path", "bool" = "bool", "u16" = "int", "usize" = "int", "std::collections::BTreeMap<String, ViewSpec>" = "map", "std::collections::BTreeMap<String, ConfigVerb>" = "map" }
+
+[[config.structs]]
+file = "crates/myco-core/src/lib.rs"
+name = "Config"
+title = "Top level"
+
+[[config.sections]]
+title = "Top level"
+struct = "Config"
+
+[[config.sections]]
+title = "Constraints"
+text = """
+- `deny_unknown_fields`: typos in field names fail the load.
+- Search order: `$MYCO_CONFIG` → `./myco.toml` →
+  `~/.config/myco/myco.toml`. The file is optional — no
+  `myco.toml` anywhere just means defaults.
+"""
