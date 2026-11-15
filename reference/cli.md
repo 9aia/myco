@@ -99,8 +99,8 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `commit` — Stage + commit worktree changes (conventional message).
 * `undo` — Undo the last ledger commit — resets the `project` branch tip one back (`HEAD~1`). One verb = one commit, so the reset is the inverse mutation, file deletions included; the undone commit is journaled for `redo`. Refuses on a dirty worktree (uncommitted `--no-commit` writes), at the root commit, and when the tip is already published on `origin` (unless `--force`). `--list` shows the redoable stack without mutating.
 * `redo` — Redo the last undo — pops the undo journal and restores the commit `myco undo` moved away from (`git reset --hard <target>`). Repeatable while entries remain; the stack self-invalidates when the ledger moves (any commit/pull/manual git op since the undo). Refuses on a dirty worktree.
-* `sync` — Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves to a fresh id, inbound `blocks:`/`links:`/supersede refs rebind to it, and a `renumbered` handoff entry records the audit). Mutating verbs refuse while behind (`ensure_synced`; `sync.auto_fetch` config fetches first), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.
-* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
+* `sync` — Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves to a fresh id, inbound `blocks:`/`links:`/supersede refs rebind to it, and a `renumbered` handoff entry records the audit). Mutating verbs refuse while behind (`ensure_synced`; `sync.auto_fetch` config fetches first), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail. With `sync.auto_push` enabled (the default; `false` opts out), a successful sync also pushes the reconciled tip (best-effort — a push failure warns, never fails).
+* `view` — Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next|roadmap|stats|burnup`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = "repos"` emits one row per repo; `format = "timeline"|"stats"|"burnup"` are the analytics emits (roadmap lanes, count tallies, done-over-time — `done:` archive stamps drive burnup); bare `myco view` lists views (or renders `default_view` when config names one).
 * `next` — The single highest-priority open item — "what should I work on" (a `view` eval with limit 1: open tasks+issues, `pri,id`; the filter flags merge over that default). `--claim` mutates it to `claimed` + an owner in one commit.
 * `status` — Cheap digest of the work ledger. `--prompt` = token-sized.
 * `report` — Aging + velocity + blocked — how the ledger is trending.
@@ -1000,7 +1000,7 @@ Redo the last undo — pops the undo journal and restores the commit `myco undo`
 
 ## `myco sync`
 
-Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves to a fresh id, inbound `blocks:`/`links:`/supersede refs rebind to it, and a `renumbered` handoff entry records the audit). Mutating verbs refuse while behind (`ensure_synced`; `sync.auto_fetch` config fetches first), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail.
+Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or rebase local commits onto the remote tip, then heal merge damage: `meta.toml` counters reconcile, duplicate ids renumber remote-wins (the pushed item keeps its id; the local one moves to a fresh id, inbound `blocks:`/`links:`/supersede refs rebind to it, and a `renumbered` handoff entry records the audit). Mutating verbs refuse while behind (`ensure_synced`; `sync.auto_fetch` config fetches first), so this is the gate. A rebase conflict stops mid-flight — resolve + `git rebase --continue` + `myco sync` again, or `--abort` to bail. With `sync.auto_push` enabled (the default; `false` opts out), a successful sync also pushes the reconciled tip (best-effort — a push failure warns, never fails).
 
 **Usage:** `myco sync [OPTIONS]`
 
@@ -1012,7 +1012,7 @@ Reconcile the ledger branch with `origin/<branch>` — fetch, fast-forward or re
 
 ## `myco view`
 
-Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = "repos"` emits one row per repo; bare `myco view` lists views (or renders `default_view` when config names one).
+Declarative views — named presets (`[views.<name>]` in config + built-ins `board|open|epic|milestone|next|roadmap|stats|burnup`, plus index-sourced `org-board|org-status` for cross-repo) or an ad-hoc spec from flags (`--source index` unions the index universe — lasius clones ∪ registered repos). `myco view board` is the kanban; `format = "repos"` emits one row per repo; `format = "timeline"|"stats"|"burnup"` are the analytics emits (roadmap lanes, count tallies, done-over-time — `done:` archive stamps drive burnup); bare `myco view` lists views (or renders `default_view` when config names one).
 
 **Usage:** `myco view [OPTIONS] [name]`
 
@@ -1041,10 +1041,10 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
 * `--source <SOURCE>` — Item universe — repo (default) reads this worktree; index unions every registered repo's snapshot (org views).
-* `--group-by <GROUP_BY>` — Group axis — status|priority|kind|owner|epic|milestone|repo.
+* `--group-by <GROUP_BY>` — Group axis — status|priority|kind|owner|epic|milestone|repo|cycle.
 * `--sort <SORT>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction.
 * `--limit <N>` — Keep the first N items after sorting.
-* `--format <FORMAT>` — Renderer — list|board|repos.
+* `--format <FORMAT>` — Renderer — list|board|repos|timeline|stats|burnup.
 
 
 
