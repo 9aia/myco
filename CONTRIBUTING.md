@@ -9,8 +9,10 @@ dogfoods its own PM ledger (`project/`). Fork freely under MIT.
 pure domain (no I/O); config loading is scarab-backed inside
 `myco-ops` (`config::TOML`), the index universe is lasius-backed
 (`universe`); `myco-ops::vcs` (over `lasius-vcs`) and `myco-shell`
-shell out; `myco`
-(`crates/myco-cli`) is the composition root. `xtask/` is repo chores.
+shell out; `myco-cli` (`crates/myco-cli`, package `myco`) is the
+engine lib — `tamias-driver-myco` in `myco-driver` is the
+composition root (bins[] shim + ops surface). `xtask/` is repo
+chores. See the crate table in [AGENTS.md](AGENTS.md#layout).
 
 ## Rules of thumb
 
