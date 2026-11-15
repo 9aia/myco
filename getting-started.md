@@ -15,7 +15,7 @@ a generated shim → `tamias bin exec` → `tamias-driver-myco cli`
 [tamias](https://github.com/9aia/tamias) installed:
 
 ```sh
-tamias install 9aia:myco@0.1.3    # org registry (needs TAMIAS_REGISTRY_TOKEN)
+tamias install 9aia:myco@<version>    # org registry (needs TAMIAS_REGISTRY_TOKEN)
 ```
 
 Or the npm launcher — a thin shim that finds the `myco` bin on
