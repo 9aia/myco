@@ -10,15 +10,15 @@ the pushed sha (gen → `cargo doc` → `vitepress build` →
 
 The detached worktree has no sibling `main` checkout, so cargo
 work happens in `$MYCO_REPO` (default
-`~/GitHub/9aia/workspace/repos/myco`) and
-the `gen-*.py` scripts resolve sources via `MYCO_ROOT` instead of
-`..`. Run `bash scripts/deploy-docs.sh` by hand for the same
-pipeline locally.
+`~/GitHub/9aia/workspace/repos/myco`): `cypera gen` reads
+`$MYCO_REPO/cypera.toml` via `--repo`, and `gen-api.py` resolves
+sources via `MYCO_ROOT`. Run `bash scripts/deploy-docs.sh` by hand
+for the same pipeline locally.
 
 From the repo root: `cargo xtask site` runs `docs:gen` +
-`vitepress build`. Generated pages — `reference/cli.md`
-(`myco gen-cli-docs`), `reference/config.md`, the crate map in
+`vitepress build`. Generated pages — `reference/cli.md` (cypera's
+`--help` walk), `reference/config.md`, the crate map in
 `explanation/architecture.md`, `reference/crate-api.md` — come
-from `gen-*.py` / the CLI, never hand-edit. `bun run docs:api`
+from `cypera gen`, never hand-edit. `bun run docs:api`
 rebuilds the rustdoc under `public/api/` (gitignored — CI
 regenerates it).
