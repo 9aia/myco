@@ -10,8 +10,8 @@ hero:
       text: Getting Started
       link: /tutorials/getting-started
     - theme: alt
-      text: Tutorial
-      link: /tutorials/first-item
+      text: Daily agent loop
+      link: /how-to/agent-loop
 
 features:
   - icon: 🍄
