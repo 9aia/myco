@@ -8,7 +8,7 @@ create a task, move it through the state machine, and close it —
 seeing the markdown change under you each step.
 
 You'll need `myco` installed (see
-[getting started](../getting-started.md)) and a git repo to play
+[getting started](../tutorials/getting-started.md)) and a git repo to play
 in:
 
 ```sh
@@ -241,7 +241,7 @@ the files. `myco status` (no flag) is the human-readable version;
 Boards cap at a screenful of rows — `--all` shows every card.
 For a human at the wheel, `myco ui` is the same board as a
 full-screen TUI — see
-[the interactive board](../getting-started.md#the-interactive-board).
+[the interactive board](../tutorials/getting-started.md#the-interactive-board).
 
 ## Claim
 
@@ -896,7 +896,7 @@ directly.
 For a fully interactive board — TODO/BACKLOG tabs, item preview,
 done/defer/promote by key, including index-sourced `org-*` views
 (`myco ui --view org-board`) — see
-[`myco ui`](../getting-started.md#the-interactive-board).
+[`myco ui`](../tutorials/getting-started.md#the-interactive-board).
 
 ---
 
@@ -3021,7 +3021,14 @@ campaigns embed it via `myco serve`, sepia sessions drive
 `libraries/myco` tamias pack. myco itself never orchestrates —
 daemons, arbitration, and multi-actor views belong to peregrin.
 
-## Boundary — work memory only
+See [Boundaries](boundaries.md) for owns / does-not-own.
+
+---
+
+---
+url: /myco/explanation/boundaries.md
+---
+# Boundaries
 
 myco owns the ledger of intent (tasks, issues, proposals, plans,
 ADRs, handoffs). Neighbors own their own memory:
@@ -3371,7 +3378,7 @@ There are no GitHub Actions workflows; the gate is the peregrin
 ---
 
 ---
-url: /myco/getting-started.md
+url: /myco/tutorials/getting-started.md
 ---
 # Getting started
 
@@ -3518,13 +3525,13 @@ repairs what it safely can.
 
 ## Where next
 
-* [Your first item](tutorials/first-item.md) — a guided walk
+* [Your first item](/tutorials/first-item.md) — a guided walk
   through a full task lifecycle.
-* [Set up myco on a repository](how-to/init-repo.md) — discovery,
+* [Set up myco on a repository](/how-to/init-repo.md) — discovery,
   overrides, non-standard layouts.
-* [The worktree model](explanation/worktree-model.md) — what is
+* [The worktree model](/explanation/worktree-model.md) — what is
   actually on disk and why.
-* [CLI reference](reference/cli.md) — the full verb surface.
+* [CLI reference](/reference/cli.md) — the full verb surface.
 
 ---
 

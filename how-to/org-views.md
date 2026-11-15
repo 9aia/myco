@@ -143,4 +143,4 @@ directly.
 For a fully interactive board — TODO/BACKLOG tabs, item preview,
 done/defer/promote by key, including index-sourced `org-*` views
 (`myco ui --view org-board`) — see
-[`myco ui`](../getting-started.md#the-interactive-board).
+[`myco ui`](../tutorials/getting-started.md#the-interactive-board).
