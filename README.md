@@ -27,7 +27,7 @@ myco handoff T-012            # attach resumable state at session end
 The `myco` command ships as a tamias `bins[]` shim —
 `tamias install 9aia:myco@<version>`, or `cargo xtask pack && tamias
 install --allow-drivers ./libraries/myco` from a checkout. See
-[Install](https://9aia.com/myco/getting-started) for details.
+[Install](https://9aia.com/myco/tutorials/getting-started) for details.
 
 ## Position in the stack
 
