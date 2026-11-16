@@ -142,7 +142,7 @@ needed; `R` forces one anyway.
 | `Enter`, `→`                  | item preview — `j`/`k` scroll, `←`/esc back   |
 | `←`                           | back — pops the drill-down stack (esc-like in preview, no-op on the board) |
 | `a`                            | add an item (TODO/BACKLOG only)              |
-| `Space` / `dd`, `D`, `p`       | done · defer to BACKLOG · promote to TODO (done/undo ask `y`/`n`) |
+| `Space` / `dd`, `D`, `p`, `x`  | done · defer to BACKLOG · promote to TODO · cancel (done/undo/cancel ask `y`/`n`) |
 | `u` / `U`                      | undo / redo ledger commits — `U` repeats while the redo stack lasts (asks `y`/`n`) |
 | `Alt+j` / `Alt+k`              | reorder among siblings                       |
 | `/`, `F`                       | live filter · clear it                       |
@@ -3047,8 +3047,10 @@ program happens to be project management.
 
 The crate is also a library: `myco-cli`'s `lib.rs` exposes
 `parse_from`/`run_from`/`dispatch` so `myco-driver` (and any
-embedder) drives the same engine in-process — `src/main.rs` is a
-six-line compat bin over it.
+embedder) drives the same engine in-process. There is no
+`[[bin]]` — the `myco` command ships as the tamias pack's
+`bins[]` shim (`libraries/myco`), which reaches `run_from`
+through `tamias-driver-myco cli`.
 
 A read is `universe → eval → emit`:
 
