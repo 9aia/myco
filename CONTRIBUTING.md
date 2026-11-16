@@ -41,11 +41,12 @@ chores. See the crate table in [AGENTS.md](AGENTS.md#layout).
 
 ## Releasing
 
-`scripts/release.sh` is run manually by an operator on `main`
-(releases are operator-run) — one workspace version bump
-(`cargo set-version --workspace`), sync of the version refs in
-`libraries/myco/tamias.yaml`/`README.md`/the myco skill, and a
-`myco-v<ver>` tag. There is **no crates.io publish**: the myco
+Releases are run manually by an operator on `main` via
+`tarsi-serve release --dir . --yes` directly (the org release
+plane, project ADR-0005; repo config: `tarsi.toml` — the per-repo
+`scripts/release.sh` shims were removed org-wide): plan →
+changelog → bump → tag → push, with the pack/doc version refs
+synced inside the release commit. There is **no crates.io publish**: the myco
 crates are internal lib-only engines (org policy keeps every repo
 but tamias off crates.io; the `myco` name there is taken anyway).
 User-facing installs ride the tamias pack — after the tag, the
