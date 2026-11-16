@@ -140,7 +140,7 @@ needed; `R` forces one anyway.
 | `Enter`, `→`                  | item preview — `j`/`k` scroll, `←`/esc back   |
 | `←`                           | back — pops the drill-down stack (esc-like in preview, no-op on the board) |
 | `a`                            | add an item (TODO/BACKLOG only)              |
-| `Space` / `dd`, `D`, `p`       | done · defer to BACKLOG · promote to TODO (done/undo ask `y`/`n`) |
+| `Space` / `dd`, `D`, `p`, `x`  | done · defer to BACKLOG · promote to TODO · cancel (done/undo/cancel ask `y`/`n`) |
 | `u` / `U`                      | undo / redo ledger commits — `U` repeats while the redo stack lasts (asks `y`/`n`) |
 | `Alt+j` / `Alt+k`              | reorder among siblings                       |
 | `/`, `F`                       | live filter · clear it                       |

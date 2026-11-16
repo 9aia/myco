@@ -66,8 +66,10 @@ program happens to be project management.
 
 The crate is also a library: `myco-cli`'s `lib.rs` exposes
 `parse_from`/`run_from`/`dispatch` so `myco-driver` (and any
-embedder) drives the same engine in-process — `src/main.rs` is a
-six-line compat bin over it.
+embedder) drives the same engine in-process. There is no
+`[[bin]]` — the `myco` command ships as the tamias pack's
+`bins[]` shim (`libraries/myco`), which reaches `run_from`
+through `tamias-driver-myco cli`.
 
 A read is `universe → eval → emit`:
 
