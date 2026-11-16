@@ -93,17 +93,19 @@ prelude configures *what* exists, never *how* writes behave
 
 ## Where it sits
 
-Myco is a **memory-layer** engine in the 9aia stack — it owns one
+Myco is a **memory-layer** organism in the 9aia stack — it owns one
 domain (work memory) and ships its behavior as tamias-distributed
 content:
 
 ```
-delivery  →  memory  →  process  →  agency
-tamias,     myco ◄───   cuora,       peregrin,
-scarab,     kuda,      mimus,       pavo,
-tarsi,      sturn,     cicada,      myco ui,
-bupha       hypha      lasius,      myco serve
-                        sepia
+delivery  →  memory  →  process  →  interface
+tamias,      myco ◄───   sturn,      pavo,
+scarab,      kuda,       cuora,      myco ui,
+tarsi,                 mimus,       myco serve
+bupha,                cicada,
+hypha                 lasius,
+                       sepia,
+                       peregrin
 ```
 
 Everything above consumes the ledger *through* myco: peregrin
