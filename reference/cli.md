@@ -816,7 +816,7 @@ Kind-agnostic item verbs — show / set / move.
 ###### **Commands:**
 
 * `show` — Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by/supersedes/associated/references/handoff, live-derived), plus the body for file-backed kinds (`--json` = the full Item + location + related + body). 1..n ids: a batch repeats the block in argument order; `--json` emits the per-id `[{id, ok, …}]` array.
-* `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).
+* `set` — Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. `--title`/`--note` rewrite the headline fields (a file item's slug — and so its filename — follows the title). Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).
 * `move` — Move an item to another repo's ledger — re-creates it in the destination's own id sequence (kind, title, body, pri/owner/labels/epic/milestone carried; `blocks:`/`links:` dropped — they name source-ledger ids — and the drop is recorded as plain text in both provenance handoffs), writes a `moved from`/`moved to` provenance handoff on both sides, then walks the source to `done` (a task's line leaves the ledger; its handoff drops to `handoffs/archive/`). `--to` takes the destination repo root, its `project/` worktree, or an index-universe repo name (`myco index list`). Two commits — one per worktree. `--dry-run` previews the plan (prospective dest id, dropped refs) with no writes; `--finish` completes a move that died after the destination copy + `moved to` pointer landed but before the source close committed — the pointer is the resume handle.
 * `reorder` — Sibling reorder inside TODO.md/BACKLOG.md — the TUI's `Alt+↑/↓` as a verb: `--delta -1` swaps with the previous sibling, `+1` with the next (larger deltas walk that many steps, stopping at the list edge). `Ledger::move_within` semantics exactly — a move never crosses a `##` section boundary, and a nested child swaps among its own siblings only. One commit per call (`chore: reorder <id>`); tasks only — file-backed items have no siblings.
 
@@ -848,7 +848,7 @@ Dump items — frontmatter fields, kind-grouped related edges (blocks/blocked_by
 
 ## `myco item set`
 
-Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).
+Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. `--title`/`--note` rewrite the headline fields (a file item's slug — and so its filename — follows the title). Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).
 
 **Usage:** `myco item set [OPTIONS] <id>`
 
@@ -859,13 +859,14 @@ Mutate an item in place. `--status` is the only field routed through the state m
 ###### **Options:**
 
 * `--json` — Emit JSON (accepted everywhere; default output for machines).
-* `--status <status>` — New status — one legal step from the current one.
+* `--title <title>` — New title — one line, no `·`; `""` clears it (tasks emit a bare id, file items an `untitled` slug and a renamed file).
 * `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
-* `--pri <pri>` — Priority: low|med|high|crit. [alias: --priority]
+* `--status <status>` — New status — one legal step from the current one.
 * `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--pri <pri>` — Priority: low|med|high|crit. [alias: --priority]
 * `--owner <owner>` — Owner actor id.
-* `--label <label>` — Add (`+x` or `x`) or remove (`-x`) a label — repeatable.
 * `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `--label <label>` — Add (`+x` or `x`) or remove (`-x`) a label — repeatable.
 * `--unlabel <unlabel>` — Remove a label — repeatable.
 * `--blocks <blocks>` — Add (`+T-1` or `T-1`) or remove (`-T-1`) a blocks dep — repeatable or comma-separated.
 * `--unblock <unblock>` — Remove a blocks dep — repeatable or comma-separated.
@@ -876,6 +877,7 @@ Mutate an item in place. `--status` is the only field routed through the state m
 * `--due <due>` — Due date (`YYYY-MM-DD`) — `""` clears the due date.
 * `--est <est>` — Estimate in points (0–1000) — `""` clears the estimate. [alias: --estimate]
 * `--cycle <cycle>` — Cycle name (`[A-Za-z0-9_.-]+`) — `""` clears the cycle.
+* `--note <note>` — Free-form note (`note:` token / frontmatter `note`) — one line, no `·`; `""` clears it.
 * `--session <session>` — Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state.
 * `--steal` — Take the item even when another actor owns the claim — records a `taken from` handoff entry.
 * `--yes` — Skip the archive/reopen confirmation prompts (also `$MYCO_YES`; non-interactive runs never prompt).
