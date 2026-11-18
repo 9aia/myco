@@ -1480,9 +1480,10 @@ pub static VERBS: &[Verb] = &[
     },
     Verb {
         name: "item.set",
-        about: "Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).",
+        about: "Mutate an item in place. `--status` is the only field routed through the state machine — single steps only, invalid ones error with the valid targets. `--title`/`--note` rewrite the headline fields (a file item's slug — and so its filename — follows the title). Status changes on tasks move the line between TODO.md and BACKLOG.md (`done`/`cancelled` archive the subtree into DONE.md — both confirm on a tty, and both reopen via `--status open|deferred`, also confirmed: `--yes`/`$MYCO_YES` skips).",
         params: &[&[
             pos("id", Val::Id, "Any item id."),
+            opt("title", Val::Str, "New title — one line, no `·`; `\"\"` clears it (tasks emit a bare id, file items an `untitled` slug and a renamed file)."),
             opt("status", Val::Status, "New status — one legal step from the current one."),
             opt("pri", Val::Pri, "Priority: low|med|high|crit.").alias("priority"),
             opt("owner", Val::Actor, "Owner actor id."),
@@ -1509,6 +1510,7 @@ pub static VERBS: &[Verb] = &[
             opt("due", Val::Str, "Due date (`YYYY-MM-DD`) — `\"\"` clears the due date."),
             opt("est", Val::Str, "Estimate in points (0–1000) — `\"\"` clears the estimate.").alias("estimate"),
             opt("cycle", Val::Str, "Cycle name (`[A-Za-z0-9_.-]+`) — `\"\"` clears the cycle."),
+            opt("note", Val::Str, "Free-form note (`note:` token / frontmatter `note`) — one line, no `·`; `\"\"` clears it."),
             opt("session", Val::Str, "Tag the item's claim with a session id — appends a `claimed` handoff entry carrying it (`interrupt --session` scopes teardown to it). The item must land in a work state."),
             flag(
                 "steal",

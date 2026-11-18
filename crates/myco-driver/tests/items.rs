@@ -1044,6 +1044,87 @@ fn item_set_semantics() {
 }
 
 #[test]
+fn item_set_title_and_note() {
+    let (d, wt) = project();
+    run(
+        d.path(),
+        &["todo", "add", "a task", "--pri", "high", "--label", "core"],
+    );
+
+    // --title rewrites the line's title portion; the metadata
+    // suffix is preserved
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--title", "a better task", "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(json(&out)["item"]["title"], "a better task");
+    let line = read(&wt, "TODO.md");
+    assert!(line.contains("T-001 a better task"), "{line}");
+    assert!(
+        line.contains("pri:high") && line.contains("#core"),
+        "{line}"
+    );
+
+    // `·` and newlines break the line grammar — refused
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--title", "bad · title"],
+    );
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("invalid title"), "{}", stderr(&out));
+    let out = run(d.path(), &["item", "set", "T-001", "--title", "two\nlines"]);
+    assert_eq!(code(&out), 2);
+
+    // --note sets and clears the `note:` token
+    run(
+        d.path(),
+        &["item", "set", "T-001", "--note", "swept from src/x.rs:9"],
+    );
+    assert!(read(&wt, "TODO.md").contains("note:swept from src/x.rs:9"));
+    let out = run(
+        d.path(),
+        &["item", "set", "T-001", "--note", "has · dot", "--json"],
+    );
+    assert_eq!(code(&out), 2);
+    run(d.path(), &["item", "set", "T-001", "--note", ""]);
+    assert!(!read(&wt, "TODO.md").contains("note:"));
+
+    // file-backed items: the frontmatter title follows and the
+    // slug rename moves the file
+    run(d.path(), &["issue", "new", "an issue"]);
+    let out = run(
+        d.path(),
+        &[
+            "item",
+            "set",
+            "I-001",
+            "--title",
+            "a renamed issue",
+            "--note",
+            "still broken",
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let v = json(&out);
+    assert_eq!(v["item"]["title"], "a renamed issue");
+    assert_eq!(v["item"]["note"], "still broken");
+    assert_eq!(v["location"], "issues/issue-0001-a-renamed-issue.md");
+    assert!(!wt.join("issues/issue-0001-an-issue.md").exists());
+    let f = read(&wt, "issues/issue-0001-a-renamed-issue.md");
+    assert!(f.contains("title = \"a renamed issue\""), "{f}");
+    assert!(f.contains("note = \"still broken\""), "{f}");
+
+    // an archived task refuses the rewrite — reopen first
+    run(d.path(), &["todo", "add", "gone soon"]);
+    run(d.path(), &["todo", "done", "T-002", "--yes"]);
+    let out = run(d.path(), &["item", "set", "T-002", "--title", "nope"]);
+    assert_eq!(code(&out), 2);
+    assert!(stderr(&out).contains("DONE.md"), "{}", stderr(&out));
+}
+
+#[test]
 fn item_set_blocks_accepts_commas() {
     let (d, _wt) = project();
     run(d.path(), &["todo", "add", "a"]);

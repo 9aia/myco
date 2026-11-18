@@ -15,6 +15,12 @@ use crate::registry::{Args, Ctx};
 /// status transition check.
 #[derive(Default, Clone)]
 pub(crate) struct SetFlags {
+    /// `--title` — raw value; `""` clears (a bare-id task line /
+    /// an `untitled` file slug). Validated at apply time like the
+    /// other stringly fields.
+    pub(crate) title: Option<String>,
+    /// `--note` — raw value; `""` clears the note.
+    pub(crate) note: Option<String>,
     pub(crate) status: Option<Status>,
     /// `--steal` — take an item over from a different owner
     /// (claim transitions and owner reassignment on work-state
@@ -42,6 +48,8 @@ pub(crate) struct SetFlags {
 /// the wire handler (`myco serve`'s `item.set`).
 pub(crate) fn set_flags(a: &Args) -> Result<SetFlags, String> {
     Ok(SetFlags {
+        title: a.opt("title").map(str::to_string),
+        note: a.opt("note").map(str::to_string),
         status: a.parsed("status")?,
         steal: a.flag("steal"),
         pri: a.parsed("pri")?,
@@ -71,7 +79,9 @@ impl SetFlags {
     }
 
     pub(crate) fn is_noop(&self) -> bool {
-        self.status.is_none()
+        self.title.is_none()
+            && self.note.is_none()
+            && self.status.is_none()
             && self.pri.is_none()
             && self.owner.is_none()
             && self.label.is_empty()
@@ -95,6 +105,20 @@ fn signed(s: &str) -> (bool, &str) {
         Some(rest) => (false, rest),
         None => (true, s.strip_prefix('+').unwrap_or(s)),
     }
+}
+
+/// The one-line string fields (`--title`, `--note`) share the
+/// line grammar's limits — `·` is the metadata separator and a
+/// newline breaks the single-line shape; file items enforce the
+/// same via `line::check_item` at emit, so refusing here keeps
+/// the error a verb error instead of a save failure. Surrounding
+/// whitespace is trimmed (emit rejects untrimmed values).
+fn set_text(field: &str, raw: &str) -> Result<String, String> {
+    let t = raw.trim();
+    if t.contains('·') || t.contains('\n') || t.contains('\r') {
+        return Err(format!("invalid {field} {raw:?} — one line, no `·`"));
+    }
+    Ok(t.to_string())
 }
 
 /// The ownership guard — assigning an item whose owner is someone
@@ -136,6 +160,13 @@ fn apply_set(item: &mut Item, flags: &SetFlags) -> Result<(), String> {
                 t = items::targets(from)
             )
         })?;
+    }
+    if let Some(t) = &flags.title {
+        item.title = set_text("title", t)?;
+    }
+    if let Some(n) = &flags.note {
+        let n = set_text("note", n)?;
+        item.note = if n.is_empty() { None } else { Some(n) }; // `--note ""` clears
     }
     if let Some(p) = flags.pri {
         item.priority = p;
