@@ -3391,41 +3391,36 @@ url: /myco/explanation/release-model.md
 > published). This page describes the tag release pipeline that
 > feeds the pack.
 
-Releases are manual: `scripts/release.sh` is run by an operator
-on `main`. The script's
-leading debounce window (default 5 min, `MYCO_RELEASE_DEBOUNCE`)
-still applies, and it pushes commits and tags to `main`.
+Releases are manual: an operator on `main` runs
+`tarsi-serve release --dir .` — dry-run by default, `--yes` as the
+explicit opt-in. The per-repo `scripts/release.sh` shim was
+removed org-wide; the command talks to tarsi directly.
 
 The org release plane is **tarsi** (`tarsi-serve` ops — project
-ADR-0005): `scripts/release.sh` is being converted to a thin shim
-over it (PL-014 E1), and until then this script implements the
-same tag-only + `tamias publish` model directly.
+ADR-0005); repo policy lives in `tarsi.toml`.
 
 ## What a release run does
 
-1. **Diff since the last tag** — release-worthy paths are the
-   workspace crates (`crates/`), the tamias pack payload
-   (`libraries/`), `xtask/`, the workspace manifests/lockfile, and
-   the release script itself. Changes to anything else trigger
-   nothing. No release-set changes, no release.
-2. **Workspace version bump** — every crate inherits
-   `version.workspace`, so `cargo set-version --workspace --bump
-   patch` moves them all at once and rewrites the
-   `workspace.dependencies` version reqs and `Cargo.lock`
-   together. The script then syncs the user-facing version refs:
-   `libraries/myco/tamias.yaml` (`version:`) and the install
-   examples in `README.md` and `.agents/skills/myco/SKILL.md`
-   (`myco@<ver>`).
-3. **Commit + tag + push** — one `release: bump myco to <ver>`
-   commit, tagged `myco-v<ver>`, pushed to `main` with the tag.
-4. **Pack publish (operator)** — the script prints the follow-up:
-   `tamias publish libraries/myco` ships `9aia:myco@<ver>` to the
-   org registry (needs `TAMIAS_REGISTRY_TOKEN`). That step is
-   deliberately outside the script — publishing is a
-   credentials-gated, registry-side action.
+`tarsi-serve release` composes the pipeline — plan → changelog →
+bump → tag → push — over `tarsi.toml`:
 
-With no tags at all the script exits early — the flow is seeded
-by tagging once.
+1. **Plan** — commits since the last `myco-v*` tag are
+   classified (conventional commits) and attributed to release
+   units; the workspace shares one version, so the plan is a
+   single-unit lockstep bump. No release-worthy changes, no
+   release.
+2. **Bump** — manifests, `Cargo.lock`, and the user-facing
+   version refs (`libraries/myco/tamias.yaml`, the install
+   examples in `README.md` and `.agents/skills/myco/SKILL.md`)
+   are rewritten inside the release commit via
+   `[release.sync_refs]` — the tagged tree is self-consistent.
+3. **Tag + push** — one release commit tagged `myco-v<ver>`,
+   pushed to `main` with the tag.
+4. **Pack publish (operator)** — after the tag the operator runs
+   `tamias publish libraries/myco` to ship `9aia:myco@<ver>` to
+   the org registry. That step is deliberately outside the
+   release — publishing is a credentials-gated, registry-side
+   action.
 
 ## Constraints
 
