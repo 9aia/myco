@@ -1,7 +1,7 @@
 +++
 id = "P-015"
 title = "Stateful current-ledger selector"
-status = "open"
+status = "in-progress"
 created = "2026-11-20"
 priority = "med"
 +++
