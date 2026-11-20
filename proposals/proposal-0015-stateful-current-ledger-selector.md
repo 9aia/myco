@@ -8,7 +8,7 @@ priority = "med"
 
 # Stateful current-ledger selector
 
-Status: **draft** · Created: 2026-11-19
+Status: **draft** · Created: 2026-11-20
 
 ## Goal & Overview
 
