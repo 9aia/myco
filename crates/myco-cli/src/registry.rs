@@ -728,6 +728,10 @@ const GROUPS: &[Group] = &[
         about: "The current-ledger selector — which ledger `myco` opens when cwd discovery doesn't say (`[current]` in user myco.toml; `repo|org|<name>|</path>|name:<repo>`; modes `always|backup`; `.myco.toml` directory pointers; `MYCO_LEDGER` env).",
     },
     Group {
+        name: "workspace",
+        about: "The workspace selector — a glob-scoped set of universe repos (`[workspace] repos` in user myco.toml) that index-sourced views (`org-board`, `org-status`) filter to.",
+    },
+    Group {
         name: "org",
         about: "Cross-repo scaffolding — re-run `init` on every registered repo. Cross-repo *views* are `myco view org-board|org-status` (index-sourced).",
     },
@@ -1762,6 +1766,55 @@ pub static VERBS: &[Verb] = &[
         hidden: false,
         cli: Some(crate::current::h_clear),
         wire: Some(serve::w_current_clear),
+    },
+    Verb {
+        name: "workspace.list",
+        about: "List universe repos — the names `[workspace]` globs match against (lasius clones ∪ registry).",
+        params: NO_PARAMS,
+        kind_lock: None,
+        mutates: false,
+        hidden: false,
+        cli: Some(crate::workspace::h_list),
+        wire: Some(serve::w_workspace_list),
+    },
+    Verb {
+        name: "workspace.use",
+        about: "Set the workspace — glob patterns over universe repo names, validated now (a glob matching nothing warns; a set matching nothing fails). Index-sourced views filter to the resolved set.",
+        params: &[
+            &[
+                pos(
+                    "repos",
+                    Val::Str,
+                    "Glob patterns over universe repo names (`*`/`?`/`[]`) — repeatable.",
+                )
+                .multi(),
+            ],
+        ],
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::workspace::h_use),
+        wire: Some(serve::w_workspace_use),
+    },
+    Verb {
+        name: "workspace.show",
+        about: "Show the workspace — configured globs, the resolved repo set, and per-glob warnings.",
+        params: NO_PARAMS,
+        kind_lock: None,
+        mutates: false,
+        hidden: false,
+        cli: Some(crate::workspace::h_show),
+        wire: Some(serve::w_workspace_show),
+    },
+    Verb {
+        name: "workspace.clear",
+        about: "Empty the workspace — index-sourced views return to the full universe.",
+        params: NO_PARAMS,
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::workspace::h_clear),
+        wire: Some(serve::w_workspace_clear),
     },
     Verb {
         name: "org.init",

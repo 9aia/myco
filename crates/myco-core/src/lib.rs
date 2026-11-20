@@ -220,6 +220,19 @@ fn default_current_ledger() -> String {
     "repo".into()
 }
 
+/// The `[workspace]` config table — the user-layer multi-repo
+/// selector (P-016): `repos` glob patterns matched against
+/// universe repo names. Merge keeps the user layer only, same
+/// rule as `[current]`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceConfig {
+    /// Glob patterns (`*`/`?`/`[]`) over universe repo names —
+    /// lasius clones ∪ registry entries.
+    #[serde(default)]
+    pub repos: Vec<String>,
+}
+
 /// The `myco.toml`-shaped config value the config loader
 /// (`myco_ops::config`) produces. Fields grow per phase; unknown keys are rejected so a typo
 /// fails loud instead of silently doing nothing.
@@ -262,6 +275,9 @@ pub struct Config {
     /// Merge keeps the user layer only; a repo `myco.toml` may
     /// carry the table but it never takes effect.
     pub current: Option<CurrentConfig>,
+    /// `[workspace]` — the user-layer repo-set selector (P-016).
+    /// Same user-layer-only rule as `[current]`.
+    pub workspace: Option<WorkspaceConfig>,
     /// `[[cycles]]` — named iteration windows (sprints, releases,
     /// quarters). Scheduling is config, not ledger memory: item
     /// lines just carry `cycle:<name>` and `check` warns when a

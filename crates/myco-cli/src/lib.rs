@@ -66,6 +66,7 @@ pub mod templates;
 pub mod todo;
 pub mod undo;
 pub mod view;
+pub mod workspace;
 
 fn manifest() -> serde_json::Value {
     serde_json::json!({

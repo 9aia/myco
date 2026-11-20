@@ -1127,6 +1127,24 @@ pub(crate) fn w_current_clear(_s: &Server, a: &crate::registry::Args) -> Result<
     Ok(crate::current::clear_json(a.flag("here"))?)
 }
 
+/// `workspace.*` wire handlers — the repo-set selector shares
+/// the same user-state file `current` uses.
+pub(crate) fn w_workspace_list(_s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(crate::workspace::list_json()?)
+}
+
+pub(crate) fn w_workspace_use(_s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(crate::workspace::use_json(&a.many("repos"))?)
+}
+
+pub(crate) fn w_workspace_show(_s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(crate::workspace::show_json()?)
+}
+
+pub(crate) fn w_workspace_clear(_s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(crate::workspace::clear_json()?)
+}
+
 /// The `serve` verb itself — stdio transport, JSON-RPC wire.
 pub(crate) fn h_serve(
     ctx: &crate::registry::Ctx,

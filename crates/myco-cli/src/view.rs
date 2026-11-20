@@ -592,11 +592,23 @@ pub(crate) fn view_json(
 /// stderr and contribute their last-good snapshot (or nothing).
 pub(crate) fn index_universe() -> Result<(Vec<org::RepoView>, Vec<String>), String> {
     let index = indexcmd::open_index()?;
-    let views = org::load_fresh(&index)?;
-    let warnings = views
+    let mut views = org::load_fresh(&index)?;
+    let mut warnings = views
         .iter()
         .filter_map(|v| v.error.as_ref().map(|e| format!("{}: {e}", v.name)))
-        .collect();
+        .collect::<Vec<_>>();
+    // `[workspace]` scopes index-sourced views (P-016) — configured
+    // globs filter the universe; an unresolvable set hard-errors
+    // like every other selector surface.
+    if myco_ops::workspace::configured(crate::ops::CONFIG).is_some() {
+        let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
+        let (matched, ws_warnings) =
+            myco_ops::workspace::resolve(&cwd, &index, crate::ops::CONFIG)?;
+        let names: std::collections::BTreeSet<&str> =
+            matched.iter().map(|u| u.entry.name.as_str()).collect();
+        views.retain(|v| names.contains(v.name.as_str()));
+        warnings.extend(ws_warnings);
+    }
     Ok((views, warnings))
 }
 
