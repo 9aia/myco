@@ -9,14 +9,14 @@ links = ["T-089", "P-015", "P-016"]
 
 ## Overview
 
-Myco's ledger-selection concepts (repo ledger, index/universe, org designation, current selector) are diffuse and undocumented. Once P-016 fixes the formal model, the docs need to teach it: what each layer is, how they relate, and the precedence table users/agents can rely on.
+Myco's ledger-selection concepts (repo ledger, index/universe, org designation, current selector, directory pointer, workspace) are diffuse and undocumented. Once P-016 fixes the formal model, the docs need to teach it: what each layer is, how they relate, and the precedence table users/agents can rely on.
 
 ## Requirements
 
-- **R1 — concepts doc**: repo ledger vs index vs universe vs org ledger vs current selector — one mental model, one diagram.
-- **R2 — precedence reference**: the formal resolution order from P-016 as a reference page, incl. `MYCO_LEDGER` env override and `--dir`/`--root`.
-- **R3 — config reference**: `[current] ledger/scope` in user-layer `myco.toml` — `repo`|`org`|name|path targets, `first`|`last` scopes, `name:` escape hatch, repo-layer injection rule.
-- **R4 — surfaces**: document that CLI, `myco ui`, serve/batch, and driver ops share the same discovery; `org-*` index views are a separate explicit source.
+- **R1 — concepts doc**: the scenario model from P-016 — repo auto-detect, `.myco.toml` directory pointer, `[current]` global pin (`always`/`backup`), per-invocation overrides, workspace (multi-repo globs), org fallback — one mental model, one diagram.
+- **R2 — precedence reference**: the formal 11-row resolution order from P-016 as a reference page, incl. `MYCO_LEDGER`/`MYCO_LEDGER_SCOPE`, `--dir`/`--root`, and the `MYCO_LEDGER=repo` escape hatch.
+- **R3 — config reference**: `[current] ledger/mode` + `[workspace] repos` in user-layer `myco.toml`, `.myco.toml` pointer files (non-repo dirs only), target vocabulary (`repo`/`org`/name/path/`name:`), repo-layer injection rule.
+- **R4 — surfaces**: document that CLI, `myco ui`, serve/batch, and driver ops share the same discovery; `org-*` index views and workspace-scoped operations are separate explicit sources.
 
 ## Decisions
 
