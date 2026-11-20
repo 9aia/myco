@@ -5,3 +5,4 @@
 - [ ] T-041 npm distribution phase 2 — publish @9aia/myco to a registry (npmjs scope vs GitHub Packages) and/or ship prebuilt binaries via GitHub Releases + cargo-dist (dist-workspace.toml exists, ci=none). Phase 1 (git-install shim, e858b78) needs Rust; this removes that requirement · pri:low · created:2026-11-08
 - [ ] T-086 emit rejects middot in item titles that parse accepts — unfixable emit-drift (graphopt PL-022/023); check\_item vs parser asymmetry · created:2026-11-11
 - [ ] T-089 docs: explain repo-ledger vs index vs current-selector; publish the formal precedence table · created:2026-11-20 · links:P-015
+- [ ] T-090 design: formalize ledger-selection model — naming (current/ledger/index/org), precedence spec, config surface · created:2026-11-20 · links:P-015
