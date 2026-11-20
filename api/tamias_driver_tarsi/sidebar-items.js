@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["USAGE"],"fn":["env","main","parse_args"],"struct":["Args"]};

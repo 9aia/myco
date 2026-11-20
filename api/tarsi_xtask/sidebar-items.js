@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["have_cargo_sub","host_triple","main","pack","run","run_out","stage_release_bin"]};

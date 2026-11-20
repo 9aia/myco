@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_TAG_FORMAT"],"enum":["PublishTarget","UnitsSpec"],"struct":["ReleaseUnitSpec"],"type":["UnitMap"]};

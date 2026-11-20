@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["NO_PUBLISH_TOML"],"fn":["commit_all","git","git_try","ls_remote","mixed_version_repo","single_unit_repo","workspace_repo","write"],"struct":["Fixture"]};

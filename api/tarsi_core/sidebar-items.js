@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["bump","changelog","commit","config","plan","strategy","unit"]};

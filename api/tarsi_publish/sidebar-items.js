@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["PublishError"],"fn":["publishers_for"],"mod":["token"],"struct":["PublishAsset","PublishJob","PublishReport"],"trait":["Publisher"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["apply_overrides"],"struct":["Config","CratesPublish","GhReleasePublish","PublishConfig","ReleaseConfig","SyncRefRule","SyncRefsConfig","UnitOverride"]};
