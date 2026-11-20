@@ -38,7 +38,7 @@ Config shape (user layer only):
 
 ```toml
 [current]
-ledger = "org"        # auto | org | <universe repo name> | </abs/path>
+ledger = "org"        # repo | org | <universe repo name> | </abs/path>
 scope  = "fallback"   # fallback | override
 ```
 
@@ -52,25 +52,25 @@ First match wins. `D` = discovery stage.
 |---|--------|------|--------------|--------|
 | 1 | `--dir <PATH>` | explicit CLI | always | the worktree path directly |
 | 2 | `--root <PATH>` | explicit CLI | always (loses to `--dir` if both) | `<root>/project` or repo `project_dir` |
-| 3 | `MYCO_LEDGER=<target>` | env, per-invocation | target ≠ `auto` | resolved target; unresolvable → hard error |
-| 4 | `[current] scope="override"` | persistent user | `ledger` ≠ `auto` | resolved target; unresolvable → hard error |
+| 3 | `MYCO_LEDGER=<target>` | env, per-invocation | target ≠ `repo` | resolved target; unresolvable → hard error |
+| 4 | `[current] scope="override"` | persistent user | `ledger` ≠ `repo` | resolved target; unresolvable → hard error |
 | 5 | cwd inside a `project/` worktree | D | cwd resolves to a ledger worktree | that worktree |
 | 6 | repo `myco.toml project_dir` | D | cwd inside a repo root (not the worktree) | `<repo>/<project_dir>` |
 | 7 | ancestor `project/` walk | D | qualifying `project/` found upward | that worktree |
-| 8 | `[current] scope="fallback"` | persistent user | `ledger` ≠ `auto` | resolved target; unresolvable → warn, continue |
+| 8 | `[current] scope="fallback"` | persistent user | `ledger` ≠ `repo` | resolved target; unresolvable → warn, continue |
 | 9 | org fallback | index | an org designation exists | org worktree |
 | 10 | — | — | nothing matched | error |
 
 Notes:
 
-- `MYCO_LEDGER_SCOPE` defaults to `override` when `MYCO_LEDGER` is set; `MYCO_LEDGER=auto` disables the env override entirely.
-- `auto` in `[current]` disables the selector — rows 4 and 8 never match.
+- `MYCO_LEDGER_SCOPE` defaults to `override` when `MYCO_LEDGER` is set; `MYCO_LEDGER=repo` disables the env override entirely.
+- `repo` in `[current]` disables the selector — rows 4 and 8 never match.
 - Rows 5–7 are today's discovery, unchanged and indivisible: cwd context always beats a fallback-scoped selector.
 - Row 9 keeps existing semantics: it is the last resort before error, available whenever the index is readable — including outside any repo. `ledger = "none"` repos opt out.
 
 ### Target resolution
 
-- `auto` — selector inert.
+- `repo` — selector inert; reserved word, so a universe repo named `repo` cannot be targeted by name (use its path). `org` is likewise reserved.
 - `org` — requires exactly one index entry with `ledger = "org"`; missing → unresolvable.
 - `<name>` — universe lookup (lasius clones ∪ registry). Name must match exactly one entry; zero → unresolvable, multiple → unresolvable (ambiguous, error lists candidates). Registry entries win over lasius clones on collision only if names are identical *and* paths agree; otherwise ambiguous.
 - `</abs/path>` — must be absolute. Accepts a ledger worktree directly, or a repo root resolved by the same rules as `--root`. Validated every invocation via `discover::qualifies`/`owns_project`.

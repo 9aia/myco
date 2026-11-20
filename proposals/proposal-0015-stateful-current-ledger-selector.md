@@ -19,7 +19,7 @@ This proposal adds a user-level, mutable ledger selector managed by a new `myco 
 ## Requirements
 
 - **R1 — state**: `[current]` in the user-layer `myco.toml` records `ledger` + `scope`; repo `myco.toml` cannot set it.
-- **R2 — targets**: `auto` (today's discovery), `org` (index-designated org ledger), a universe repo name (index ∪ lasius clones), or an absolute worktree/repo path.
+- **R2 — targets**: `repo` (today's discovery), `org` (index-designated org ledger), a universe repo name (index ∪ lasius clones), or an absolute worktree/repo path.
 - **R3 — verbs**: `myco current list|use|show|clear`, `--json` everywhere, exposed on CLI, `serve`/`batch`, and the driver ops surface.
 - **R4 — precedence**: `--dir`/`--root` always win; `MYCO_LEDGER`/`MYCO_LEDGER_SCOPE` act as a per-invocation override; config `override` scope applies before cwd discovery; `fallback` scope applies after local discovery and before the built-in org fallback.
 - **R5 — validation**: `current use` resolves immediately and fails loudly (`org` needs an org designation, names need universe membership, paths must qualify).
@@ -31,7 +31,7 @@ User config (`~/.config/myco/myco.toml`, `$XDG_CONFIG_HOME` honored):
 
 ```toml
 [current]
-ledger = "org"        # auto | org | <universe repo name> | </abs/path>
+ledger = "org"        # repo | org | <universe repo name> | </abs/path>
 scope  = "fallback"   # fallback | override
 ```
 
@@ -49,16 +49,16 @@ Resolution order:
 → error
 ```
 
-`auto` disables the selector for that invocation (`MYCO_LEDGER=auto` ignores the config too). `MYCO_LEDGER_SCOPE` defaults to `override` when `MYCO_LEDGER` is set. Prefer storing universe repo *names* over paths so registry moves survive; canonicalize absolute paths and revalidate on every run.
+`repo` disables the selector for that invocation (`MYCO_LEDGER=repo` ignores the config too). `MYCO_LEDGER_SCOPE` defaults to `override` when `MYCO_LEDGER` is set. Prefer storing universe repo *names* over paths so registry moves survive; canonicalize absolute paths and revalidate on every run.
 
 Commands:
 
 ```bash
-myco current list                  # auto/org/universe repos with ledgers
-myco current use org               # or <repo-name> | </path> | auto
+myco current list                  # repo/org/universe repos with ledgers
+myco current use org               # or <repo-name> | </path> | repo
 myco current use myrepo --scope override
 myco current show [--json]         # ledger + scope + resolved root/worktree
-myco current clear                 # ledger = auto
+myco current clear                 # ledger = repo
 MYCO_LEDGER=org myco status        # per-invocation override
 ```
 
