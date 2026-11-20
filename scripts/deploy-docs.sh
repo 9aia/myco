@@ -37,7 +37,7 @@ $CYPERA gen config --repo "$REPO"
 $CYPERA gen crate-map --repo "$REPO"
 
 echo "==> rustdoc → public/api (cargo doc in $REPO)"
-python3 gen-api.py
+bun run docs:api
 
 echo "==> vitepress build"
 bunx vitepress build
