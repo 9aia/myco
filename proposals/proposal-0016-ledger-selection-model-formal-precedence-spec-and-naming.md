@@ -62,7 +62,7 @@ mode   = "backup"     # always | backup
 repos = ["9aia/*", "myco"]   # globs over universe names
 ```
 
-(`ledger`, not `target` — the key names what is being pointed at. Mode names `always`/`backup` are provisional — see Decisions.)
+(`ledger`, not `target` — the key names what is being pointed at.)
 
 ### Targets
 
@@ -110,7 +110,7 @@ Notes:
 - Found by upward search from cwd; the **nearest** `.myco.toml` wins.
 - **Ignored inside git repositories** — a committed pointer would be repo-controlled injection, same class as repo `myco.toml` setting `[current]`. Pointers serve non-repo folders only.
 - Fallback semantics only (row 8): no mode/scope — a pointer never beats a repo's own ledger.
-- Writes: `myco current use --here` (or `myco pointer set|clear` — naming TBD in P-015) creates/removes the nearest-or-cwd `.myco.toml` via `toml_edit`.
+- Writes: `myco current use <target> --here` creates/updates the cwd `.myco.toml`; `myco current clear --here` removes it (nearest-or-cwd file) via `toml_edit`. `--here` selects the directory-pointer store instead of the user config — same verb group, no separate `pointer` verbs. `current show` needs no flag: it reports whatever discovery resolves.
 
 ### Workspace (multi-repo)
 
@@ -145,7 +145,7 @@ Escape hatch: a stale `always`-mode or env target blocks *every* verb — includ
 ## Decisions
 
 - Scenarios are the organizing frame; the precedence table is the formalization underneath.
-- Modes renamed `first|last` → `always|backup` (**provisional** — veto welcome; `fallback` was rejected to avoid a third "fallback" alongside the pointer and org rows).
+- Modes: `always`|`backup` — confirmed. `fallback` stays reserved for the pointer/org rows to avoid a third "fallback".
 - Directory pointer: `.myco.toml`, upward search, non-repo dirs only, fallback semantics only.
 - Workspace = `[workspace] repos` globs over universe names; index derives the rest. Multi-ledger *operations* remain future work — this spec covers selection only.
 - Naming: `current` for the single-ledger selector; `workspace` for the repo set.

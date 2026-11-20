@@ -58,6 +58,7 @@ Commands:
 myco current list                  # repo | org | <name> | <path> targets
 myco current use org               # or <repo-name> | </path> | repo
 myco current use myrepo --mode always
+myco current use org --here          # writes ./.myco.toml (directory pointer)
 myco current show [--json]         # ledger + mode + resolved root/worktree
 myco current clear                 # ledger = repo
 MYCO_LEDGER=org myco status        # per-invocation selector
