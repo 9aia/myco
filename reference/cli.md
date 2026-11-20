@@ -54,6 +54,16 @@ myco — agent-first project management for a repo's `project/` worktree.
 * [`myco index remove`↴](#myco-index-remove)
 * [`myco index list`↴](#myco-index-list)
 * [`myco index rebuild`↴](#myco-index-rebuild)
+* [`myco current`↴](#myco-current)
+* [`myco current list`↴](#myco-current-list)
+* [`myco current use`↴](#myco-current-use)
+* [`myco current show`↴](#myco-current-show)
+* [`myco current clear`↴](#myco-current-clear)
+* [`myco workspace`↴](#myco-workspace)
+* [`myco workspace list`↴](#myco-workspace-list)
+* [`myco workspace use`↴](#myco-workspace-use)
+* [`myco workspace show`↴](#myco-workspace-show)
+* [`myco workspace clear`↴](#myco-workspace-clear)
 * [`myco org`↴](#myco-org)
 * [`myco org init`↴](#myco-org-init)
 * [`myco manifest`↴](#myco-manifest)
@@ -95,6 +105,8 @@ myco — agent-first project management for a repo's `project/` worktree.
 * `item` — Kind-agnostic item verbs — show / set / move.
 * `absorb` — Import work into the ledger — TODO/FIXME comments, Jira CSV exports, GitHub issue dumps.
 * `index` — The derived index: register repos, query/rebuild snapshots.
+* `current` — The current-ledger selector — which ledger `myco` opens when cwd discovery doesn't say (`[current]` in user myco.toml; `repo|org|<name>|</path>|name:<repo>`; modes `always|backup`; `.myco.toml` directory pointers; `MYCO_LEDGER` env).
+* `workspace` — The workspace selector — a glob-scoped set of universe repos (`[workspace] repos` in user myco.toml) that index-sourced views (`org-board`, `org-status`) filter to.
 * `org` — Cross-repo scaffolding — re-run `init` on every registered repo. Cross-repo *views* are `myco view org-board|org-status` (index-sourced).
 * `manifest` — Capabilities + protocol version — agent self-discovery.
 * `schema` — The file/state spec, machine-readable JSON Schema.
@@ -1084,6 +1096,171 @@ Re-scan a registered repo (all of them without `<path>`).
 ###### **Arguments:**
 
 * `[path]` — Registered repo root (or project worktree).
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco current`
+
+The current-ledger selector — which ledger `myco` opens when cwd discovery doesn't say (`[current]` in user myco.toml; `repo|org|<name>|</path>|name:<repo>`; modes `always|backup`; `.myco.toml` directory pointers; `MYCO_LEDGER` env).
+
+**Usage:** `myco current [OPTIONS] <COMMAND>`
+
+###### **Commands:**
+
+* `list` — List selectable ledger targets — `repo` (normal discovery), `org` (the index-designated org ledger), and every ledger-capable repo in the universe. Names that collide with a reserved word are shown `name:`-escaped.
+* `use` — Pin the current ledger — the target is validated now and fails loudly if unresolvable. `--mode always` beats cwd discovery; `backup` (default) answers only when discovery finds nothing (both beat the org fallback). `--here` writes a `.myco.toml` directory pointer in cwd instead of the user config.
+* `show` — Show the current selector — env (`MYCO_LEDGER`/`MYCO_LEDGER_SCOPE`), persisted `[current]`, directory pointer, and what discovery resolves to.
+* `clear` — Reset the current selector to `repo` (normal discovery). `--here` removes the `.myco.toml` directory pointer in cwd instead.
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco current list`
+
+List selectable ledger targets — `repo` (normal discovery), `org` (the index-designated org ledger), and every ledger-capable repo in the universe. Names that collide with a reserved word are shown `name:`-escaped.
+
+**Usage:** `myco current list [OPTIONS]`
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco current use`
+
+Pin the current ledger — the target is validated now and fails loudly if unresolvable. `--mode always` beats cwd discovery; `backup` (default) answers only when discovery finds nothing (both beat the org fallback). `--here` writes a `.myco.toml` directory pointer in cwd instead of the user config.
+
+**Usage:** `myco current use [OPTIONS] <target>`
+
+###### **Arguments:**
+
+* `<target>` — `repo` | `org` | `<universe-repo-name>` | `</abs/path>` | `name:<repo>`.
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--mode <mode>` — `always` | `backup` (default `backup`).
+* `--here` — Write a `.myco.toml` directory pointer in cwd instead of `[current]` in user config.
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco current show`
+
+Show the current selector — env (`MYCO_LEDGER`/`MYCO_LEDGER_SCOPE`), persisted `[current]`, directory pointer, and what discovery resolves to.
+
+**Usage:** `myco current show [OPTIONS]`
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco current clear`
+
+Reset the current selector to `repo` (normal discovery). `--here` removes the `.myco.toml` directory pointer in cwd instead.
+
+**Usage:** `myco current clear [OPTIONS]`
+
+###### **Options:**
+
+* `--here` — Remove the `.myco.toml` pointer in cwd instead of the user-config selector.
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco workspace`
+
+The workspace selector — a glob-scoped set of universe repos (`[workspace] repos` in user myco.toml) that index-sourced views (`org-board`, `org-status`) filter to.
+
+**Usage:** `myco workspace [OPTIONS] <COMMAND>`
+
+###### **Commands:**
+
+* `list` — List universe repos — the names `[workspace]` globs match against (lasius clones ∪ registry).
+* `use` — Set the workspace — glob patterns over universe repo names, validated now (a glob matching nothing warns; a set matching nothing fails). Index-sourced views filter to the resolved set.
+* `show` — Show the workspace — configured globs, the resolved repo set, and per-glob warnings.
+* `clear` — Empty the workspace — index-sourced views return to the full universe.
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco workspace list`
+
+List universe repos — the names `[workspace]` globs match against (lasius clones ∪ registry).
+
+**Usage:** `myco workspace list [OPTIONS]`
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco workspace use`
+
+Set the workspace — glob patterns over universe repo names, validated now (a glob matching nothing warns; a set matching nothing fails). Index-sourced views filter to the resolved set.
+
+**Usage:** `myco workspace use [OPTIONS] <repos>...`
+
+###### **Arguments:**
+
+* `<repos>...` — Glob patterns over universe repo names (`*`/`?`/`[]`) — repeatable.
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco workspace show`
+
+Show the workspace — configured globs, the resolved repo set, and per-glob warnings.
+
+**Usage:** `myco workspace show [OPTIONS]`
+
+###### **Options:**
+
+* `--json` — Emit JSON (accepted everywhere; default output for machines).
+* `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
+* `--dir <PATH>` — Project worktree to act on, overriding discovery.
+* `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
+* `-h, --help` — Print help
+
+## `myco workspace clear`
+
+Empty the workspace — index-sourced views return to the full universe.
+
+**Usage:** `myco workspace clear [OPTIONS]`
 
 ###### **Options:**
 

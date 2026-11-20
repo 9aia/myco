@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["run"],"struct":["OrgRepo"],"type":["OrgLoader"]};
+window.SIDEBAR_ITEMS = {"fn":["run"],"struct":["OrgRepo"],"type":["DiscoverFn","OrgLoader"]};

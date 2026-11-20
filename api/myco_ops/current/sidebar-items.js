@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["config_selector","env_selector","list_targets","pointer_selector","resolve","write_config","write_pointer"],"struct":["Selector"]};

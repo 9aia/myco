@@ -19,7 +19,7 @@ surface small; add it if a real need shows up).</p>
 tables scope bindings to a driver (<code>[myco]</code>) or a single view
 (<code>["myco:board"]</code> — quote when the scope contains <code>:</code>). Keys are
 command ids (quote them — they contain <code>:</code>/<code>.</code>); values are a
-[<code>pavo_core::KeySpec</code>] string or an array of spec strings. An
+<a href="../../pavo_core/keymap/struct.KeySpec.html" title="struct pavo_core::keymap::KeySpec"><code>pavo_core::KeySpec</code></a> string or an array of spec strings. An
 entry <em>replaces</em> the declaration’s suggested keys wholesale;
 command ids absent from the file keep their suggestions.</p>
 <div class="example-wrap"><pre class="language-toml"><code># ~/.config/pavo/keys.toml
@@ -32,7 +32,7 @@ command ids absent from the file keep their suggestions.</p>
 [&quot;myco:board&quot;]                    # just the board view
 &quot;host.reload&quot; = &quot;R&quot;</code></pre></div>
 <p>Scope precedence per command id: <code>driver:view</code> &gt; <code>driver</code> &gt;
-global. Specs validate through [<code>pavo_core::KeySpec</code>]; invalid
+global. Specs validate through <a href="../../pavo_core/keymap/struct.KeySpec.html" title="struct pavo_core::keymap::KeySpec"><code>pavo_core::KeySpec</code></a>; invalid
 entries drop out of the effective binding (see
 <code>pavo_core::commands::effective_bindings</code>).</p>
 </div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.UserKeymap.html" title="struct pavo_tui::keymap::UserKeymap">User<wbr>Keymap</a></dt><dd>A parsed <code>keys.toml</code> — bindings partitioned by scope. <code>""</code>-less

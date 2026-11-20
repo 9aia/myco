@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["TOML"],"fn":["cycles_for","default_view_for","kinds_for","sync_auto_fetch_for","sync_auto_push_for"],"struct":["ConfigLoader"]};
+window.SIDEBAR_ITEMS = {"constant":["TOML"],"fn":["cycles_for","default_view_for","kinds_for","sync_auto_fetch_for","sync_auto_push_for","user_config_write_path","user_layer_path","user_state_path"],"struct":["ConfigLoader"]};

@@ -2,15 +2,15 @@
 (<code>myco-driver</code>) share it. <code>discover</code> itself is cli-local: ops
 takes the config loader as a parameter and the composition
 root (this crate) names the impl, so call sites stay two-arg.</p>
-<p>The cli <code>discover</code> adds the org-ledger fallback on top of ops’
-strict discovery: inside a <em>registered</em> repo with no ledger of
-its own, verbs resolve to the <code>ledger = "org"</code> entry’s
-worktree. The index opens lazily — only when plain discovery
-already failed — so the happy path never touches it, and
-unregistered repos fail exactly as before.</p>
+<p>The cli <code>discover</code> is the user-facing path: ops’
+<a href="../../myco_ops/discover/fn.discover_selected.html" title="fn myco_ops::discover::discover_selected"><code>myco_ops::discover::discover_selected</code></a> applies the
+current-ledger selector (P-015/P-016) plus the org-ledger
+fallback. The index opens lazily — only when the first pass
+fails or a selector target needs it — so the happy path never
+touches it, and unregistered repos fail exactly as before.</p>
 </div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Project.html" title="struct myco::discover::Project">Project</a></dt><dd>A resolved project: repo root + the <code>project/</code> worktree inside
-(or pointed at via <code>--dir</code>).</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.BRANCH.html" title="constant myco::discover::BRANCH">BRANCH</a></dt><dd>The orphan branch + conventional dir name.</dd><dt><a class="constant" href="constant.DIR.html" title="constant myco::discover::DIR">DIR</a></dt><dd>Conventional worktree dir at the repo root.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.discover.html" title="fn myco::discover::discover">discover</a></dt><dd><a href="../../myco_ops/discover/fn.discover.html" title="fn myco_ops::discover::discover"><code>myco_ops::discover::discover</code></a> wired to <a href="../ops/constant.CONFIG.html" title="constant myco::ops::CONFIG"><code>crate::ops::CONFIG</code></a>
-plus the org-ledger fallback (see module docs).</dd><dt><a class="fn" href="fn.qualifies.html" title="fn myco::discover::qualifies">qualifies</a></dt><dd><code>d</code> is usable as the project dir — a git worktree rooted at
+(or pointed at via <code>--dir</code>).</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.BRANCH.html" title="constant myco::discover::BRANCH">BRANCH</a></dt><dd>The orphan branch + conventional dir name.</dd><dt><a class="constant" href="constant.DIR.html" title="constant myco::discover::DIR">DIR</a></dt><dd>Conventional worktree dir at the repo root.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.discover.html" title="fn myco::discover::discover">discover</a></dt><dd><a href="../../myco_ops/discover/fn.discover_selected.html" title="fn myco_ops::discover::discover_selected"><code>myco_ops::discover::discover_selected</code></a> wired to
+<a href="../ops/constant.CONFIG.html" title="constant myco::ops::CONFIG"><code>crate::ops::CONFIG</code></a>, with the index opened on demand.</dd><dt><a class="fn" href="fn.qualifies.html" title="fn myco::discover::qualifies">qualifies</a></dt><dd><code>d</code> is usable as the project dir — a git worktree rooted at
 <code>d</code> checked out on <code>project</code>, or at minimum a dir holding
 <code>TODO.md</code>.</dd><dt><a class="fn" href="fn.repo_root_for.html" title="fn myco::discover::repo_root_for">repo_<wbr>root_<wbr>for</a></dt><dd>Resolve the repo root for <code>myco init</code> / <code>migrate</code> — the verbs
 that create the worktree rather than requiring it. <code>--root</code>

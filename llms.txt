@@ -20,6 +20,7 @@ Agent-first project management — markdown ledger canonical, git the audit trai
 - [Import external work](/myco/how-to/import-work.md)
 - [Shape the board with named views](/myco/how-to/views.md)
 - [See work across repos](/myco/how-to/org-views.md)
+- [Pin the ledger myco opens](/myco/how-to/current-ledger.md)
 - [Declare custom item kinds](/myco/how-to/custom-kinds.md)
 
 ### Reference
@@ -36,6 +37,7 @@ Agent-first project management — markdown ledger canonical, git the audit trai
 - [Architecture](/myco/explanation/architecture.md)
 - [Boundaries](/myco/explanation/boundaries.md)
 - [Concepts](/myco/explanation/concepts.md)
+- [Ledger selection — which ledger does `myco` open?](/myco/explanation/ledger-selection.md)
 - [Decisions](/myco/explanation/decisions.md)
 - [Flow: a task's life in the ledger](/myco/explanation/flow.md)
 - [Release model](/myco/explanation/release-model.md)

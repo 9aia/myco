@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["configured","resolve","resolve_globs","write_config"]};
