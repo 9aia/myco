@@ -10,9 +10,15 @@ use std::path::Path;
 
 #[test]
 fn driver_passes_pavo_conformance() {
-    let violations = pavo_testkit::conformance::check_driver(Path::new(env!(
-        "CARGO_BIN_EXE_tamias-driver-myco"
-    )));
+    // The harness default is a 10s per-request timeout — tight under
+    // nextest's parallel load (a debug `serve` spawn can starve past
+    // that). Give the wire 30s; assertions are unchanged.
+    let violations = pavo_testkit::conformance::check_driver_with(
+        Path::new(env!("CARGO_BIN_EXE_tamias-driver-myco")),
+        pavo_testkit::CheckOptions {
+            timeout: std::time::Duration::from_secs(30),
+        },
+    );
     assert!(
         violations.is_empty(),
         "pavo conformance violations:\n{}",
