@@ -57,11 +57,7 @@ pub fn env_selector() -> Option<Selector> {
 /// readable) wins over the user-layer file; repo `./myco.toml`
 /// is never a source.
 pub fn config_selector(cfg: ConfigLoader) -> Option<Selector> {
-    let path = std::env::var("MYCO_CONFIG")
-        .ok()
-        .map(PathBuf::from)
-        .filter(|p| p.is_file())
-        .or_else(crate::config::user_layer_path)?;
+    let path = crate::config::user_state_path()?;
     let c = cfg.load_file(&path).ok()?;
     c.current.map(|cur| Selector {
         ledger: cur.ledger,

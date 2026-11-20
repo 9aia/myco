@@ -84,6 +84,18 @@ fn repo_layer(explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
     }
 }
 
+/// The file user-state tables (`[current]`, `[workspace]`)
+/// read from — `MYCO_CONFIG` wins when set and readable, else
+/// the user-layer `myco.toml`. Writes never come through here —
+/// they always target [`user_config_write_path`].
+pub fn user_state_path() -> Option<PathBuf> {
+    std::env::var("MYCO_CONFIG")
+        .ok()
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
+        .or_else(user_layer_path)
+}
+
 /// The user-layer config file path — first existing candidate
 /// (XDG dir preferred over `~/.config`), `None` when no user
 /// `myco.toml` exists. `current` writes need the *write* path
@@ -163,6 +175,9 @@ fn merge(
         // (P-016). The dedicated `current` loader reads the files
         // directly anyway; this keeps `cfg.load` honest too.
         current: user_cfg.as_ref().and_then(|c| c.current.clone()),
+        // `[workspace]` is user-layer ONLY for the same reason —
+        // a repo must not scope the user's repo set (P-016).
+        workspace: user_cfg.as_ref().and_then(|c| c.workspace.clone()),
         ..Default::default()
     };
     for cfg in [&repo_cfg, &user_cfg].into_iter().flatten() {

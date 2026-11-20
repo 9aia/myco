@@ -25,3 +25,4 @@ pub mod universe;
 pub mod vcs;
 pub mod verb;
 pub mod view;
+pub mod workspace;
