@@ -14,7 +14,7 @@ P-015 adds a persistent current-ledger selector, but the selection model is stil
 ## Requirements
 
 - **R1 — precedence spec**: a formal, ordered resolution table covering `--dir`/`--root`, `MYCO_LEDGER`/`MYCO_LEDGER_SCOPE`, config `[current]` scope=first|last, cwd worktree discovery, `project_dir`, ancestor walk, org fallback, error. Each row: source, when it applies, what it can override.
-- **R2 — vocabulary**: canonical definitions for *repo ledger* (a repo's own `project/` worktree), *index* (`repos.toml` registry), *universe* (lasius clones ∪ registry), *org designation* (`ledger="org"`), *current selector* (user-layer `[current]`). Naming review: is `current` the right verb/config key vs `ledger`?
+- **R2 — vocabulary**: canonical definitions for *repo ledger* (a repo's own `project/` worktree), *index* (`repos.toml` registry), *universe* (lasius clones ∪ registry), *org designation* (`ledger="org"`), *current selector* (user-layer `[current]`).
 - **R3 — config surface**: decide whether `[current]` lives in `myco_core::Config` with user-layer-only merge, or a dedicated user-state loader; document why repo-layer injection must be impossible.
 - **R4 — failure semantics**: what happens when a persisted target goes stale (repo moved, org undesignated) — decided: hard error for every scope.
 
@@ -27,7 +27,7 @@ P-015 adds a persistent current-ledger selector, but the selection model is stil
 - **index**: `repos.toml` under `$MYCO_HOME` (`~/.local/share/myco`) — the registry of repos myco knows; a disposable derived cache.
 - **universe**: lasius workspace clones ∪ index registry entries — the named set `current` targets and `org-*` views resolve against.
 - **org designation**: the single index entry with `ledger = "org"`; its worktree is the org-wide ledger.
-- **current selector**: the user-layer `[current]` table — a sticky `ledger` target + `scope`.
+- **current selector**: the user-layer `[current]` table — a sticky ledger choice + `scope`.
 - **explicit override**: per-invocation selectors — `--dir`, `--root`, `MYCO_LEDGER`.
 
 ### Naming
@@ -64,8 +64,9 @@ First match wins. `D` = discovery stage.
 Notes:
 
 - `MYCO_LEDGER_SCOPE` defaults to `first` when `MYCO_LEDGER` is set; `MYCO_LEDGER=repo` disables the env override entirely.
+- Scopes are positional: `first` applies at row 4 (before cwd discovery), `last` at row 8 (after discovery, before org fallback).
 - `repo` in `[current]` disables the selector — rows 4 and 8 never match.
-- Rows 5–7 are today's discovery, unchanged and indivisible: cwd context always beats a `last`-scoped selector.
+- Rows 5–7 are today's discovery, unchanged and indivisible: they only match when they yield a ledger; a ledger-less repo context falls through. cwd context always beats a `last`-scoped selector.
 - Row 9 keeps existing semantics: it is the last resort before error, available whenever the index is readable — including outside any repo. `ledger = "none"` repos opt out.
 
 ### Target resolution

@@ -19,7 +19,7 @@ This proposal adds a user-level, mutable ledger selector managed by a new `myco 
 ## Requirements
 
 - **R1 — state**: `[current]` in the user-layer `myco.toml` records `ledger` + `scope`; repo `myco.toml` cannot set it.
-- **R2 — targets**: `repo` (today's discovery), `org` (index-designated org ledger), a universe repo name (index ∪ lasius clones), or an absolute worktree/repo path.
+- **R2 — targets**: `repo` (today's discovery), `org` (index-designated org ledger), a universe repo name (index ∪ lasius clones), or an absolute worktree/repo path. `repo`/`org` are reserved — `name:<repo>` is the escape hatch (P-016).
 - **R3 — verbs**: `myco current list|use|show|clear`, `--json` everywhere, exposed on CLI, `serve`/`batch`, and the driver ops surface.
 - **R4 — precedence**: `--dir`/`--root` always win; `MYCO_LEDGER`/`MYCO_LEDGER_SCOPE` act as a per-invocation selector; config `first` scope applies before cwd discovery; `last` scope applies after local discovery and before the built-in org fallback.
 - **R5 — validation**: `current use` resolves immediately and fails loudly (`org` needs an org designation, names need universe membership, paths must qualify).
@@ -39,7 +39,7 @@ Resolution order:
 
 ```text
 --dir / --root
-→ MYCO_LEDGER / MYCO_LEDGER_SCOPE (per-invocation override)
+→ MYCO_LEDGER / MYCO_LEDGER_SCOPE (per-invocation selector)
 → config ledger when scope = first
 → cwd inside project worktree
 → repo myco.toml project_dir
@@ -54,12 +54,12 @@ Resolution order:
 Commands:
 
 ```bash
-myco current list                  # repo/org/universe repos with ledgers
+myco current list                  # repo | org | <name> | <path> targets
 myco current use org               # or <repo-name> | </path> | repo
 myco current use myrepo --scope first
 myco current show [--json]         # ledger + scope + resolved root/worktree
 myco current clear                 # ledger = repo
-MYCO_LEDGER=org myco status        # per-invocation override
+MYCO_LEDGER=org myco status        # per-invocation selector
 ```
 
 Implementation notes (per P-016 spec): dedicated user-state loader in `myco-ops` (`myco_ops::current`) reading `MYCO_CONFIG` (when set) and the user-layer file — never repo `./myco.toml`, so repo injection is impossible by construction. `current use` rewrites the canonical user-layer file via `toml_edit`, ignoring `MYCO_CONFIG` (comments/formatting preserved). Formal precedence table, target resolution, and failure semantics live in P-016. Discovery gains one stage reusing `discover::qualifies`, `owns_project`, `universe::repos` (lasius clones ∪ registry), and `RepoEntry::worktree_path`; register the verbs in `VERBS` with cli+wire handlers so CLI, serve/batch, and driver ops all expose them.
@@ -69,5 +69,5 @@ Implementation notes (per P-016 spec): dedicated user-state loader in `myco-ops`
 - Verb group: `current` — `myco current list|use|show|clear`.
 - Config: `[current] ledger/scope` in user-layer `myco.toml`; repo layer cannot set it (P-016).
 - Names: resolve through the index universe, which already includes lasius clones inside a workspace.
-- Env: `MYCO_LEDGER` + `MYCO_LEDGER_SCOPE` as a per-invocation override.
+- Env: `MYCO_LEDGER` + `MYCO_LEDGER_SCOPE` as a per-invocation selector.
 - Surface: all verbs on CLI, serve/batch, and driver ops.

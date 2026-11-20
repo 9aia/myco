@@ -15,7 +15,7 @@ Myco's ledger-selection concepts (repo ledger, index/universe, org designation, 
 
 - **R1 — concepts doc**: repo ledger vs index vs universe vs org ledger vs current selector — one mental model, one diagram.
 - **R2 — precedence reference**: the formal resolution order from P-016 as a reference page, incl. `MYCO_LEDGER` env override and `--dir`/`--root`.
-- **R3 — config reference**: `[current] target/scope` in user-layer `myco.toml`, including the repo-layer injection rule.
+- **R3 — config reference**: `[current] ledger/scope` in user-layer `myco.toml` — `repo`|`org`|name|path targets, `first`|`last` scopes, `name:` escape hatch, repo-layer injection rule.
 - **R4 — surfaces**: document that CLI, `myco ui`, serve/batch, and driver ops share the same discovery; `org-*` index views are a separate explicit source.
 
 ## Decisions
