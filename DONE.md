@@ -11,3 +11,4 @@
 - T-087 sync.auto\_push: push ledger branch to origin after mutation commits (opt-in config, off by default) · owner:human:Luis-Emidio · created:2026-11-14 · done:2026-11-14
 - T-088 fix discovery: org-ledger fallback scoped to anchor's lasius workspace — ledger-less repos no longer resolve to a foreign org's ledger (commit 2fcff770) · created:2026-11-15 · done:2026-11-15
 - T-090 design: formalize ledger-selection model — naming (current/ledger/index/org), precedence spec, config surface · created:2026-11-20 · links:P-015 · done:2026-11-20
+- T-089 docs: explain repo-ledger vs index vs current-selector; publish the formal precedence table · created:2026-11-20 · links:P-015 · done:2026-11-20
