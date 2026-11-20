@@ -1,10 +1,11 @@
 +++
 id = "P-017"
 title = "Docs: ledger concepts and precedence reference"
-status = "open"
+status = "done"
 created = "2026-11-20"
 priority = "med"
 links = ["T-089", "P-015", "P-016"]
+done = "2026-11-20"
 +++
 
 ## Overview
