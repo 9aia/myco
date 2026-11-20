@@ -87,9 +87,11 @@ Notes:
 
 | Situation | any scope / env / `current use` |
 |-----------|-------------------------------|
-| target unresolvable at runtime | hard error naming target + `myco current clear` hint — stale config is never silent |
+| target unresolvable at runtime | hard error naming target + escape hint — stale config is never silent |
 | `current use <bad>` | fails immediately, writes nothing |
 | `current show` | reports resolved worktree, or the stale reason |
+
+Escape hatch: a stale `first`-scope or env target blocks *every* verb — including `current` itself. The error must hint `MYCO_LEDGER=repo myco current clear` (env row 3 beats the persisted row 4), not bare `myco current clear`, which would hit the same wall. `--dir`/`--root` work too but require knowing a valid path.
 
 ### Surfaces
 
