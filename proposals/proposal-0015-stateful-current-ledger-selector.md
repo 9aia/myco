@@ -1,9 +1,10 @@
 +++
 id = "P-015"
 title = "Stateful current-ledger selector"
-status = "in-progress"
+status = "done"
 created = "2026-11-20"
 priority = "med"
+done = "2026-11-20"
 +++
 
 # Stateful current-ledger selector
