@@ -1,10 +1,11 @@
 +++
 id = "P-016"
 title = "Ledger-selection model: formal precedence spec and naming"
-status = "open"
+status = "done"
 created = "2026-11-20"
 priority = "med"
 links = ["T-090", "P-015"]
+done = "2026-11-20"
 +++
 
 # Ledger-selection model: scenarios, precedence, workspace
