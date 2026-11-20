@@ -37,6 +37,7 @@ pub mod check;
 pub mod commit;
 pub mod confirm;
 pub mod continuity;
+pub mod current;
 pub mod digest;
 pub mod discover;
 pub mod done;
@@ -142,12 +143,16 @@ fn h_ui(ctx: &registry::Ctx, a: &registry::Args) -> Result<i32, String> {
             })
             .collect())
     });
+    // Ledger discovery rides the cli path — index-aware, so
+    // `[current]`/`MYCO_LEDGER` name/org targets resolve (P-015).
+    let disc: myco_tui::DiscoverFn = Box::new(crate::discover::discover);
     myco_tui::run(
         ctx.dir.as_deref(),
         ctx.root.as_deref(),
         ctx.no_commit,
         view,
         Some(org),
+        Some(disc),
     )
     .map(|_| 0)
 }

@@ -32,7 +32,7 @@ pub struct Project {
 
 /// Canonical form for comparisons — never fails, degrades to the
 /// input when `canonicalize` can't resolve the path.
-fn canon(p: &Path) -> PathBuf {
+pub(crate) fn canon(p: &Path) -> PathBuf {
     p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
 }
 
@@ -187,6 +187,43 @@ fn discover_in_index(
     cfg: ConfigLoader,
     index: Option<&dyn myco_index::Index>,
 ) -> Result<Project, String> {
+    discover_impl(cwd, dir, root, cfg, index, false)
+}
+
+/// [`discover_with`] plus the current-ledger selector (P-015/
+/// P-016) — the user-facing entry point. Internal callers
+/// (`universe`, `index` verbs) keep the strict paths so a pinned
+/// ledger can never hijack repo bookkeeping.
+pub fn discover_selected(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: ConfigLoader,
+    index: Option<&dyn myco_index::Index>,
+) -> Result<Project, String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
+    discover_selected_at(&cwd, dir, root, cfg, index)
+}
+
+/// [`discover_selected`] with an explicit cwd — tests and
+/// index-universe callers drive this (no `set_current_dir`).
+pub fn discover_selected_at(
+    cwd: &Path,
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: ConfigLoader,
+    index: Option<&dyn myco_index::Index>,
+) -> Result<Project, String> {
+    discover_impl(cwd, dir, root, cfg, index, true)
+}
+
+fn discover_impl(
+    cwd: &Path,
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    cfg: ConfigLoader,
+    index: Option<&dyn myco_index::Index>,
+    sel: bool,
+) -> Result<Project, String> {
     // --dir: an explicit worktree path — still must qualify,
     // otherwise verbs would stage/commit inside whatever repo
     // happens to contain an arbitrary dir
@@ -232,6 +269,24 @@ fn discover_in_index(
 
     let cwd = canon(cwd);
 
+    // current-ledger selector (P-016) — `always`-mode pins answer
+    // before cwd discovery: env first (per-invocation beats
+    // persisted), then `[current]` mode=always
+    let env_sel = sel.then(crate::current::env_selector).flatten();
+    if sel {
+        if let Some(s) = env_sel
+            .clone()
+            .filter(|s| s.mode == myco_core::CurrentMode::Always)
+        {
+            return crate::current::resolve(&s, &cwd, index, cfg);
+        }
+        if let Some(s) = crate::current::config_selector(cfg)
+            .filter(|s| s.mode == myco_core::CurrentMode::Always)
+        {
+            return crate::current::resolve(&s, &cwd, index, cfg);
+        }
+    }
+
     // cwd inside the project worktree itself — checked before any
     // `project/` found by config or walking: an ancestor's ledger
     // may be a different repo's
@@ -267,6 +322,26 @@ fn discover_in_index(
                 root: a.to_path_buf(),
                 worktree: candidate,
             });
+        }
+    }
+
+    // late selector rows (P-016): `.myco.toml` directory pointer
+    // (non-repo dirs only), then `backup`-mode pins — env before
+    // persisted config — all before the org fallback
+    if sel {
+        if let Some((_f, s)) = crate::current::pointer_selector(&cwd) {
+            return crate::current::resolve(&s, &cwd, index, cfg);
+        }
+        if let Some(s) = env_sel
+            .clone()
+            .filter(|s| s.mode == myco_core::CurrentMode::Backup)
+        {
+            return crate::current::resolve(&s, &cwd, index, cfg);
+        }
+        if let Some(s) = crate::current::config_selector(cfg)
+            .filter(|s| s.mode == myco_core::CurrentMode::Backup)
+        {
+            return crate::current::resolve(&s, &cwd, index, cfg);
         }
     }
 
@@ -954,5 +1029,217 @@ mod tests {
             assert_eq!(p.worktree, org_a.join("project").canonicalize().unwrap());
             assert_eq!(p.root, org_a.canonicalize().unwrap());
         });
+    }
+
+    // --- current-ledger selector (P-015/P-016) ---------------------
+
+    /// An empty stand-in user config — keeps `config_selector`
+    /// off the real `~/.config/myco/myco.toml`.
+    fn user_cfg(text: &str) -> (tempfile::TempDir, String) {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("myco.toml");
+        std::fs::write(&f, text).unwrap();
+        (d, f.to_string_lossy().into_owned())
+    }
+
+    /// `MYCO_LEDGER` always-mode answers before cwd discovery;
+    /// backup-mode yields to the repo's own ledger.
+    #[test]
+    fn selector_env_modes() {
+        let (_d, cfgp) = user_cfg("");
+        let cwd_repo = repo_with_project();
+        let other = repo_with_project();
+        let other_wt = other.path().join("project").canonicalize().unwrap();
+        let target = other_wt.to_string_lossy().into_owned();
+        let own_wt = cwd_repo.path().join("project");
+
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", Some(cfgp.as_str())),
+                ("MYCO_LEDGER", Some(target.as_str())),
+                ("MYCO_LEDGER_SCOPE", Some("always")),
+            ],
+            || {
+                let p =
+                    discover_selected_at(cwd_repo.path(), None, None, test_loader(), None).unwrap();
+                assert_eq!(p.worktree, other_wt);
+            },
+        );
+
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", Some(cfgp.as_str())),
+                ("MYCO_LEDGER", Some(target.as_str())),
+                ("MYCO_LEDGER_SCOPE", Some("backup")),
+            ],
+            || {
+                let p =
+                    discover_selected_at(cwd_repo.path(), None, None, test_loader(), None).unwrap();
+                assert_eq!(p.worktree, own_wt);
+                // …but outside any repo the backup target answers
+                let outside = tempfile::tempdir().unwrap();
+                let p =
+                    discover_selected_at(outside.path(), None, None, test_loader(), None).unwrap();
+                assert_eq!(p.worktree, other_wt);
+            },
+        );
+    }
+
+    /// A stale pin hard-errors in every mode — `always` inside a
+    /// repo, `backup` outside one. `MYCO_LEDGER=repo` disables.
+    #[test]
+    fn selector_stale_target_hard_errors() {
+        let (_d, cfgp) = user_cfg("");
+        let cwd_repo = repo_with_project();
+        let own_wt = cwd_repo.path().join("project");
+        let bogus = "/definitely/not/a/ledger".to_string();
+
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", Some(cfgp.as_str())),
+                ("MYCO_LEDGER", Some(bogus.as_str())),
+            ],
+            || {
+                // env defaults to always → error even inside a repo
+                assert!(
+                    discover_selected_at(cwd_repo.path(), None, None, test_loader(), None).is_err()
+                );
+            },
+        );
+
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", Some(cfgp.as_str())),
+                ("MYCO_LEDGER", Some(bogus.as_str())),
+                ("MYCO_LEDGER_SCOPE", Some("backup")),
+            ],
+            || {
+                // backup yields to the repo's own ledger…
+                let p =
+                    discover_selected_at(cwd_repo.path(), None, None, test_loader(), None).unwrap();
+                assert_eq!(p.worktree, own_wt);
+                // …but hard-errors where discovery finds nothing
+                let outside = tempfile::tempdir().unwrap();
+                assert!(
+                    discover_selected_at(outside.path(), None, None, test_loader(), None).is_err()
+                );
+            },
+        );
+
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", Some(cfgp.as_str())),
+                ("MYCO_LEDGER", Some("repo")),
+            ],
+            || {
+                let p =
+                    discover_selected_at(cwd_repo.path(), None, None, test_loader(), None).unwrap();
+                assert_eq!(p.worktree, own_wt);
+            },
+        );
+    }
+
+    /// Persisted `[current]` in the user config applies; a
+    /// `[current]` table in the *repo's* myco.toml is ignored —
+    /// a repo must not pin the user's ledger.
+    #[test]
+    fn selector_config_scope_and_repo_injection() {
+        let cwd_repo = repo_with_project();
+        let other = repo_with_project();
+        let other_wt = other.path().join("project").canonicalize().unwrap();
+        let own_wt = cwd_repo.path().join("project");
+        let (_d, cfgp) = user_cfg(&format!(
+            "[current]\nledger = \"{}\"\nmode = \"always\"\n",
+            other_wt.display()
+        ));
+
+        temp_env::with_var("MYCO_CONFIG", Some(cfgp.as_str()), || {
+            // user-layer always pin beats the repo's own ledger
+            let p = discover_selected_at(cwd_repo.path(), None, None, test_loader(), None).unwrap();
+            assert_eq!(p.worktree, other_wt);
+        });
+
+        // repo-layer [current] — same target, but in the repo's
+        // own myco.toml: must NOT take effect
+        std::fs::write(
+            cwd_repo.path().join("myco.toml"),
+            format!(
+                "[current]\nledger = \"{}\"\nmode = \"always\"\n",
+                other_wt.display()
+            ),
+        )
+        .unwrap();
+        let (_d2, empty) = user_cfg("");
+        temp_env::with_var("MYCO_CONFIG", Some(empty.as_str()), || {
+            let p = discover_selected_at(cwd_repo.path(), None, None, test_loader(), None).unwrap();
+            assert_eq!(p.worktree, own_wt);
+        });
+    }
+
+    /// `.myco.toml` directory pointers answer only outside git
+    /// repos — inside one they're repo-controlled and skipped.
+    #[test]
+    fn selector_pointer_scope() {
+        let (_d, cfgp) = user_cfg("");
+        let other = repo_with_project();
+        let other_wt = other.path().join("project").canonicalize().unwrap();
+
+        // plain dir + pointer → resolves the target
+        let base = tempfile::tempdir().unwrap();
+        let sub = base.path().join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(
+            base.path().join(".myco.toml"),
+            format!("ledger = \"{}\"\n", other_wt.display()),
+        )
+        .unwrap();
+        temp_env::with_var("MYCO_CONFIG", Some(cfgp.as_str()), || {
+            let p = discover_selected_at(&sub, None, None, test_loader(), None).unwrap();
+            assert_eq!(p.worktree, other_wt);
+        });
+
+        // pointer inside a repo is ignored — a repo without its
+        // own ledger still fails rather than obeying it
+        let repo = repo_without_project();
+        std::fs::write(
+            repo.path().join(".myco.toml"),
+            format!("ledger = \"{}\"\n", other_wt.display()),
+        )
+        .unwrap();
+        temp_env::with_var("MYCO_CONFIG", Some(cfgp.as_str()), || {
+            assert!(discover_selected_at(repo.path(), None, None, test_loader(), None).is_err());
+        });
+    }
+
+    /// Universe-name targets resolve through the index; `name:`
+    /// escapes reserved words like a repo literally named `repo`.
+    #[test]
+    fn selector_name_targets() {
+        let (_d, cfgp) = user_cfg("");
+        let named = repo_with_project();
+        let named_root = named.path().canonicalize().unwrap();
+        let named_wt = named_root.join("project");
+        let idx_dir = tempfile::tempdir().unwrap();
+        let index = RedbIndex::open_at(
+            camino::Utf8PathBuf::from_path_buf(idx_dir.path().join("idx")).unwrap(),
+        )
+        .unwrap();
+        index
+            .register(&RepoEntry::new(canon_path(named.path()), "repo"))
+            .unwrap();
+        let outside = tempfile::tempdir().unwrap();
+
+        temp_env::with_vars(
+            [
+                ("MYCO_CONFIG", Some(cfgp.as_str())),
+                ("MYCO_LEDGER", Some("name:repo")),
+            ],
+            || {
+                let p =
+                    discover_selected_at(outside.path(), None, None, test_loader(), Some(&index))
+                        .unwrap();
+                assert_eq!(p.worktree, named_wt.canonicalize().unwrap());
+            },
+        );
     }
 }

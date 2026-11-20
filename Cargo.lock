@@ -1179,6 +1179,7 @@ dependencies = [
  "temp-env",
  "tempfile",
  "time",
+ "toml_edit 0.22.27",
 ]
 
 [[package]]

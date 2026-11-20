@@ -188,6 +188,38 @@ pub struct IndexConfig {
     pub ledger: Option<LedgerMode>,
 }
 
+/// Where a `[current]` pin sits in ledger discovery (P-016).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CurrentMode {
+    /// The pin answers only when cwd discovery finds nothing —
+    /// the safe default.
+    #[default]
+    Backup,
+    /// The pin wins over cwd discovery — a true "current ledger".
+    Always,
+}
+
+/// The `[current]` config table — the user-layer ledger selector
+/// (P-015/P-016). Parsed on every layer for tolerance, but the
+/// merge keeps only the user-layer value: a repo's `[current]`
+/// never takes effect.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CurrentConfig {
+    /// `repo` | `org` | `<universe repo name>` | `</abs/path>` |
+    /// `name:<repo>` — `repo` disables the selector.
+    #[serde(default = "default_current_ledger")]
+    pub ledger: String,
+    /// `always` | `backup` — where the pin sits in discovery.
+    #[serde(default)]
+    pub mode: CurrentMode,
+}
+
+fn default_current_ledger() -> String {
+    "repo".into()
+}
+
 /// The `myco.toml`-shaped config value the config loader
 /// (`myco_ops::config`) produces. Fields grow per phase; unknown keys are rejected so a typo
 /// fails loud instead of silently doing nothing.
@@ -226,6 +258,10 @@ pub struct Config {
     /// directly, so a user-layer table can't leak a global
     /// designation into every repo.
     pub index: Option<IndexConfig>,
+    /// `[current]` — the user-layer ledger selector (P-016).
+    /// Merge keeps the user layer only; a repo `myco.toml` may
+    /// carry the table but it never takes effect.
+    pub current: Option<CurrentConfig>,
     /// `[[cycles]]` — named iteration windows (sprints, releases,
     /// quarters). Scheduling is config, not ledger memory: item
     /// lines just carry `cycle:<name>` and `check` warns when a

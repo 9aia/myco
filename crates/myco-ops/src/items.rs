@@ -268,7 +268,10 @@ pub fn open_with_index<S: Store>(
     index: Option<&dyn myco_index::Index>,
     mk: impl FnOnce(&Path, &myco_core::KindTable) -> Result<S, String>,
 ) -> Result<(discover::Project, LockedStore<S>), String> {
-    let proj = discover::discover_with(dir, root, cfg, index)?;
+    // selector-aware discovery (P-015): `[current]`/`MYCO_LEDGER`/
+    // `.myco.toml` pointers apply to every verb that opens a
+    // ledger; internal callers keep the strict `discover_with`.
+    let proj = discover::discover_selected(dir, root, cfg, index)?;
     // a detached worktree would swallow the write — refuse before
     // the store opens (`check --fix` repairs the worktree itself)
     ops::ensure_committable(&proj.worktree)?;
@@ -313,7 +316,7 @@ pub fn open_read_with_index<S: Store>(
     index: Option<&dyn myco_index::Index>,
     mk: impl FnOnce(&Path, &myco_core::KindTable) -> Result<S, String>,
 ) -> Result<(discover::Project, LockedStore<S>), String> {
-    let proj = discover::discover_with(dir, root, cfg, index)?;
+    let proj = discover::discover_selected(dir, root, cfg, index)?;
     let kinds = crate::config::kinds_for(&proj.root, cfg);
     let lock = ops::lock_shared(&proj.worktree)?;
     let store = mk(&proj.worktree, &kinds)?;

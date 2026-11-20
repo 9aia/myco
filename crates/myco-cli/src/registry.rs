@@ -724,6 +724,10 @@ const GROUPS: &[Group] = &[
         about: "The derived index: register repos, query/rebuild snapshots.",
     },
     Group {
+        name: "current",
+        about: "The current-ledger selector — which ledger `myco` opens when cwd discovery doesn't say (`[current]` in user myco.toml; `repo|org|<name>|</path>|name:<repo>`; modes `always|backup`; `.myco.toml` directory pointers; `MYCO_LEDGER` env).",
+    },
+    Group {
         name: "org",
         about: "Cross-repo scaffolding — re-run `init` on every registered repo. Cross-repo *views* are `myco view org-board|org-status` (index-sourced).",
     },
@@ -1698,6 +1702,66 @@ pub static VERBS: &[Verb] = &[
         hidden: false,
         cli: Some(crate::indexcmd::h_rebuild),
         wire: None,
+    },
+    Verb {
+        name: "current.list",
+        about: "List selectable ledger targets — `repo` (normal discovery), `org` (the index-designated org ledger), and every ledger-capable repo in the universe. Names that collide with a reserved word are shown `name:`-escaped.",
+        params: NO_PARAMS,
+        kind_lock: None,
+        mutates: false,
+        hidden: false,
+        cli: Some(crate::current::h_list),
+        wire: Some(serve::w_current_list),
+    },
+    Verb {
+        name: "current.use",
+        about: "Pin the current ledger — the target is validated now and fails loudly if unresolvable. `--mode always` beats cwd discovery; `backup` (default) answers only when discovery finds nothing (both beat the org fallback). `--here` writes a `.myco.toml` directory pointer in cwd instead of the user config.",
+        params: &[
+            &[
+                pos(
+                    "target",
+                    Val::Str,
+                    "`repo` | `org` | `<universe-repo-name>` | `</abs/path>` | `name:<repo>`.",
+                ),
+                opt(
+                    "mode",
+                    Val::Str,
+                    "`always` | `backup` (default `backup`).",
+                ),
+                flag(
+                    "here",
+                    "Write a `.myco.toml` directory pointer in cwd instead of `[current]` in user config.",
+                ),
+            ],
+        ],
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::current::h_use),
+        wire: Some(serve::w_current_use),
+    },
+    Verb {
+        name: "current.show",
+        about: "Show the current selector — env (`MYCO_LEDGER`/`MYCO_LEDGER_SCOPE`), persisted `[current]`, directory pointer, and what discovery resolves to.",
+        params: NO_PARAMS,
+        kind_lock: None,
+        mutates: false,
+        hidden: false,
+        cli: Some(crate::current::h_show),
+        wire: Some(serve::w_current_show),
+    },
+    Verb {
+        name: "current.clear",
+        about: "Reset the current selector to `repo` (normal discovery). `--here` removes the `.myco.toml` directory pointer in cwd instead.",
+        params: &[&[flag(
+            "here",
+            "Remove the `.myco.toml` pointer in cwd instead of the user-config selector.",
+        )]],
+        kind_lock: None,
+        mutates: true,
+        hidden: false,
+        cli: Some(crate::current::h_clear),
+        wire: Some(serve::w_current_clear),
     },
     Verb {
         name: "org.init",

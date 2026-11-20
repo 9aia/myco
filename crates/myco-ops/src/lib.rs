@@ -15,6 +15,7 @@
 //! same functions, so every front-end sees identical state.
 
 pub mod config;
+pub mod current;
 pub mod discover;
 pub mod history;
 pub mod items;

@@ -84,6 +84,28 @@ fn repo_layer(explicit: Option<&Path>) -> Result<Option<PathBuf>, String> {
     }
 }
 
+/// The user-layer config file path — first existing candidate
+/// (XDG dir preferred over `~/.config`), `None` when no user
+/// `myco.toml` exists. `current` writes need the *write* path
+/// instead — see [`user_config_write_path`].
+pub fn user_layer_path() -> Option<PathBuf> {
+    user_layer()
+}
+
+/// Where user-layer writes land — the preferred candidate even
+/// when no file exists yet (`$XDG_CONFIG_HOME/myco/myco.toml`,
+/// else `~/.config/myco/myco.toml`).
+pub fn user_config_write_path() -> Option<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        dirs.push(PathBuf::from(xdg).join("myco"));
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(PathBuf::from(home).join(".config/myco"));
+    }
+    dirs.first().map(|d| d.join("myco.toml"))
+}
+
 /// First existing path wins within the user layer — XDG dir
 /// preferred over ~/.config. Same scarab probe, dirs swapped.
 fn user_layer() -> Option<PathBuf> {
@@ -135,6 +157,12 @@ fn merge(
             .as_ref()
             .and_then(|c| c.index.clone())
             .or_else(|| user_cfg.as_ref().and_then(|c| c.index.clone())),
+        // `[current]` is user-layer ONLY — a repo `myco.toml` may
+        // carry the table (the parse tolerates it) but it never
+        // takes effect: repos must not pin the user's ledger
+        // (P-016). The dedicated `current` loader reads the files
+        // directly anyway; this keeps `cfg.load` honest too.
+        current: user_cfg.as_ref().and_then(|c| c.current.clone()),
         ..Default::default()
     };
     for cfg in [&repo_cfg, &user_cfg].into_iter().flatten() {

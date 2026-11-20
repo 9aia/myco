@@ -46,6 +46,7 @@ clap-markdown = "0.1.5"
 thiserror = "2"
 time = { version = "0.3", features = ["serde", "parsing", "formatting", "macros"] }
 camino = { version = "1", features = ["serde1"] }
+toml_edit = "0.22"
 slug = "0.1"
 markdown = "1"
 mdast_util_to_markdown = "0.0.2"

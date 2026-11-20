@@ -140,6 +140,14 @@ pub struct OrgRepo {
 /// impl-free). Called at open and on every reload (`:w`/`R`).
 pub type OrgLoader = Box<dyn FnMut() -> Result<Vec<OrgRepo>, String>>;
 
+/// Ledger discovery — injected by the composition root (`myco ui`
+/// wires the index-aware cli path so `[current]`/`MYCO_LEDGER`
+/// name/org targets resolve). `None` falls back to ops' selector
+/// without the index — env/config/pointer/path targets still
+/// resolve; `org`/universe names need the injected variant.
+pub type DiscoverFn =
+    Box<dyn Fn(Option<&Path>, Option<&Path>) -> Result<discover::Project, String>>;
+
 /// A flattened display row — section headers aren't selectable.
 #[derive(Debug, Clone)]
 pub enum Row {
@@ -327,11 +335,17 @@ impl Model {
         no_commit: bool,
         view: Option<String>,
         org_loader: Option<OrgLoader>,
+        discover_fn: Option<DiscoverFn>,
     ) -> Result<Self, String> {
         // The view resolves first — its source picks the universe.
         // Discovery here is only for the config root, so a repo-less
-        // launch still reaches an index-sourced spec.
-        let proj = discover::discover(dir, root, CONFIG).ok();
+        // launch still reaches an index-sourced spec. The injected
+        // fn carries the index-aware selector path (P-015); without
+        // it the ops selector runs index-less.
+        let proj = match discover_fn {
+            Some(f) => f(dir, root).ok(),
+            None => discover::discover_selected(dir, root, CONFIG, None).ok(),
+        };
         let cfg_root = proj
             .as_ref()
             .map(|p| p.root.clone())
@@ -3749,7 +3763,7 @@ pub(crate) mod tests {
         let (home, cfg) = env_dirs();
         pin_env(home.path(), cfg.path());
         let (_dir, wt) = open_fixture();
-        let m = Model::open(Some(&wt), None, true, None, None).unwrap();
+        let m = Model::open(Some(&wt), None, true, None, None, None).unwrap();
         assert_eq!(m.selected().unwrap().id.number(), 1);
         assert!(m.store.is_some() && m.orgs.is_none());
         assert_eq!(m.board, Board::Todo);
@@ -3770,6 +3784,7 @@ pub(crate) mod tests {
             true,
             Some("org-board".into()),
             Some(loader),
+            None,
         )
         .unwrap();
         assert!(m.orgs.is_some() && m.store.is_none());
@@ -3797,6 +3812,7 @@ pub(crate) mod tests {
             true,
             Some("org-board".into()),
             Some(loader),
+            None,
         )
         .unwrap();
         assert!(m.proj.is_none());
@@ -3813,7 +3829,7 @@ pub(crate) mod tests {
         pin_env(home.path(), cfg.path());
         let (_dir, wt) = open_fixture();
         // no loader at all
-        let err = Model::open(Some(&wt), None, true, Some("org-board".into()), None)
+        let err = Model::open(Some(&wt), None, true, Some("org-board".into()), None, None)
             .err()
             .unwrap();
         assert!(err.contains("no index"), "{err}");
@@ -3824,12 +3840,13 @@ pub(crate) mod tests {
             true,
             Some("org-board".into()),
             Some(Box::new(|| Err("index down".into()))),
+            None,
         )
         .err()
         .unwrap();
         assert_eq!(err, "index down");
         // unknown view name
-        let err = Model::open(Some(&wt), None, true, Some("nope".into()), None)
+        let err = Model::open(Some(&wt), None, true, Some("nope".into()), None, None)
             .err()
             .unwrap();
         assert!(!err.is_empty());
@@ -3854,6 +3871,7 @@ pub(crate) mod tests {
             true,
             Some("org-board".into()),
             Some(loader),
+            None,
         )
         .unwrap();
         assert_eq!(m.status, "index: a: rescan failed");
@@ -3865,7 +3883,7 @@ pub(crate) mod tests {
         let (home, cfg) = env_dirs();
         pin_env(home.path(), cfg.path());
         let (_dir, wt) = open_fixture();
-        let m = Model::open(Some(&wt), None, true, Some("board".into()), None).unwrap();
+        let m = Model::open(Some(&wt), None, true, Some("board".into()), None, None).unwrap();
         assert_eq!(m.status, "view: board");
         assert!(m.view.is_some());
     }

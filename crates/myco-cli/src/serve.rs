@@ -1106,6 +1106,27 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
     }
 }
 
+/// `current.*` wire handlers — the selector verbs are
+/// ledger-independent (they resolve *which* ledger opens), so
+/// they run against the same user state the CLI does.
+pub(crate) fn w_current_list(_s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(crate::current::list_json()?)
+}
+
+pub(crate) fn w_current_use(_s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    let target = a.text("target")?;
+    let mode = a.opt("mode").unwrap_or("backup");
+    Ok(crate::current::use_json(target, mode, a.flag("here"))?)
+}
+
+pub(crate) fn w_current_show(_s: &Server, _a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(crate::current::show_json()?)
+}
+
+pub(crate) fn w_current_clear(_s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
+    Ok(crate::current::clear_json(a.flag("here"))?)
+}
+
 /// The `serve` verb itself — stdio transport, JSON-RPC wire.
 pub(crate) fn h_serve(
     ctx: &crate::registry::Ctx,

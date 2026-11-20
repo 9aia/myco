@@ -34,7 +34,7 @@
 mod app;
 mod render;
 
-pub use app::{OrgLoader, OrgRepo};
+pub use app::{DiscoverFn, OrgLoader, OrgRepo};
 
 use std::io::{self, Stdout};
 use std::path::Path;
@@ -77,14 +77,18 @@ fn install_panic_hook() {
 /// config entry) whose filter narrows every board's item source; a
 /// `source = "index"` view swaps the repo store for `org`'s
 /// cross-repo universe (required then — `myco ui` supplies it).
+/// `disc` is the ledger-discovery fn — `myco ui` injects the
+/// index-aware cli path so the current-ledger selector resolves
+/// `org`/universe-name targets; `None` runs it index-less.
 pub fn run(
     dir: Option<&Path>,
     root: Option<&Path>,
     no_commit: bool,
     view: Option<String>,
     org: Option<OrgLoader>,
+    disc: Option<DiscoverFn>,
 ) -> Result<(), String> {
-    let mut model = app::Model::open(dir, root, no_commit, view, org)?;
+    let mut model = app::Model::open(dir, root, no_commit, view, org, disc)?;
     enable_raw_mode().map_err(|e| format!("raw mode: {e}"))?;
     // Guard first — raw mode is on from here, so every fallible
     // step below (alt screen, terminal init) must restore on `?`.
