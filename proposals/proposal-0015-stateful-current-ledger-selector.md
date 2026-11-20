@@ -18,7 +18,7 @@ This proposal adds a user-level, mutable ledger selector managed by a new `myco 
 
 ## Requirements
 
-- **R1 — state**: `[current]` in the user-layer `myco.toml` records `target` + `scope`; repo `myco.toml` cannot set it.
+- **R1 — state**: `[current]` in the user-layer `myco.toml` records `ledger` + `scope`; repo `myco.toml` cannot set it.
 - **R2 — targets**: `auto` (today's discovery), `org` (index-designated org ledger), a universe repo name (index ∪ lasius clones), or an absolute worktree/repo path.
 - **R3 — verbs**: `myco current list|use|show|clear`, `--json` everywhere, exposed on CLI, `serve`/`batch`, and the driver ops surface.
 - **R4 — precedence**: `--dir`/`--root` always win; `MYCO_LEDGER`/`MYCO_LEDGER_SCOPE` act as a per-invocation override; config `override` scope applies before cwd discovery; `fallback` scope applies after local discovery and before the built-in org fallback.
@@ -31,7 +31,7 @@ User config (`~/.config/myco/myco.toml`, `$XDG_CONFIG_HOME` honored):
 
 ```toml
 [current]
-target = "org"        # auto | org | <universe repo name> | </abs/path>
+ledger = "org"        # auto | org | <universe repo name> | </abs/path>
 scope  = "fallback"   # fallback | override
 ```
 
@@ -40,11 +40,11 @@ Resolution order:
 ```text
 --dir / --root
 → MYCO_LEDGER / MYCO_LEDGER_SCOPE (per-invocation override)
-→ config target when scope = override
+→ config ledger when scope = override
 → cwd inside project worktree
 → repo myco.toml project_dir
 → ancestor project/ walk
-→ config target when scope = fallback
+→ config ledger when scope = fallback
 → org fallback
 → error
 ```
@@ -57,17 +57,17 @@ Commands:
 myco current list                  # auto/org/universe repos with ledgers
 myco current use org               # or <repo-name> | </path> | auto
 myco current use myrepo --scope override
-myco current show [--json]         # target + scope + resolved root/worktree
-myco current clear                 # target = auto
+myco current show [--json]         # ledger + scope + resolved root/worktree
+myco current clear                 # ledger = auto
 MYCO_LEDGER=org myco status        # per-invocation override
 ```
 
-Implementation notes: add `CurrentConfig` to `myco_core::Config` but merge `[current]` from the user layer only — repo `myco.toml` must not pin the global ledger. `current use` rewrites the resolved user-layer `myco.toml` via `toml_edit` (comments/formatting preserved) and ignores `MYCO_CONFIG` for the write target. Discovery gains one stage reusing `discover::qualifies`, `owns_project`, `universe::repos` (lasius clones ∪ registry), and `RepoEntry::worktree_path`; register the verbs in `VERBS` with cli+wire handlers so CLI, serve/batch, and driver ops all expose them.
+Implementation notes (per P-016 spec): dedicated user-state loader in `myco-ops` (`myco_ops::current`) reading only `$XDG_CONFIG_HOME/myco/myco.toml` / `~/.config/myco/myco.toml` — never `MYCO_CONFIG` or repo `./myco.toml`, so repo injection is impossible by construction. `current use` rewrites that file via `toml_edit` (comments/formatting preserved). Formal precedence table, target resolution, and failure semantics live in P-016. Discovery gains one stage reusing `discover::qualifies`, `owns_project`, `universe::repos` (lasius clones ∪ registry), and `RepoEntry::worktree_path`; register the verbs in `VERBS` with cli+wire handlers so CLI, serve/batch, and driver ops all expose them.
 
 ## Decisions
 
 - Verb group: `current` — `myco current list|use|show|clear`.
-- Config: `[current] target/scope` in user-layer `myco.toml`; repo layer cannot set it.
+- Config: `[current] ledger/scope` in user-layer `myco.toml`; repo layer cannot set it (P-016).
 - Names: resolve through the index universe, which already includes lasius clones inside a workspace.
 - Env: `MYCO_LEDGER` + `MYCO_LEDGER_SCOPE` as a per-invocation override.
 - Surface: all verbs on CLI, serve/batch, and driver ops.
