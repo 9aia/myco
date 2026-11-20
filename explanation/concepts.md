@@ -43,6 +43,16 @@ The vocabulary of the myco ledger — each term defined once.
 - **Ledger state** — per universe repo: `local` (own `project/`),
   `none` (ledger-less — verbs resolve to the org ledger), or `org`
   (the one repo every `none` member points at).
+- **Org designation** — the `ledger = "org"` mark on one universe
+  entry; its worktree is the fallback ledger and a `current`
+  target.
+- **Current selector** — the user-layer `[current]` table in
+  `myco.toml`: a sticky ledger target + `always`/`backup` mode.
+  See [ledger selection](/explanation/ledger-selection).
+- **Directory pointer** — a `.myco.toml` file in a plain folder
+  naming a ledger; honored only outside git repos.
+- **Workspace** — `[workspace] repos` globs selecting a set of
+  universe repos for index-sourced views.
 
 ## Surfaces
 
