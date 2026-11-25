@@ -1464,6 +1464,7 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--cycle <cycle>` — Items in this cycle.
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
+* `--q <QUERY>` — Query-language filter (P-058) — `key:value` terms (`is:`, `status:`, `pri:>=`, `label:`, `owner:`/`assignee:`/`@me`, `claimed`/`unclaimed`, `epic:`, `milestone:`, `due:` incl. `today`/`Nd`/`>=` bounds, `cycle:`), `-term` negation, `OR` alternatives, plus bare text terms; merges over the named spec like the filter flags. [alias: --query]
 * `--source <source>` — Item universe — repo (default) reads this worktree; index unions every registered repo's snapshot (org views).
 * `--group-by <group_by>` — Group axis — status|priority|kind|owner|epic|milestone|repo|cycle.
 * `--sort <sort>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction.
@@ -1498,6 +1499,7 @@ The single highest-priority open item — "what should I work on" (a `view` eval
 * `--cycle <cycle>` — Items in this cycle.
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
+* `--q <QUERY>` — Query-language filter (P-058) — `key:value` terms (`is:`, `status:`, `pri:>=`, `label:`, `owner:`/`assignee:`/`@me`, `claimed`/`unclaimed`, `epic:`, `milestone:`, `due:` incl. `today`/`Nd`/`>=` bounds, `cycle:`), `-term` negation, `OR` alternatives, plus bare text terms; merges over the named spec like the filter flags. [alias: --query]
 * `--sort <sort>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction. Default `pri,id`.
 * `--claim` — Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else the resolved actor); `--owner` names the claimer here and doesn't filter. Mutating: one commit.
 * `--steal` — With `--claim`: take the item even when another actor owns the claim — records a `taken from` handoff entry.
@@ -1621,7 +1623,7 @@ Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes thro
 ###### **Options:**
 
 * `--json` — Emit JSON (accepted everywhere; default output for machines).
-* `--view <NAME>` — Open with a named view's filter narrowing every board; index-sourced views load the cross-repo universe.
+* `--view <NAME|QUERY>` — Open with a named view's filter narrowing every board — or a query string (`owner:devin is:open`, P-058); index-sourced views load the cross-repo universe.
 * `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
 * `--dir <PATH>` — Project worktree to act on, overriding discovery.
 * `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
