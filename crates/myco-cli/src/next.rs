@@ -59,13 +59,18 @@ pub(crate) fn next_flags(a: &Args) -> Result<NextFlags, String> {
     })
 }
 
-/// Resolve the `next` named view — a repo's `[views.next]`
-/// shadows the builtin like any other name — then merge flags,
-/// validated. Under `--claim` the `--owner` flag names the
+/// Resolve the `next` named view — a repo's `[views.next]` or
+/// `views/next.toml` shadows the builtin like any other name —
+/// then merge flags, validated. `worktree` feeds the ledger
+/// `views/` scan. Under `--claim` the `--owner` flag names the
 /// claimer, so it must not also restrict the pick to items that
 /// owner already holds.
-pub(crate) fn spec(root: &std::path::Path, flags: &NextFlags) -> Result<ViewSpec, String> {
-    let (view, warnings) = myco_ops::view::resolve_lenient(root, "next", ops::CONFIG)?;
+pub(crate) fn spec(
+    root: &std::path::Path,
+    worktree: Option<&std::path::Path>,
+    flags: &NextFlags,
+) -> Result<ViewSpec, String> {
+    let (view, warnings) = myco_ops::view::resolve_lenient(root, worktree, "next", ops::CONFIG)?;
     view::warn(&warnings);
     let mut spec = view.spec;
     flags.filter.apply(&mut spec.filter);
@@ -138,7 +143,7 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let me = flags
         .claim
         .then(|| ops::resolve_actor(Some(&proj.worktree), explicit_owner.as_ref()));
-    let mut spec = spec(&proj.root, &flags)?;
+    let mut spec = spec(&proj.root, Some(&proj.worktree), &flags)?;
     // `--q` merges over the named spec like the flag patch (P-058);
     // bare text terms narrow the pick below.
     let query = flags
@@ -148,23 +153,25 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         .map(|q| view::apply_query(&mut spec, q, Some(&proj.worktree)))
         .transpose()?;
     let scan = digest::scan(&store)?;
-    // text terms have no `ViewFilter` home — narrow the universe
-    // before eval (top-level items only, like the eval itself)
+    let kinds = store.kinds();
+    // text/`-` terms have no `ViewFilter` home — narrow the
+    // universe before eval (top-level items only, like the eval
+    // itself); `matches` re-checks the whole query per branch
     let text_filtered = query
         .as_ref()
-        .filter(|q| !q.text.is_empty())
+        .filter(|q| q.has_text())
         .map(|q| digest::Scan {
             name: scan.name.clone(),
             items: scan
                 .items
                 .iter()
-                .filter(|i| q.text_matches(i, None))
+                .filter(|i| q.matches(i, None, kinds))
                 .cloned()
                 .collect(),
             archived: scan.archived.clone(),
         });
     let scan_ref = text_filtered.as_ref().unwrap_or(&scan);
-    let Some(item) = pick(scan_ref, &spec, store.kinds()).cloned() else {
+    let Some(item) = pick(scan_ref, &spec, kinds).cloned() else {
         if json_out {
             ops::print_json(&json!({"item": null}));
         } else {
@@ -218,7 +225,7 @@ mod tests {
     /// A hermetic root — no myco.toml, no user config leaks.
     fn spec_at(dir: &tempfile::TempDir, flags: &NextFlags) -> ViewSpec {
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
-            spec(dir.path(), flags).unwrap()
+            spec(dir.path(), None, flags).unwrap()
         })
     }
 

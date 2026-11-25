@@ -150,7 +150,7 @@ pub(crate) fn apply_query(
 ) -> Result<myco_core::ViewQuery, String> {
     let me = ops::resolve_actor(dir, None);
     let parsed = myco_core::query::parse(q, Some(&me)).map_err(|e| format!("--q: {e}"))?;
-    spec.filter.overlay(&parsed.filter);
+    spec.filter.overlay(&parsed.filter());
     spec.validate()?;
     Ok(parsed)
 }
@@ -213,9 +213,9 @@ impl SpecPatchCli {
     }
 }
 
-/// One-line spec digest for `--list` — only set fields.
-fn spec_digest(s: &ViewSpec) -> String {
-    let f = &s.filter;
+/// One filter node's set fields as `k=v` tokens — recurses
+/// through `any_of`/`not` so nested alternatives digest too.
+fn filter_parts(f: &ViewFilter) -> Vec<String> {
     let mut parts = Vec::new();
     let names = |v: &[String]| v.join(",");
     if !f.kind.is_empty() {
@@ -262,6 +262,12 @@ fn spec_digest(s: &ViewSpec) -> String {
     if let Some(d) = f.due {
         parts.push(format!("due={d}"));
     }
+    if let Some(d) = f.due_min {
+        parts.push(format!("due_min={d}"));
+    }
+    if let Some(d) = f.due_max {
+        parts.push(format!("due_max={d}"));
+    }
     if let Some(e) = f.estimate {
         parts.push(format!("estimate={e}"));
     }
@@ -271,6 +277,33 @@ fn spec_digest(s: &ViewSpec) -> String {
     if let Some(sup) = f.superseded {
         parts.push(format!("superseded={sup}"));
     }
+    if !f.any_of.is_empty() {
+        parts.push(format!(
+            "any_of=[{}]",
+            f.any_of
+                .iter()
+                .map(|a| format!("{{{}}}", filter_parts(a).join(" ")))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ));
+    }
+    if !f.not.is_empty() {
+        parts.push(format!(
+            "not=[{}]",
+            f.not
+                .iter()
+                .map(|a| format!("{{{}}}", filter_parts(a).join(" ")))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ));
+    }
+    parts
+}
+
+/// One-line spec digest for `--list` — only set fields.
+fn spec_digest(s: &ViewSpec) -> String {
+    let f = &s.filter;
+    let parts = filter_parts(f);
     let mut out = if parts.is_empty() {
         "filter:{}".to_string()
     } else {
@@ -307,6 +340,7 @@ fn list_views(views: &[NamedView], json_out: bool) {
                 "name": v.name,
                 "origin": match v.origin {
                     Origin::Builtin => "builtin",
+                    Origin::Dir => "dir",
                     Origin::Config => "config",
                 },
                 "spec": v.spec,
@@ -317,6 +351,7 @@ fn list_views(views: &[NamedView], json_out: bool) {
     for v in views {
         let origin = match v.origin {
             Origin::Builtin => "builtin",
+            Origin::Dir => "dir",
             Origin::Config => "config",
         };
         println!("{:<10} {:<7} {}", v.name, origin, spec_digest(&v.spec));
@@ -678,6 +713,9 @@ fn run(
         .or_else(|| root.clone())
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
+    // the ledger worktree feeds the second `views/` scan — its
+    // view files travel with the `project` branch
+    let worktree = opened.as_ref().ok().map(|(p, _)| p.worktree.clone());
 
     // `default_view` in config names the landing view — bare
     // `myco view` renders it instead of listing (a `~/myco.toml`
@@ -690,14 +728,19 @@ fn run(
     };
 
     if out.list || (name.is_none() && !flags.any_set()) {
-        let (views, _) = myco_ops::view::named_views_lenient(&cfg_root, ops::CONFIG)?;
+        let (views, warnings) =
+            myco_ops::view::named_views_lenient(&cfg_root, worktree.as_deref(), ops::CONFIG)?;
+        // broken `views/` files warn here too — a silent --list
+        // would hide them until `myco check`
+        warn(&warnings);
         list_views(&views, json_out);
         return Ok(0);
     }
 
     let (mut spec, warnings) = match &name {
         Some(n) => {
-            let (v, w) = myco_ops::view::resolve_lenient(&cfg_root, n, ops::CONFIG)?;
+            let (v, w) =
+                myco_ops::view::resolve_lenient(&cfg_root, worktree.as_deref(), n, ops::CONFIG)?;
             (v.spec, w)
         }
         None => (ViewSpec::default(), Vec::new()),
@@ -706,12 +749,11 @@ fn run(
     // `--q` merges over the named spec like the flag patch; its
     // bare text terms post-filter the eval below. `@me` resolves
     // against the discovered worktree when there is one.
-    let wt = opened.as_ref().ok().map(|(p, _)| p.worktree.clone());
     let query = flags
         .filter
         .q
         .as_deref()
-        .map(|q| apply_query(&mut spec, q, wt.as_deref()))
+        .map(|q| apply_query(&mut spec, q, worktree.as_deref()))
         .transpose()?;
     spec.validate()?;
     warn(&warnings);
@@ -768,7 +810,7 @@ fn run(
         let emit_items = match &query {
             Some(q) => emit_items
                 .into_iter()
-                .filter(|s| q.text_matches(s.item, s.repo))
+                .filter(|s| q.matches(s.item, s.repo, &kinds))
                 .collect(),
             None => emit_items,
         };
@@ -814,11 +856,13 @@ fn run(
         ),
     };
 
-    // `--q` bare text terms — the substring predicate `ViewFilter`
-    // can't express (title/id/labels/repo, AND across terms)
+    // `--q` bare text/`-` terms — the substring predicates
+    // `ViewFilter` can't express (title/id/labels/repo); `matches`
+    // re-checks the whole query per branch, which the eval's
+    // `spec.filter` already implies for the filter half
     if let Some(q) = &query {
         for g in &mut groups {
-            g.items.retain(|s| q.text_matches(s.item, s.repo));
+            g.items.retain(|s| q.matches(s.item, s.repo, &kinds));
         }
     }
 
@@ -873,7 +917,8 @@ mod tests {
             ],
             || {
                 let (v, warnings) =
-                    myco_ops::view::resolve_lenient(dir.path(), "board", ops::CONFIG).unwrap();
+                    myco_ops::view::resolve_lenient(dir.path(), None, "board", ops::CONFIG)
+                        .unwrap();
                 assert_eq!(warnings.len(), 1);
                 let spec = v.spec;
                 assert_eq!(spec.filter.kind, vec!["issue".to_string()]);

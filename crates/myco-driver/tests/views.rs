@@ -801,3 +801,65 @@ fn analytics_emits_and_done_stamp() {
     let line = todo_md.lines().find(|l| l.contains("T-001")).unwrap();
     assert!(!line.contains("done:"), "{line}");
 }
+
+#[test]
+fn views_dir_files_and_worktree_precedence() {
+    let d = seeded();
+    // repo-shared views/ — a sibling of myco.toml
+    std::fs::create_dir_all(d.path().join("views")).unwrap();
+    std::fs::write(
+        d.path().join("views/hot.toml"),
+        "filter = { kind = [\"task\"] }\n",
+    )
+    .unwrap();
+    // ledger-worktree views/ — travels with the `project` branch
+    // and wins the name collision
+    let wt = d.path().join("project");
+    std::fs::create_dir_all(wt.join("views")).unwrap();
+    std::fs::write(
+        wt.join("views/hot.toml"),
+        "filter = { kind = [\"issue\"] }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        wt.join("views/wtonly.toml"),
+        "filter = { pri_min = \"high\" }\n",
+    )
+    .unwrap();
+    // --list reports the dir origin
+    let v = json(&ok(d.path(), &["view", "--list", "--json"]));
+    let views = v["views"].as_array().unwrap();
+    let hot = views.iter().find(|x| x["name"] == "hot").unwrap();
+    assert_eq!(hot["origin"], "dir", "{hot}");
+    assert!(
+        views
+            .iter()
+            .any(|x| x["name"] == "wtonly" && x["origin"] == "dir"),
+        "{views:?}"
+    );
+    // the worktree file wins — issues only (I-001)
+    let v = json(&ok(d.path(), &["view", "hot", "--json"]));
+    let ids: Vec<&str> = v["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|g| g["items"].as_array().unwrap())
+        .filter_map(|i| i["id"].as_str())
+        .collect();
+    assert_eq!(ids, ["I-001"], "{v}");
+    // the worktree-only view resolves too — the high-pri task
+    let v = json(&ok(d.path(), &["view", "wtonly", "--json"]));
+    let ids: Vec<&str> = v["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|g| g["items"].as_array().unwrap())
+        .filter_map(|i| i["id"].as_str())
+        .collect();
+    assert_eq!(ids, ["T-002"], "{v}");
+    // a broken file warns on stderr and drops out — reads survive
+    std::fs::write(wt.join("views/broken.toml"), "filter = [unclosed\n").unwrap();
+    let out = ok(d.path(), &["view", "--list"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("broken.toml"), "{stderr}");
+}

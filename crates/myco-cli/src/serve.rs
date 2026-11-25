@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use myco_core::{
     eval, eval_scoped, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, Scoped, SortKey, Status,
-    ViewFormat, ViewSource, ViewSpec,
+    ViewFilter, ViewFormat, ViewSource, ViewSpec,
 };
 use myco_ops::view::Origin;
 use serde::Deserialize;
@@ -230,9 +230,17 @@ struct FilterPatch {
     milestone: Option<String>,
     #[serde(default, deserialize_with = "de_opt_date")]
     due: Option<time::Date>,
+    #[serde(default, deserialize_with = "de_opt_date")]
+    due_min: Option<time::Date>,
+    #[serde(default, deserialize_with = "de_opt_date")]
+    due_max: Option<time::Date>,
     estimate: Option<u32>,
     cycle: Option<String>,
     superseded: Option<bool>,
+    /// OR alternatives / `-` exclusions (P-058 phase 3) — full
+    /// `ViewFilter` nodes, same serde shape as `[views]` TOML.
+    any_of: Option<Vec<ViewFilter>>,
+    not: Option<Vec<ViewFilter>>,
 }
 
 /// `pri_min`/`pri_max` wire values take the same lenient read as
@@ -288,6 +296,12 @@ impl SpecPatch {
             if let Some(v) = p.due {
                 f.due = Some(v);
             }
+            if let Some(v) = p.due_min {
+                f.due_min = Some(v);
+            }
+            if let Some(v) = p.due_max {
+                f.due_max = Some(v);
+            }
             if let Some(v) = p.estimate {
                 f.estimate = Some(v);
             }
@@ -296,6 +310,12 @@ impl SpecPatch {
             }
             if let Some(v) = p.superseded {
                 f.superseded = Some(v);
+            }
+            if let Some(v) = &p.any_of {
+                f.any_of = v.clone();
+            }
+            if let Some(v) = &p.not {
+                f.not = v.clone();
             }
         }
         if let Some(s) = self.source {
@@ -956,8 +976,13 @@ pub(crate) fn w_reap(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
 pub(crate) fn w_next(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let patch = a.spec("spec").map_err(Fail::BadParams)?;
     let (proj, store) = s.open_read()?;
-    let (view, _warnings) = myco_ops::view::resolve_lenient(&proj.root, "next", crate::ops::CONFIG)
-        .map_err(Fail::Verb)?;
+    let (view, _warnings) = myco_ops::view::resolve_lenient(
+        &proj.root,
+        Some(&proj.worktree),
+        "next",
+        crate::ops::CONFIG,
+    )
+    .map_err(Fail::Verb)?;
     let mut spec = view.spec;
     if let Some(patch) = &patch {
         patch.apply(&mut spec);
@@ -979,7 +1004,8 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
         // bare — enumerate the defined views
         (None, None) => {
             let (views, warnings) =
-                myco_ops::view::named_views(&proj.root, crate::ops::CONFIG).map_err(Fail::Verb)?;
+                myco_ops::view::named_views(&proj.root, Some(&proj.worktree), crate::ops::CONFIG)
+                    .map_err(Fail::Verb)?;
             Ok(json!({
                 "views": views
                     .iter()
@@ -987,6 +1013,7 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
                         "name": v.name,
                         "origin": match v.origin {
                             Origin::Builtin => "builtin",
+                            Origin::Dir => "dir",
                             Origin::Config => "config",
                         },
                         "spec": v.spec,
@@ -998,8 +1025,13 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
         (name, patch) => {
             let (mut spec, warnings) = match name {
                 Some(n) => {
-                    let (v, w) = myco_ops::view::resolve(&proj.root, n, crate::ops::CONFIG)
-                        .map_err(Fail::Verb)?;
+                    let (v, w) = myco_ops::view::resolve(
+                        &proj.root,
+                        Some(&proj.worktree),
+                        n,
+                        crate::ops::CONFIG,
+                    )
+                    .map_err(Fail::Verb)?;
                     (v.spec, w)
                 }
                 None => (ViewSpec::default(), Vec::new()),

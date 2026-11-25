@@ -4,8 +4,11 @@
 //! myco.toml layers; the built-in presets (`board`, `epic`, …)
 //! are the same engine's shapes as data.
 //!
-//! Semantics: OR within a filter list, AND across fields. Filters
-//! see top-level items only — children render with their parent.
+//! Semantics: OR within a filter list, AND across fields; a
+//! node's `any_of` alternatives OR against each other and its
+//! `not` sub-filters exclude (P-058 phase 3 — the query
+//! language's `OR`/`-term` compile onto them). Filters see
+//! top-level items only — children render with their parent.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -143,6 +146,23 @@ pub struct ViewFilter {
     )]
     #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
     pub due: Option<time::Date>,
+    /// `due_min` — inclusive lower due-date bound (`"YYYY-MM-DD"`).
+    /// Undated items never match a set bound.
+    #[serde(
+        default,
+        with = "crate::date::opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    pub due_min: Option<time::Date>,
+    /// `due_max` — inclusive upper due-date bound (`"YYYY-MM-DD"`).
+    #[serde(
+        default,
+        with = "crate::date::opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
+    pub due_max: Option<time::Date>,
     /// `estimate` — exact point estimate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub estimate: Option<u32>,
@@ -152,6 +172,16 @@ pub struct ViewFilter {
     /// `superseded` — `false` excludes items with `superseded_by`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub superseded: Option<bool>,
+    /// `any_of` — OR alternatives (P-058 phase 3): the item must
+    /// match this node's own fields AND at least one alternative
+    /// when the list is non-empty. Each alternative is a full
+    /// filter — its own `any_of`/`not` nest freely.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub any_of: Vec<ViewFilter>,
+    /// `not` — exclusions: the item must NOT match any of these
+    /// sub-filters (the query language's `-term`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub not: Vec<ViewFilter>,
 }
 
 /// One grouping axis for `group_by`.
@@ -605,6 +635,12 @@ impl ViewFilter {
         if let Some(d) = patch.due {
             self.due = Some(d);
         }
+        if let Some(d) = patch.due_min {
+            self.due_min = Some(d);
+        }
+        if let Some(d) = patch.due_max {
+            self.due_max = Some(d);
+        }
         if let Some(e) = patch.estimate {
             self.estimate = Some(e);
         }
@@ -613,6 +649,12 @@ impl ViewFilter {
         }
         if let Some(s) = patch.superseded {
             self.superseded = Some(s);
+        }
+        if !patch.any_of.is_empty() {
+            self.any_of = patch.any_of.clone();
+        }
+        if !patch.not.is_empty() {
+            self.not = patch.not.clone();
         }
     }
 
@@ -626,10 +668,11 @@ impl ViewFilter {
         }
     }
 
-    /// All fields ANDed; each list ORs internally. An all-default
-    /// filter matches everything. `kinds` resolves `kind` tokens
-    /// — names and prefixes both accepted.
-    pub fn matches(&self, item: &Item, kinds: &KindTable) -> bool {
+    /// This node's own conjunctive fields — every field ANDed,
+    /// each list ORs internally. An all-default node matches
+    /// everything. `kinds` resolves `kind` tokens — names and
+    /// prefixes both accepted.
+    fn conjuncts_match(&self, item: &Item, kinds: &KindTable) -> bool {
         (self.kind.is_empty() || self.kind.iter().any(|t| self.kind_matches(t, item, kinds)))
             && (self.status.is_empty() || self.status.contains(&item.status))
             && self.pri_min.is_none_or(|p| item.priority >= p)
@@ -647,6 +690,12 @@ impl ViewFilter {
                 .as_ref()
                 .is_none_or(|m| item.milestone.as_ref() == Some(m))
             && self.due.is_none_or(|d| item.due == Some(d))
+            && self
+                .due_min
+                .is_none_or(|d| item.due.is_some_and(|x| x >= d))
+            && self
+                .due_max
+                .is_none_or(|d| item.due.is_some_and(|x| x <= d))
             && self.estimate.is_none_or(|e| item.estimate == Some(e))
             && self
                 .cycle
@@ -656,16 +705,25 @@ impl ViewFilter {
                 .superseded
                 .is_none_or(|s| s == item.superseded_by.is_some())
     }
-}
 
-impl ViewSpec {
-    /// Spec-level invariants broken combos can't reach eval:
-    /// `claimed` + `owner` together, or `pri_min > pri_max`.
-    pub fn validate(&self) -> Result<(), String> {
-        if self.filter.claimed.is_some() && !self.filter.owner.is_empty() {
+    /// The single predicate eval calls: this node's fields AND
+    /// (`any_of` empty OR some alternative matches) AND (no `not`
+    /// sub-filter matches). Alternatives and exclusions are full
+    /// filters — `matches` recurses.
+    pub fn matches(&self, item: &Item, kinds: &KindTable) -> bool {
+        self.conjuncts_match(item, kinds)
+            && (self.any_of.is_empty() || self.any_of.iter().any(|f| f.matches(item, kinds)))
+            && self.not.iter().all(|f| !f.matches(item, kinds))
+    }
+
+    /// Per-node spec invariants, checked recursively through
+    /// `any_of`/`not` — `claimed` + `owner` on the same node, or
+    /// `pri_min > pri_max`.
+    fn check_invariants(&self) -> Result<(), String> {
+        if self.claimed.is_some() && !self.owner.is_empty() {
             return Err("claimed and owner are mutually exclusive".into());
         }
-        if let (Some(lo), Some(hi)) = (self.filter.pri_min, self.filter.pri_max) {
+        if let (Some(lo), Some(hi)) = (self.pri_min, self.pri_max) {
             if lo > hi {
                 return Err(format!(
                     "pri_min {} exceeds pri_max {}",
@@ -674,14 +732,37 @@ impl ViewSpec {
                 ));
             }
         }
+        for f in self.any_of.iter().chain(self.not.iter()) {
+            f.check_invariants()?;
+        }
         Ok(())
+    }
+
+    /// Every `kind` token in the tree — `validate_kinds` resolves
+    /// them all, nested alternatives included.
+    fn kind_tokens<'a>(&'a self, out: &mut Vec<&'a str>) {
+        out.extend(self.kind.iter().map(String::as_str));
+        for f in self.any_of.iter().chain(self.not.iter()) {
+            f.kind_tokens(out);
+        }
+    }
+}
+
+impl ViewSpec {
+    /// Spec-level invariants broken combos can't reach eval —
+    /// checked per filter node, `any_of`/`not` alternatives
+    /// included.
+    pub fn validate(&self) -> Result<(), String> {
+        self.filter.check_invariants()
     }
 
     /// `kind` filter tokens must resolve to a declared kind or a
     /// grammatically valid prefix — `kind = ["tsak"]` is a typo
     /// to surface at resolution, not a silent empty view.
     pub fn validate_kinds(&self, kinds: &KindTable) -> Result<(), String> {
-        for t in &self.filter.kind {
+        let mut tokens = Vec::new();
+        self.filter.kind_tokens(&mut tokens);
+        for t in tokens {
             if kinds.resolve(t).is_none() && ItemKind::from_prefix(t).is_none() {
                 return Err(format!("unknown kind {t:?} in view filter"));
             }
@@ -1013,6 +1094,64 @@ mod tests {
         assert!(flat_ids(&eval(&v, &spec, &table())).is_empty());
         // malformed dates are toml errors, not silent non-matches
         assert!(toml::from_str::<ViewSpec>(r#"filter = { due = "soon" }"#).is_err());
+    }
+
+    #[test]
+    fn filter_any_of_not_and_due_bounds() {
+        let v = items();
+        // `any_of` alternatives OR; the node's own fields still AND
+        let spec: ViewSpec = toml::from_str(
+            r#"filter = { any_of = [{ status = ["open"] }, { status = ["done"] }] }"#,
+        )
+        .unwrap();
+        spec.validate().unwrap();
+        // T-003 is in-progress — outside both alternatives
+        assert_eq!(
+            flat_ids(&eval(&v, &spec, &table())),
+            ["T-002", "I-001", "T-004", "T-001"]
+        );
+        // combined with own fields: (open-or-done) AND pri>=high —
+        // T-004 is done but only medium
+        let spec: ViewSpec = toml::from_str(
+            r#"filter = { pri_min = "high", any_of = [{ status = ["open"] }, { status = ["done"] }] }"#,
+        )
+        .unwrap();
+        assert_eq!(flat_ids(&eval(&v, &spec, &table())), ["T-002", "I-001"]);
+        // `not` excludes — each sub-filter must NOT match
+        let spec: ViewSpec =
+            toml::from_str(r#"filter = { not = [{ label = ["bug"] }, { status = ["done"] }] }"#)
+                .unwrap();
+        assert_eq!(
+            flat_ids(&eval(&v, &spec, &table())),
+            ["T-002", "T-003", "T-001"]
+        );
+        // due_min/due_max bounds — undated items never match
+        let mut v2 = items();
+        v2[0] = v2[0].clone().due(crate::date::parse("2026-12-01").unwrap());
+        v2[1] = v2[1].clone().due(crate::date::parse("2027-01-15").unwrap());
+        let spec: ViewSpec =
+            toml::from_str(r#"filter = { due_min = "2026-12-01", due_max = "2026-12-31" }"#)
+                .unwrap();
+        assert_eq!(flat_ids(&eval(&v2, &spec, &table())), ["T-001"]);
+        // invariants check per node, nested alternatives included
+        let bad: ViewSpec =
+            toml::from_str(r#"filter = { any_of = [{ claimed = false, owner = ["devin"] }] }"#)
+                .unwrap();
+        assert!(bad.validate().is_err());
+        let bad: ViewSpec =
+            toml::from_str(r#"filter = { not = [{ pri_min = "crit", pri_max = "low" }] }"#)
+                .unwrap();
+        assert!(bad.validate().is_err());
+        // and the query sugar reaches the same shape
+        let spec: ViewSpec = toml::from_str(r#"filter = "is:open OR is:done -label:bug""#).unwrap();
+        spec.validate().unwrap();
+        assert_eq!(spec.filter.any_of.len(), 2);
+        assert_eq!(spec.filter.any_of[1].not.len(), 1);
+        // open items + the (unbuggy) done item — T-003 stays out
+        assert_eq!(
+            flat_ids(&eval(&v, &spec, &table())),
+            ["T-002", "I-001", "T-004", "T-001"]
+        );
     }
 
     #[test]

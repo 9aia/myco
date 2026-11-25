@@ -363,17 +363,26 @@ impl Model {
         // `/` filter so they keep filtering rows.
         let mut filter_seed = String::new();
         let view_spec = match &view {
-            Some(name) => match myco_ops::view::resolve(&cfg_root, name, CONFIG) {
+            Some(name) => match myco_ops::view::resolve(
+                &cfg_root,
+                proj.as_ref().map(|p| p.worktree.as_path()),
+                name,
+                CONFIG,
+            ) {
                 Ok((v, _)) => Some(v.spec),
                 Err(e) if e.starts_with("unknown view") => {
                     let me = ops::resolve_actor(proj.as_ref().map(|p| p.worktree.as_path()), None);
                     match myco_core::query::parse(name, Some(&me)) {
                         Ok(q)
-                            if q.filter != myco_core::ViewFilter::default()
-                                || q.text.len() > 1
-                                || name.contains(':') =>
+                            if q.filter() != myco_core::ViewFilter::default()
+                                || q.text().len() > 1
+                                || name.contains(':')
+                                || name.starts_with('-') =>
                         {
-                            filter_seed = q.text.join(" ");
+                            // seed `/` with the query itself —
+                            // OR/negation/text survive the
+                            // re-parse (P-058 phase 3)
+                            filter_seed = name.clone();
                             Some(q.spec())
                         }
                         _ => return Err(e),
@@ -928,11 +937,11 @@ impl Model {
         }
     }
 
-    /// `/` filter — `key:value` query tokens compile onto a
-    /// `ViewFilter` (P-058: `owner:`, `is:`, `pri:>=`, `label:`,
-    /// `claimed`, …); bare text keeps the substring match over
-    /// title/id/labels/repo. An unparseable query — mid-typing
-    /// `owner:` — falls back to the plain substring.
+    /// `/` filter — the query language (P-058): `key:value`
+    /// tokens, `OR` alternatives, `-term` negation, and bare
+    /// substring text over title/id/labels/repo. An unparseable
+    /// query — mid-typing `owner:` — falls back to the plain
+    /// substring.
     fn apply_filter(&mut self) {
         if self.filter.is_empty() {
             return;
@@ -944,8 +953,7 @@ impl Model {
             };
             self.rows.retain(|r| {
                 matches!(r, Row::Item { item, repo, .. }
-                    if q.filter.matches(item, kinds)
-                        && q.text_matches(item, repo.as_deref()))
+                    if q.matches(item, repo.as_deref(), kinds))
             });
             return;
         }
@@ -4462,6 +4470,29 @@ pub(crate) mod tests {
         m.filter = "owner:".into();
         m.rebuild_rows();
         assert!(ids(&m).is_empty());
+        // phase 3 — OR alternatives and `-` negation. T-009's
+        // owner is `me`, which is `cli` only without a git
+        // identity — compute the expectation either way.
+        let cli_me = me.as_str() == "cli";
+        m.filter = "owner:devin OR owner:cli".into();
+        m.rebuild_rows();
+        let want: Vec<u32> = [1, 2].into_iter().chain(cli_me.then_some(9)).collect();
+        assert_eq!(ids(&m), want);
+        // `-` binds to its own alternative — devin's item
+        // survives branch 1 regardless of branch 2's exclusion
+        m.filter = "-pri:>=high".into();
+        m.rebuild_rows();
+        assert_eq!(ids(&m), [2, 3, 9]);
+        m.filter = "-owner:devin".into();
+        m.rebuild_rows();
+        assert_eq!(ids(&m), [2, 3, 9]);
+        // negated bare text — only T-009's title is "t9"
+        m.filter = "-t9".into();
+        m.rebuild_rows();
+        assert_eq!(ids(&m), [1, 2, 3]);
+        m.filter = "owner:devin OR is:done -t9".into();
+        m.rebuild_rows();
+        assert_eq!(ids(&m), [1]);
     }
 
     #[test]
