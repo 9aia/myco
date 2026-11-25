@@ -1,13 +1,37 @@
 # Shape the board with named views
 
 A view is a declarative spec — `filter`, `group_by`, `sort`,
-`limit`, `format` — evaluated by one engine. Names come from two
-places: built-in presets (`board`, `open`, `epic`, `milestone`,
-`next`, `roadmap`, `stats`, `burnup`, `org-board`, `org-status`)
-and `[views.<name>]` tables in `myco.toml`
-([spec fields](../reference/config.md)).
+`limit`, `format` — evaluated by one engine. Names come from
+three places: built-in presets (`board`, `open`, `epic`,
+`milestone`, `next`, `roadmap`, `stats`, `burnup`, `org-board`,
+`org-status`), `views/*.toml` files, and `[views.<name>]` tables
+in `myco.toml` ([spec fields](../reference/config.md)).
 
 ## Define one
+
+The lightest form is one file per view — `views/<name>.toml`
+holds a bare spec table, the filename stem is the view name:
+
+```toml
+# views/hot.toml
+filter = { pri_min = "high", status = ["open", "in-progress"] }
+group_by = "owner"
+sort = "-created"
+format = "list"
+```
+
+`filter` takes the inline table *or* a query string
+(`filter = "owner:devin is:open"`). Two directories are scanned,
+in precedence order — a later file wins a name collision and
+warns on stderr:
+
+1. `<repo>/views/*.toml` — repo-shared, a sibling of `myco.toml`.
+2. `<project>/views/*.toml` — inside the ledger worktree, so
+   views travel with the `project` branch. This is the org-ledger
+   pattern: a shared `repos/project` checkout can carry the org's
+   view set and every member repo resolves it.
+
+The same spec also lives in config when you want it layered:
 
 ```toml
 # myco.toml
@@ -17,6 +41,16 @@ group_by = "owner"
 sort = "-created"
 format = "list"
 ```
+
+Precedence overall: builtins < repo `views/` < worktree `views/`
+< `[views]` tables (repo layer, then user layer — a personal
+`~/.config/myco/myco.toml` view still wins over everything).
+`myco view --list` shows each view's origin (`builtin`, `dir`,
+`config`). A `views/` file that doesn't parse or fails spec
+validation warns and drops out — it never bricks the read; `myco
+check` lints every repo-owned source (`view-invalid` findings name
+the file: `views/hot.toml`, `project/views/hot.toml` for the
+worktree side).
 
 ```sh
 myco view hot          # resolves the named view
@@ -114,7 +148,11 @@ admit non-lane buckets (e.g. `done`) surface them as extra
 columns/keys — nothing matched is silently dropped.
 
 Layering is repo &lt; user &lt; flags: a `[views]` table merges
-across config layers; scalar fields stay first-match.
+across config layers; scalar fields stay first-match. `views/`
+files sit *under* the config tables — a `[views.<name>]` entry
+(any layer) redefines `views/<name>.toml`, and either `views/`
+dir redefines a same-named built-in preset (each shadow warns on
+stderr).
 
 ## Over the wire
 
