@@ -17,6 +17,7 @@ pub mod kind;
 pub mod ledger;
 pub mod meta;
 pub mod priority;
+pub mod query;
 pub mod refs;
 pub mod status;
 pub mod view;
@@ -33,6 +34,7 @@ pub use kind::{KindSpec, KindTable, Storage};
 pub use ledger::{Ledger, TaskLoc};
 pub use meta::{NextCounters, ProjectMeta, Registry};
 pub use priority::{ParsePriorityError, Priority};
+pub use query::{parse as parse_query, parse_filter, ParseQueryError, ViewQuery};
 pub use refs::{Edge, EdgeKind};
 pub use status::{InvalidTransition, ParseStatusError, Status};
 pub use view::{

@@ -38,6 +38,9 @@ pub(crate) struct FilterPatch {
     pub(crate) cycle: Option<String>,
     pub(crate) live_only: bool,
     pub(crate) superseded: bool,
+    /// `--q`/`--query` — the query-language string (P-058), applied
+    /// after the flag patch; its bare text terms post-filter eval.
+    pub(crate) q: Option<String>,
 }
 
 /// The filter args → the patch — `view` and `next` share the
@@ -59,6 +62,7 @@ pub(crate) fn filter_args(a: &Args) -> Result<FilterPatch, String> {
         cycle: a.opt("cycle").map(str::to_string),
         live_only: a.flag("live_only"),
         superseded: a.flag("superseded"),
+        q: a.opt("q").map(str::to_string),
     })
 }
 
@@ -130,7 +134,25 @@ impl FilterPatch {
             || self.cycle.is_some()
             || self.live_only
             || self.superseded
+            || self.q.is_some()
     }
+}
+
+/// `--q`/`--query` → the parsed query's filter overlaid onto
+/// `spec` (P-058 — merges over the named spec like the flag
+/// patch); the returned query's `text` terms post-filter the
+/// eval. `dir` is any path inside the repo for `@me` resolution —
+/// the project worktree when discovery found one.
+pub(crate) fn apply_query(
+    spec: &mut ViewSpec,
+    q: &str,
+    dir: Option<&std::path::Path>,
+) -> Result<myco_core::ViewQuery, String> {
+    let me = ops::resolve_actor(dir, None);
+    let parsed = myco_core::query::parse(q, Some(&me)).map_err(|e| format!("--q: {e}"))?;
+    spec.filter.overlay(&parsed.filter);
+    spec.validate()?;
+    Ok(parsed)
 }
 
 /// The ad-hoc spec patch — [`FilterPatch`] plus the
@@ -681,6 +703,16 @@ fn run(
         None => (ViewSpec::default(), Vec::new()),
     };
     flags.apply(&mut spec);
+    // `--q` merges over the named spec like the flag patch; its
+    // bare text terms post-filter the eval below. `@me` resolves
+    // against the discovered worktree when there is one.
+    let wt = opened.as_ref().ok().map(|(p, _)| p.worktree.clone());
+    let query = flags
+        .filter
+        .q
+        .as_deref()
+        .map(|q| apply_query(&mut spec, q, wt.as_deref()))
+        .transpose()?;
     spec.validate()?;
     warn(&warnings);
 
@@ -733,6 +765,13 @@ fn run(
     if crate::analytics::is_emit(&spec) {
         let cycles = myco_ops::config::cycles_for(&cfg_root, ops::CONFIG)?;
         let emit_items = crate::analytics::emit_items(&spec, scan.as_ref(), &views, &kinds);
+        let emit_items = match &query {
+            Some(q) => emit_items
+                .into_iter()
+                .filter(|s| q.text_matches(s.item, s.repo))
+                .collect(),
+            None => emit_items,
+        };
         if json_out {
             ops::print_json(&crate::analytics::emit_json(
                 name.as_deref(),
@@ -754,7 +793,7 @@ fn run(
 
     // top-level items only — children ride with their parent
     // (they can't match a filter on their own)
-    let groups = match spec.source {
+    let mut groups = match spec.source {
         ViewSource::Repo => eval(
             scan.iter()
                 .flat_map(|s| s.items.iter().filter(|i| !s.archived.contains(&i.id))),
@@ -774,6 +813,14 @@ fn run(
             &kinds,
         ),
     };
+
+    // `--q` bare text terms — the substring predicate `ViewFilter`
+    // can't express (title/id/labels/repo, AND across terms)
+    if let Some(q) = &query {
+        for g in &mut groups {
+            g.items.retain(|s| q.text_matches(s.item, s.repo));
+        }
+    }
 
     if json_out {
         let payload = if board::is_status_board(&spec) {

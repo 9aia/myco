@@ -962,6 +962,14 @@ const FILTER: &[Param] = &[
         .conflicts("superseded")
         .cli(),
     flag("superseded", "Items superseded by another (ADRs).").cli(),
+    opt(
+        "q",
+        Val::Str,
+        "Query-language filter (P-058) — `key:value` terms (`is:`, `status:`, `pri:>=`, `label:`, `owner:`/`assignee:`/`@me`, `claimed`/`unclaimed`, `epic:`, `milestone:`, `due:`, `cycle:`) plus bare text terms; merges over the named spec like the filter flags.",
+    )
+    .alias("query")
+    .vname("QUERY")
+    .cli(),
 ];
 
 /// The ad-hoc spec flags — [`FILTER`] plus the
@@ -1901,9 +1909,9 @@ pub static VERBS: &[Verb] = &[
         params: &[&[opt(
             "view",
             Val::Str,
-            "Open with a named view's filter narrowing every board; index-sourced views load the cross-repo universe.",
+            "Open with a named view's filter narrowing every board — or a query string (`owner:devin is:open`, P-058); index-sourced views load the cross-repo universe.",
         )
-        .vname("NAME")]],
+        .vname("NAME|QUERY")]],
         kind_lock: None,
         mutates: true,
         hidden: false,

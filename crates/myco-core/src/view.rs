@@ -68,8 +68,10 @@ impl FromStr for ViewSource {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct ViewSpec {
-    /// Item selection — absent fields match everything.
-    #[serde(default)]
+    /// Item selection — absent fields match everything. Reads as
+    /// the inline table *or* a query string (`filter = "owner:devin
+    /// is:open"`, P-058) compiled by [`crate::query::parse_filter`].
+    #[serde(default, deserialize_with = "de_filter")]
     pub filter: ViewFilter,
     /// Universe — `repo` (default) or `index` (every registered
     /// repo's snapshot unioned; items are repo-tagged).
@@ -326,6 +328,35 @@ impl schemars::JsonSchema for SortField {
     }
 }
 
+/// `ViewSpec.filter` reads the inline table *or* a query string
+/// (`filter = "owner:devin is:open"` — P-058 config sugar). The
+/// string compiles through [`crate::query::parse_filter`]; the
+/// map arm delegates to `ViewFilter`'s own derive so field-level
+/// errors (`status = ["bogus"]`) keep their messages.
+fn de_filter<'de, D: serde::Deserializer<'de>>(d: D) -> Result<ViewFilter, D::Error> {
+    struct V;
+    impl<'de> serde::de::Visitor<'de> for V {
+        type Value = ViewFilter;
+
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a filter table or a query string")
+        }
+
+        fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<ViewFilter, E> {
+            crate::query::parse_filter(s).map_err(E::custom)
+        }
+
+        fn visit_string<E: serde::de::Error>(self, s: String) -> Result<ViewFilter, E> {
+            self.visit_str(&s)
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(self, map: A) -> Result<ViewFilter, A::Error> {
+            ViewFilter::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+        }
+    }
+    d.deserialize_any(V)
+}
+
 /// Accepts `pri:` tokens (`med`, `crit`) and full serde names
 /// (`medium`, `critical`) — lenient read, strict write.
 fn de_opt_priority<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Priority>, D::Error> {
@@ -539,6 +570,52 @@ enum GroupKey {
 }
 
 impl ViewFilter {
+    /// Fold a patch over `self` — each set field replaces, unset
+    /// fields keep the base value (the `FilterPatch` merge rule,
+    /// generalized to the whole filter). Query terms and CLI flag
+    /// patches both land here.
+    pub fn overlay(&mut self, patch: &ViewFilter) {
+        if !patch.kind.is_empty() {
+            self.kind = patch.kind.clone();
+        }
+        if !patch.status.is_empty() {
+            self.status = patch.status.clone();
+        }
+        if let Some(p) = patch.pri_min {
+            self.pri_min = Some(p);
+        }
+        if let Some(p) = patch.pri_max {
+            self.pri_max = Some(p);
+        }
+        if !patch.label.is_empty() {
+            self.label = patch.label.clone();
+        }
+        if !patch.owner.is_empty() {
+            self.owner = patch.owner.clone();
+        }
+        if let Some(c) = patch.claimed {
+            self.claimed = Some(c);
+        }
+        if let Some(e) = &patch.epic {
+            self.epic = Some(e.clone());
+        }
+        if let Some(m) = &patch.milestone {
+            self.milestone = Some(m.clone());
+        }
+        if let Some(d) = patch.due {
+            self.due = Some(d);
+        }
+        if let Some(e) = patch.estimate {
+            self.estimate = Some(e);
+        }
+        if let Some(c) = &patch.cycle {
+            self.cycle = Some(c.clone());
+        }
+        if let Some(s) = patch.superseded {
+            self.superseded = Some(s);
+        }
+    }
+
     /// Does `token` name this item's kind? Resolution order:
     /// declared name → declared prefix → a raw prefix compare, so
     /// `kind = ["X"]` still selects undeclared-prefix items.
@@ -1068,6 +1145,30 @@ format = "board"
         assert_eq!(spec.filter.pri_min, Some(Priority::High));
         let back: ViewSpec = toml::from_str(&toml::to_string(&spec).unwrap()).unwrap();
         assert_eq!(back, spec);
+    }
+
+    #[test]
+    fn filter_string_sugar_compiles_query() {
+        // `filter = "…"` is the P-058 query sugar; the inline
+        // table keeps working alongside it.
+        let spec: ViewSpec =
+            toml::from_str(r#"filter = "owner:devin is:open pri:>=high""#).unwrap();
+        spec.validate().unwrap();
+        assert_eq!(spec.filter.owner, vec!["devin".parse().unwrap()]);
+        assert_eq!(spec.filter.status, [Status::Open]);
+        assert_eq!(spec.filter.pri_min, Some(Priority::High));
+        // table form unchanged
+        let spec: ViewSpec =
+            toml::from_str(r#"filter = { status = ["open"], label = ["bug"] }"#).unwrap();
+        assert_eq!(spec.filter.status, [Status::Open]);
+        assert_eq!(spec.filter.label, ["bug".to_string()]);
+        // bad query / bad table both error
+        assert!(toml::from_str::<ViewSpec>(r#"filter = "owner:""#).is_err());
+        assert!(toml::from_str::<ViewSpec>(r#"filter = "owner:devin bug""#).is_err());
+        assert!(toml::from_str::<ViewSpec>(r#"filter = { status = ["bogus"] }"#).is_err());
+        // serializes back as the table — the string is read sugar
+        let back = toml::to_string(&spec).unwrap();
+        assert!(back.contains("status"), "{back}");
     }
 
     #[test]

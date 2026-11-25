@@ -236,6 +236,9 @@ pub struct Model {
     /// `--view <name>` spec — narrows every board's item source
     /// (the filter only; group/sort/format are renderer concerns).
     pub view: Option<ViewSpec>,
+    /// Lazy `@me` resolution for `/`-mode query terms (P-058) —
+    /// the git-identity probe only runs when a query needs it.
+    me: std::cell::OnceCell<myco_core::Actor>,
     /// `:` command-line buffer — separate from `input` so an `a`
     /// draft isn't clobbered.
     pub cmdline: String,
@@ -352,8 +355,32 @@ impl Model {
             .or_else(|| root.map(Path::to_path_buf))
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_else(|| PathBuf::from("."));
+        // `--view` takes a named view *or* a query string (P-058) —
+        // names win; an "unknown view" miss retries as a query
+        // (`owner:devin is:open`, bare text). A lone bare word
+        // stays an unknown-view error — more likely a mistyped
+        // name than a text query. The query's text terms seed the
+        // `/` filter so they keep filtering rows.
+        let mut filter_seed = String::new();
         let view_spec = match &view {
-            Some(name) => Some(myco_ops::view::resolve(&cfg_root, name, CONFIG)?.0.spec),
+            Some(name) => match myco_ops::view::resolve(&cfg_root, name, CONFIG) {
+                Ok((v, _)) => Some(v.spec),
+                Err(e) if e.starts_with("unknown view") => {
+                    let me = ops::resolve_actor(proj.as_ref().map(|p| p.worktree.as_path()), None);
+                    match myco_core::query::parse(name, Some(&me)) {
+                        Ok(q)
+                            if q.filter != myco_core::ViewFilter::default()
+                                || q.text.len() > 1
+                                || name.contains(':') =>
+                        {
+                            filter_seed = q.text.join(" ");
+                            Some(q.spec())
+                        }
+                        _ => return Err(e),
+                    }
+                }
+                Err(e) => return Err(e),
+            },
             None => None,
         };
         let index_sourced = view_spec
@@ -399,8 +426,9 @@ impl Model {
             sel: 0,
             mode: Mode::Normal,
             input: String::new(),
-            filter: String::new(),
+            filter: filter_seed,
             view: view_spec,
+            me: std::cell::OnceCell::new(),
             cmdline: String::new(),
             show_ids: true,
             status: String::new(),
@@ -460,6 +488,14 @@ impl Model {
             Some(s) => s.kinds(),
             None => myco_core::kind::prelude_table(),
         }
+    }
+
+    /// The resolved actor `@me`/`me` query terms name — lazy: the
+    /// git-identity probe runs once, on first use (P-058).
+    fn me(&self) -> &myco_core::Actor {
+        self.me.get_or_init(|| {
+            ops::resolve_actor(self.proj.as_ref().map(|p| p.worktree.as_path()), None)
+        })
     }
 
     /// `--view` narrows the item source — top-level only; children
@@ -892,10 +928,25 @@ impl Model {
         }
     }
 
-    /// `/` filter — keep only item rows matching the query
-    /// (title/id/labels/repo, case-insensitive); headers drop out.
+    /// `/` filter — `key:value` query tokens compile onto a
+    /// `ViewFilter` (P-058: `owner:`, `is:`, `pri:>=`, `label:`,
+    /// `claimed`, …); bare text keeps the substring match over
+    /// title/id/labels/repo. An unparseable query — mid-typing
+    /// `owner:` — falls back to the plain substring.
     fn apply_filter(&mut self) {
         if self.filter.is_empty() {
+            return;
+        }
+        if let Ok(q) = myco_core::query::parse(&self.filter, Some(self.me())) {
+            let kinds = match &self.store {
+                Some(s) => s.kinds(),
+                None => myco_core::kind::prelude_table(),
+            };
+            self.rows.retain(|r| {
+                matches!(r, Row::Item { item, repo, .. }
+                    if q.filter.matches(item, kinds)
+                        && q.text_matches(item, repo.as_deref()))
+            });
             return;
         }
         let q = self.filter.to_lowercase();
@@ -2367,6 +2418,7 @@ pub(crate) mod tests {
             input: String::new(),
             filter: String::new(),
             view: None,
+            me: std::cell::OnceCell::new(),
             cmdline: String::new(),
             show_ids: true,
             status: String::new(),
@@ -3494,6 +3546,7 @@ pub(crate) mod tests {
                 group_by,
                 ..ViewSpec::default()
             }),
+            me: std::cell::OnceCell::new(),
             cmdline: String::new(),
             show_ids: true,
             status: String::new(),
@@ -4349,6 +4402,66 @@ pub(crate) mod tests {
         m.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(m.filter, "");
         assert_eq!(m.mode, Mode::Normal);
+    }
+
+    /// `/` query language (P-058) — `key:value` tokens compile
+    /// onto the filter, bare text substring-matches, and an
+    /// unparseable query falls back to the plain substring.
+    #[test]
+    fn filter_mode_query_language() {
+        let mut m = model(|l| {
+            l.put_todo(
+                t(1).priority(myco_core::Priority::High)
+                    .owner("devin".parse().unwrap()),
+                None,
+            );
+            l.put_todo(t(2).owner("cli".parse().unwrap()), None);
+            l.put_todo(t(3), None);
+        });
+        let ids = |m: &Model| -> Vec<u32> {
+            m.rows
+                .iter()
+                .filter_map(|r| match r {
+                    Row::Item { item, .. } => Some(item.id.number()),
+                    Row::Header(_) => None,
+                })
+                .collect()
+        };
+        m.filter = "owner:devin".into();
+        m.rebuild_rows();
+        assert_eq!(ids(&m), [1]);
+        m.filter = "pri:>=high".into();
+        m.rebuild_rows();
+        assert_eq!(ids(&m), [1]);
+        m.filter = "unclaimed".into();
+        m.rebuild_rows();
+        assert_eq!(ids(&m), [3]);
+        // bare text ANDs with the structured terms
+        m.filter = "owner:devin t1".into();
+        m.rebuild_rows();
+        assert_eq!(ids(&m), [1]);
+        m.filter = "owner:devin t2".into();
+        m.rebuild_rows();
+        assert!(ids(&m).is_empty());
+        // @me resolves through the actor chain — claim an item
+        // for it and only owned rows survive
+        let me = m.me().clone();
+        m.ledger.put_todo(t(9).owner(me.clone()), None);
+        m.rebuild_rows();
+        m.filter = "owner:@me".into();
+        m.rebuild_rows();
+        let kept = ids(&m);
+        assert!(kept.contains(&9), "{kept:?}");
+        for r in &m.rows {
+            if let Row::Item { item, .. } = r {
+                assert_eq!(item.owner.as_ref(), Some(&me));
+            }
+        }
+        // mid-typing `owner:` doesn't parse → substring fallback
+        // (no title contains it) → no item rows
+        m.filter = "owner:".into();
+        m.rebuild_rows();
+        assert!(ids(&m).is_empty());
     }
 
     #[test]
