@@ -965,7 +965,7 @@ const FILTER: &[Param] = &[
     opt(
         "q",
         Val::Str,
-        "Query-language filter (P-058) — `key:value` terms (`is:`, `status:`, `pri:>=`, `label:`, `owner:`/`assignee:`/`@me`, `claimed`/`unclaimed`, `epic:`, `milestone:`, `due:`, `cycle:`) plus bare text terms; merges over the named spec like the filter flags.",
+        "Query-language filter (P-058) — `key:value` terms (`is:`, `status:`, `pri:>=`, `label:`, `owner:`/`assignee:`/`@me`, `claimed`/`unclaimed`, `epic:`, `milestone:`, `due:` incl. `today`/`Nd`/`>=` bounds, `cycle:`), `-term` negation, `OR` alternatives, plus bare text terms; merges over the named spec like the filter flags.",
     )
     .alias("query")
     .vname("QUERY")

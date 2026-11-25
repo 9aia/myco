@@ -150,7 +150,7 @@ pub(crate) fn apply_query(
 ) -> Result<myco_core::ViewQuery, String> {
     let me = ops::resolve_actor(dir, None);
     let parsed = myco_core::query::parse(q, Some(&me)).map_err(|e| format!("--q: {e}"))?;
-    spec.filter.overlay(&parsed.filter);
+    spec.filter.overlay(&parsed.filter());
     spec.validate()?;
     Ok(parsed)
 }
@@ -213,9 +213,9 @@ impl SpecPatchCli {
     }
 }
 
-/// One-line spec digest for `--list` — only set fields.
-fn spec_digest(s: &ViewSpec) -> String {
-    let f = &s.filter;
+/// One filter node's set fields as `k=v` tokens — recurses
+/// through `any_of`/`not` so nested alternatives digest too.
+fn filter_parts(f: &ViewFilter) -> Vec<String> {
     let mut parts = Vec::new();
     let names = |v: &[String]| v.join(",");
     if !f.kind.is_empty() {
@@ -262,6 +262,12 @@ fn spec_digest(s: &ViewSpec) -> String {
     if let Some(d) = f.due {
         parts.push(format!("due={d}"));
     }
+    if let Some(d) = f.due_min {
+        parts.push(format!("due_min={d}"));
+    }
+    if let Some(d) = f.due_max {
+        parts.push(format!("due_max={d}"));
+    }
     if let Some(e) = f.estimate {
         parts.push(format!("estimate={e}"));
     }
@@ -271,6 +277,33 @@ fn spec_digest(s: &ViewSpec) -> String {
     if let Some(sup) = f.superseded {
         parts.push(format!("superseded={sup}"));
     }
+    if !f.any_of.is_empty() {
+        parts.push(format!(
+            "any_of=[{}]",
+            f.any_of
+                .iter()
+                .map(|a| format!("{{{}}}", filter_parts(a).join(" ")))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ));
+    }
+    if !f.not.is_empty() {
+        parts.push(format!(
+            "not=[{}]",
+            f.not
+                .iter()
+                .map(|a| format!("{{{}}}", filter_parts(a).join(" ")))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ));
+    }
+    parts
+}
+
+/// One-line spec digest for `--list` — only set fields.
+fn spec_digest(s: &ViewSpec) -> String {
+    let f = &s.filter;
+    let parts = filter_parts(f);
     let mut out = if parts.is_empty() {
         "filter:{}".to_string()
     } else {
@@ -777,7 +810,7 @@ fn run(
         let emit_items = match &query {
             Some(q) => emit_items
                 .into_iter()
-                .filter(|s| q.text_matches(s.item, s.repo))
+                .filter(|s| q.matches(s.item, s.repo, &kinds))
                 .collect(),
             None => emit_items,
         };
@@ -823,11 +856,13 @@ fn run(
         ),
     };
 
-    // `--q` bare text terms — the substring predicate `ViewFilter`
-    // can't express (title/id/labels/repo, AND across terms)
+    // `--q` bare text/`-` terms — the substring predicates
+    // `ViewFilter` can't express (title/id/labels/repo); `matches`
+    // re-checks the whole query per branch, which the eval's
+    // `spec.filter` already implies for the filter half
     if let Some(q) = &query {
         for g in &mut groups {
-            g.items.retain(|s| q.text_matches(s.item, s.repo));
+            g.items.retain(|s| q.matches(s.item, s.repo, &kinds));
         }
     }
 

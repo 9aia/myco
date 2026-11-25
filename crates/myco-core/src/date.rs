@@ -17,6 +17,13 @@ pub fn render(d: Date) -> String {
     d.to_string()
 }
 
+/// Today (UTC) — the clock relative-date query terms
+/// (`due:today`, `due:7d`) resolve against (P-058). The one place
+/// core reads the clock; everything downstream takes the `Date`.
+pub fn today() -> Date {
+    time::OffsetDateTime::now_utc().date()
+}
+
 /// Serde adapter for a required `Date` — `#[serde(with = "date::req")]`.
 /// Serializes as `"YYYY-MM-DD"`.
 pub mod req {

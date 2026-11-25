@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use myco_core::{
     eval, eval_scoped, Actor, GroupAxis, Item, ItemId, ItemKind, Priority, Scoped, SortKey, Status,
-    ViewFormat, ViewSource, ViewSpec,
+    ViewFilter, ViewFormat, ViewSource, ViewSpec,
 };
 use myco_ops::view::Origin;
 use serde::Deserialize;
@@ -230,9 +230,17 @@ struct FilterPatch {
     milestone: Option<String>,
     #[serde(default, deserialize_with = "de_opt_date")]
     due: Option<time::Date>,
+    #[serde(default, deserialize_with = "de_opt_date")]
+    due_min: Option<time::Date>,
+    #[serde(default, deserialize_with = "de_opt_date")]
+    due_max: Option<time::Date>,
     estimate: Option<u32>,
     cycle: Option<String>,
     superseded: Option<bool>,
+    /// OR alternatives / `-` exclusions (P-058 phase 3) — full
+    /// `ViewFilter` nodes, same serde shape as `[views]` TOML.
+    any_of: Option<Vec<ViewFilter>>,
+    not: Option<Vec<ViewFilter>>,
 }
 
 /// `pri_min`/`pri_max` wire values take the same lenient read as
@@ -288,6 +296,12 @@ impl SpecPatch {
             if let Some(v) = p.due {
                 f.due = Some(v);
             }
+            if let Some(v) = p.due_min {
+                f.due_min = Some(v);
+            }
+            if let Some(v) = p.due_max {
+                f.due_max = Some(v);
+            }
             if let Some(v) = p.estimate {
                 f.estimate = Some(v);
             }
@@ -296,6 +310,12 @@ impl SpecPatch {
             }
             if let Some(v) = p.superseded {
                 f.superseded = Some(v);
+            }
+            if let Some(v) = &p.any_of {
+                f.any_of = v.clone();
+            }
+            if let Some(v) = &p.not {
+                f.not = v.clone();
             }
         }
         if let Some(s) = self.source {

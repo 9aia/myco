@@ -34,7 +34,7 @@ pub use kind::{KindSpec, KindTable, Storage};
 pub use ledger::{Ledger, TaskLoc};
 pub use meta::{NextCounters, ProjectMeta, Registry};
 pub use priority::{ParsePriorityError, Priority};
-pub use query::{parse as parse_query, parse_filter, ParseQueryError, ViewQuery};
+pub use query::{parse as parse_query, parse_filter, ParseQueryError, QueryBranch, ViewQuery};
 pub use refs::{Edge, EdgeKind};
 pub use status::{InvalidTransition, ParseStatusError, Status};
 pub use view::{
@@ -109,8 +109,9 @@ pub enum ConfigVerb {
     /// the builtin with `args` then any extra tokens appended.
     Alias(AliasVerb),
     /// A flattened [`ViewSpec`] + `emit` — `myco <name>` evaluates
-    /// the spec and emits in the declared shape.
-    ViewEmit(ViewEmitVerb),
+    /// the spec and emits in the declared shape. Boxed: the spec
+    /// dwarfs the alias variant (`large_enum_variant`).
+    ViewEmit(Box<ViewEmitVerb>),
 }
 
 /// The `alias` config verb — name → builtin + baked args.

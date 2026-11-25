@@ -153,23 +153,25 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
         .map(|q| view::apply_query(&mut spec, q, Some(&proj.worktree)))
         .transpose()?;
     let scan = digest::scan(&store)?;
-    // text terms have no `ViewFilter` home — narrow the universe
-    // before eval (top-level items only, like the eval itself)
+    let kinds = store.kinds();
+    // text/`-` terms have no `ViewFilter` home — narrow the
+    // universe before eval (top-level items only, like the eval
+    // itself); `matches` re-checks the whole query per branch
     let text_filtered = query
         .as_ref()
-        .filter(|q| !q.text.is_empty())
+        .filter(|q| q.has_text())
         .map(|q| digest::Scan {
             name: scan.name.clone(),
             items: scan
                 .items
                 .iter()
-                .filter(|i| q.text_matches(i, None))
+                .filter(|i| q.matches(i, None, kinds))
                 .cloned()
                 .collect(),
             archived: scan.archived.clone(),
         });
     let scan_ref = text_filtered.as_ref().unwrap_or(&scan);
-    let Some(item) = pick(scan_ref, &spec, store.kinds()).cloned() else {
+    let Some(item) = pick(scan_ref, &spec, kinds).cloned() else {
         if json_out {
             ops::print_json(&json!({"item": null}));
         } else {
