@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.0] - 2026-11-24
+
+### Added
+
+- **view:** query-language filters — --q/--query, TUI /, --view, config sugar (P-058) (`a6f40b6`)
+
 ## [0.3.0] - 2026-11-24
 
 ### Added
