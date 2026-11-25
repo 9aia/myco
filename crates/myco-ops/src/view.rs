@@ -217,10 +217,17 @@ fn scan_view_dir(dir: &Path) -> Vec<(String, Result<ViewSpec, String>, PathBuf)>
 /// surfaces just the ones matching the requested view.
 type ViewWarnings = Vec<(String, String)>;
 
+/// One `views/` dir's scan — `(name, spec)` pairs plus warnings.
+type DirViews = (Vec<(String, ViewSpec)>, ViewWarnings);
+
+/// `merged_views`' result — resolved views plus name-scoped
+/// warnings.
+type MergedViews = Result<(Vec<NamedView>, ViewWarnings), String>;
+
 /// `(specs, warnings)` for one `views/` dir — unparseable or
 /// invalid files warn on stderr's channel and drop out; a broken
 /// view file must not brick every read.
-fn dir_views(dir: &Path) -> (Vec<(String, ViewSpec)>, ViewWarnings) {
+fn dir_views(dir: &Path) -> DirViews {
     let mut specs = Vec::new();
     let mut warnings = Vec::new();
     for (name, res, _path) in scan_view_dir(dir) {
@@ -274,7 +281,7 @@ fn merged_views(
     worktree: Option<&Path>,
     strict: bool,
     cfg: ConfigLoader,
-) -> Result<(Vec<NamedView>, ViewWarnings), String> {
+) -> MergedViews {
     let mut warnings = Vec::new();
     let mut out = builtins();
     // `views/` dirs — repo root first, then the ledger worktree
