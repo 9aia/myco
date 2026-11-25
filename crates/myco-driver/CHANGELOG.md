@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.0] - 2026-11-24
+
+### Added
+
+- **view:** views/ directory convention — file-per-view loading (`aff532b`)
+
 ## [0.4.0] - 2026-11-24
 
 ## [0.3.0] - 2026-11-24
