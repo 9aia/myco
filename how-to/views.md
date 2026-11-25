@@ -75,6 +75,39 @@ the index-sourced org presets (see
 The filter flags scope any view — `myco view board --epic v2` is
 one epic's lanes.
 
+## Query filters — `--q`, `/`, `ui --view`
+
+The same engine also takes a gh-projects-shaped query string
+(P-058) on every read surface: `myco view board --q "…"`,
+`myco next --q "…"`, `myco ui --view "…"` (a query works anywhere
+a view name does), the TUI `/` filter, and the config sugar
+`filter = "owner:devin is:open"` inside `[views.<name>]` (the
+inline-table form still works, and the string compiles at load
+time — `@me` isn't available there).
+
+```text
+owner:devin is:open pri:>=high label:bug epic:v2 due:>=today-7d
+is:open OR label:bug -owner:bot fix
+```
+
+- `key:value` terms map onto the filter fields: `kind:`/`is:`
+  (status tokens or kind names/prefixes), `status:`,
+  `pri:`/`priority:` (`>=`,`<=`,`>`,`<`, or bare for exact),
+  `label:`, `owner:`/`assignee:` (`@me`/`me` resolves to your
+  actor), `claimed:`/`unclaimed`, `epic:`, `milestone:`,
+  `cycle:`, `est:`/`estimate:`, `superseded:`.
+- `due:` takes `YYYY-MM-DD`, `today`/`tomorrow`/`yesterday`,
+  `Nd`/`Nw` offsets (`due:7d`, `due:-3d`), a `[+-]N[dw]` adjust on
+  any date (`today-7d`), and ordering ops — `due:>=today`,
+  `due:<2026-12-01`, `due:>today-7d`.
+- `-term` negates any token or bare word: `-owner:devin`,
+  `-is:done`, `-bug`.
+- `OR` (uppercase, standalone) separates alternatives — each side
+  is a full clause, `a b OR c` reads `(a AND b) OR c`. There are
+  no parentheses; a global exclusion repeats per alternative.
+- Bare words keep substring semantics over title/id/labels/repo,
+  ANDed within their alternative.
+
 ## Analytics emits — roadmap, stats, burnup
 
 Three formats ride the same `filter → group → sort` pipeline but
