@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["CHORE_ONLY_COMMITS","SYNTHETIC_COMMITS"],"fn":["chore_only_commits","parse_commits","synthetic_commits"]};

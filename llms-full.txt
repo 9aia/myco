@@ -656,13 +656,37 @@ url: /myco/how-to/views.md
 # Shape the board with named views
 
 A view is a declarative spec — `filter`, `group_by`, `sort`,
-`limit`, `format` — evaluated by one engine. Names come from two
-places: built-in presets (`board`, `open`, `epic`, `milestone`,
-`next`, `roadmap`, `stats`, `burnup`, `org-board`, `org-status`)
-and `[views.<name>]` tables in `myco.toml`
-([spec fields](../reference/config.md)).
+`limit`, `format` — evaluated by one engine. Names come from
+three places: built-in presets (`board`, `open`, `epic`,
+`milestone`, `next`, `roadmap`, `stats`, `burnup`, `org-board`,
+`org-status`), `views/*.toml` files, and `[views.<name>]` tables
+in `myco.toml` ([spec fields](../reference/config.md)).
 
 ## Define one
+
+The lightest form is one file per view — `views/<name>.toml`
+holds a bare spec table, the filename stem is the view name:
+
+```toml
+# views/hot.toml
+filter = { pri_min = "high", status = ["open", "in-progress"] }
+group_by = "owner"
+sort = "-created"
+format = "list"
+```
+
+`filter` takes the inline table *or* a query string
+(`filter = "owner:devin is:open"`). Two directories are scanned,
+in precedence order — a later file wins a name collision and
+warns on stderr:
+
+1. `<repo>/views/*.toml` — repo-shared, a sibling of `myco.toml`.
+2. `<project>/views/*.toml` — inside the ledger worktree, so
+   views travel with the `project` branch. This is the org-ledger
+   pattern: a shared `repos/project` checkout can carry the org's
+   view set and every member repo resolves it.
+
+The same spec also lives in config when you want it layered:
 
 ```toml
 # myco.toml
@@ -672,6 +696,16 @@ group_by = "owner"
 sort = "-created"
 format = "list"
 ```
+
+Precedence overall: builtins < repo `views/` < worktree `views/`
+< `[views]` tables (repo layer, then user layer — a personal
+`~/.config/myco/myco.toml` view still wins over everything).
+`myco view --list` shows each view's origin (`builtin`, `dir`,
+`config`). A `views/` file that doesn't parse or fails spec
+validation warns and drops out — it never bricks the read; `myco
+check` lints every repo-owned source (`view-invalid` findings name
+the file: `views/hot.toml`, `project/views/hot.toml` for the
+worktree side).
 
 ```sh
 myco view hot          # resolves the named view
@@ -695,6 +729,39 @@ the index-sourced org presets (see
 [org views](org-views.md)).
 The filter flags scope any view — `myco view board --epic v2` is
 one epic's lanes.
+
+## Query filters — `--q`, `/`, `ui --view`
+
+The same engine also takes a gh-projects-shaped query string
+(P-058) on every read surface: `myco view board --q "…"`,
+`myco next --q "…"`, `myco ui --view "…"` (a query works anywhere
+a view name does), the TUI `/` filter, and the config sugar
+`filter = "owner:devin is:open"` inside `[views.<name>]` (the
+inline-table form still works, and the string compiles at load
+time — `@me` isn't available there).
+
+```text
+owner:devin is:open pri:>=high label:bug epic:v2 due:>=today-7d
+is:open OR label:bug -owner:bot fix
+```
+
+* `key:value` terms map onto the filter fields: `kind:`/`is:`
+  (status tokens or kind names/prefixes), `status:`,
+  `pri:`/`priority:` (`>=`,`<=`,`>`,`<`, or bare for exact),
+  `label:`, `owner:`/`assignee:` (`@me`/`me` resolves to your
+  actor), `claimed:`/`unclaimed`, `epic:`, `milestone:`,
+  `cycle:`, `est:`/`estimate:`, `superseded:`.
+* `due:` takes `YYYY-MM-DD`, `today`/`tomorrow`/`yesterday`,
+  `Nd`/`Nw` offsets (`due:7d`, `due:-3d`), a `[+-]N[dw]` adjust on
+  any date (`today-7d`), and ordering ops — `due:>=today`,
+  `due:<2026-12-01`, `due:>today-7d`.
+* `-term` negates any token or bare word: `-owner:devin`,
+  `-is:done`, `-bug`.
+* `OR` (uppercase, standalone) separates alternatives — each side
+  is a full clause, `a b OR c` reads `(a AND b) OR c`. There are
+  no parentheses; a global exclusion repeats per alternative.
+* Bare words keep substring semantics over title/id/labels/repo,
+  ANDed within their alternative.
 
 ## Analytics emits — roadmap, stats, burnup
 
@@ -769,7 +836,11 @@ admit non-lane buckets (e.g. `done`) surface them as extra
 columns/keys — nothing matched is silently dropped.
 
 Layering is repo < user < flags: a `[views]` table merges
-across config layers; scalar fields stay first-match.
+across config layers; scalar fields stay first-match. `views/`
+files sit *under* the config tables — a `[views.<name>]` entry
+(any layer) redefines `views/<name>.toml`, and either `views/`
+dir redefines a same-named built-in preset (each shadow warns on
+stderr).
 
 ## Over the wire
 
@@ -2613,6 +2684,7 @@ Declarative views — named presets (`[views.<name>]` in config + built-ins `boa
 * `--cycle <cycle>` — Items in this cycle.
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
+* `--q <QUERY>` — Query-language filter (P-058) — `key:value` terms (`is:`, `status:`, `pri:>=`, `label:`, `owner:`/`assignee:`/`@me`, `claimed`/`unclaimed`, `epic:`, `milestone:`, `due:` incl. `today`/`Nd`/`>=` bounds, `cycle:`), `-term` negation, `OR` alternatives, plus bare text terms; merges over the named spec like the filter flags. \[alias: --query]
 * `--source <source>` — Item universe — repo (default) reads this worktree; index unions every registered repo's snapshot (org views).
 * `--group-by <group_by>` — Group axis — status|priority|kind|owner|epic|milestone|repo|cycle.
 * `--sort <sort>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction.
@@ -2647,6 +2719,7 @@ The single highest-priority open item — "what should I work on" (a `view` eval
 * `--cycle <cycle>` — Items in this cycle.
 * `--live-only` — Items not superseded by another (ADRs).
 * `--superseded` — Items superseded by another (ADRs).
+* `--q <QUERY>` — Query-language filter (P-058) — `key:value` terms (`is:`, `status:`, `pri:>=`, `label:`, `owner:`/`assignee:`/`@me`, `claimed`/`unclaimed`, `epic:`, `milestone:`, `due:` incl. `today`/`Nd`/`>=` bounds, `cycle:`), `-term` negation, `OR` alternatives, plus bare text terms; merges over the named spec like the filter flags. \[alias: --query]
 * `--sort <sort>` — Sort keys — `pri,id,-created`; `-` flips a key's default direction. Default `pri,id`.
 * `--claim` — Claim the emitted item — status `claimed`, owner set to the `--owner` actor (else the resolved actor); `--owner` names the claimer here and doesn't filter. Mutating: one commit.
 * `--steal` — With `--claim`: take the item even when another actor owns the claim — records a `taken from` handoff entry.
@@ -2770,7 +2843,7 @@ Interactive board TUI (ratatui) — TODO/BACKLOG tabs, item preview, writes thro
 ###### **Options:**
 
 * `--json` — Emit JSON (accepted everywhere; default output for machines).
-* `--view <NAME>` — Open with a named view's filter narrowing every board; index-sourced views load the cross-repo universe.
+* `--view <NAME|QUERY>` — Open with a named view's filter narrowing every board — or a query string (`owner:devin is:open`, P-058); index-sourced views load the cross-repo universe.
 * `--no-commit` — Skip the per-verb commit (also suppressed by $MYCO_NO_COMMIT).
 * `--dir <PATH>` — Project worktree to act on, overriding discovery.
 * `--root <PATH>` — Repo root to act on, overriding discovery (the worktree is `<root>/project`).
@@ -2818,7 +2891,7 @@ url: /myco/reference/config.md
 |---|---|---|---|
 | `project_dir` | `string` | optional | Path to the project worktree, relative to the repo root. |
 | `default_view` | `string` | optional | The named view bare `myco view` resolves when no name is given — a repo pins its landing view, a machine `~/myco.toml` pins a global one (scalar: repo layer wins). |
-| `views` | `map` | optional | Named declarative views — merged across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the *user* layer wins a name collision. |
+| `views` | `map` | optional | Named declarative views — `[views.&lt;name&gt;]` tables merged across config layers (P-006): repo `myco.toml` presets are shared, user-config presets personal; the *user* layer wins a name collision. Resolution also scans `views/*.toml` files (repo root, then the ledger worktree; filename stem = view name, body = bare `ViewSpec`) — precedence builtin < `views/` < `[views]` (`myco_ops::view`). |
 | `verbs` | `map` | optional | Config-declared verbs (P-007) — merged like `views`, but the *repo* layer wins collisions (repo verbs are shared surface, personal verbs don't override them). Builtins win over both at resolution. |
 | `kinds` | `Vec<KindSpec>` | optional | `[[kinds]]` — user item kinds layered over the prelude (P-008). A prelude name *shadows* that spec (prefix stays locked); new names extend the table. Merged like verbs: the repo layer wins a name collision — a repo's kind vocabulary is shared surface. |
 | `sync` | `SyncConfig` | optional | `[sync]` — ledger-branch sync policy. `None` = defaults. Repo layer wins the table like the scalars. |

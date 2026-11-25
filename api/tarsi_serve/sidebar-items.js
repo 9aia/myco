@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["dispatch","serve"],"struct":["Request","Response"]};

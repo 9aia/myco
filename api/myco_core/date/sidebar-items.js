@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["parse","render"],"mod":["opt","req"]};
+window.SIDEBAR_ITEMS = {"fn":["parse","render","today"],"mod":["opt","req"]};

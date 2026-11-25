@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["find_dir","find_dir_env","list","list_profiles"],"struct":["ProfileInfo"],"type":["Env"]};

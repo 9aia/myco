@@ -59,221 +59,252 @@
 <a href=#59 id=59 data-nosnippet>59</a>    })
 <a href=#60 id=60 data-nosnippet>60</a>}
 <a href=#61 id=61 data-nosnippet>61</a>
-<a href=#62 id=62 data-nosnippet>62</a><span class="doccomment">/// Resolve the `next` named view — a repo's `[views.next]`
-<a href=#63 id=63 data-nosnippet>63</a>/// shadows the builtin like any other name — then merge flags,
-<a href=#64 id=64 data-nosnippet>64</a>/// validated. Under `--claim` the `--owner` flag names the
-<a href=#65 id=65 data-nosnippet>65</a>/// claimer, so it must not also restrict the pick to items that
-<a href=#66 id=66 data-nosnippet>66</a>/// owner already holds.
-<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>spec(root: <span class="kw-2">&amp;</span>std::path::Path, flags: <span class="kw-2">&amp;</span>NextFlags) -&gt; <span class="prelude-ty">Result</span>&lt;ViewSpec, String&gt; {
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">let </span>(view, warnings) = myco_ops::view::resolve_lenient(root, <span class="string">"next"</span>, ops::CONFIG)<span class="question-mark">?</span>;
-<a href=#69 id=69 data-nosnippet>69</a>    view::warn(<span class="kw-2">&amp;</span>warnings);
-<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">let </span><span class="kw-2">mut </span>spec = view.spec;
-<a href=#71 id=71 data-nosnippet>71</a>    flags.filter.apply(<span class="kw-2">&amp;mut </span>spec.filter);
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">if </span>flags.claim {
-<a href=#73 id=73 data-nosnippet>73</a>        spec.filter.owner = Vec::new();
-<a href=#74 id=74 data-nosnippet>74</a>    }
-<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">if </span>!flags.sort.is_empty() {
-<a href=#76 id=76 data-nosnippet>76</a>        spec.sort = flags.sort.clone();
-<a href=#77 id=77 data-nosnippet>77</a>    }
-<a href=#78 id=78 data-nosnippet>78</a>    spec.validate()<span class="question-mark">?</span>;
-<a href=#79 id=79 data-nosnippet>79</a>    <span class="prelude-val">Ok</span>(spec)
-<a href=#80 id=80 data-nosnippet>80</a>}
-<a href=#81 id=81 data-nosnippet>81</a>
-<a href=#82 id=82 data-nosnippet>82</a><span class="doccomment">/// The highest-priority live item under `spec` — the pick
-<a href=#83 id=83 data-nosnippet>83</a>/// behind the verb and `serve`'s `next` method. The universe is
-<a href=#84 id=84 data-nosnippet>84</a>/// top-level items only — children ride with their parent (the
-<a href=#85 id=85 data-nosnippet>85</a>/// `myco view` rule).
-<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pick&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#87 id=87 data-nosnippet>87</a>    scan: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>digest::Scan,
-<a href=#88 id=88 data-nosnippet>88</a>    spec: <span class="kw-2">&amp;</span>ViewSpec,
-<a href=#89 id=89 data-nosnippet>89</a>    kinds: <span class="kw-2">&amp;</span>myco_core::KindTable,
-<a href=#90 id=90 data-nosnippet>90</a>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Item&gt; {
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let </span>universe = scan.items.iter().filter(|i| !scan.archived.contains(<span class="kw-2">&amp;</span>i.id));
-<a href=#92 id=92 data-nosnippet>92</a>    eval(universe, spec, kinds)
-<a href=#93 id=93 data-nosnippet>93</a>        .iter()
-<a href=#94 id=94 data-nosnippet>94</a>        .find_map(|g| g.items.first().map(|s| s.item))
-<a href=#95 id=95 data-nosnippet>95</a>}
-<a href=#96 id=96 data-nosnippet>96</a>
-<a href=#97 id=97 data-nosnippet>97</a><span class="doccomment">/// Who a `--claim` assigns when `--owner` names one — under
-<a href=#98 id=98 data-nosnippet>98</a>/// `--claim` it names the claimer, not a filter. `None` means
-<a href=#99 id=99 data-nosnippet>99</a>/// "use the resolved actor" ([`ops::resolve_actor`]). Several
-<a href=#100 id=100 data-nosnippet>100</a>/// `--owner`s can't name one claimer, so that's an error.
-<a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">fn </span>claim_owner(flags: <span class="kw-2">&amp;</span>NextFlags) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Actor&gt;, String&gt; {
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">match </span>flags.filter.owner.as_slice() {
-<a href=#103 id=103 data-nosnippet>103</a>        [] =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>),
-<a href=#104 id=104 data-nosnippet>104</a>        [owner] =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(owner.clone())),
-<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(<span class="string">"next --claim: pass one --owner (the claimer), not several"</span>.into()),
-<a href=#106 id=106 data-nosnippet>106</a>    }
-<a href=#107 id=107 data-nosnippet>107</a>}
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a><span class="doccomment">/// The one-line human output — `items::compact` + the `⚡`
-<a href=#110 id=110 data-nosnippet>110</a>/// interrupted marker, same as a `list`-format view row.
-<a href=#111 id=111 data-nosnippet>111</a></span><span class="kw">fn </span>line(store: <span class="kw-2">&amp;</span><span class="kw">impl </span>Store, item: <span class="kw-2">&amp;</span>Item) -&gt; <span class="prelude-ty">Result</span>&lt;String, String&gt; {
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = items::compact(item);
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">if </span>continuity::is_interrupted(store, item.id)<span class="question-mark">? </span>{
-<a href=#114 id=114 data-nosnippet>114</a>        out.push_str(<span class="string">" ⚡"</span>);
-<a href=#115 id=115 data-nosnippet>115</a>    }
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="prelude-val">Ok</span>(out)
-<a href=#117 id=117 data-nosnippet>117</a>}
-<a href=#118 id=118 data-nosnippet>118</a>
-<a href=#119 id=119 data-nosnippet>119</a><span class="doccomment">/// The `next` verb — read-only unless `--claim`, which takes
-<a href=#120 id=120 data-nosnippet>120</a>/// the mutating open path + per-verb commit (`chore: claim
-<a href=#121 id=121 data-nosnippet>121</a>/// &lt;ID&gt;`; `--no-commit`/`$MYCO_NO_COMMIT` honored).
-<a href=#122 id=122 data-nosnippet>122</a></span><span class="kw">pub fn </span>h(ctx: <span class="kw-2">&amp;</span>Ctx, a: <span class="kw-2">&amp;</span>Args) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">let </span>flags = next_flags(a)<span class="question-mark">?</span>;
-<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">let </span>json_out = ctx.json;
-<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">let </span>no_commit = ctx.no_commit;
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">let </span>explicit_owner = flags
-<a href=#127 id=127 data-nosnippet>127</a>        .claim
-<a href=#128 id=128 data-nosnippet>128</a>        .then(|| claim_owner(<span class="kw-2">&amp;</span>flags))
-<a href=#129 id=129 data-nosnippet>129</a>        .transpose()<span class="question-mark">?
-<a href=#130 id=130 data-nosnippet>130</a>        </span>.flatten();
-<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>(proj, store) = <span class="kw">if </span>flags.claim {
-<a href=#132 id=132 data-nosnippet>132</a>        items::open(ctx.dir.as_deref(), ctx.root.as_deref())<span class="question-mark">?
-<a href=#133 id=133 data-nosnippet>133</a>    </span>} <span class="kw">else </span>{
-<a href=#134 id=134 data-nosnippet>134</a>        items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())<span class="question-mark">?
-<a href=#135 id=135 data-nosnippet>135</a>    </span>};
-<a href=#136 id=136 data-nosnippet>136</a>    <span class="comment">// the claimer — `--owner` is the chain's first rung, then
-<a href=#137 id=137 data-nosnippet>137</a>    // `$MYCO_ACTOR` → `human:&lt;git user.name&gt;` → `cli`
-<a href=#138 id=138 data-nosnippet>138</a>    </span><span class="kw">let </span>me = flags
-<a href=#139 id=139 data-nosnippet>139</a>        .claim
-<a href=#140 id=140 data-nosnippet>140</a>        .then(|| ops::resolve_actor(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>proj.worktree), explicit_owner.as_ref()));
-<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">let </span>spec = spec(<span class="kw-2">&amp;</span>proj.root, <span class="kw-2">&amp;</span>flags)<span class="question-mark">?</span>;
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">let </span>scan = digest::scan(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
-<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(item) = pick(<span class="kw-2">&amp;</span>scan, <span class="kw-2">&amp;</span>spec, store.kinds()).cloned() <span class="kw">else </span>{
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">if </span>json_out {
-<a href=#145 id=145 data-nosnippet>145</a>            ops::print_json(<span class="kw-2">&amp;</span><span class="macro">json!</span>({<span class="string">"item"</span>: null}));
-<a href=#146 id=146 data-nosnippet>146</a>        } <span class="kw">else </span>{
-<a href=#147 id=147 data-nosnippet>147</a>            <span class="macro">println!</span>(<span class="string">"{}: nothing next — backlog is clear"</span>, scan.name);
-<a href=#148 id=148 data-nosnippet>148</a>        }
-<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
-<a href=#150 id=150 data-nosnippet>150</a>    };
-<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(me) = me <span class="kw">else </span>{
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">if </span>json_out {
-<a href=#153 id=153 data-nosnippet>153</a>            ops::print_json(<span class="kw-2">&amp;</span><span class="macro">json!</span>({<span class="string">"item"</span>: item}));
-<a href=#154 id=154 data-nosnippet>154</a>        } <span class="kw">else </span>{
-<a href=#155 id=155 data-nosnippet>155</a>            <span class="macro">println!</span>(<span class="string">"{}"</span>, line(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>item)<span class="question-mark">?</span>);
-<a href=#156 id=156 data-nosnippet>156</a>        }
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
-<a href=#158 id=158 data-nosnippet>158</a>    };
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span>id = item.id;
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">let </span>set = itemcmd::SetFlags {
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="comment">// identity isn't a transition — an already-claimed item
-<a href=#162 id=162 data-nosnippet>162</a>        // just re-stamps the owner
-<a href=#163 id=163 data-nosnippet>163</a>        </span>status: (item.status != Status::Claimed).then_some(Status::Claimed),
-<a href=#164 id=164 data-nosnippet>164</a>        owner: <span class="prelude-val">Some</span>(me.clone()),
-<a href=#165 id=165 data-nosnippet>165</a>        steal: flags.steal,
-<a href=#166 id=166 data-nosnippet>166</a>        ..Default::default()
-<a href=#167 id=167 data-nosnippet>167</a>    };
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="comment">// `--session` tags the claim — the mutation and the `claimed`
-<a href=#169 id=169 data-nosnippet>169</a>    // handoff entry pair through the atomic claim path
-<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">let </span>outcome = itemcmd::set_item(<span class="kw-2">&amp;</span>store, id, <span class="kw-2">&amp;</span>set, flags.session, <span class="kw-2">&amp;</span>me)<span class="question-mark">?</span>;
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span>committed = items::commit(
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw-2">&amp;</span>proj.worktree,
-<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: claim {id}"</span>),
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>me),
-<a href=#175 id=175 data-nosnippet>175</a>        no_commit,
-<a href=#176 id=176 data-nosnippet>176</a>    )<span class="question-mark">?</span>;
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">let </span>human = <span class="kw">match </span><span class="kw-2">&amp;</span>outcome.item {
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="prelude-val">Some</span>(i) =&gt; line(<span class="kw-2">&amp;</span>store, i)<span class="question-mark">?</span>,
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="prelude-val">None </span>=&gt; <span class="macro">format!</span>(<span class="string">"claimed {id}"</span>),
-<a href=#180 id=180 data-nosnippet>180</a>    };
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span><span class="kw-2">mut </span>payload = <span class="macro">json!</span>({<span class="string">"item"</span>: outcome.item});
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(from) = outcome.taken_from {
-<a href=#183 id=183 data-nosnippet>183</a>        payload[<span class="string">"taken_from"</span>] = <span class="macro">json!</span>(from);
-<a href=#184 id=184 data-nosnippet>184</a>    }
-<a href=#185 id=185 data-nosnippet>185</a>    items::report(payload, committed, json_out, <span class="kw-2">&amp;</span>human)
-<a href=#186 id=186 data-nosnippet>186</a>}
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a><span class="attr">#[cfg(test)]
-<a href=#189 id=189 data-nosnippet>189</a>#[allow(clippy::unwrap_used)]
-<a href=#190 id=190 data-nosnippet>190</a></span><span class="kw">mod </span>tests {
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">use </span>myco_core::{ItemId, ItemKind};
-<a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="doccomment">/// A hermetic root — no myco.toml, no user config leaks.
-<a href=#195 id=195 data-nosnippet>195</a>    </span><span class="kw">fn </span>spec_at(dir: <span class="kw-2">&amp;</span>tempfile::TempDir, flags: <span class="kw-2">&amp;</span>NextFlags) -&gt; ViewSpec {
-<a href=#196 id=196 data-nosnippet>196</a>        temp_env::with_var(<span class="string">"MYCO_CONFIG"</span>, <span class="prelude-val">None</span>::&lt;<span class="kw-2">&amp;</span>str&gt;, || {
-<a href=#197 id=197 data-nosnippet>197</a>            spec(dir.path(), flags).unwrap()
-<a href=#198 id=198 data-nosnippet>198</a>        })
-<a href=#199 id=199 data-nosnippet>199</a>    }
-<a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="attr">#[test]
-<a href=#202 id=202 data-nosnippet>202</a>    </span><span class="kw">fn </span>default_spec_is_open_tasks_and_issues_limit_1() {
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#204 id=204 data-nosnippet>204</a>        <span class="kw">let </span>spec = spec_at(<span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>NextFlags::default());
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="macro">assert_eq!</span>(spec.limit, <span class="prelude-val">Some</span>(<span class="number">1</span>));
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="macro">assert_eq!</span>(spec.filter.kind, [<span class="string">"task"</span>.to_string(), <span class="string">"issue"</span>.to_string()]);
-<a href=#207 id=207 data-nosnippet>207</a>        <span class="macro">assert_eq!</span>(spec.filter.status, [Status::Open]);
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="macro">assert!</span>(spec.sort.is_empty()); <span class="comment">// engine default: pri,id
-<a href=#209 id=209 data-nosnippet>209</a>    </span>}
-<a href=#210 id=210 data-nosnippet>210</a>
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="attr">#[test]
-<a href=#212 id=212 data-nosnippet>212</a>    </span><span class="kw">fn </span>flags_merge_over_the_default() {
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">let </span>flags = NextFlags {
-<a href=#214 id=214 data-nosnippet>214</a>            filter: view::FilterPatch {
-<a href=#215 id=215 data-nosnippet>215</a>                kind: <span class="macro">vec!</span>[<span class="string">"issue"</span>.to_string()],
-<a href=#216 id=216 data-nosnippet>216</a>                label: <span class="macro">vec!</span>[<span class="string">"bug"</span>.into()],
-<a href=#217 id=217 data-nosnippet>217</a>                ..Default::default()
-<a href=#218 id=218 data-nosnippet>218</a>            },
-<a href=#219 id=219 data-nosnippet>219</a>            sort: <span class="macro">vec!</span>[<span class="string">"-id"</span>.parse().unwrap()],
-<a href=#220 id=220 data-nosnippet>220</a>            claim: <span class="bool-val">false</span>,
-<a href=#221 id=221 data-nosnippet>221</a>            steal: <span class="bool-val">false</span>,
-<a href=#222 id=222 data-nosnippet>222</a>            session: <span class="prelude-val">None</span>,
-<a href=#223 id=223 data-nosnippet>223</a>        };
-<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
-<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">let </span>spec = spec_at(<span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>flags);
-<a href=#226 id=226 data-nosnippet>226</a>        <span class="macro">assert_eq!</span>(spec.filter.kind, [<span class="string">"issue"</span>.to_string()]);
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="comment">// unset fields keep the base: status stays [open]
-<a href=#228 id=228 data-nosnippet>228</a>        </span><span class="macro">assert_eq!</span>(spec.filter.status, [Status::Open]);
-<a href=#229 id=229 data-nosnippet>229</a>        <span class="macro">assert_eq!</span>(spec.filter.label, [<span class="string">"bug"</span>]);
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="macro">assert_eq!</span>(spec.sort.len(), <span class="number">1</span>);
-<a href=#231 id=231 data-nosnippet>231</a>    }
-<a href=#232 id=232 data-nosnippet>232</a>
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="attr">#[test]
-<a href=#234 id=234 data-nosnippet>234</a>    </span><span class="kw">fn </span>claim_owner_resolution() {
-<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">let </span><span class="kw-2">mut </span>flags = NextFlags::default();
-<a href=#236 id=236 data-nosnippet>236</a>        <span class="comment">// no --owner → the resolved actor chain decides
-<a href=#237 id=237 data-nosnippet>237</a>        </span><span class="macro">assert_eq!</span>(claim_owner(<span class="kw-2">&amp;</span>flags).unwrap(), <span class="prelude-val">None</span>);
-<a href=#238 id=238 data-nosnippet>238</a>        flags.filter.owner = <span class="macro">vec!</span>[<span class="string">"devin"</span>.parse().unwrap()];
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="macro">assert_eq!</span>(claim_owner(<span class="kw-2">&amp;</span>flags).unwrap().unwrap().as_str(), <span class="string">"devin"</span>);
-<a href=#240 id=240 data-nosnippet>240</a>        flags.filter.owner = <span class="macro">vec!</span>[<span class="string">"devin"</span>.parse().unwrap(), <span class="string">"human:x"</span>.parse().unwrap()];
-<a href=#241 id=241 data-nosnippet>241</a>        <span class="macro">assert!</span>(claim_owner(<span class="kw-2">&amp;</span>flags).is_err());
-<a href=#242 id=242 data-nosnippet>242</a>    }
-<a href=#243 id=243 data-nosnippet>243</a>
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="attr">#[test]
-<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="kw">fn </span>pick_orders_pri_then_id() {
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>items = <span class="macro">vec!</span>[
-<a href=#247 id=247 data-nosnippet>247</a>            Item::new(ItemId::new(ItemKind::Task, <span class="number">1</span>), <span class="string">"low"</span>).priority(myco_core::Priority::Low),
-<a href=#248 id=248 data-nosnippet>248</a>            Item::new(ItemId::new(ItemKind::Task, <span class="number">2</span>), <span class="string">"crit"</span>)
-<a href=#249 id=249 data-nosnippet>249</a>                .priority(myco_core::Priority::Critical),
-<a href=#250 id=250 data-nosnippet>250</a>            Item::new(ItemId::new(ItemKind::Issue, <span class="number">1</span>), <span class="string">"hi"</span>).priority(myco_core::Priority::High),
-<a href=#251 id=251 data-nosnippet>251</a>        ];
-<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">let </span>scan = digest::Scan {
-<a href=#253 id=253 data-nosnippet>253</a>            name: <span class="string">"p"</span>.into(),
-<a href=#254 id=254 data-nosnippet>254</a>            items,
-<a href=#255 id=255 data-nosnippet>255</a>            archived: Default::default(),
-<a href=#256 id=256 data-nosnippet>256</a>        };
-<a href=#257 id=257 data-nosnippet>257</a>        <span class="kw">let </span>spec = base_spec();
-<a href=#258 id=258 data-nosnippet>258</a>        <span class="macro">assert_eq!</span>(
-<a href=#259 id=259 data-nosnippet>259</a>            pick(<span class="kw-2">&amp;</span>scan, <span class="kw-2">&amp;</span>spec, myco_core::kind::prelude_table())
-<a href=#260 id=260 data-nosnippet>260</a>                .unwrap()
-<a href=#261 id=261 data-nosnippet>261</a>                .id,
-<a href=#262 id=262 data-nosnippet>262</a>            ItemId::new(ItemKind::Task, <span class="number">2</span>)
-<a href=#263 id=263 data-nosnippet>263</a>        );
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="comment">// a done crit drops out of the open default
-<a href=#265 id=265 data-nosnippet>265</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>scan2 = digest::Scan {
-<a href=#266 id=266 data-nosnippet>266</a>            name: <span class="string">"p"</span>.into(),
-<a href=#267 id=267 data-nosnippet>267</a>            items: scan.items.clone(),
-<a href=#268 id=268 data-nosnippet>268</a>            archived: Default::default(),
-<a href=#269 id=269 data-nosnippet>269</a>        };
-<a href=#270 id=270 data-nosnippet>270</a>        scan2.items[<span class="number">1</span>].status = Status::Done;
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="macro">assert_eq!</span>(
-<a href=#272 id=272 data-nosnippet>272</a>            pick(<span class="kw-2">&amp;</span>scan2, <span class="kw-2">&amp;</span>spec, myco_core::kind::prelude_table())
-<a href=#273 id=273 data-nosnippet>273</a>                .unwrap()
-<a href=#274 id=274 data-nosnippet>274</a>                .id,
-<a href=#275 id=275 data-nosnippet>275</a>            ItemId::new(ItemKind::Issue, <span class="number">1</span>)
-<a href=#276 id=276 data-nosnippet>276</a>        );
-<a href=#277 id=277 data-nosnippet>277</a>    }
-<a href=#278 id=278 data-nosnippet>278</a>}
+<a href=#62 id=62 data-nosnippet>62</a><span class="doccomment">/// Resolve the `next` named view — a repo's `[views.next]` or
+<a href=#63 id=63 data-nosnippet>63</a>/// `views/next.toml` shadows the builtin like any other name —
+<a href=#64 id=64 data-nosnippet>64</a>/// then merge flags, validated. `worktree` feeds the ledger
+<a href=#65 id=65 data-nosnippet>65</a>/// `views/` scan. Under `--claim` the `--owner` flag names the
+<a href=#66 id=66 data-nosnippet>66</a>/// claimer, so it must not also restrict the pick to items that
+<a href=#67 id=67 data-nosnippet>67</a>/// owner already holds.
+<a href=#68 id=68 data-nosnippet>68</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>spec(
+<a href=#69 id=69 data-nosnippet>69</a>    root: <span class="kw-2">&amp;</span>std::path::Path,
+<a href=#70 id=70 data-nosnippet>70</a>    worktree: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>std::path::Path&gt;,
+<a href=#71 id=71 data-nosnippet>71</a>    flags: <span class="kw-2">&amp;</span>NextFlags,
+<a href=#72 id=72 data-nosnippet>72</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ViewSpec, String&gt; {
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let </span>(view, warnings) = myco_ops::view::resolve_lenient(root, worktree, <span class="string">"next"</span>, ops::CONFIG)<span class="question-mark">?</span>;
+<a href=#74 id=74 data-nosnippet>74</a>    view::warn(<span class="kw-2">&amp;</span>warnings);
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">let </span><span class="kw-2">mut </span>spec = view.spec;
+<a href=#76 id=76 data-nosnippet>76</a>    flags.filter.apply(<span class="kw-2">&amp;mut </span>spec.filter);
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">if </span>flags.claim {
+<a href=#78 id=78 data-nosnippet>78</a>        spec.filter.owner = Vec::new();
+<a href=#79 id=79 data-nosnippet>79</a>    }
+<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">if </span>!flags.sort.is_empty() {
+<a href=#81 id=81 data-nosnippet>81</a>        spec.sort = flags.sort.clone();
+<a href=#82 id=82 data-nosnippet>82</a>    }
+<a href=#83 id=83 data-nosnippet>83</a>    spec.validate()<span class="question-mark">?</span>;
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="prelude-val">Ok</span>(spec)
+<a href=#85 id=85 data-nosnippet>85</a>}
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// The highest-priority live item under `spec` — the pick
+<a href=#88 id=88 data-nosnippet>88</a>/// behind the verb and `serve`'s `next` method. The universe is
+<a href=#89 id=89 data-nosnippet>89</a>/// top-level items only — children ride with their parent (the
+<a href=#90 id=90 data-nosnippet>90</a>/// `myco view` rule).
+<a href=#91 id=91 data-nosnippet>91</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pick&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#92 id=92 data-nosnippet>92</a>    scan: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>digest::Scan,
+<a href=#93 id=93 data-nosnippet>93</a>    spec: <span class="kw-2">&amp;</span>ViewSpec,
+<a href=#94 id=94 data-nosnippet>94</a>    kinds: <span class="kw-2">&amp;</span>myco_core::KindTable,
+<a href=#95 id=95 data-nosnippet>95</a>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Item&gt; {
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span>universe = scan.items.iter().filter(|i| !scan.archived.contains(<span class="kw-2">&amp;</span>i.id));
+<a href=#97 id=97 data-nosnippet>97</a>    eval(universe, spec, kinds)
+<a href=#98 id=98 data-nosnippet>98</a>        .iter()
+<a href=#99 id=99 data-nosnippet>99</a>        .find_map(|g| g.items.first().map(|s| s.item))
+<a href=#100 id=100 data-nosnippet>100</a>}
+<a href=#101 id=101 data-nosnippet>101</a>
+<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// Who a `--claim` assigns when `--owner` names one — under
+<a href=#103 id=103 data-nosnippet>103</a>/// `--claim` it names the claimer, not a filter. `None` means
+<a href=#104 id=104 data-nosnippet>104</a>/// "use the resolved actor" ([`ops::resolve_actor`]). Several
+<a href=#105 id=105 data-nosnippet>105</a>/// `--owner`s can't name one claimer, so that's an error.
+<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">fn </span>claim_owner(flags: <span class="kw-2">&amp;</span>NextFlags) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Actor&gt;, String&gt; {
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">match </span>flags.filter.owner.as_slice() {
+<a href=#108 id=108 data-nosnippet>108</a>        [] =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>),
+<a href=#109 id=109 data-nosnippet>109</a>        [owner] =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(owner.clone())),
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(<span class="string">"next --claim: pass one --owner (the claimer), not several"</span>.into()),
+<a href=#111 id=111 data-nosnippet>111</a>    }
+<a href=#112 id=112 data-nosnippet>112</a>}
+<a href=#113 id=113 data-nosnippet>113</a>
+<a href=#114 id=114 data-nosnippet>114</a><span class="doccomment">/// The one-line human output — `items::compact` + the `⚡`
+<a href=#115 id=115 data-nosnippet>115</a>/// interrupted marker, same as a `list`-format view row.
+<a href=#116 id=116 data-nosnippet>116</a></span><span class="kw">fn </span>line(store: <span class="kw-2">&amp;</span><span class="kw">impl </span>Store, item: <span class="kw-2">&amp;</span>Item) -&gt; <span class="prelude-ty">Result</span>&lt;String, String&gt; {
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = items::compact(item);
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">if </span>continuity::is_interrupted(store, item.id)<span class="question-mark">? </span>{
+<a href=#119 id=119 data-nosnippet>119</a>        out.push_str(<span class="string">" ⚡"</span>);
+<a href=#120 id=120 data-nosnippet>120</a>    }
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="prelude-val">Ok</span>(out)
+<a href=#122 id=122 data-nosnippet>122</a>}
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a><span class="doccomment">/// The `next` verb — read-only unless `--claim`, which takes
+<a href=#125 id=125 data-nosnippet>125</a>/// the mutating open path + per-verb commit (`chore: claim
+<a href=#126 id=126 data-nosnippet>126</a>/// &lt;ID&gt;`; `--no-commit`/`$MYCO_NO_COMMIT` honored).
+<a href=#127 id=127 data-nosnippet>127</a></span><span class="kw">pub fn </span>h(ctx: <span class="kw-2">&amp;</span>Ctx, a: <span class="kw-2">&amp;</span>Args) -&gt; <span class="prelude-ty">Result</span>&lt;i32, String&gt; {
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="kw">let </span>flags = next_flags(a)<span class="question-mark">?</span>;
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">let </span>json_out = ctx.json;
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">let </span>no_commit = ctx.no_commit;
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">let </span>explicit_owner = flags
+<a href=#132 id=132 data-nosnippet>132</a>        .claim
+<a href=#133 id=133 data-nosnippet>133</a>        .then(|| claim_owner(<span class="kw-2">&amp;</span>flags))
+<a href=#134 id=134 data-nosnippet>134</a>        .transpose()<span class="question-mark">?
+<a href=#135 id=135 data-nosnippet>135</a>        </span>.flatten();
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">let </span>(proj, store) = <span class="kw">if </span>flags.claim {
+<a href=#137 id=137 data-nosnippet>137</a>        items::open(ctx.dir.as_deref(), ctx.root.as_deref())<span class="question-mark">?
+<a href=#138 id=138 data-nosnippet>138</a>    </span>} <span class="kw">else </span>{
+<a href=#139 id=139 data-nosnippet>139</a>        items::open_read(ctx.dir.as_deref(), ctx.root.as_deref())<span class="question-mark">?
+<a href=#140 id=140 data-nosnippet>140</a>    </span>};
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="comment">// the claimer — `--owner` is the chain's first rung, then
+<a href=#142 id=142 data-nosnippet>142</a>    // `$MYCO_ACTOR` → `human:&lt;git user.name&gt;` → `cli`
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">let </span>me = flags
+<a href=#144 id=144 data-nosnippet>144</a>        .claim
+<a href=#145 id=145 data-nosnippet>145</a>        .then(|| ops::resolve_actor(<span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>proj.worktree), explicit_owner.as_ref()));
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">let </span><span class="kw-2">mut </span>spec = spec(<span class="kw-2">&amp;</span>proj.root, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>proj.worktree), <span class="kw-2">&amp;</span>flags)<span class="question-mark">?</span>;
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="comment">// `--q` merges over the named spec like the flag patch (P-058);
+<a href=#148 id=148 data-nosnippet>148</a>    // bare text terms narrow the pick below.
+<a href=#149 id=149 data-nosnippet>149</a>    </span><span class="kw">let </span>query = flags
+<a href=#150 id=150 data-nosnippet>150</a>        .filter
+<a href=#151 id=151 data-nosnippet>151</a>        .q
+<a href=#152 id=152 data-nosnippet>152</a>        .as_deref()
+<a href=#153 id=153 data-nosnippet>153</a>        .map(|q| view::apply_query(<span class="kw-2">&amp;mut </span>spec, q, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>proj.worktree)))
+<a href=#154 id=154 data-nosnippet>154</a>        .transpose()<span class="question-mark">?</span>;
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span>scan = digest::scan(<span class="kw-2">&amp;</span>store)<span class="question-mark">?</span>;
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">let </span>kinds = store.kinds();
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="comment">// text/`-` terms have no `ViewFilter` home — narrow the
+<a href=#158 id=158 data-nosnippet>158</a>    // universe before eval (top-level items only, like the eval
+<a href=#159 id=159 data-nosnippet>159</a>    // itself); `matches` re-checks the whole query per branch
+<a href=#160 id=160 data-nosnippet>160</a>    </span><span class="kw">let </span>text_filtered = query
+<a href=#161 id=161 data-nosnippet>161</a>        .as_ref()
+<a href=#162 id=162 data-nosnippet>162</a>        .filter(|q| q.has_text())
+<a href=#163 id=163 data-nosnippet>163</a>        .map(|q| digest::Scan {
+<a href=#164 id=164 data-nosnippet>164</a>            name: scan.name.clone(),
+<a href=#165 id=165 data-nosnippet>165</a>            items: scan
+<a href=#166 id=166 data-nosnippet>166</a>                .items
+<a href=#167 id=167 data-nosnippet>167</a>                .iter()
+<a href=#168 id=168 data-nosnippet>168</a>                .filter(|i| q.matches(i, <span class="prelude-val">None</span>, kinds))
+<a href=#169 id=169 data-nosnippet>169</a>                .cloned()
+<a href=#170 id=170 data-nosnippet>170</a>                .collect(),
+<a href=#171 id=171 data-nosnippet>171</a>            archived: scan.archived.clone(),
+<a href=#172 id=172 data-nosnippet>172</a>        });
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="kw">let </span>scan_ref = text_filtered.as_ref().unwrap_or(<span class="kw-2">&amp;</span>scan);
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(item) = pick(scan_ref, <span class="kw-2">&amp;</span>spec, kinds).cloned() <span class="kw">else </span>{
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">if </span>json_out {
+<a href=#176 id=176 data-nosnippet>176</a>            ops::print_json(<span class="kw-2">&amp;</span><span class="macro">json!</span>({<span class="string">"item"</span>: null}));
+<a href=#177 id=177 data-nosnippet>177</a>        } <span class="kw">else </span>{
+<a href=#178 id=178 data-nosnippet>178</a>            <span class="macro">println!</span>(<span class="string">"{}: nothing next — backlog is clear"</span>, scan.name);
+<a href=#179 id=179 data-nosnippet>179</a>        }
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
+<a href=#181 id=181 data-nosnippet>181</a>    };
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(me) = me <span class="kw">else </span>{
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">if </span>json_out {
+<a href=#184 id=184 data-nosnippet>184</a>            ops::print_json(<span class="kw-2">&amp;</span><span class="macro">json!</span>({<span class="string">"item"</span>: item}));
+<a href=#185 id=185 data-nosnippet>185</a>        } <span class="kw">else </span>{
+<a href=#186 id=186 data-nosnippet>186</a>            <span class="macro">println!</span>(<span class="string">"{}"</span>, line(<span class="kw-2">&amp;</span>store, <span class="kw-2">&amp;</span>item)<span class="question-mark">?</span>);
+<a href=#187 id=187 data-nosnippet>187</a>        }
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
+<a href=#189 id=189 data-nosnippet>189</a>    };
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">let </span>id = item.id;
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">let </span>set = itemcmd::SetFlags {
+<a href=#192 id=192 data-nosnippet>192</a>        <span class="comment">// identity isn't a transition — an already-claimed item
+<a href=#193 id=193 data-nosnippet>193</a>        // just re-stamps the owner
+<a href=#194 id=194 data-nosnippet>194</a>        </span>status: (item.status != Status::Claimed).then_some(Status::Claimed),
+<a href=#195 id=195 data-nosnippet>195</a>        owner: <span class="prelude-val">Some</span>(me.clone()),
+<a href=#196 id=196 data-nosnippet>196</a>        steal: flags.steal,
+<a href=#197 id=197 data-nosnippet>197</a>        ..Default::default()
+<a href=#198 id=198 data-nosnippet>198</a>    };
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="comment">// `--session` tags the claim — the mutation and the `claimed`
+<a href=#200 id=200 data-nosnippet>200</a>    // handoff entry pair through the atomic claim path
+<a href=#201 id=201 data-nosnippet>201</a>    </span><span class="kw">let </span>outcome = itemcmd::set_item(<span class="kw-2">&amp;</span>store, id, <span class="kw-2">&amp;</span>set, flags.session, <span class="kw-2">&amp;</span>me)<span class="question-mark">?</span>;
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">let </span>committed = items::commit(
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw-2">&amp;</span>proj.worktree,
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"chore: claim {id}"</span>),
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>me),
+<a href=#206 id=206 data-nosnippet>206</a>        no_commit,
+<a href=#207 id=207 data-nosnippet>207</a>    )<span class="question-mark">?</span>;
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">let </span>human = <span class="kw">match </span><span class="kw-2">&amp;</span>outcome.item {
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="prelude-val">Some</span>(i) =&gt; line(<span class="kw-2">&amp;</span>store, i)<span class="question-mark">?</span>,
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="prelude-val">None </span>=&gt; <span class="macro">format!</span>(<span class="string">"claimed {id}"</span>),
+<a href=#211 id=211 data-nosnippet>211</a>    };
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let </span><span class="kw-2">mut </span>payload = <span class="macro">json!</span>({<span class="string">"item"</span>: outcome.item});
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(from) = outcome.taken_from {
+<a href=#214 id=214 data-nosnippet>214</a>        payload[<span class="string">"taken_from"</span>] = <span class="macro">json!</span>(from);
+<a href=#215 id=215 data-nosnippet>215</a>    }
+<a href=#216 id=216 data-nosnippet>216</a>    items::report(payload, committed, json_out, <span class="kw-2">&amp;</span>human)
+<a href=#217 id=217 data-nosnippet>217</a>}
+<a href=#218 id=218 data-nosnippet>218</a>
+<a href=#219 id=219 data-nosnippet>219</a><span class="attr">#[cfg(test)]
+<a href=#220 id=220 data-nosnippet>220</a>#[allow(clippy::unwrap_used)]
+<a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">mod </span>tests {
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">use </span>myco_core::{ItemId, ItemKind};
+<a href=#224 id=224 data-nosnippet>224</a>
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="doccomment">/// A hermetic root — no myco.toml, no user config leaks.
+<a href=#226 id=226 data-nosnippet>226</a>    </span><span class="kw">fn </span>spec_at(dir: <span class="kw-2">&amp;</span>tempfile::TempDir, flags: <span class="kw-2">&amp;</span>NextFlags) -&gt; ViewSpec {
+<a href=#227 id=227 data-nosnippet>227</a>        temp_env::with_var(<span class="string">"MYCO_CONFIG"</span>, <span class="prelude-val">None</span>::&lt;<span class="kw-2">&amp;</span>str&gt;, || {
+<a href=#228 id=228 data-nosnippet>228</a>            spec(dir.path(), <span class="prelude-val">None</span>, flags).unwrap()
+<a href=#229 id=229 data-nosnippet>229</a>        })
+<a href=#230 id=230 data-nosnippet>230</a>    }
+<a href=#231 id=231 data-nosnippet>231</a>
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="attr">#[test]
+<a href=#233 id=233 data-nosnippet>233</a>    </span><span class="kw">fn </span>default_spec_is_open_tasks_and_issues_limit_1() {
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">let </span>spec = spec_at(<span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>NextFlags::default());
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="macro">assert_eq!</span>(spec.limit, <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="macro">assert_eq!</span>(spec.filter.kind, [<span class="string">"task"</span>.to_string(), <span class="string">"issue"</span>.to_string()]);
+<a href=#238 id=238 data-nosnippet>238</a>        <span class="macro">assert_eq!</span>(spec.filter.status, [Status::Open]);
+<a href=#239 id=239 data-nosnippet>239</a>        <span class="macro">assert!</span>(spec.sort.is_empty()); <span class="comment">// engine default: pri,id
+<a href=#240 id=240 data-nosnippet>240</a>    </span>}
+<a href=#241 id=241 data-nosnippet>241</a>
+<a href=#242 id=242 data-nosnippet>242</a>    <span class="attr">#[test]
+<a href=#243 id=243 data-nosnippet>243</a>    </span><span class="kw">fn </span>flags_merge_over_the_default() {
+<a href=#244 id=244 data-nosnippet>244</a>        <span class="kw">let </span>flags = NextFlags {
+<a href=#245 id=245 data-nosnippet>245</a>            filter: view::FilterPatch {
+<a href=#246 id=246 data-nosnippet>246</a>                kind: <span class="macro">vec!</span>[<span class="string">"issue"</span>.to_string()],
+<a href=#247 id=247 data-nosnippet>247</a>                label: <span class="macro">vec!</span>[<span class="string">"bug"</span>.into()],
+<a href=#248 id=248 data-nosnippet>248</a>                ..Default::default()
+<a href=#249 id=249 data-nosnippet>249</a>            },
+<a href=#250 id=250 data-nosnippet>250</a>            sort: <span class="macro">vec!</span>[<span class="string">"-id"</span>.parse().unwrap()],
+<a href=#251 id=251 data-nosnippet>251</a>            claim: <span class="bool-val">false</span>,
+<a href=#252 id=252 data-nosnippet>252</a>            steal: <span class="bool-val">false</span>,
+<a href=#253 id=253 data-nosnippet>253</a>            session: <span class="prelude-val">None</span>,
+<a href=#254 id=254 data-nosnippet>254</a>        };
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">let </span>dir = tempfile::tempdir().unwrap();
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw">let </span>spec = spec_at(<span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>flags);
+<a href=#257 id=257 data-nosnippet>257</a>        <span class="macro">assert_eq!</span>(spec.filter.kind, [<span class="string">"issue"</span>.to_string()]);
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="comment">// unset fields keep the base: status stays [open]
+<a href=#259 id=259 data-nosnippet>259</a>        </span><span class="macro">assert_eq!</span>(spec.filter.status, [Status::Open]);
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="macro">assert_eq!</span>(spec.filter.label, [<span class="string">"bug"</span>]);
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="macro">assert_eq!</span>(spec.sort.len(), <span class="number">1</span>);
+<a href=#262 id=262 data-nosnippet>262</a>    }
+<a href=#263 id=263 data-nosnippet>263</a>
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="attr">#[test]
+<a href=#265 id=265 data-nosnippet>265</a>    </span><span class="kw">fn </span>claim_owner_resolution() {
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">let </span><span class="kw-2">mut </span>flags = NextFlags::default();
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="comment">// no --owner → the resolved actor chain decides
+<a href=#268 id=268 data-nosnippet>268</a>        </span><span class="macro">assert_eq!</span>(claim_owner(<span class="kw-2">&amp;</span>flags).unwrap(), <span class="prelude-val">None</span>);
+<a href=#269 id=269 data-nosnippet>269</a>        flags.filter.owner = <span class="macro">vec!</span>[<span class="string">"devin"</span>.parse().unwrap()];
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="macro">assert_eq!</span>(claim_owner(<span class="kw-2">&amp;</span>flags).unwrap().unwrap().as_str(), <span class="string">"devin"</span>);
+<a href=#271 id=271 data-nosnippet>271</a>        flags.filter.owner = <span class="macro">vec!</span>[<span class="string">"devin"</span>.parse().unwrap(), <span class="string">"human:x"</span>.parse().unwrap()];
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="macro">assert!</span>(claim_owner(<span class="kw-2">&amp;</span>flags).is_err());
+<a href=#273 id=273 data-nosnippet>273</a>    }
+<a href=#274 id=274 data-nosnippet>274</a>
+<a href=#275 id=275 data-nosnippet>275</a>    <span class="attr">#[test]
+<a href=#276 id=276 data-nosnippet>276</a>    </span><span class="kw">fn </span>pick_orders_pri_then_id() {
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">let </span>items = <span class="macro">vec!</span>[
+<a href=#278 id=278 data-nosnippet>278</a>            Item::new(ItemId::new(ItemKind::Task, <span class="number">1</span>), <span class="string">"low"</span>).priority(myco_core::Priority::Low),
+<a href=#279 id=279 data-nosnippet>279</a>            Item::new(ItemId::new(ItemKind::Task, <span class="number">2</span>), <span class="string">"crit"</span>)
+<a href=#280 id=280 data-nosnippet>280</a>                .priority(myco_core::Priority::Critical),
+<a href=#281 id=281 data-nosnippet>281</a>            Item::new(ItemId::new(ItemKind::Issue, <span class="number">1</span>), <span class="string">"hi"</span>).priority(myco_core::Priority::High),
+<a href=#282 id=282 data-nosnippet>282</a>        ];
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">let </span>scan = digest::Scan {
+<a href=#284 id=284 data-nosnippet>284</a>            name: <span class="string">"p"</span>.into(),
+<a href=#285 id=285 data-nosnippet>285</a>            items,
+<a href=#286 id=286 data-nosnippet>286</a>            archived: Default::default(),
+<a href=#287 id=287 data-nosnippet>287</a>        };
+<a href=#288 id=288 data-nosnippet>288</a>        <span class="kw">let </span>spec = base_spec();
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="macro">assert_eq!</span>(
+<a href=#290 id=290 data-nosnippet>290</a>            pick(<span class="kw-2">&amp;</span>scan, <span class="kw-2">&amp;</span>spec, myco_core::kind::prelude_table())
+<a href=#291 id=291 data-nosnippet>291</a>                .unwrap()
+<a href=#292 id=292 data-nosnippet>292</a>                .id,
+<a href=#293 id=293 data-nosnippet>293</a>            ItemId::new(ItemKind::Task, <span class="number">2</span>)
+<a href=#294 id=294 data-nosnippet>294</a>        );
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="comment">// a done crit drops out of the open default
+<a href=#296 id=296 data-nosnippet>296</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>scan2 = digest::Scan {
+<a href=#297 id=297 data-nosnippet>297</a>            name: <span class="string">"p"</span>.into(),
+<a href=#298 id=298 data-nosnippet>298</a>            items: scan.items.clone(),
+<a href=#299 id=299 data-nosnippet>299</a>            archived: Default::default(),
+<a href=#300 id=300 data-nosnippet>300</a>        };
+<a href=#301 id=301 data-nosnippet>301</a>        scan2.items[<span class="number">1</span>].status = Status::Done;
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="macro">assert_eq!</span>(
+<a href=#303 id=303 data-nosnippet>303</a>            pick(<span class="kw-2">&amp;</span>scan2, <span class="kw-2">&amp;</span>spec, myco_core::kind::prelude_table())
+<a href=#304 id=304 data-nosnippet>304</a>                .unwrap()
+<a href=#305 id=305 data-nosnippet>305</a>                .id,
+<a href=#306 id=306 data-nosnippet>306</a>            ItemId::new(ItemKind::Issue, <span class="number">1</span>)
+<a href=#307 id=307 data-nosnippet>307</a>        );
+<a href=#308 id=308 data-nosnippet>308</a>    }
+<a href=#309 id=309 data-nosnippet>309</a>}
 </code></pre></div></section></main></body></html>

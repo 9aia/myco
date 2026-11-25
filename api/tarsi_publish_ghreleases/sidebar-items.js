@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["expand_assets","guess_content_type"],"struct":["GhReleasePublisher"]};

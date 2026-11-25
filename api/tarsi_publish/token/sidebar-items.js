@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["CUORA_BIN_ENV","CUORA_TRANSPORT_ENV"],"struct":["CuoraTokenResolver"],"trait":["TokenResolver"]};
