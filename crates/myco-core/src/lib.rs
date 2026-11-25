@@ -248,9 +248,13 @@ pub struct Config {
     /// given — a repo pins its landing view, a machine `~/myco.toml`
     /// pins a global one (scalar: repo layer wins).
     pub default_view: Option<String>,
-    /// Named declarative views — merged across config layers
-    /// (P-006): repo `myco.toml` presets are shared, user-config
-    /// presets personal; the *user* layer wins a name collision.
+    /// Named declarative views — `[views.<name>]` tables merged
+    /// across config layers (P-006): repo `myco.toml` presets are
+    /// shared, user-config presets personal; the *user* layer wins
+    /// a name collision. Resolution also scans `views/*.toml`
+    /// files (repo root, then the ledger worktree; filename stem =
+    /// view name, body = bare `ViewSpec`) — precedence builtin <
+    /// `views/` < `[views]` (`myco_ops::view`).
     #[serde(default)]
     pub views: std::collections::BTreeMap<String, ViewSpec>,
     /// Config-declared verbs (P-007) — merged like `views`, but
