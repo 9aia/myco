@@ -307,6 +307,7 @@ fn list_views(views: &[NamedView], json_out: bool) {
                 "name": v.name,
                 "origin": match v.origin {
                     Origin::Builtin => "builtin",
+                    Origin::Dir => "dir",
                     Origin::Config => "config",
                 },
                 "spec": v.spec,
@@ -317,6 +318,7 @@ fn list_views(views: &[NamedView], json_out: bool) {
     for v in views {
         let origin = match v.origin {
             Origin::Builtin => "builtin",
+            Origin::Dir => "dir",
             Origin::Config => "config",
         };
         println!("{:<10} {:<7} {}", v.name, origin, spec_digest(&v.spec));
@@ -678,6 +680,9 @@ fn run(
         .or_else(|| root.clone())
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
+    // the ledger worktree feeds the second `views/` scan — its
+    // view files travel with the `project` branch
+    let worktree = opened.as_ref().ok().map(|(p, _)| p.worktree.clone());
 
     // `default_view` in config names the landing view — bare
     // `myco view` renders it instead of listing (a `~/myco.toml`
@@ -690,14 +695,19 @@ fn run(
     };
 
     if out.list || (name.is_none() && !flags.any_set()) {
-        let (views, _) = myco_ops::view::named_views_lenient(&cfg_root, ops::CONFIG)?;
+        let (views, warnings) =
+            myco_ops::view::named_views_lenient(&cfg_root, worktree.as_deref(), ops::CONFIG)?;
+        // broken `views/` files warn here too — a silent --list
+        // would hide them until `myco check`
+        warn(&warnings);
         list_views(&views, json_out);
         return Ok(0);
     }
 
     let (mut spec, warnings) = match &name {
         Some(n) => {
-            let (v, w) = myco_ops::view::resolve_lenient(&cfg_root, n, ops::CONFIG)?;
+            let (v, w) =
+                myco_ops::view::resolve_lenient(&cfg_root, worktree.as_deref(), n, ops::CONFIG)?;
             (v.spec, w)
         }
         None => (ViewSpec::default(), Vec::new()),
@@ -706,12 +716,11 @@ fn run(
     // `--q` merges over the named spec like the flag patch; its
     // bare text terms post-filter the eval below. `@me` resolves
     // against the discovered worktree when there is one.
-    let wt = opened.as_ref().ok().map(|(p, _)| p.worktree.clone());
     let query = flags
         .filter
         .q
         .as_deref()
-        .map(|q| apply_query(&mut spec, q, wt.as_deref()))
+        .map(|q| apply_query(&mut spec, q, worktree.as_deref()))
         .transpose()?;
     spec.validate()?;
     warn(&warnings);
@@ -873,7 +882,8 @@ mod tests {
             ],
             || {
                 let (v, warnings) =
-                    myco_ops::view::resolve_lenient(dir.path(), "board", ops::CONFIG).unwrap();
+                    myco_ops::view::resolve_lenient(dir.path(), None, "board", ops::CONFIG)
+                        .unwrap();
                 assert_eq!(warnings.len(), 1);
                 let spec = v.spec;
                 assert_eq!(spec.filter.kind, vec!["issue".to_string()]);

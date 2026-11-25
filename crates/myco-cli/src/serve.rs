@@ -956,8 +956,13 @@ pub(crate) fn w_reap(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
 pub(crate) fn w_next(s: &Server, a: &crate::registry::Args) -> Result<Value, Fail> {
     let patch = a.spec("spec").map_err(Fail::BadParams)?;
     let (proj, store) = s.open_read()?;
-    let (view, _warnings) = myco_ops::view::resolve_lenient(&proj.root, "next", crate::ops::CONFIG)
-        .map_err(Fail::Verb)?;
+    let (view, _warnings) = myco_ops::view::resolve_lenient(
+        &proj.root,
+        Some(&proj.worktree),
+        "next",
+        crate::ops::CONFIG,
+    )
+    .map_err(Fail::Verb)?;
     let mut spec = view.spec;
     if let Some(patch) = &patch {
         patch.apply(&mut spec);
@@ -979,7 +984,8 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
         // bare — enumerate the defined views
         (None, None) => {
             let (views, warnings) =
-                myco_ops::view::named_views(&proj.root, crate::ops::CONFIG).map_err(Fail::Verb)?;
+                myco_ops::view::named_views(&proj.root, Some(&proj.worktree), crate::ops::CONFIG)
+                    .map_err(Fail::Verb)?;
             Ok(json!({
                 "views": views
                     .iter()
@@ -987,6 +993,7 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
                         "name": v.name,
                         "origin": match v.origin {
                             Origin::Builtin => "builtin",
+                            Origin::Dir => "dir",
                             Origin::Config => "config",
                         },
                         "spec": v.spec,
@@ -998,8 +1005,13 @@ pub(crate) fn w_view(s: &Server, a: &crate::registry::Args) -> Result<Value, Fai
         (name, patch) => {
             let (mut spec, warnings) = match name {
                 Some(n) => {
-                    let (v, w) = myco_ops::view::resolve(&proj.root, n, crate::ops::CONFIG)
-                        .map_err(Fail::Verb)?;
+                    let (v, w) = myco_ops::view::resolve(
+                        &proj.root,
+                        Some(&proj.worktree),
+                        n,
+                        crate::ops::CONFIG,
+                    )
+                    .map_err(Fail::Verb)?;
                     (v.spec, w)
                 }
                 None => (ViewSpec::default(), Vec::new()),

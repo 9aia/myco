@@ -59,13 +59,18 @@ pub(crate) fn next_flags(a: &Args) -> Result<NextFlags, String> {
     })
 }
 
-/// Resolve the `next` named view — a repo's `[views.next]`
-/// shadows the builtin like any other name — then merge flags,
-/// validated. Under `--claim` the `--owner` flag names the
+/// Resolve the `next` named view — a repo's `[views.next]` or
+/// `views/next.toml` shadows the builtin like any other name —
+/// then merge flags, validated. `worktree` feeds the ledger
+/// `views/` scan. Under `--claim` the `--owner` flag names the
 /// claimer, so it must not also restrict the pick to items that
 /// owner already holds.
-pub(crate) fn spec(root: &std::path::Path, flags: &NextFlags) -> Result<ViewSpec, String> {
-    let (view, warnings) = myco_ops::view::resolve_lenient(root, "next", ops::CONFIG)?;
+pub(crate) fn spec(
+    root: &std::path::Path,
+    worktree: Option<&std::path::Path>,
+    flags: &NextFlags,
+) -> Result<ViewSpec, String> {
+    let (view, warnings) = myco_ops::view::resolve_lenient(root, worktree, "next", ops::CONFIG)?;
     view::warn(&warnings);
     let mut spec = view.spec;
     flags.filter.apply(&mut spec.filter);
@@ -138,7 +143,7 @@ pub fn h(ctx: &Ctx, a: &Args) -> Result<i32, String> {
     let me = flags
         .claim
         .then(|| ops::resolve_actor(Some(&proj.worktree), explicit_owner.as_ref()));
-    let mut spec = spec(&proj.root, &flags)?;
+    let mut spec = spec(&proj.root, Some(&proj.worktree), &flags)?;
     // `--q` merges over the named spec like the flag patch (P-058);
     // bare text terms narrow the pick below.
     let query = flags
@@ -218,7 +223,7 @@ mod tests {
     /// A hermetic root — no myco.toml, no user config leaks.
     fn spec_at(dir: &tempfile::TempDir, flags: &NextFlags) -> ViewSpec {
         temp_env::with_var("MYCO_CONFIG", None::<&str>, || {
-            spec(dir.path(), flags).unwrap()
+            spec(dir.path(), None, flags).unwrap()
         })
     }
 

@@ -2113,18 +2113,20 @@ pub fn check_json(proj: &Project) -> Result<serde_json::Value, String> {
     }))
 }
 
-/// `[views]` lint — unparseable config or an invalid spec is a
-/// finding (unfixable — the repair is editing myco.toml). Only the
-/// repo layer is linted: check output must be identical for every
-/// user and CI. Shadowing a builtin is legal (warned at use), not
-/// a finding.
-fn view_findings(root: &std::path::Path) -> Vec<Finding> {
-    match myco_ops::view::validate_repo_views(root, ops::CONFIG) {
+/// `[views]` + `views/` lint — an unparseable config, an invalid
+/// spec, or a broken view file is a finding (unfixable — the
+/// repair is editing the file). Only repo-owned sources are
+/// linted: the repo-layer myco.toml and both `views/` dirs
+/// (repo root + ledger worktree); check output must be identical
+/// for every user and CI. Shadowing a builtin is legal (warned
+/// at use), not a finding.
+fn view_findings(root: &std::path::Path, worktree: Option<&std::path::Path>) -> Vec<Finding> {
+    match myco_ops::view::validate_repo_views(root, worktree, ops::CONFIG) {
         Ok(errs) => errs
             .into_iter()
-            .map(|(name, e)| {
+            .map(|(file, name, e)| {
                 Finding::at(
-                    "myco.toml",
+                    &file,
                     "view-invalid",
                     format!("view \"{name}\": {e}"),
                     false,
@@ -2302,7 +2304,9 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
     // config layer: `[views]` specs in the repo/user myco.toml —
     // lint-only (no fixer); a broken spec fails every verb that
     // loads config, so it surfaces here too
-    analysis.findings.extend(view_findings(&proj.root));
+    analysis
+        .findings
+        .extend(view_findings(&proj.root, Some(&proj.worktree)));
     analysis.findings.extend(verb_findings(&proj.root));
     analysis.findings.extend(kind_findings(&proj.root));
     analysis

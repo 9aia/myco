@@ -363,7 +363,12 @@ impl Model {
         // `/` filter so they keep filtering rows.
         let mut filter_seed = String::new();
         let view_spec = match &view {
-            Some(name) => match myco_ops::view::resolve(&cfg_root, name, CONFIG) {
+            Some(name) => match myco_ops::view::resolve(
+                &cfg_root,
+                proj.as_ref().map(|p| p.worktree.as_path()),
+                name,
+                CONFIG,
+            ) {
                 Ok((v, _)) => Some(v.spec),
                 Err(e) if e.starts_with("unknown view") => {
                     let me = ops::resolve_actor(proj.as_ref().map(|p| p.worktree.as_path()), None);
