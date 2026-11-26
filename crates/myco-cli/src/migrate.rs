@@ -94,7 +94,9 @@ fn adopt_title(src: &str, fallback: &str) -> String {
 struct Stats {
     converted_items: usize,
     ids_allocated: usize,
-    dropped_done: usize,
+    /// Terminal items (`[x]`/`status:done`/`status:cancelled`)
+    /// archived into DONE.md — never dropped (I-005).
+    archived_done: usize,
     files_moved: BTreeMap<String, String>,
     unparsed: Vec<String>,
     warnings: Vec<String>,
@@ -194,6 +196,45 @@ fn materialize(
     };
     stats.converted_items += 1;
     Ok(item)
+}
+
+/// Materialize legacy terminal items and archive them into
+/// DONE.md — ids allocated/honored like live items, `done:` stamps
+/// via `done_push`, ids already in the archive skipped with a
+/// warning (the item is preserved either way, never duplicated).
+fn archive_legacy_done(
+    store: &myco_store_md::MdStore,
+    reg: &mut Registry,
+    stats: &mut Stats,
+    items: impl IntoIterator<Item = myco_store_md::LegacyItem>,
+) -> Result<(), String> {
+    let mut staged: Vec<Item> = Vec::new();
+    for li in items {
+        let mut item = materialize(reg, &li, ItemKind::Task, stats)?;
+        demote(&mut item, li.id, "DONE.md", stats);
+        staged.push(item);
+    }
+    if staged.is_empty() {
+        return Ok(());
+    }
+    let mut done = crate::items::load_done(store)?;
+    let mut live: BTreeSet<ItemId> = done
+        .items()
+        .flat_map(|i| i.subtree())
+        .map(|i| i.id)
+        .collect();
+    for item in staged {
+        if live.contains(&item.id) {
+            stats
+                .warnings
+                .push(format!("{} already in DONE.md — skipped", item.id));
+            continue;
+        }
+        live.extend(item.subtree().map(|i| i.id));
+        crate::items::done_push(&mut done, item)?;
+        stats.archived_done += 1;
+    }
+    crate::items::save_done(store, &done)
 }
 
 /// Legacy sections → v2 `Section`s for `file` (`TODO.md` /
@@ -300,13 +341,15 @@ fn migrate_pm(
         .collect();
     names.sort();
     let mut leftovers: Vec<String> = Vec::new();
+    // terminal items the legacy docs carried — archived into
+    // DONE.md after the live sections convert (I-005)
+    let mut pending_done: Vec<myco_store_md::LegacyItem> = Vec::new();
     for name in &names {
         let src = std::fs::read_to_string(pm.join(name)).map_err(|e| e.to_string())?;
         let rel_from = format!("pm/{name}");
         match pm_dest(name) {
             Some(PmDest::Todo) => {
                 let (_repo, doc) = myco_store_md::parse_legacy_todo(&src, "migrated");
-                stats.dropped_done += doc.dropped;
                 todo.sections.extend(convert_sections(
                     &mut reg,
                     &doc,
@@ -314,11 +357,11 @@ fn migrate_pm(
                     "TODO.md",
                     &mut stats,
                 )?);
+                pending_done.extend(doc.done);
                 stats.files_moved.insert(rel_from, "TODO.md".into());
             }
             Some(PmDest::Backlog) => {
                 let doc = myco_store_md::parse_legacy_backlog(&src);
-                stats.dropped_done += doc.dropped;
                 let mut secs =
                     convert_sections(&mut reg, &doc, ItemKind::Task, "BACKLOG.md", &mut stats)?;
                 for s in &mut secs {
@@ -327,6 +370,7 @@ fn migrate_pm(
                     }
                 }
                 backlog.sections.extend(secs);
+                pending_done.extend(doc.done);
                 stats.files_moved.insert(rel_from, "BACKLOG.md".into());
             }
             Some(PmDest::Plan) => {
@@ -365,6 +409,7 @@ fn migrate_pm(
     }
     store.save_todo(&todo).map_err(|e| e.to_string())?;
     store.save_backlog(&backlog).map_err(|e| e.to_string())?;
+    archive_legacy_done(&store, &mut reg, &mut stats, pending_done)?;
     meta.next = reg.counters();
     store.save_meta(&meta).map_err(|e| e.to_string())?;
 
@@ -409,7 +454,7 @@ fn migrate_pm(
         "mode": "pm",
         "converted_items": stats.converted_items,
         "ids_allocated": stats.ids_allocated,
-        "dropped_done": stats.dropped_done,
+        "archived_done": stats.archived_done,
         "files_moved": stats.files_moved.iter()
             .map(|(from, to)| json!({"from": from, "to": to}))
             .collect::<Vec<_>>(),
@@ -479,16 +524,20 @@ fn migrate_project(
     let mut reg = meta.registry();
     reg.observe_all(migrate_ids(wt)?);
 
+    // terminal items the legacy docs carried — archived into
+    // DONE.md once both docs convert (I-005)
+    let mut pending_done: Vec<myco_store_md::LegacyItem> = Vec::new();
+
     // --- TODO.md ---
     if let Some(src) = read_str(wt, "TODO.md") {
         let doc = match myco_store_md::parse_todo(&src) {
             Ok(doc) => doc, // already v2 — re-emit normalizes drift
             Err(_) => {
                 let (repo, legacy) = myco_store_md::parse_legacy_todo(&src, &meta.name);
-                stats.dropped_done += legacy.dropped;
                 let mut doc = TodoDoc::new(if repo.is_empty() { &meta.name } else { &repo });
                 doc.sections =
                     convert_sections(&mut reg, &legacy, ItemKind::Task, "TODO.md", &mut stats)?;
+                pending_done.extend(legacy.done);
                 doc
             }
         };
@@ -501,7 +550,6 @@ fn migrate_project(
             Ok(doc) => doc,
             Err(_) => {
                 let legacy = myco_store_md::parse_legacy_backlog(&src);
-                stats.dropped_done += legacy.dropped;
                 let mut secs =
                     convert_sections(&mut reg, &legacy, ItemKind::Task, "BACKLOG.md", &mut stats)?;
                 for s in &mut secs {
@@ -509,11 +557,13 @@ fn migrate_project(
                         i.status = Status::Deferred;
                     }
                 }
+                pending_done.extend(legacy.done);
                 BacklogDoc { sections: secs }
             }
         };
         store.save_backlog(&doc).map_err(|e| e.to_string())?;
     }
+    archive_legacy_done(&store, &mut reg, &mut stats, pending_done)?;
 
     // --- item dirs: normalize filenames + adopt unfrontmattered ---
     //
@@ -640,7 +690,7 @@ fn migrate_project(
         "mode": "project",
         "converted_items": stats.converted_items,
         "ids_allocated": stats.ids_allocated,
-        "dropped_done": stats.dropped_done,
+        "archived_done": stats.archived_done,
         "files_moved": stats.files_moved.iter()
             .map(|(from, to)| json!({"from": from, "to": to}))
             .collect::<Vec<_>>(),
@@ -668,6 +718,9 @@ fn migrate_ids(wt: &Path) -> Result<BTreeSet<ItemId>, String> {
             Err(_) => {
                 let (_, legacy) = myco_store_md::parse_legacy_todo(&src, "");
                 ids.extend(legacy.items().filter_map(|li| li.id));
+                // terminal items keep their numbers too — they're
+                // about to land in DONE.md
+                ids.extend(legacy.done.iter().filter_map(|li| li.id));
             }
         }
     }
@@ -677,7 +730,17 @@ fn migrate_ids(wt: &Path) -> Result<BTreeSet<ItemId>, String> {
             Err(_) => {
                 let legacy = myco_store_md::parse_legacy_backlog(&src);
                 ids.extend(legacy.items().filter_map(|li| li.id));
+                // terminal items keep their numbers too — they're
+                // about to land in DONE.md
+                ids.extend(legacy.done.iter().filter_map(|li| li.id));
             }
+        }
+    }
+    if let Some(src) = read_str(wt, "DONE.md") {
+        // archived ids stay reserved — an unparseable DONE.md is
+        // left for `myco check` to report, not silently reissued
+        if let Ok(doc) = myco_store_md::parse_done(&src) {
+            ids.extend(doc.items().flat_map(|i| i.subtree()).map(|i| i.id));
         }
     }
     for spec in file_specs() {
@@ -865,8 +928,8 @@ pub fn h(ctx: &crate::registry::Ctx, _a: &crate::registry::Args) -> Result<i32, 
         ops::print_json(&out);
     } else {
         println!(
-            "myco migrate ({}): {} items, {} ids allocated, {} done dropped",
-            out["mode"], out["converted_items"], out["ids_allocated"], out["dropped_done"]
+            "myco migrate ({}): {} items, {} ids allocated, {} done archived",
+            out["mode"], out["converted_items"], out["ids_allocated"], out["archived_done"]
         );
         for m in out["files_moved"].as_array().into_iter().flatten() {
             println!("  {} → {}", m["from"], m["to"]);
@@ -1007,7 +1070,7 @@ mod tests {
                     items: vec![li("c")],
                 },
             ],
-            dropped: 0,
+            done: Vec::new(),
         };
         let mut reg = Registry::default();
         let mut stats = Stats::default();

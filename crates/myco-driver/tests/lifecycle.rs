@@ -211,8 +211,13 @@ fn check_reports_findings_and_fix_repairs() {
     let todo = std::fs::read_to_string(wt.join("TODO.md")).unwrap();
     assert!(!todo.contains("[x]"));
     assert!(todo.contains("T-001"));
+    // I-005: the done item is archived, not dropped — it keeps its id
+    // so the counter must not reissue T-002
+    let done = std::fs::read_to_string(wt.join("DONE.md")).unwrap();
+    assert!(done.contains("T-002"), "{done}");
+    assert!(done.contains("done:"), "{done}");
     let meta = std::fs::read_to_string(wt.join("meta.toml")).unwrap();
-    assert!(meta.contains("t = 2"), "counter reconciled past T-001");
+    assert!(meta.contains("t = 3"), "counter reconciled past T-002: {meta}");
     assert!(git(&wt, &["log", "-1", "--format=%s"]).starts_with("chore: check --fix"));
     // clean tree, clean check
     let out = run(d.path(), &["check"]);
@@ -289,11 +294,15 @@ fn migrate_normalizes_legacy_project() {
     assert_eq!(code(&out), 0, "{}", String::from_utf8_lossy(&out.stderr));
     let v = json(&out);
     assert_eq!(v["mode"], "project");
-    assert_eq!(v["ids_allocated"], 4); // 2 todo + 1 backlog + 1 proposal
-    assert_eq!(v["dropped_done"], 1);
+    assert_eq!(v["ids_allocated"], 5); // 2 todo + 1 backlog + 1 done + 1 proposal
+    assert_eq!(v["archived_done"], 1);
     let todo = std::fs::read_to_string(wt.join("TODO.md")).unwrap();
     assert!(todo.contains("- [ ] T-001 alpha task"));
     assert!(todo.contains("- [ ] T-002 beta · pri:high"));
+    // I-005: the `[x]` item archived into DONE.md, not dropped
+    let done = std::fs::read_to_string(wt.join("DONE.md")).unwrap();
+    assert!(done.contains("T-004"), "{done}");
+    assert!(done.contains("done:"), "{done}");
     let backlog = std::fs::read_to_string(wt.join("BACKLOG.md")).unwrap();
     assert!(backlog.contains("- T-003 parked one"));
     assert!(wt

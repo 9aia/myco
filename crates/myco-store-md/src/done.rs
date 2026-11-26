@@ -131,6 +131,195 @@ fn parse_li(
     Ok(parsed)
 }
 
+/// Is `line` a terminal item? `[x]`/`[X]` checkbox, or a
+/// `· status:done`/`· status:cancelled` metadata token — both
+/// archive into DONE.md, so neither belongs in TODO.md/BACKLOG.md.
+/// Shared by `myco check`'s done-item finding and
+/// [`strip_terminal`]'s removal pass — the two must agree on what
+/// counts as terminal or the gate and the fixer disagree.
+pub fn is_done_line(line: &str) -> bool {
+    let t = line.trim_start();
+    if ["- [x]", "- [X]", "* [x]", "* [X]", "+ [x]", "+ [X]"]
+        .iter()
+        .any(|m| t.starts_with(m))
+    {
+        return true;
+    }
+    t.split('·')
+        .skip(1)
+        .any(|p| matches!(p.trim(), "status:done" | "status:cancelled"))
+}
+
+/// The `LineSpec` terminal extraction parses with — tasks, and the
+/// default is moot: every extracted item is normalized to the
+/// terminal pair (`done`/`cancelled`) before it can reach DONE.md.
+const TASK_SPEC: LineSpec = LineSpec {
+    kind: ItemKind::Task,
+    default_status: Status::Open,
+    file: FILE,
+};
+
+/// What [`strip_terminal`] produced: the source minus the terminal
+/// item blocks, plus the items those blocks parsed into (subtrees
+/// included — every node forced to the terminal pair, mirroring
+/// `todo done`/`todo cancel`'s whole-subtree archive).
+#[derive(Debug, Default)]
+pub struct StripOutcome {
+    /// The input with every *archivable* terminal block removed.
+    /// Terminal lines that don't parse into an item stay — they
+    /// can't be archived, so they can't be silently dropped either.
+    pub src: String,
+    /// The removed items, in file order, ready for [`crate::emit_done`].
+    pub items: Vec<Item>,
+}
+
+/// The text inside a `-`/`*`/`+` bullet — checkbox (`[ ]`/`[x]`/
+/// `[X]`) stripped — or `None` when `t` isn't a bullet at all.
+/// `Some("")` is a bare bullet (no item text).
+fn bullet_text(t: &str) -> Option<&str> {
+    let mut rest = t.strip_prefix(['-', '*', '+'])?.trim_start();
+    for cb in ["[ ]", "[x]", "[X]"] {
+        if let Some(r) = rest.strip_prefix(cb) {
+            // the checkbox must be followed by a boundary —
+            // `- [x]y` is text, not a marker
+            if r.is_empty() || r.starts_with(char::is_whitespace) {
+                rest = r.trim_start();
+                break;
+            }
+        }
+    }
+    Some(rest)
+}
+
+/// Parse one terminal block — the done line plus its deeper-
+/// indented subtree — into an [`Item`]. `None` when any item-
+/// shaped line fails the line grammar: the caller then keeps the
+/// whole block rather than archive a partial tree and drop the
+/// rest. Non-bullet deeper lines (continuations) carry no item
+/// and drop with the block, as they always have.
+fn parse_done_block(block: &[&str]) -> Option<Item> {
+    // the done line itself is the archive root — it must parse;
+    // a terminal marker that isn't an item (`foo · status:done`
+    // prose) keeps the whole block rather than invent a root
+    let first = block.first()?;
+    let root_text = bullet_text(first.trim()).filter(|s| !s.is_empty())?;
+    let at = first.len() - first.trim_start().len();
+    let root = line::parse_text(root_text, &TASK_SPEC).ok()?;
+    // (indent, item) per bullet line in the rest of the block —
+    // an item-shaped line that fails the grammar aborts the whole
+    // block: archiving the parseable part would drop the rest
+    let mut entries: Vec<(usize, Item)> = vec![(at, root)];
+    for l in &block[1..] {
+        let t = l.trim();
+        let Some(text) = bullet_text(t) else {
+            continue; // not a bullet — continuation/prose, not an item
+        };
+        if text.is_empty() {
+            continue; // bare bullet — no item to keep or lose
+        }
+        let indent = l.len() - l.trim_start().len();
+        entries.push((indent, line::parse_text(text, &TASK_SPEC).ok()?));
+    }
+    // parent[j] = index of the nearest preceding entry with a
+    // strictly smaller indent — the subtree grammar
+    let n = entries.len();
+    let mut parent = vec![usize::MAX; n];
+    let mut stack: Vec<usize> = Vec::new();
+    for j in 0..n {
+        while stack.last().is_some_and(|&t| entries[t].0 >= entries[j].0) {
+            stack.pop();
+        }
+        parent[j] = stack.last().copied().unwrap_or(usize::MAX);
+        stack.push(j);
+    }
+    // children adjacency, then a bounded recursive build
+    let mut kids: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (j, &p) in parent.iter().enumerate().skip(1) {
+        if p != usize::MAX {
+            kids[p].push(j);
+        }
+    }
+    fn build(
+        j: usize,
+        entries: &[(usize, Item)],
+        kids: &[Vec<usize>],
+        depth: usize,
+    ) -> Option<Item> {
+        if depth > line::MAX_ITEM_DEPTH {
+            return None;
+        }
+        let mut item = entries[j].1.clone();
+        for &c in &kids[j] {
+            item.children.push(build(c, entries, kids, depth + 1)?);
+        }
+        Some(item)
+    }
+    let mut root = build(0, &entries, &kids, 0)?;
+    // normalize to the terminal pair: `status:cancelled` keeps its
+    // token (the archive records *why* it left); everything else —
+    // `[x]` with no token, `status:done`, even a stale live status
+    // on a checked line — archives as done
+    let term = match root.status {
+        Status::Cancelled => Status::Cancelled,
+        _ => Status::Done,
+    };
+    // the whole subtree takes the root's terminal status — the
+    // same all-or-nothing `todo done`/`todo cancel` apply
+    let mut stack = vec![&mut root];
+    while let Some(i) = stack.pop() {
+        i.status = term;
+        stack.extend(i.children.iter_mut());
+    }
+    Some(root)
+}
+
+/// Remove terminal item blocks (`[x]` checkboxes, `status:done`/
+/// `status:cancelled` tokens) from TODO.md/BACKLOG.md source and
+/// return the cleaned text plus the items to archive into DONE.md.
+///
+/// This is the archiving half of "terminal items leave the ledger
+/// docs": every removed *item* comes back parsed so the caller can
+/// push it through `done_push` (which stamps `done:`). A terminal
+/// line that doesn't parse — no `T-NNN` id, a malformed token, a
+/// child that breaks the grammar — keeps its whole block in the
+/// output: `check` keeps reporting it rather than drop it silently.
+pub fn strip_terminal(src: &str) -> StripOutcome {
+    let mut out = String::with_capacity(src.len());
+    let mut items = Vec::new();
+    let lines: Vec<&str> = src.split_inclusive('\n').collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        if !is_done_line(line) {
+            out.push_str(line);
+            i += 1;
+            continue;
+        }
+        // the block a done line takes with it: itself plus every
+        // deeper-indented line (same rule the old textual strip
+        // used — a same-or-shallower indent ends it)
+        let at = line.len() - line.trim_start().len();
+        let mut j = i + 1;
+        while j < lines.len() {
+            let l = lines[j];
+            let indented = l.starts_with(' ') || l.starts_with('\t');
+            let indent = l.len() - l.trim_start().len();
+            if indented && indent > at {
+                j += 1;
+            } else {
+                break;
+            }
+        }
+        match parse_done_block(&lines[i..j]) {
+            Some(item) => items.push(item),
+            // unarchivable — leave every line so nothing is lost
+            None => out.extend(lines[i..j].iter().copied()),
+        }
+        i = j;
+    }
+    StripOutcome { src: out, items }
+}
+
 /// Canonical `DONE.md` — same layout as [`crate::emit_backlog`]
 /// with the terminal-only rule. Fails on non-terminal items and
 /// the same line-grammar limits as the other ledger docs.
@@ -353,6 +542,52 @@ mod tests {
         doc.sections.push(Section::named("s"));
         doc.sections[0].items.push(item);
         assert!(emit_done(&doc).is_err());
+    }
+
+    #[test]
+    fn strip_terminal_archives_items() {
+        // the I-005 regression: terminal lines used to be deleted
+        // outright — now they come back as items for DONE.md
+        let src = "# TODO — x\n\n- [ ] T-001 live\n- [x] T-002 shipped\n- [ ] T-003 cancelled · status:cancelled\n  - [ ] T-004 sub\n- [ ] T-005 drop · status:done\n";
+        let out = strip_terminal(src);
+        assert_eq!(out.src, "# TODO — x\n\n- [ ] T-001 live\n");
+        assert_eq!(out.items.len(), 3);
+        assert_eq!(out.items[0].id.number(), 2);
+        assert_eq!(out.items[0].status, Status::Done);
+        assert_eq!(out.items[1].id.number(), 3);
+        assert_eq!(out.items[1].status, Status::Cancelled);
+        // the subtree archives with the parent, forced terminal
+        assert_eq!(out.items[1].children.len(), 1);
+        assert_eq!(out.items[1].children[0].status, Status::Cancelled);
+        assert_eq!(out.items[2].status, Status::Done);
+        // the archive-ready items emit cleanly
+        let mut doc = DoneDoc::default();
+        doc.sections.push(Section::unsectioned());
+        for i in out.items {
+            doc.sections[0].items.push(i);
+        }
+        emit_done(&doc).unwrap();
+    }
+
+    #[test]
+    fn strip_terminal_keeps_unarchivable_lines() {
+        // no T-NNN id → can't archive → the line stays put and
+        // `check` keeps reporting it (never a silent drop)
+        let src = "- [x] buy milk\n- [ ] T-001 live\n";
+        let out = strip_terminal(src);
+        assert_eq!(out.src, src);
+        assert!(out.items.is_empty());
+        // an unparseable *child* blocks the whole done item too
+        let src = "- [x] T-001 done\n  - [ ] not-an-id child\n- [ ] T-002 live\n";
+        let out = strip_terminal(src);
+        assert_eq!(out.src, src);
+        assert!(out.items.is_empty());
+        // a done *child* of a live parent archives standalone
+        let src = "- [ ] T-001 parent\n  - [x] T-002 done kid\n  - [ ] T-003 sib\n";
+        let out = strip_terminal(src);
+        assert_eq!(out.src, "- [ ] T-001 parent\n  - [ ] T-003 sib\n");
+        assert_eq!(out.items.len(), 1);
+        assert_eq!(out.items[0].id.number(), 2);
     }
 
     #[test]

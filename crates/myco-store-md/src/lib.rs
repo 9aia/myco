@@ -50,7 +50,7 @@ mod store;
 mod todo;
 
 pub use backlog::{emit_backlog, parse_backlog};
-pub use done::{emit_done, parse_done};
+pub use done::{emit_done, is_done_line, parse_done, strip_terminal, StripOutcome};
 pub use error::{EmitError, ParseError};
 pub use handoff::{
     emit_entry, emit_handoff_file, handoff_filename, parse_handoff_file, parse_handoff_filename,

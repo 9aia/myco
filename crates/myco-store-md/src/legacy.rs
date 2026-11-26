@@ -2,9 +2,9 @@
 //! migrate` uses where the strict parsers reject. Everything is
 //! best-effort, nothing is silently lost:
 //!
-//! - `- [x]` items and `· status:done` lines → counted in
-//!   [`LegacyDoc::dropped`] (done items are deleted; git keeps
-//!   history).
+//! - `- [x]` items and `· status:done`/`· status:cancelled` lines →
+//!   [`LegacyDoc::done`] — terminal items are *archived* into
+//!   DONE.md by the caller (`myco migrate`), never dropped (I-005).
 //! - Id-less bullets → [`LegacyItem::id`] `None`; the caller
 //!   allocates via [`myco_store::Store::alloc_id`].
 //! - Items already carrying `T-NNN`/`I-NNN`/`…` ids keep them.
@@ -29,9 +29,11 @@ pub struct LegacyDoc {
     /// Sections in file order (a `None` name = the run before the
     /// first heading).
     pub sections: Vec<LegacySection>,
-    /// Items dropped because they were already done (`[x]`,
-    /// `status:done`).
-    pub dropped: usize,
+    /// Terminal items (`[x]`, `status:done`, `status:cancelled`)
+    /// pulled out of the live sections — the caller archives them
+    /// into DONE.md. Their [`LegacyItem::id`]s still reserve their
+    /// numbers exactly like live items'.
+    pub done: Vec<LegacyItem>,
 }
 
 /// A `##`-level run of legacy items.
@@ -154,18 +156,22 @@ fn convert(src: &str) -> Conv {
 }
 
 fn convert_item(doc: &mut LegacyDoc, li: &markdown::mdast::ListItem) {
-    if li.checked == Some(true) {
-        doc.dropped += 1;
-        return;
-    }
     let text = flat_text_children(&li.children);
     if text.is_empty() {
         return; // empty bullet — nothing to keep, nothing to count
     }
-    let Some(parsed) = parse_item_text(&text) else {
-        doc.dropped += 1; // status:done
+    let mut parsed = parse_item_text(&text);
+    // a checked box means done even when no `status:` token says
+    // so — unless the token already named the other terminal state
+    if li.checked == Some(true) && !matches!(parsed.item.status, Status::Done | Status::Cancelled) {
+        parsed.item.status = Status::Done;
+    }
+    // terminal items archive into DONE.md — collected here, never
+    // dropped (I-005)
+    if matches!(parsed.item.status, Status::Done | Status::Cancelled) {
+        doc.done.push(parsed);
         return;
-    };
+    }
     if doc.sections.is_empty() {
         doc.sections.push(LegacySection::default());
     }
@@ -229,8 +235,9 @@ fn collapse_ws(s: &str) -> String {
 
 /// `<id>? <title> [· token]…` — tolerant: unknown tokens fold into
 /// the title (`·` isn't emittable, so the separator becomes ` - `).
-/// `None` ⇐ the item is `status:done`.
-fn parse_item_text(text: &str) -> Option<LegacyItem> {
+/// Terminal statuses (`done`/`cancelled`) stay on the item — the
+/// caller routes them to DONE.md.
+fn parse_item_text(text: &str) -> LegacyItem {
     // callers only hand in non-empty collapsed text
     let mut parts = text.trim().split('·');
     let head = parts.next().unwrap_or_default().trim();
@@ -242,7 +249,6 @@ fn parse_item_text(text: &str) -> Option<LegacyItem> {
     };
     let mut title_bits = vec![rest.trim().to_string()];
     let mut item = Item::new(id.unwrap_or(ItemId::new(ItemKind::Task, 0)), "");
-    let mut done = false;
     for raw in parts {
         let tok = raw.trim();
         if tok.is_empty() {
@@ -260,13 +266,9 @@ fn parse_item_text(text: &str) -> Option<LegacyItem> {
             .split_once(':')
             .and_then(|(k, v)| apply_token(&mut item, k, v.trim()));
         match known {
-            Some(true) => {}
-            Some(false) => done = true, // status:done
+            Some(()) => {}
             None => title_bits.push(tok.to_string()),
         }
-    }
-    if done {
-        return None;
     }
     let title = title_bits
         .into_iter()
@@ -275,33 +277,20 @@ fn parse_item_text(text: &str) -> Option<LegacyItem> {
         .join(" - ");
     // `·` can't survive a title anyway; other separators already split
     item.title = collapse_ws(&title);
-    Some(LegacyItem { id, item })
+    LegacyItem { id, item }
 }
 
-/// `Some(true)` = applied, `Some(false)` = `status:done` (drop the
-/// item), `None` = unrecognized — caller folds it into the title.
-fn apply_token(item: &mut Item, key: &str, value: &str) -> Option<bool> {
+/// `Some(())` = applied, `None` = unrecognized — caller folds it
+/// into the title. Every `Status` applies, terminal included —
+/// `convert_item` routes done/cancelled to [`LegacyDoc::done`].
+fn apply_token(item: &mut Item, key: &str, value: &str) -> Option<()> {
     match key {
-        "status" => Some(match value.parse::<Status>() {
-            Ok(Status::Done) => false,
-            Ok(s) => {
-                item.status = s;
-                true
-            }
-            Err(_) => return None,
-        }),
+        "status" => value.parse::<Status>().ok().map(|s| item.status = s),
         "pri" => value.parse::<myco_core::Priority>().ok().map(|p| {
             item.priority = p;
-            true
         }),
-        "owner" => Actor::new(value).ok().map(|a| {
-            item.owner = Some(a);
-            true
-        }),
-        "created" => date::parse(value).ok().map(|d| {
-            item.created = Some(d);
-            true
-        }),
+        "owner" => Actor::new(value).ok().map(|a| item.owner = Some(a)),
+        "created" => date::parse(value).ok().map(|d| item.created = Some(d)),
         "blocks" => {
             let mut ok = true;
             for bid in value.split(',') {
@@ -312,7 +301,7 @@ fn apply_token(item: &mut Item, key: &str, value: &str) -> Option<bool> {
                     Err(_) => ok = false,
                 }
             }
-            ok.then_some(true)
+            ok.then_some(())
         }
         _ => None,
     }
@@ -327,10 +316,13 @@ mod tests {
     const DOGFOOD_TODO: &str = "# TODO — myco\n\n## v2 rewrite (phases — see proposals/v2.md)\n\n- [x] Bootstrap from bupha — v0 branch, anatomy copy, rename, prune,\n      worktrees, `xtask check` green\n- [x] `myco-core` + `myco-store-md` — models\n- [ ] `myco-git` — `init` / `check` / `migrate` / auto-commit\n- [ ] Item verbs — todo/backlog/issue/proposal/plan/adr + `item set`\n";
 
     #[test]
-    fn todo_drops_done_and_flattens() {
+    fn todo_archives_done_and_flattens() {
         let (repo, doc) = parse_legacy_todo(DOGFOOD_TODO, "x");
         assert_eq!(repo, "myco");
-        assert_eq!(doc.dropped, 2);
+        assert_eq!(doc.done.len(), 2);
+        // archived items keep their parsed fields and land as done
+        assert!(doc.done.iter().all(|i| i.item.status == Status::Done));
+        assert!(doc.done[0].item.title.contains("Bootstrap from bupha"));
         assert_eq!(doc.sections.len(), 1);
         assert_eq!(
             doc.sections[0].name.as_deref(),
@@ -367,7 +359,7 @@ mod tests {
         let src =
             "# TODO\n\nPhase 1:\n\n- thing one\n- thing two\n\nPhase 2\n\n- [x] old\n- later\n";
         let (_repo, doc) = parse_legacy_todo(src, "fb");
-        assert_eq!(doc.dropped, 1);
+        assert_eq!(doc.done.len(), 1);
         assert_eq!(doc.sections.len(), 2);
         assert_eq!(doc.sections[0].name.as_deref(), Some("Phase 1:"));
         assert_eq!(doc.sections[0].items.len(), 2);
@@ -378,7 +370,10 @@ mod tests {
     fn keeps_existing_ids_and_tokens() {
         let src = "# TODO — x\n\n- [ ] T-012 keep me · status:in-progress · pri:high · owner:devin · #core · blocks:T-001\n- T-009 done-ish · status:done\n";
         let (_r, doc) = parse_legacy_todo(src, "x");
-        assert_eq!(doc.dropped, 1);
+        assert_eq!(doc.done.len(), 1);
+        // the archived item keeps its source id + terminal status
+        assert_eq!(doc.done[0].id, Some(ItemId::new(ItemKind::Task, 9)));
+        assert_eq!(doc.done[0].item.status, Status::Done);
         let item = &doc.items().next().unwrap();
         assert_eq!(item.id, Some(ItemId::new(ItemKind::Task, 12)));
         assert_eq!(item.item.status, Status::InProgress);

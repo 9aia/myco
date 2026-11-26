@@ -4,7 +4,8 @@
 //! counters ≥ max id per kind, duplicate ids across the ledger,
 //! dangling `blocks:`/`links:` refs, kind/dir filename mismatches, `[x]`/
 //! `status:done`/`status:cancelled` items (the rule: terminal
-//! items are deleted — git keeps history), title/frontmatter id mismatches (a file whose
+//! items archive into DONE.md, then leave TODO/BACKLOG — never
+//! deleted outright, I-005), title/frontmatter id mismatches (a file whose
 //! title or H1 still carries its old `ADR-0008:` number), stale
 //! `PREFIX-NNNN` prose references (a mention in a body, title,
 //! index or handoff that no live or archived id resolves — code
@@ -20,7 +21,8 @@
 //! when they finish — every handoff and note naming one dangles by
 //! design and no fixer can know what the author meant.
 //!
-//! `--fix` applies the safe repairs — strip done items, rename
+//! `--fix` applies the safe repairs — archive done items into
+//! DONE.md then strip them from the ledger docs, rename
 //! misplaced files, renumber title-mismatched items (repointing
 //! index links, `blocks:`/`supersedes` refs and handoffs),
 //! reconcile counters, reattach a detached worktree, re-emit
@@ -132,8 +134,15 @@ impl Finding {
 /// A repair `--fix` applies.
 #[derive(Debug)]
 enum Fix {
-    /// Delete `[x]`/`status:done` lines + their continuations.
-    StripDone { rel: String },
+    /// Rewrite a ledger doc minus its terminal items — applied
+    /// *after* [`Fix::ArchiveDone`] so the items are safe in
+    /// DONE.md before their lines leave TODO/BACKLOG (I-005).
+    StripDone { rel: String, contents: String },
+    /// Push terminal items into DONE.md (`done:` stamps via
+    /// `done_push`) — applied after doc Writes so a missing/
+    /// drifted DONE.md is canonical first, and before StripDone
+    /// so a failed archive can't lose the source lines.
+    ArchiveDone { items: Vec<Item> },
     /// Move an item file to its canonical location.
     Rename { from: String, to: String },
     /// Write canonical content (missing file, drift, counters).
@@ -532,46 +541,10 @@ fn self_ids(file: &myco_core::ItemFile) -> Vec<ItemId> {
     v
 }
 
-/// Is `line` a terminal item? `[x]`/`[X]` checkbox, or a
-/// `· status:done`/`· status:cancelled` metadata token — both
-/// archive into DONE.md, so neither belongs in TODO.md.
+/// Is `line` a terminal item? Delegates to the store — the
+/// finding count and `strip_terminal`'s removal pass must agree.
 fn is_done_line(line: &str) -> bool {
-    let t = line.trim_start();
-    if ["- [x]", "- [X]", "* [x]", "* [X]", "+ [x]", "+ [X]"]
-        .iter()
-        .any(|m| t.starts_with(m))
-    {
-        return true;
-    }
-    t.split('·')
-        .skip(1)
-        .any(|p| matches!(p.trim(), "status:done" | "status:cancelled"))
-}
-
-/// Delete done-item lines and their deeper-indented continuations
-/// — a done item's nested children die with it, but a done child
-/// leaves its parent's other children alone.
-fn strip_done(path: &Path) -> Result<(), String> {
-    let src = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let mut out = String::with_capacity(src.len());
-    // indent width of the done line currently being skipped under
-    let mut skipping_at: Option<usize> = None;
-    for line in src.split_inclusive('\n') {
-        let indented = line.starts_with(' ') || line.starts_with('\t');
-        let indent = line.len() - line.trim_start().len();
-        if let Some(at) = skipping_at {
-            if indented && indent > at {
-                continue; // continuation/nested line of the done item
-            }
-            skipping_at = None;
-        }
-        if is_done_line(line) {
-            skipping_at = Some(indent);
-            continue;
-        }
-        out.push_str(line);
-    }
-    std::fs::write(path, out).map_err(|e| format!("write {}: {e}", path.display()))
+    myco_store_md::is_done_line(line)
 }
 
 /// One item anywhere in the ledger, with where it lives for
@@ -681,22 +654,35 @@ pub(crate) fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis 
                 .filter(|(_, l)| is_done_line(l))
                 .collect();
             if !done.is_empty() {
+                // archive-before-strip (I-005): `strip_terminal`
+                // pulls the terminal items out as archive-ready
+                // `Item`s; lines it can't parse stay in the doc —
+                // they can't be archived, so they can't be dropped
+                let stripped = myco_store_md::strip_terminal(&src);
                 a.findings.push(Finding {
                     file: "TODO.md".into(),
                     line: done[0].0 + 1,
                     col: 1,
                     code: "done-item",
                     msg: format!(
-                        "{} terminal item(s) — done/cancelled tasks are removed from TODO.md",
+                        "{} terminal item(s) — done/cancelled tasks archive into DONE.md and leave TODO.md",
                         done.len()
                     ),
                     severity: Severity::Error,
-                    fixable: true,
+                    fixable: stripped.src != src,
                     rendered: None,
                 });
-                a.fixes.push(Fix::StripDone {
-                    rel: "TODO.md".into(),
-                });
+                if stripped.src != src {
+                    a.fixes.push(Fix::StripDone {
+                        rel: "TODO.md".into(),
+                        contents: stripped.src,
+                    });
+                    if !stripped.items.is_empty() {
+                        a.fixes.push(Fix::ArchiveDone {
+                            items: stripped.items,
+                        });
+                    }
+                }
             }
             match myco_store_md::parse_todo(&src) {
                 Ok(doc) => {
@@ -765,15 +751,28 @@ pub(crate) fn analyze_with(wt: &Path, kinds: &myco_core::KindTable) -> Analysis 
         }
         Read::Ok(src) => {
             if src.lines().any(is_done_line) {
-                a.findings.push(Finding::at(
-                    "BACKLOG.md",
-                    "done-item",
-                    "done item(s) — done tasks are removed, not parked",
-                    true,
-                ));
-                a.fixes.push(Fix::StripDone {
-                    rel: "BACKLOG.md".into(),
+                let stripped = myco_store_md::strip_terminal(&src);
+                a.findings.push(Finding {
+                    file: "BACKLOG.md".into(),
+                    line: 0,
+                    col: 0,
+                    code: "done-item",
+                    msg: "done item(s) — terminal tasks archive into DONE.md, not parked".into(),
+                    severity: Severity::Error,
+                    fixable: stripped.src != src,
+                    rendered: None,
                 });
+                if stripped.src != src {
+                    a.fixes.push(Fix::StripDone {
+                        rel: "BACKLOG.md".into(),
+                        contents: stripped.src,
+                    });
+                    if !stripped.items.is_empty() {
+                        a.fixes.push(Fix::ArchiveDone {
+                            items: stripped.items,
+                        });
+                    }
+                }
             }
             match myco_store_md::parse_backlog(&src) {
                 Ok(doc) => {
@@ -1923,7 +1922,7 @@ pub(crate) fn renumber_duplicates(
             });
         }
     }
-    let applied = apply_fixes(wt, &fixes)?;
+    let applied = apply_fixes(wt, &fixes, kinds)?;
     // the audit trail — every healed item records both ids in a
     // `renumbered` handoff entry; failures report, never abort
     // (the id move itself already landed)
@@ -1938,15 +1937,13 @@ pub(crate) fn renumber_duplicates(
     Ok((applied, report))
 }
 
-fn apply_fixes(wt: &Path, fixes: &[Fix]) -> Result<usize, String> {
+fn apply_fixes(wt: &Path, fixes: &[Fix], kinds: &myco_core::KindTable) -> Result<usize, String> {
     let mut n = 0;
-    // order matters: strip → rename → write
-    for f in fixes {
-        if let Fix::StripDone { rel } = f {
-            strip_done(&wt.join(rel))?;
-            n += 1;
-        }
-    }
+    // order matters: rename → write → archive → strip. Doc Writes
+    // run first so a missing/drifted DONE.md is canonical before
+    // items push into it; the archive lands *before* the strip so
+    // a failed DONE.md write can't lose the terminal lines it was
+    // meant to preserve (I-005).
     for f in fixes {
         if let Fix::Rename { from, to } = f {
             let (from, to) = (wt.join(from), wt.join(to));
@@ -1967,6 +1964,45 @@ fn apply_fixes(wt: &Path, fixes: &[Fix]) -> Result<usize, String> {
     }
     for f in fixes {
         if let Fix::Write { rel, contents } = f {
+            let path = Utf8PathBuf::from_path_buf(wt.join(rel))
+                .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
+            myco_store_md::write_atomic(&path, contents).map_err(|e| e.to_string())?;
+            n += 1;
+        }
+    }
+    // ArchiveDone — terminal items stripped from TODO/BACKLOG land
+    // in DONE.md through the store (`done:` stamps via done_push,
+    // canonical emit). An id already in the archive is skipped —
+    // the item is preserved either way, never duplicated.
+    let archived: Vec<Item> = fixes
+        .iter()
+        .flat_map(|f| match f {
+            Fix::ArchiveDone { items } => items.to_vec(),
+            _ => Vec::new(),
+        })
+        .collect();
+    if !archived.is_empty() {
+        let store = ops::store_at(wt, kinds)?;
+        let mut doc = crate::items::load_done(&store)?;
+        let mut live: BTreeSet<ItemId> = doc
+            .items()
+            .flat_map(|i| i.subtree())
+            .map(|i| i.id)
+            .collect();
+        for item in archived {
+            if item.subtree().any(|i| live.contains(&i.id)) {
+                continue;
+            }
+            live.extend(item.subtree().map(|i| i.id));
+            crate::items::done_push(&mut doc, item)?;
+        }
+        crate::items::save_done(&store, &doc)?;
+        n += 1;
+    }
+    // StripDone last — the items are archived by now, so rewriting
+    // the ledger docs can't lose them
+    for f in fixes {
+        if let Fix::StripDone { rel, contents } = f {
             let path = Utf8PathBuf::from_path_buf(wt.join(rel))
                 .map_err(|p| format!("{}: non-utf8 path", p.display()))?;
             myco_store_md::write_atomic(&path, contents).map_err(|e| e.to_string())?;
@@ -2297,7 +2333,7 @@ pub fn run_on(proj: &Project, fix: bool, json_out: bool, no_commit: bool) -> Res
             if analysis.fixes.is_empty() {
                 break;
             }
-            fixes_applied += apply_fixes(wt, &analysis.fixes)?;
+            fixes_applied += apply_fixes(wt, &analysis.fixes, &kinds)?;
             analysis = analyze_with(wt, &kinds);
         }
     }
@@ -2439,28 +2475,33 @@ mod tests {
     }
 
     #[test]
-    fn strip_done_removes_continuations() {
-        let d = tempfile::tempdir().unwrap();
-        let p = d.path().join("TODO.md");
-        std::fs::write(
-            &p,
-            "- [x] done one\n      continuation\n- [ ] keep\n- [ ] drop · status:done\n  nested\n",
-        )
-        .unwrap();
-        strip_done(&p).unwrap();
-        assert_eq!(std::fs::read_to_string(&p).unwrap(), "- [ ] keep\n");
+    fn strip_terminal_removes_continuations_and_archives() {
+        // I-005 regression at the check layer: the cleaned source
+        // drops the done blocks while the items come back for
+        // DONE.md — nothing is deleted without an archive copy
+        let out = myco_store_md::strip_terminal(
+            "- [x] T-001 done one\n      continuation\n- [ ] T-002 keep\n- [ ] T-003 drop · status:done\n  nested\n",
+        );
+        assert_eq!(out.src, "- [ ] T-002 keep\n");
+        assert_eq!(out.items.len(), 2);
+        assert!(out
+            .items
+            .iter()
+            .all(|i| i.status == myco_core::Status::Done));
         // a done *child* leaves same-level siblings alone; a done
         // *parent* still takes its nested children with it
-        std::fs::write(
-            &p,
-            "- [ ] parent\n  - [x] done child\n  - [ ] kept sibling\n- [x] gone\n  - [ ] kid\n- [ ] last\n",
-        )
-        .unwrap();
-        strip_done(&p).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(&p).unwrap(),
-            "- [ ] parent\n  - [ ] kept sibling\n- [ ] last\n"
+        let out = myco_store_md::strip_terminal(
+            "- [ ] T-001 parent\n  - [x] T-002 done child\n  - [ ] T-003 kept sibling\n- [x] T-004 gone\n  - [ ] T-005 kid\n- [ ] T-006 last\n",
         );
+        assert_eq!(
+            out.src,
+            "- [ ] T-001 parent\n  - [ ] T-003 kept sibling\n- [ ] T-006 last\n"
+        );
+        assert_eq!(out.items.len(), 2);
+        assert_eq!(out.items[0].id.number(), 2);
+        assert_eq!(out.items[1].id.number(), 4);
+        assert_eq!(out.items[1].children.len(), 1);
+        assert_eq!(out.items[1].children[0].id.number(), 5);
     }
 
     #[test]
@@ -2730,6 +2771,11 @@ mod tests {
             "{cs:?}"
         );
         assert!(a.fixes.iter().any(|f| matches!(f, Fix::StripDone { .. })));
+        // the stripped items ride an ArchiveDone fix — they land
+        // in DONE.md, not the bit bucket (I-005)
+        assert!(a.fixes.iter().any(
+            |f| matches!(f, Fix::ArchiveDone { items } if items.iter().any(|i| i.id.number() == 9))
+        ));
         assert!(a
             .fixes
             .iter()
@@ -2956,6 +3002,60 @@ mod tests {
         assert_eq!(run_on(&proj, false, true, true).unwrap(), 0);
     }
 
+    /// I-005 regression: `check --fix` used to delete `[x]`/
+    /// `status:done` lines outright — 15 completed items vanished
+    /// from the ledger with no DONE.md trace. Terminal items must
+    /// archive (with `done:` stamps) before their lines leave.
+    #[test]
+    fn check_fix_archives_done_items_to_done_md() {
+        let d = tempfile::tempdir().unwrap();
+        let wt = d.path();
+        let proj = Project {
+            root: wt.to_path_buf(),
+            worktree: wt.to_path_buf(),
+        };
+        let meta = ProjectMeta::new("x");
+        write(wt, "meta.toml", &myco_store_md::emit_meta(&meta).unwrap());
+        let todo = myco_store_md::emit_todo(&myco_core::TodoDoc::new("x")).unwrap();
+        write(
+            wt,
+            "TODO.md",
+            &format!(
+                "{todo}- [x] T-001 shipped\n- [ ] T-002 live\n- [ ] T-003 wontfix · status:cancelled\n  - [ ] T-004 sub\n"
+            ),
+        );
+        write(
+            wt,
+            "BACKLOG.md",
+            &myco_store_md::emit_backlog(&myco_core::BacklogDoc::default()).unwrap(),
+        );
+        write(
+            wt,
+            "DONE.md",
+            &myco_store_md::emit_done(&myco_core::DoneDoc::default()).unwrap(),
+        );
+        write(wt, "index.md", "# x\n");
+        // the gate reds on the terminal items first
+        assert_eq!(run_on(&proj, false, false, true).unwrap(), 1);
+        // --fix archives them, then strips — exit clean
+        assert_eq!(run_on(&proj, true, false, true).unwrap(), 0);
+        let done = std::fs::read_to_string(wt.join("DONE.md")).unwrap();
+        for needle in ["T-001", "T-003", "T-004"] {
+            assert!(
+                done.contains(needle),
+                "{needle} missing from DONE.md:\n{done}"
+            );
+        }
+        assert!(done.contains("status:cancelled"), "{done}");
+        // done: stamps landed (write-once archive metadata)
+        assert!(done.contains("done:"), "{done}");
+        // and the ledger docs are clean — nothing left, nothing lost
+        let todo = std::fs::read_to_string(wt.join("TODO.md")).unwrap();
+        assert!(todo.contains("- [ ] T-002 live"), "{todo}");
+        assert!(!todo.contains("T-001") && !todo.contains("T-003"), "{todo}");
+        assert_eq!(run_on(&proj, false, false, true).unwrap(), 0);
+    }
+
     #[test]
     fn cycle_findings_warn_unknown_and_error_invalid() {
         let d = tempfile::tempdir().unwrap();
@@ -3022,7 +3122,7 @@ mod tests {
             from: "a.md".into(),
             to: "blocker/b.md".into(),
         }];
-        assert!(apply_fixes(wt, &fixes).is_err());
+        assert!(apply_fixes(wt, &fixes, &myco_core::KindTable::prelude()).is_err());
     }
 
     #[test]
@@ -3035,7 +3135,7 @@ mod tests {
             from: "a.md".into(),
             to: "b.md".into(),
         }];
-        let e = apply_fixes(wt, &fixes).unwrap_err();
+        let e = apply_fixes(wt, &fixes, &myco_core::KindTable::prelude()).unwrap_err();
         assert!(e.contains("would overwrite"), "{e}");
         // the target survives untouched
         assert_eq!(std::fs::read_to_string(wt.join("b.md")).unwrap(), "keep me");
